@@ -1,0 +1,44 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Environment — NEVER commit real secrets
+.env
+.env.local
+.env.*.local
+server/.env
+client/.env
+
+# Builds
+dist/
+build/
+out/
+*.tsbuildinfo
+
+# Local embedded PostgreSQL data, logs & sockets
+server/.pgdata/
+server/.pglog*
+**/pgdata/
+*.pglog
+.s.PGSQL.*
+**/.s.PGSQL.*
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Media uploads (later step)
+server/uploads/
+
+# Generated Prisma client (regenerated via `npm run db:generate` / postinstall)
+server/src/generated/
