@@ -1,18 +1,36 @@
 {
-  "name": "maddy-chats",
-  "version": "1.0.0",
+  "name": "nextjs-postgresql-template",
   "private": true,
-  "description": "Maddy Chats — Chat. Connect. Stay in sync.",
   "scripts": {
-    "setup": "npm install && npm --prefix server install && npm --prefix client install",
-    "db:start": "npm --prefix server run db:start",
-    "db:stop": "npm --prefix server run db:stop",
-    "db:migrate": "npm --prefix server run db:migrate",
-    "dev": "concurrently -n server,client -c blue,magenta \"npm --prefix server run dev\" \"npm --prefix client run dev\"",
-    "build": "npm --prefix server run build && npm --prefix client run build",
-    "verify": "npm --prefix server run verify"
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "dotenv": "17.3.1",
+    "drizzle-orm": "0.45.2",
+    "jose": "^6.2.10",
+    "lucide-react": "^1.38.0",
+    "next": "16.2.6",
+    "pg": "8.20.0",
+    "react": "19.2.6",
+    "react-dom": "19.2.6",
+    "zod": "^4.5.4"
   },
   "devDependencies": {
-    "concurrently": "^9.1.0"
+    "@tailwindcss/postcss": "4.1.17",
+    "@types/node": "22.19.15",
+    "@types/pg": "8.18.0",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "drizzle-kit": "0.31.10",
+    "eslint": "9.39.4",
+    "eslint-config-next": "16.2.6",
+    "postcss": "8.5.8",
+    "tailwindcss": "4.1.17",
+    "typescript": "5.9.3"
   }
 }
