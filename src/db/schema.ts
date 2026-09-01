@@ -394,6 +394,49 @@ export const notifications = pgTable(
   ],
 );
 
+/* ======================== temporary status updates ======================== */
+
+export const statusTypeEnum = pgEnum("status_type", ["text", "image", "video"]);
+export const statusPrivacyEnum = pgEnum("status_privacy", ["all", "selected"]);
+
+export const statuses = pgTable(
+  "statuses",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+    type: statusTypeEnum("type").notNull(),
+    text: text("text"),
+    mediaPath: text("media_path"),
+    mediaMimeType: text("media_mime_type"),
+    backgroundStyle: text("background_style"),
+    privacy: statusPrivacyEnum("privacy").default("all").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true, mode: "date" }).notNull(),
+  },
+  (table) => [index("statuses_user_created_idx").on(table.userId, table.createdAt), index("statuses_expires_idx").on(table.expiresAt)],
+);
+
+export const statusViews = pgTable(
+  "status_views",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    statusId: uuid("status_id").references(() => statuses.id, { onDelete: "cascade" }).notNull(),
+    viewerId: uuid("viewer_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+    viewedAt: timestamp("viewed_at", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+  },
+  (table) => [unique("status_views_status_viewer_unique").on(table.statusId, table.viewerId), index("status_views_viewer_idx").on(table.viewerId)],
+);
+
+export const statusRecipients = pgTable(
+  "status_recipients",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    statusId: uuid("status_id").references(() => statuses.id, { onDelete: "cascade" }).notNull(),
+    userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  },
+  (table) => [unique("status_recipients_status_user_unique").on(table.statusId, table.userId), index("status_recipients_user_idx").on(table.userId)],
+);
+
 /* ================================ relations ============================== */
 
 export const usersRelations = relations(users, ({ many }) => ({
@@ -581,3 +624,4 @@ export type MessageStarRow = typeof messageStars.$inferSelect;
 export type PinnedMessageRow = typeof pinnedMessages.$inferSelect;
 export type MessageDeletionRow = typeof messageDeletions.$inferSelect;
 export type MessageMentionRow = typeof messageMentions.$inferSelect;
+export type StatusRow = typeof statuses.$inferSelect;

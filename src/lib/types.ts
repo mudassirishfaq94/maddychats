@@ -252,9 +252,31 @@ export type RealtimeEvent =
   | RealtimeNotificationEvent
   | RealtimeTypingEvent
   | RealtimePinnedEvent
-  | RealtimeDeleteForMeEvent;
+  | RealtimeDeleteForMeEvent
+  | RealtimeStatusEvent;
 
 /** Presence snapshot delivered on connect and via presence:update. */
 export interface PresenceState {
   [userId: string]: { online: boolean; lastSeenAt: string | null };
+}
+
+export interface StatusDTO {
+  id: string;
+  userId: string;
+  type: "text" | "image" | "video";
+  text: string | null;
+  mediaUrl: string | null;
+  backgroundStyle: string | null;
+  privacy: "all" | "selected";
+  createdAt: string;
+  expiresAt: string;
+  viewed: boolean;
+  viewCount: number;
+  owner: PublicUser;
+}
+
+export interface RealtimeStatusEvent {
+  type: "status:new" | "status:deleted";
+  statusId: string;
+  userId: string;
 }

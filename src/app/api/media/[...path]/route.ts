@@ -6,12 +6,14 @@ import {
   messageAttachments,
   messageDeletions,
   messages,
+  statuses,
 } from "@/db/schema";
 import { getSessionUser } from "@/server/session";
 import { isUuid } from "@/server/users";
 import { jsonError } from "@/server/http";
 import { statStored, streamStored, UPLOAD_ROOT } from "@/server/storage";
 import path from "path";
+import { canViewStatus } from "@/server/status";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -55,6 +57,13 @@ export async function GET(
             ? "image/gif"
             : "image/jpeg";
     downloadName = name;
+  } else if (segments.length === 2 && segments[0] === "status" && isUuid(segments[1])) {
+    const rows = await db.select().from(statuses).where(eq(statuses.id, segments[1])).limit(1);
+    const status = rows[0];
+    if (!status?.mediaPath || !(await canViewStatus(status, me.id))) return jsonError(404, "Not found.");
+    relativePath = status.mediaPath;
+    mimeType = status.mediaMimeType ?? "image/jpeg";
+    downloadName = path.basename(status.mediaPath);
   } else if (segments.length === 1 && isUuid(segments[0])) {
     const rows = await db
       .select({ attachment: messageAttachments, message: messages })

@@ -17,12 +17,13 @@ export const UPLOAD_ROOT = path.join(
   "uploads",
 );
 
-export type Bucket = "avatars" | "images" | "files";
+export type Bucket = "avatars" | "images" | "files" | "statuses";
 
 const BUCKETS: Record<Bucket, string> = {
   avatars: "avatars",
   images: "images",
   files: "files",
+  statuses: "statuses",
 };
 
 /** Size limits (bytes), configurable via environment. */
