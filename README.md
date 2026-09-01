@@ -1,323 +1,167 @@
 # Maddy Chats
 
-A chat-first messaging application with persistent direct conversations,
-realtime delivery, presence, typing indicators, read receipts, reactions,
-replies, private media, notifications, search, and responsive light/dark UI.
+Maddy Chats is a full-stack direct-messaging application built with Next.js,
+React, TypeScript, PostgreSQL, and Drizzle ORM. It supports persistent private
+conversations, realtime delivery and presence, typing indicators, read
+receipts, reactions, replies, search, notifications, private attachments, and
+responsive light/dark themes.
 
-## Architecture
+## Tech stack
 
-```text
-React + TypeScript client
-        │
-        │ same-origin HTTP + authenticated realtime stream
-        ▼
-Next.js Route Handlers (Node.js API layer)
-        │
-        ├── bcrypt password hashing
-        ├── signed JWT sessions in HttpOnly cookies
-        ├── request validation / rate limiting / authorization
-        ├── local filesystem media storage
-        └── realtime pub/sub
-        │
-        ▼
-Drizzle ORM
-        │
-        ▼
-PostgreSQL
-```
+- Next.js 16 with App Router and Route Handlers
+- React 19 and TypeScript
+- PostgreSQL with Drizzle ORM
+- Server-Sent Events for realtime updates
+- JWT sessions stored in HttpOnly cookies
+- bcrypt password hashing
+- Tailwind CSS 4
 
-React never connects directly to PostgreSQL. Database credentials, JWT signing
-material, password hashes, and private file paths stay server-side.
-
-> **Express/Prisma compatibility note:** this repository runs in a
-> platform-managed Next.js environment. The Node API layer therefore uses
-> Next.js Route Handlers instead of a separately started Express process, and
-> the platform-provided ORM is Drizzle instead of Prisma. The application still
-> follows the same client → Node API → ORM → PostgreSQL separation. Do not add a
-> direct browser-to-database connection.
-
-### Project map
-
-```text
-src/
-├── app/
-│   ├── api/                       # authenticated Node.js HTTP endpoints
-│   ├── app/                       # protected chat, people, profile pages
-│   ├── login|register|forgot-password/
-│   └── page.tsx                   # public landing page
-├── components/
-│   ├── auth/                      # auth forms and layout
-│   ├── chats/                     # list, messages, composer, media, search
-│   ├── people/                    # user directory
-│   ├── profile/                   # profile settings
-│   ├── providers/                 # auth and realtime client state
-│   └── shell/                     # compact app header and notifications
-├── db/
-│   ├── index.ts                   # PostgreSQL pool + Drizzle client
-│   └── schema.ts                  # tables, foreign keys, indexes, relations
-├── lib/                           # shared validation schemas and DTO types
-├── server/                        # server-only auth, chat, storage, presence
-└── proxy.ts                       # Next.js 16 protected-route interception
-scripts/
-├── seed.mjs                       # development-only User A/User B seed
-└── smoke-test.sh                  # full end-to-end QA suite
-server/uploads/                    # runtime media (git-ignored)
-```
-
-## Features
-
-- Registration and login by username or email
-- bcrypt(12) password hashes; password hashes never enter API responses
-- Seven-day signed JWT session in an HttpOnly cookie
-- Server-side session revocation on logout
-- Editable display name, username, bio, and avatar
-- Searchable user directory and public profiles
-- Duplicate-safe direct conversations
-- Cursor-paginated message history
-- Text, image, and file messages
-- Realtime new/edit/delete events
-- Realtime presence and typing indicators without polling
-- Sent, delivered, and read states
-- Reactions, replies, edit, copy, and soft delete
-- Message search, persistent notifications, unread counts
-- Pin, mute, archive, mark-unread, and delete-for-me controls
-- Backend-enforced blocking
-- Light, dark, and system themes
-- Responsive conversation-list → full-screen-chat mobile flow
-
-## Requirements
+## Prerequisites
 
 - Node.js 20 or newer
 - npm
 - PostgreSQL 15 or newer
 
-## Installation
+## Local setup
+
+Clone the repository and install dependencies:
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/mudassirishfaq94/maddychats.git
 cd maddychats
 npm install
+```
+
+Create a local environment file from the safe template:
+
+```bash
 cp .env.example .env
 ```
 
-Create a PostgreSQL database:
+Configure `.env` with local values. Never commit this file.
 
-```bash
-createdb maddy_chats
-```
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `DATABASE_URL` | Yes | Server-only PostgreSQL connection string |
+| `JWT_SECRET` | Production | Secret of at least 32 characters used to sign sessions |
+| `PORT` | No | Application port; defaults to `3000` |
+| `CLIENT_URL` | Recommended | Canonical application origin |
+| `MAX_AVATAR_MB` | No | Avatar upload limit |
+| `MAX_IMAGE_MB` | No | Message-image upload limit |
+| `MAX_FILE_MB` | No | Message-file upload limit |
+| `DEV_SEED_PASSWORD` | Seed only | Password for local development accounts |
 
-Or with `psql`:
-
-```bash
-psql -U postgres -c 'CREATE DATABASE maddy_chats;'
-```
-
-Set `DATABASE_URL` and `JWT_SECRET` in `.env`, then apply the schema:
-
-```bash
-npx drizzle-kit push
-```
-
-The schema includes users, conversations, memberships, messages, attachments,
-reactions, reads, blocks, and notifications, with foreign keys, cascade rules,
-unique constraints, and access-pattern indexes.
-
-## Environment variables
-
-```env
-DATABASE_URL=postgresql://user:password@localhost:5432/maddy_chats
-JWT_SECRET=replace-with-a-long-random-string
-PORT=3000
-CLIENT_URL=http://localhost:3000
-
-MAX_AVATAR_MB=5
-MAX_IMAGE_MB=10
-MAX_FILE_MB=25
-
-# Development seed only; never configure in production
-# DEV_SEED_PASSWORD=choose-a-local-password
-```
-
-Generate a signing secret with:
+Generate a production-quality session secret locally:
 
 ```bash
 openssl rand -hex 32
 ```
 
-- `.env` and all `.env.*` files are ignored by Git.
-- `.env.example` contains placeholders only.
-- Only variables prefixed with `NEXT_PUBLIC_` may enter browser bundles. This
-  application does not expose database or signing secrets through such vars.
-
-## ORM and migrations
-
-The ORM configuration is `drizzle.config.ts` and reads `DATABASE_URL` from the
-environment. The schema is `src/db/schema.ts`.
-
-Apply the current schema to a local database:
+Create the database, then apply the schema:
 
 ```bash
+createdb maddy_chats
 npx drizzle-kit push
 ```
 
-Inspect pending schema changes without editing credentials into config files:
+Start the development server:
 
 ```bash
-npx drizzle-kit generate
+npm run dev
 ```
+
+Open [http://localhost:3000](http://localhost:3000).
+
+## Available commands
+
+| Command | Description |
+| --- | --- |
+| `npm run dev` | Start the development server |
+| `npm run build` | Create a production build |
+| `npm start` | Run the production build |
+| `npm run typecheck` | Run TypeScript checks |
+| `npm run lint` | Run ESLint |
+| `npx drizzle-kit push` | Apply the current schema to the database |
+| `npx drizzle-kit generate` | Generate schema migration files |
 
 ## Development seed
 
-Create or refresh two reserved development users:
+The optional seed script creates two local test users. It requires an explicit
+password and refuses to run when `NODE_ENV=production`.
 
 ```bash
-DEV_SEED_PASSWORD='choose-a-dev-password' node scripts/seed.mjs
+DEV_SEED_PASSWORD='local-password-only' node scripts/seed.mjs
 ```
 
-This creates:
+## Project structure
 
-- `User A` (`user_a`, `user.a@maddychats.local`)
-- `User B` (`user_b`, `user.b@maddychats.local`)
+```text
+src/
+├── app/
+│   ├── api/          # authenticated HTTP and realtime endpoints
+│   └── app/          # protected application pages
+├── components/       # auth, chat, profile, people, and shell UI
+├── db/               # Drizzle connection and PostgreSQL schema
+├── lib/              # shared validation, types, and utilities
+└── server/           # server-only auth, chat, media, and realtime logic
+scripts/
+├── seed.mjs          # guarded local-development seed
+└── smoke-test.sh     # end-to-end API and realtime checks
+server/uploads/       # runtime media; excluded from Git
+```
 
-The password is read only from `DEV_SEED_PASSWORD` and is not printed. The
-script hashes it with bcrypt(12), is idempotent, and **refuses to run when
-`NODE_ENV=production`**. Seed users are never rendered or exposed by a
-production-only code path.
+The browser communicates only with same-origin Next.js endpoints. Database
+credentials, password hashes, signing material, and storage paths remain on
+the server. Private media is served through authenticated routes that verify
+conversation membership.
 
-## Development and startup
+Realtime updates use the authenticated `/api/realtime/stream` Server-Sent
+Events endpoint. The current event bus and presence store are process-local;
+multi-instance deployments should replace them with shared infrastructure such
+as Redis pub/sub.
 
-This deployment uses a unified Next.js process: React pages and the Node API
-start together. There is no separate frontend/database connection or second
-Express process.
+## Testing
+
+Run static checks before opening a pull request:
 
 ```bash
-npm run dev          # React frontend + Node API, development mode
-npm run build        # optimized production build
-npm start            # start the built frontend + backend
-npm run lint         # ESLint
-npm run typecheck    # TypeScript
-```
-
-Open `http://localhost:3000`.
-
-## Realtime architecture and Socket.IO compatibility
-
-The managed runtime cannot replace its production start command with a custom
-HTTP server, which Socket.IO requires. Realtime delivery therefore uses an
-authenticated Server-Sent Events endpoint:
-
-```text
-GET /api/realtime/stream
-```
-
-Clients send authorized ephemeral events such as typing through narrow REST
-routes; the server publishes normalized events to the recipient’s stream:
-
-```text
-message:new          message:update       message:delete
-message:delivered    message:read         typing:update
-presence:update      notification:new     conversation:new/delete
-```
-
-This preserves Socket.IO-style event semantics while remaining compatible with
-the platform runtime. Authentication always comes from the HttpOnly session,
-conversation membership is checked server-side, client-supplied user IDs are
-never trusted, streams are capped per account, EventSource reconnects
-natively, and all listeners/timers are cleaned up on unmount or disconnect.
-
-For a deployment with a custom Express/Node server, the same event contracts
-can be moved to Socket.IO by replacing the stream/provider transport. For
-multiple application instances, use Redis pub/sub behind `src/server/realtime.ts`
-and shared presence storage; the current in-memory bus is intentionally
-single-instance V1 architecture.
-
-## Media storage
-
-Runtime files are stored under:
-
-```text
-server/uploads/
-├── avatars/
-├── images/
-└── files/
-```
-
-The directory is git-ignored. PostgreSQL stores metadata only; binary contents
-are never stored in database columns. Original filenames are sanitized for
-display only. Actual stored filenames are generated server-side.
-
-Uploads enforce:
-
-- Authentication
-- Conversation membership for message files
-- MIME and extension allow-lists
-- Executable and active-content rejection
-- Configurable size limits
-- Path traversal prevention
-- Maximum attachment count
-
-Private attachments are never served as unrestricted static files. Access goes
-through `GET /api/media/:id`, which verifies the user belongs to the owning
-conversation. Deleted-message attachments return 404.
-
-Local disk is suitable for V1 development and a single persistent server. For
-production horizontal scaling, replace the storage adapter with durable object
-storage while preserving the authenticated media API.
-
-## API overview
-
-```text
-/api/auth/*                              registration, login, logout, session
-/api/users/*                             profiles, search, block/unblock
-/api/conversations/*                     direct chats, messages, reads, controls
-/api/messages/*                          edit/delete/reactions
-/api/upload/avatar                       avatar upload
-/api/upload/message                      message attachment upload
-/api/media/*                             authorized private media
-/api/search/messages                     authorized message search
-/api/notifications/*                     persistent notification feed
-/api/realtime/stream                     authenticated realtime channel
-```
-
-All private routes authenticate server-side. Conversation, message, media, and
-notification endpoints independently enforce ownership or membership.
-
-## Testing and QA
-
-Run the application, then execute:
-
-```bash
-DATABASE_URL='postgresql://user:password@localhost:5432/maddy_chats' \
-  ./scripts/smoke-test.sh http://localhost:3000
-```
-
-The suite creates isolated random QA users and tests registration, login,
-profile persistence, direct-chat deduplication, two-way realtime messages,
-typing, reactions, replies, edits, deleted state, read receipts, presence
-disconnect/reconnect, image/PDF/text uploads, invalid and oversized uploads,
-media authorization, notifications, controls, blocking, search, pagination,
-logout/re-login persistence, and bcrypt storage.
-
-Release validation:
-
-```bash
-npx next typegen
-npm exec tsc -- --noEmit --pretty false
+npm run typecheck
 npm run lint
 npm run build
 ```
 
-## Deployment notes
+With the application and a test database running, execute the smoke suite:
 
-- Set a persistent, random `JWT_SECRET`; never use the development fallback in
-  a public deployment.
-- Serve over HTTPS so session cookies use `Secure; HttpOnly; SameSite=None`
-  where cross-site embedding is required.
-- Keep `CLIENT_URL` restricted to the real client origin.
-- Use a persistent volume for `UPLOAD_DIR`, or replace local storage with a
-  durable storage adapter.
-- The V1 realtime bus is single-process. Use Redis pub/sub and shared presence
-  for multiple instances.
-- Apply schema changes before accepting traffic.
-- Run the smoke suite against the deployed origin before promotion.
-- Do not commit `.env`, uploads, credentials, test passwords, or private keys.
+```bash
+./scripts/smoke-test.sh http://localhost:3000
+```
+
+The smoke suite creates isolated test accounts and exercises authentication,
+profiles, conversations, realtime events, messages, reactions, uploads,
+authorization, search, notifications, and persistence.
+
+## Production checklist
+
+- Set a unique, random `JWT_SECRET`; never rely on a fallback in production.
+- Keep `DATABASE_URL`, `JWT_SECRET`, and seed credentials in the deployment
+  platform's secret manager, not in source control or client-visible variables.
+- Set `CLIENT_URL` to the exact HTTPS production origin.
+- Apply database schema changes before accepting traffic.
+- Use persistent private storage for uploads, or replace local storage with an
+  object-storage adapter while preserving authorization checks.
+- Use shared realtime and presence infrastructure when running more than one
+  application instance.
+- Run type checking, linting, a production build, and smoke tests before release.
+- Never commit `.env` files, database dumps, logs, uploads, credentials,
+  private keys, access tokens, or production user data.
+
+## Security notes
+
+- Authentication is enforced server-side with signed HttpOnly session cookies.
+- Passwords are hashed with bcrypt and are never returned by API responses.
+- Private routes independently verify ownership or conversation membership.
+- Uploads enforce size and type restrictions and reject executable content.
+- Only variables intentionally prefixed with `NEXT_PUBLIC_` can be exposed to
+  browser bundles. Do not use that prefix for secrets.
+- Report security issues privately to the repository owner rather than opening
+  a public issue containing exploit details or sensitive data.
