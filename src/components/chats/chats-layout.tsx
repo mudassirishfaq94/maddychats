@@ -215,6 +215,7 @@ export function ChatsLayout({
                             <span className="truncate text-[0.92rem] font-semibold">
                               {name}
                             </span>
+                            {conv.requestPending ? <span className="shrink-0 rounded-full bg-[var(--accent-soft)] px-1.5 py-0.5 text-[0.58rem] font-bold uppercase tracking-wide text-[var(--accent-fg)]">Request</span> : null}
                           </span>
                           <span className="shrink-0 text-[0.66rem] tabular-nums text-[var(--muted)]">
                             {stampTime(conv.lastMessageAt ?? conv.createdAt)}

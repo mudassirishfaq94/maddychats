@@ -112,6 +112,7 @@ export interface ConversationSummary {
   description: string | null;
   avatarUrl: string | null;
   memberCount: number;
+  requestPending: boolean;
   createdAt: string;
   updatedAt: string;
   lastMessageAt: string | null;
@@ -146,6 +147,8 @@ export interface ConversationDetail {
   avatarUrl: string | null;
   createdById: string | null;
   myRole: "owner" | "admin" | "member";
+  requestPending: boolean;
+  requestInitiatorId: string | null;
   createdAt: string;
   updatedAt: string;
   lastMessageAt: string | null;
@@ -187,6 +190,7 @@ export interface RealtimeConversationEvent {
   type:
     | "conversation:new"
     | "conversation:delete"
+    | "conversation:accepted"
     | "group:created"
     | "group:member-added"
     | "group:member-removed"

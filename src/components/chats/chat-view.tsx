@@ -80,8 +80,9 @@ function sameDay(a: string, b: string): boolean {
 function ReceiptIcon({ message }: { message: MessageDTO }) {
   if (message.readBy.length > 0) {
     return (
-      <span title="Read" className="inline-flex items-center">
-        <CheckCheck className="h-3.5 w-3.5 text-[var(--accent-fg)]" />
+      <span title="Read" className="inline-flex items-center gap-0.5 font-semibold text-[var(--accent-fg)]">
+        <CheckCheck className="h-3.5 w-3.5 text-sky-400" />
+        <span className="text-[0.62rem]">Read</span>
       </span>
     );
   }
@@ -137,6 +138,8 @@ export function ChatView({
   const [showDetails, setShowDetails] = useState(false);
   const [galleryRevision, setGalleryRevision] = useState(0);
   const [otherTyping, setOtherTyping] = useState(false);
+  const [requestAccepted, setRequestAccepted] = useState(!conversation.requestPending);
+  const [acceptingRequest, setAcceptingRequest] = useState(false);
   const attachments = useAttachmentUpload();
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -170,6 +173,7 @@ export function ChatView({
   /* ------------------------------ read receipts ----------------------------- */
 
   const markRead = useCallback(async () => {
+    if (!requestAccepted) return;
     try {
       // The endpoint emits message:read when rows change; ChatsLayout then
       // performs one debounced refresh. Do not duplicate that request here.
@@ -179,7 +183,23 @@ export function ChatView({
     } catch {
       // best-effort
     }
-  }, [conversationId]);
+  }, [conversationId, requestAccepted]);
+
+  async function acceptMessageRequest() {
+    setAcceptingRequest(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/conversations/${conversationId}/accept`, { method: "POST" });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(data?.error ?? "Could not accept this message request.");
+      setRequestAccepted(true);
+      requestAnimationFrame(() => composerRef.current?.focus());
+    } catch (cause) {
+      setError((cause as Error).message);
+    } finally {
+      setAcceptingRequest(false);
+    }
+  }
 
   useEffect(() => {
     void markRead();
@@ -826,6 +846,21 @@ export function ChatView({
         </div>
       </header>
 
+      {!requestAccepted ? (
+        <div className="border-b border-[var(--border)] bg-[color-mix(in_srgb,var(--accent)_8%,var(--surface))] px-4 py-3">
+          <div className="mx-auto flex max-w-xl items-center gap-3">
+            <ShieldCheck className="h-5 w-5 shrink-0 text-[var(--accent-fg)]" />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold">Message request</p>
+              <p className="text-xs text-[var(--muted)]">Preview privately. The sender will not see a read receipt until you accept.</p>
+            </div>
+            <button type="button" disabled={acceptingRequest} onClick={() => void acceptMessageRequest()} className="btn btn-primary shrink-0 px-3! py-2! text-xs!">
+              {acceptingRequest ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Accept"}
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       {/* Pinned message indicator */}
       {hasPinnedMsgs && firstPinned ? (
         <button
@@ -1251,7 +1286,7 @@ export function ChatView({
         <div className="flex items-end gap-2">
           <AttachButton
             onFiles={(files) => attachments.addFiles(files)}
-            disabled={sendPending}
+            disabled={sendPending || !requestAccepted}
           />
           <div className="flex-1 rounded-2xl bg-[var(--input-bg)] px-3.5">
             <textarea
@@ -1265,7 +1300,8 @@ export function ChatView({
               }}
               onBlur={() => signalTyping(false)}
               onKeyDown={onComposerKey}
-              placeholder="Message…"
+              placeholder={requestAccepted ? "Message…" : "Accept this request to reply"}
+              disabled={!requestAccepted}
               aria-label="Message text"
               rows={1}
               maxLength={2000}
@@ -1275,7 +1311,9 @@ export function ChatView({
           <button
             type="submit"
             disabled={
-              (!draft.trim() && attachments.pending.length === 0) || sendPending
+              !requestAccepted ||
+              (!draft.trim() && attachments.pending.length === 0) ||
+              sendPending
             }
             aria-label="Send message"
             className="btn btn-primary h-10 w-10 shrink-0 rounded-full! p-0!"

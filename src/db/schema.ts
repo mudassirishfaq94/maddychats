@@ -107,6 +107,8 @@ export const conversationMembers = pgTable(
     joinedAt: timestamp("joined_at", { withTimezone: true, mode: "date" })
       .defaultNow()
       .notNull(),
+    /** Null only for a pending direct-message request recipient. */
+    acceptedAt: timestamp("accepted_at", { withTimezone: true, mode: "date" }),
     /* ---- per-user conversation state (Step 7) ---------------------------
      * These are deliberately per-member so one user pinning/archiving or
      * "deleting" a chat never mutates the other participant's view. */

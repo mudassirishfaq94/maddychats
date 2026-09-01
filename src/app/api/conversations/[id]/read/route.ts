@@ -3,7 +3,7 @@ import { guardSameOrigin, jsonError } from "@/server/http";
 import { getSessionUser } from "@/server/session";
 import { isUuid } from "@/server/users";
 import { publishToConversation } from "@/server/realtime";
-import { getMembership, markConversationRead } from "@/server/chat";
+import { getConversationForUser, getMembership, markConversationRead } from "@/server/chat";
 
 export const dynamic = "force-dynamic";
 
@@ -27,6 +27,13 @@ export async function POST(
 
   const membership = await getMembership(id, me.id);
   if (!membership) return jsonError(404, "Conversation not found.");
+
+  // Previewing a message request is deliberately private. Until the recipient
+  // accepts, no read rows or realtime read receipts are created.
+  const conversation = await getConversationForUser(id, me.id);
+  if (conversation?.type === "dm" && conversation.requestPending) {
+    return NextResponse.json({ ok: true, readCount: 0, requestPending: true });
+  }
 
   const { messageIds, readAt } = await markConversationRead(id, me.id);
 

@@ -9,7 +9,7 @@
  * - Refuses to run with NODE_ENV=production.
  * - Requires the password through an environment variable (never hardcoded).
  * - Uses bcrypt(12), the same cost as registration.
- * - Idempotently creates/refreshes only the two reserved development users.
+ * - Idempotently creates/refreshes only the six reserved development users.
  */
 import "dotenv/config";
 import bcrypt from "bcryptjs";
@@ -44,6 +44,30 @@ const seedUsers = [
     displayName: "User B",
     email: "user.b@maddychats.local",
     bio: "Development test account B",
+  },
+  {
+    username: "alex_chen",
+    displayName: "Alex Chen",
+    email: "alex@maddychats.local",
+    bio: "Coffee, code, and good conversations.",
+  },
+  {
+    username: "sara_khan",
+    displayName: "Sara Khan",
+    email: "sara@maddychats.local",
+    bio: "Product designer and weekend photographer.",
+  },
+  {
+    username: "omar_ali",
+    displayName: "Omar Ali",
+    email: "omar@maddychats.local",
+    bio: "Building things for the web.",
+  },
+  {
+    username: "maya_patel",
+    displayName: "Maya Patel",
+    email: "maya@maddychats.local",
+    bio: "Always planning the next trip.",
   },
 ];
 
@@ -83,6 +107,7 @@ try {
   console.log("Development users are ready:");
   console.log("  User A: user_a / user.a@maddychats.local");
   console.log("  User B: user_b / user.b@maddychats.local");
+  console.log("  Plus: alex_chen, sara_khan, omar_ali, maya_patel");
   console.log("  Password: read from DEV_SEED_PASSWORD (not printed)");
 } catch (error) {
   await pool.query("ROLLBACK").catch(() => undefined);

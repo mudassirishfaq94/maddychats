@@ -373,6 +373,7 @@ export async function listConversationsFor(
         description: conv.description,
         avatarUrl: conv.avatarUrl,
         memberCount: others.length,
+        requestPending: conv.type === "dm" && !mine?.acceptedAt,
         createdAt: conv.createdAt.toISOString(),
         updatedAt: conv.updatedAt.toISOString(),
         lastMessageAt: conv.lastMessageAt
@@ -438,6 +439,8 @@ export async function getConversationForUser(
     avatarUrl: conv.avatarUrl,
     createdById: conv.createdById,
     myRole: membership.role as "owner" | "admin" | "member",
+    requestPending: conv.type === "dm" && !membership.acceptedAt,
+    requestInitiatorId: conv.type === "dm" ? conv.createdById : null,
     createdAt: conv.createdAt.toISOString(),
     updatedAt: conv.updatedAt.toISOString(),
     lastMessageAt: conv.lastMessageAt ? conv.lastMessageAt.toISOString() : null,
@@ -583,8 +586,8 @@ export async function createDirectConversation(
         .values({ type: "dm", dmKey: directKey(me, other), createdById: me })
         .returning();
       await tx.insert(conversationMembers).values([
-        { conversationId: inserted[0].id, userId: me, role: "owner" },
-        { conversationId: inserted[0].id, userId: other, role: "member" },
+        { conversationId: inserted[0].id, userId: me, role: "owner", acceptedAt: new Date() },
+        { conversationId: inserted[0].id, userId: other, role: "member", acceptedAt: null },
       ]);
       return inserted[0];
     });
@@ -596,6 +599,17 @@ export async function createDirectConversation(
     }
     throw err;
   }
+}
+
+export async function acceptDirectConversation(conversationId: string, userId: string) {
+  const membership = await getMembership(conversationId, userId);
+  if (!membership) return "not_found" as const;
+  const [conversation] = await db.select().from(conversations).where(eq(conversations.id, conversationId)).limit(1);
+  if (!conversation || conversation.type !== "dm" || conversation.deletedAt) return "not_found" as const;
+  if (conversation.createdById === userId) return "already_accepted" as const;
+  if (membership.acceptedAt) return "already_accepted" as const;
+  await db.update(conversationMembers).set({ acceptedAt: new Date() }).where(eq(conversationMembers.id, membership.id));
+  return "ok" as const;
 }
 
 export async function deleteConversation(
