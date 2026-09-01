@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import {
   Archive,
@@ -35,18 +36,37 @@ export function ConversationMenu({
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     function onDoc(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      if (
+        menuRef.current && !menuRef.current.contains(target) &&
+        triggerRef.current && !triggerRef.current.contains(target)
+      ) {
         setOpen(false);
         setConfirmClear(false);
       }
     }
-    document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
-  }, []);
+    if (open) {
+      document.addEventListener("mousedown", onDoc);
+      return () => document.removeEventListener("mousedown", onDoc);
+    }
+  }, [open]);
+
+  // Position the dropdown relative to the viewport when opening
+  useEffect(() => {
+    if (open && triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect();
+      setMenuPos({
+        top: rect.bottom + 6,
+        right: window.innerWidth - rect.right,
+      });
+    }
+  }, [open]);
 
   async function run(action: Action) {
     setBusy(true);
@@ -70,8 +90,9 @@ export function ConversationMenu({
     "flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-xs transition-colors hover:bg-[color-mix(in_srgb,var(--muted)_10%,transparent)]";
 
   return (
-    <div ref={ref} className="relative">
+    <div className="relative">
       <button
+        ref={triggerRef}
         type="button"
         onClick={(e) => {
           e.preventDefault();
@@ -88,92 +109,100 @@ export function ConversationMenu({
         )}
       </button>
 
-      {open ? (
-        <div className="card-glass absolute right-0 top-[calc(100%+6px)] z-50 w-52 max-w-[calc(100vw-1.5rem)] rounded-2xl p-1.5 animate-fade-up">
-          <button
-            type="button"
-            className={`${item} text-[var(--muted)]`}
-            onClick={() => run(conversation.pinned ? "unpin" : "pin")}
-          >
-            {conversation.pinned ? (
-              <PinOff className="h-3.5 w-3.5" />
-            ) : (
-              <Pin className="h-3.5 w-3.5" />
-            )}
-            {conversation.pinned ? "Unpin" : "Pin to top"}
-          </button>
-
-          <button
-            type="button"
-            className={`${item} text-[var(--muted)]`}
-            onClick={() => run(conversation.muted ? "unmute" : "mute")}
-          >
-            {conversation.muted ? (
-              <Bell className="h-3.5 w-3.5" />
-            ) : (
-              <BellOff className="h-3.5 w-3.5" />
-            )}
-            {conversation.muted ? "Unmute" : "Mute notifications"}
-          </button>
-
-          <button
-            type="button"
-            className={`${item} text-[var(--muted)]`}
-            onClick={() => run(conversation.archived ? "unarchive" : "archive")}
-          >
-            {conversation.archived ? (
-              <ArchiveRestore className="h-3.5 w-3.5" />
-            ) : (
-              <Archive className="h-3.5 w-3.5" />
-            )}
-            {conversation.archived ? "Unarchive" : "Archive"}
-          </button>
-
-          <button
-            type="button"
-            className={`${item} text-[var(--muted)]`}
-            onClick={() => run("markUnread")}
-          >
-            <MailOpen className="h-3.5 w-3.5" />
-            Mark as unread
-          </button>
-
-          <div className="my-1 border-t border-[var(--border)]" />
-
-          {confirmClear ? (
-            <div className="rounded-xl bg-[color-mix(in_srgb,var(--danger)_10%,transparent)] p-2">
-              <p className="px-1 pb-1.5 text-[0.68rem] leading-snug text-[var(--muted)]">
-                Delete this chat for you only? The other person keeps their copy.
-              </p>
-              <div className="flex gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => run("clear")}
-                  className="flex-1 rounded-lg bg-[var(--danger)] px-2 py-1.5 text-[0.68rem] font-semibold text-white"
-                >
-                  Delete for me
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setConfirmClear(false)}
-                  className="rounded-lg px-2 py-1.5 text-[0.68rem] text-[var(--muted)]"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          ) : (
-            <button
-              type="button"
-              className={`${item} text-[var(--danger)]`}
-              onClick={() => setConfirmClear(true)}
+      {open && menuPos
+        ? createPortal(
+            <div
+              ref={menuRef}
+              className="card-glass fixed z-[100] w-52 max-w-[calc(100vw-1.5rem)] rounded-2xl p-1.5 animate-fade-up"
+              style={{ top: menuPos.top, right: menuPos.right }}
+              onClick={(e) => e.stopPropagation()}
             >
-              <Trash2 className="h-3.5 w-3.5" />
-              Delete chat
-            </button>
-          )}
-        </div>
-      ) : null}
+              <button
+                type="button"
+                className={`${item} text-[var(--muted)]`}
+                onClick={() => run(conversation.pinned ? "unpin" : "pin")}
+              >
+                {conversation.pinned ? (
+                  <PinOff className="h-3.5 w-3.5" />
+                ) : (
+                  <Pin className="h-3.5 w-3.5" />
+                )}
+                {conversation.pinned ? "Unpin" : "Pin to top"}
+              </button>
+
+              <button
+                type="button"
+                className={`${item} text-[var(--muted)]`}
+                onClick={() => run(conversation.muted ? "unmute" : "mute")}
+              >
+                {conversation.muted ? (
+                  <Bell className="h-3.5 w-3.5" />
+                ) : (
+                  <BellOff className="h-3.5 w-3.5" />
+                )}
+                {conversation.muted ? "Unmute" : "Mute notifications"}
+              </button>
+
+              <button
+                type="button"
+                className={`${item} text-[var(--muted)]`}
+                onClick={() => run(conversation.archived ? "unarchive" : "archive")}
+              >
+                {conversation.archived ? (
+                  <ArchiveRestore className="h-3.5 w-3.5" />
+                ) : (
+                  <Archive className="h-3.5 w-3.5" />
+                )}
+                {conversation.archived ? "Unarchive" : "Archive"}
+              </button>
+
+              <button
+                type="button"
+                className={`${item} text-[var(--muted)]`}
+                onClick={() => run("markUnread")}
+              >
+                <MailOpen className="h-3.5 w-3.5" />
+                Mark as unread
+              </button>
+
+              <div className="my-1 border-t border-[var(--border)]" />
+
+              {confirmClear ? (
+                <div className="rounded-xl bg-[color-mix(in_srgb,var(--danger)_10%,transparent)] p-2">
+                  <p className="px-1 pb-1.5 text-[0.68rem] leading-snug text-[var(--muted)]">
+                    Delete this chat for you only? The other person keeps their copy.
+                  </p>
+                  <div className="flex gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => run("clear")}
+                      className="flex-1 rounded-lg bg-[var(--danger)] px-2 py-1.5 text-[0.68rem] font-semibold text-white"
+                    >
+                      Delete for me
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setConfirmClear(false)}
+                      className="rounded-lg px-2 py-1.5 text-[0.68rem] text-[var(--muted)]"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  className={`${item} text-[var(--danger)]`}
+                  onClick={() => setConfirmClear(true)}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Delete chat
+                </button>
+              )}
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }

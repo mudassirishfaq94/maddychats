@@ -154,6 +154,8 @@ export interface ConversationDetail {
   createdAt: string;
   updatedAt: string;
   lastMessageAt: string | null;
+  backgroundStyle: string | null;
+  backgroundOpacity: number;
   members: Array<PublicUser & { role: "owner" | "admin" | "member"; joinedAt: string }>;
 }
 

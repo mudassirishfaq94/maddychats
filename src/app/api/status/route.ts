@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
   const blocked = guardSameOrigin(req); if (blocked) return blocked;
   const me = await getSessionUser(); if (!me) return jsonError(401, "Not authenticated.");
   const contentType = req.headers.get("content-type") ?? "";
-  let type: "text" | "image"; let text: string | null = null; let backgroundStyle: string | null = null;
+  let type: "text" | "image" | "video"; let text: string | null = null; let backgroundStyle: string | null = null;
   let privacy: "all" | "selected" = "all"; let selectedUserIds: string[] = [];
   let mediaPath: string | null = null; let mediaMimeType: string | null = null;
 
@@ -28,9 +28,10 @@ export async function POST(req: NextRequest) {
     type = "image"; text = String(form.get("caption") ?? "").trim().slice(0, 500) || null;
     privacy = form.get("privacy") === "selected" ? "selected" : "all";
     try { selectedUserIds = JSON.parse(String(form.get("selectedUserIds") ?? "[]")); } catch { return jsonError(422, "Invalid selected users."); }
-    const entry = form.get("file"); if (!entry || typeof entry === "string") return jsonError(422, "Choose an image.");
+    const entry = form.get("file"); if (!entry || typeof entry === "string") return jsonError(422, "Choose a file.");
     const file = entry as File; const check = validateUpload(file.name, file.type, file.size, "message");
-    if (!check.ok || check.kind !== "image") return jsonError(422, check.ok ? "Status media must be an image." : check.error);
+    if (!check.ok || (check.kind !== "image" && check.kind !== "video")) return jsonError(422, check.ok ? "Status media must be an image or video." : check.error);
+    type = check.kind;
     const storedName = generateStoredName(check.extension); const buffer = Buffer.from(await file.arrayBuffer());
     mediaPath = await saveBuffer("statuses", storedName, buffer); mediaMimeType = file.type;
   } else {

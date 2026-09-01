@@ -38,7 +38,7 @@ export async function canViewStatus(row: StatusRow, viewerId: string) {
 }
 
 export async function createStatus(input: {
-  userId: string; type: "text" | "image"; text?: string | null; mediaPath?: string | null;
+  userId: string; type: "text" | "image" | "video"; text?: string | null; mediaPath?: string | null;
   mediaMimeType?: string | null; backgroundStyle?: string | null; privacy: "all" | "selected"; selectedUserIds?: string[];
 }) {
   const now = new Date();

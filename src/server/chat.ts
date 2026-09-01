@@ -447,6 +447,8 @@ export async function getConversationForUser(
     createdAt: conv.createdAt.toISOString(),
     updatedAt: conv.updatedAt.toISOString(),
     lastMessageAt: conv.lastMessageAt ? conv.lastMessageAt.toISOString() : null,
+    backgroundStyle: conv.backgroundStyle ?? null,
+    backgroundOpacity: conv.backgroundOpacity ?? 100,
     members: memberRows.map((m) => ({
       ...toPublicUser(m.user),
       role: m.member.role as "owner" | "admin" | "member",

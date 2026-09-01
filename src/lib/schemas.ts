@@ -113,6 +113,19 @@ export const reactionSchema = z.object({
     .max(16, "That reaction is too long"),
 });
 
+export const notificationPreferencesSchema = z
+  .object({
+    messageNotifications: z.boolean().optional(),
+    groupNotifications: z.boolean().optional(),
+    pushNotifications: z.boolean().optional(),
+    notificationSound: z.boolean().optional(),
+  })
+  .refine((value) => Object.values(value).some((item) => item !== undefined), {
+    message: "Provide at least one preference to update",
+  });
+
+export type NotificationPreferencesInput = z.infer<typeof notificationPreferencesSchema>;
+
 export const REACTION_CHOICES = ["👍", "❤️", "😂", "🎉", "😮", "😢"] as const;
 
 export type RegisterInput = z.infer<typeof registerSchema>;

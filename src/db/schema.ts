@@ -1,6 +1,7 @@
 import { relations, sql } from "drizzle-orm";
 import {
   index,
+  boolean,
   integer,
   jsonb,
   pgEnum,
@@ -80,6 +81,10 @@ export const conversations = pgTable(
       withTimezone: true,
       mode: "date",
     }),
+    /** Chat background style key (e.g. 'ocean', 'forest', 'midnight', or custom URL/color). */
+    backgroundStyle: text("background_style"),
+    /** Background opacity 0.0–1.0 (controls intensity of patterns/images). */
+    backgroundOpacity: integer("background_opacity").default(100),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" })
       .defaultNow()
       .notNull(),
@@ -394,6 +399,23 @@ export const notifications = pgTable(
   ],
 );
 
+/** One row per user; absent legacy rows resolve to these enabled defaults. */
+export const notificationPreferences = pgTable("notification_preferences", {
+  userId: uuid("user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  messageNotifications: boolean("message_notifications").default(true).notNull(),
+  groupNotifications: boolean("group_notifications").default(true).notNull(),
+  pushNotifications: boolean("push_notifications").default(true).notNull(),
+  notificationSound: boolean("notification_sound").default(true).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true, mode: "date" })
+    .defaultNow()
+    .notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" })
+    .defaultNow()
+    .notNull(),
+});
+
 /* ======================== temporary status updates ======================== */
 
 export const statusTypeEnum = pgEnum("status_type", ["text", "image", "video"]);
@@ -631,6 +653,7 @@ export type MessageReactionRow = typeof messageReactions.$inferSelect;
 export type MessageReadRow = typeof messageReads.$inferSelect;
 export type BlockRow = typeof blocks.$inferSelect;
 export type NotificationRow = typeof notifications.$inferSelect;
+export type NotificationPreferenceRow = typeof notificationPreferences.$inferSelect;
 export type MessageAttachmentRow = typeof messageAttachments.$inferSelect;
 export type MessageStarRow = typeof messageStars.$inferSelect;
 export type PinnedMessageRow = typeof pinnedMessages.$inferSelect;

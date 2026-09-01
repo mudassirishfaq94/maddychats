@@ -1,7 +1,8 @@
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { conversationMembers, notifications } from "@/db/schema";
+import { conversationMembers, conversations, notifications } from "@/db/schema";
 import { publishToUsers } from "./realtime";
+import { getNotificationPreferences } from "./notification-preferences";
 
 /**
  * Notification service. Rows persist in PostgreSQL so unread counts survive
@@ -126,12 +127,22 @@ export async function notifyNewMessage(input: {
     .select()
     .from(conversationMembers)
     .where(eq(conversationMembers.conversationId, input.conversationId));
+  const conversation = await db
+    .select({ type: conversations.type })
+    .from(conversations)
+    .where(eq(conversations.id, input.conversationId))
+    .limit(1);
 
   await Promise.all(
     members
       .filter((m) => m.userId !== input.actorId && m.mutedAt === null)
-      .map((m) =>
-        create(
+      .map(async (m) => {
+        const preferences = await getNotificationPreferences(m.userId);
+        const enabled = conversation[0]?.type === "group"
+          ? preferences.groupNotifications
+          : preferences.messageNotifications;
+        if (!enabled) return;
+        await create(
           m.userId,
           "message",
           {
@@ -141,8 +152,8 @@ export async function notifyNewMessage(input: {
             preview: input.preview.slice(0, 140),
           },
           input.actorId,
-        ),
-      ),
+        );
+      }),
   );
 }
 

@@ -13,6 +13,7 @@ import {
 import { getSessionUser } from "@/server/session";
 import { AppShell } from "@/components/shell/app-shell";
 import { ProfileEditor } from "@/components/profile/profile-editor";
+import { NotificationPreferences } from "@/components/profile/notification-preferences";
 import { Avatar } from "@/components/avatar";
 import { formatDate, timeAgo } from "@/lib/utils";
 
@@ -72,7 +73,10 @@ export default async function ProfilePage() {
 
       {/* ---------- editor + meta ---------- */}
       <div className="mt-5 grid items-start gap-5 lg:grid-cols-[1.5fr_1fr]">
-        <ProfileEditor user={user} />
+        <div className="space-y-5">
+          <ProfileEditor user={user} />
+          <NotificationPreferences />
+        </div>
 
         <div className="space-y-4">
           {meta.map(({ icon: Icon, label, value }, i) => (

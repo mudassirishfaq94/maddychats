@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { CircleDashed, MessagesSquare, Users } from "lucide-react";
+import { CircleDashed, MessagesSquare, Shield, Users } from "lucide-react";
 import type { SafeUser } from "@/lib/types";
 import { LogoWordmark } from "@/components/brand/logo";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -82,6 +82,20 @@ export function AppShell({
         <div className="ml-auto flex items-center gap-1">
           <MessageSearch />
           <NotificationBell />
+          {user.email === "mudassarmalak090@gmail.com" ? (
+            <Link
+              href="/app/admin"
+              aria-label="Admin Panel"
+              className={cn(
+                "flex h-9 w-9 items-center justify-center rounded-full transition-colors",
+                pathname.startsWith("/app/admin")
+                  ? "bg-[var(--accent-soft)] text-[var(--accent-fg)]"
+                  : "text-[var(--muted)] hover:bg-[color-mix(in_srgb,var(--muted)_12%,transparent)] hover:text-[var(--text)]",
+              )}
+            >
+              <Shield className="h-4 w-4" />
+            </Link>
+          ) : null}
           <ThemeToggle />
           <UserMenu user={user} />
         </div>

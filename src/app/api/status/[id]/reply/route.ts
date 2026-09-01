@@ -15,8 +15,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (!found) return jsonError(404, "Status not found.");
   if (found.status.userId === me.id) return jsonError(403, "You cannot reply to your own status.");
   const { conversation, created } = await createDirectConversation(me.id, found.status.userId);
-  const context = found.status.type === "text" ? found.status.text?.slice(0, 120) : found.status.text?.slice(0, 120) || "Photo";
-  const message = await createMessage(conversation.id, me.id, `↪ Replied to your status: ${context}\n${text}`);
+  const statusText = found.status.type === "text" ? (found.status.text ?? "") : (found.status.text || (found.status.type === "video" ? "Video" : "Photo"));
+  const statusPreview = statusText.slice(0, 150);
+  const formattedText = `[STATUS_REPLY:${found.status.type}]${statusPreview}[/STATUS_REPLY]
+${text}`;
+  const message = await createMessage(conversation.id, me.id, formattedText);
   if (created) publishToUsers([me.id, found.status.userId], { type: "conversation:new", conversationId: conversation.id });
   await publishToConversation(conversation.id, { type: "message:new", conversationId: conversation.id, message: (await getMessageDTO(message.id, me.id)) ?? message });
   await notifyNewMessage({ conversationId: conversation.id, messageId: message.id, actorId: me.id, actorName: me.displayName, preview: text });

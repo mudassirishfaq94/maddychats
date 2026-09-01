@@ -56,6 +56,14 @@ const IMAGE_TYPES: Record<string, string[]> = {
   "image/bmp": [".bmp"],
 };
 
+const VIDEO_TYPES: Record<string, string[]> = {
+  "video/mp4": [".mp4"],
+  "video/webm": [".webm"],
+  "video/quicktime": [".mov"],
+  "video/x-msvideo": [".avi"],
+  "video/ogg": [".ogv"],
+};
+
 const DOCUMENT_TYPES: Record<string, string[]> = {
   "application/pdf": [".pdf"],
   "text/plain": [".txt", ".log", ".md"],
@@ -76,8 +84,6 @@ const DOCUMENT_TYPES: Record<string, string[]> = {
   ],
   "audio/mpeg": [".mp3"],
   "audio/wav": [".wav"],
-  "video/mp4": [".mp4"],
-  "video/webm": [".webm"],
 };
 
 /** Extensions that must never be accepted, whatever MIME type is claimed. */
@@ -164,28 +170,43 @@ export function validateUpload(
     return { ok: true, kind: "image", extension, safeName };
   }
 
-  if (!isImage && !isDoc) {
+  if (!isImage && !isDoc && !isVideo) {
     return { ok: false, error: "That file type is not supported." };
   }
-  const allowed = isImage ? IMAGE_TYPES[type] : DOCUMENT_TYPES[type];
-  if (!allowed.includes(extension)) {
-    return { ok: false, error: "File extension does not match its content type." };
+
+  if (isImage) {
+    if (!IMAGE_TYPES[type].includes(extension)) {
+      return { ok: false, error: "File extension does not match its content type." };
+    }
+    if (size > LIMITS.image) {
+      return { ok: false, error: `That file is too large (max ${Math.round(LIMITS.image / 1024 / 1024)} MB).` };
+    }
+    return { ok: true, kind: "image", extension, safeName };
   }
 
-  const limit = isImage ? LIMITS.image : LIMITS.file;
-  if (size > limit) {
+  if (isVideo) {
+    const allowed = VIDEO_TYPES[type];
+    if (!allowed || !allowed.includes(extension)) {
+      return { ok: false, error: "File extension does not match its content type." };
+    }
+    if (size > LIMITS.file) {
+      return { ok: false, error: `That video is too large (max ${Math.round(LIMITS.file / 1024 / 1024)} MB).` };
+    }
+    return { ok: true, kind: "video", extension, safeName };
+  }
+
+  const allowed = DOCUMENT_TYPES[type];
+  if (!allowed || !allowed.includes(extension)) {
+    return { ok: false, error: "File extension does not match its content type." };
+  }
+  if (size > LIMITS.file) {
     return {
       ok: false,
-      error: `That file is too large (max ${Math.round(limit / 1024 / 1024)} MB).`,
+      error: `That file is too large (max ${Math.round(LIMITS.file / 1024 / 1024)} MB).`,
     };
   }
 
-  return {
-    ok: true,
-    kind: isImage ? "image" : isVideo ? "video" : "file",
-    extension,
-    safeName,
-  };
+  return { ok: true, kind: "file", extension, safeName };
 }
 
 /** Generates a collision-free, server-controlled filename. */
