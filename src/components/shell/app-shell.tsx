@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { MessagesSquare, Users } from "lucide-react";
+import { MessagesSquare, Star, Users } from "lucide-react";
 import type { SafeUser } from "@/lib/types";
 import { LogoWordmark } from "@/components/brand/logo";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -25,7 +25,8 @@ export function AppShell({
 }) {
   const pathname = usePathname();
   const onPeople = pathname.startsWith("/app/people") || pathname.startsWith("/app/users");
-  const onChats = !onPeople && !pathname.startsWith("/app/profile");
+  const onStarred = pathname.startsWith("/app/starred");
+  const onChats = !onPeople && !onStarred && !pathname.startsWith("/app/profile");
 
   return (
     <div className="flex h-dvh flex-col bg-[var(--bg)]">
@@ -51,6 +52,19 @@ export function AppShell({
           >
             <MessagesSquare className="h-4 w-4" />
             <span className="hidden sm:inline">Chats</span>
+          </Link>
+          <Link
+            href="/app/starred"
+            aria-current={onStarred ? "page" : undefined}
+            className={cn(
+              "flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium transition-colors",
+              onStarred
+                ? "bg-[var(--surface-2)] text-[var(--text)]"
+                : "text-[var(--muted)] hover:text-[var(--text)]",
+            )}
+          >
+            <Star className="h-4 w-4" />
+            <span className="hidden sm:inline">Starred</span>
           </Link>
           <Link
             href="/app/people"

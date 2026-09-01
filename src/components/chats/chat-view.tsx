@@ -21,7 +21,9 @@ import {
   ChevronLeft,
   Loader2,
   MoreVertical,
+  Pin,
   Reply as ReplyIcon,
+  Star,
   Send,
   ShieldCheck,
   Trash2,
@@ -119,10 +121,12 @@ export function ChatView({
   const [replyTo, setReplyTo] = useState<MessageDTO | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState("");
-  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<{ id: string; mode: "for_me" | "for_everyone" } | null>(null);
   const [confirmConvDelete, setConfirmConvDelete] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [highlightId, setHighlightId] = useState<string | null>(null);
+  const [hasPinnedMsgs, setHasPinnedMsgs] = useState(false);
+  const [pinnedCount, setPinnedCount] = useState(0);
   const [dragging, setDragging] = useState(false);
   const [headerMenu, setHeaderMenu] = useState(false);
   const [otherTyping, setOtherTyping] = useState(false);
@@ -211,6 +215,25 @@ export function ChatView({
 
   useEffect(() => {
     return subscribe((event) => {
+      if (event.type === "message:pinned" && event.conversationId === conversationId) {
+        setHasPinnedMsgs(true);
+        setPinnedCount((c) => c + 1);
+        setItems((prev) => prev.map((m) => m.id === event.messageId ? { ...m, pinned: true } : m));
+        return;
+      }
+      if (event.type === "message:unpinned" && event.conversationId === conversationId) {
+        setPinnedCount((c) => {
+          const next = c - 1;
+          if (next <= 0) setHasPinnedMsgs(false);
+          return Math.max(0, next);
+        });
+        setItems((prev) => prev.map((m) => m.id === event.messageId ? { ...m, pinned: false } : m));
+        return;
+      }
+      if (event.type === "message:deleted_for_me" && event.conversationId === conversationId) {
+        // Another member deleted this message for themselves — no UI change needed.
+        return;
+      }
       if (
         event.type === "conversation:delete" &&
         event.conversationId === conversationId
@@ -500,11 +523,15 @@ export function ChatView({
     }
   }
 
-  async function confirmDelete(id: string) {
+  async function executeDelete(id: string, mode: "for_me" | "for_everyone" = "for_me") {
     setBusyId(id);
     setError(null);
     try {
-      const res = await fetch(`/api/messages/${id}`, { method: "DELETE" });
+      const res = await fetch(`/api/messages/${id}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode }),
+      });
       const data = (await res.json().catch(() => null)) as {
         message?: MessageDTO;
         error?: string;
@@ -513,9 +540,14 @@ export function ChatView({
         setError(data?.error ?? "Delete failed. Try again.");
         return;
       }
-      const updated = data.message;
-      setItems((prev) => prev.map((m) => (m.id === id ? updated : m)));
-      setConfirmDeleteId(null);
+      if (mode === "for_me") {
+        // Remove from visible list immediately
+        setItems((prev) => prev.filter((m) => m.id !== id));
+      } else {
+        const updated = data.message;
+        setItems((prev) => prev.map((m) => (m.id === id ? updated : m)));
+      }
+      setPendingDelete(null);
     } catch {
       setError("Network error while deleting.");
     } finally {
@@ -529,6 +561,63 @@ export function ChatView({
     }).catch(() => null);
     router.push("/app");
     router.refresh();
+  }
+
+  async function toggleStar(message: MessageDTO) {
+    const endpoint = message.starred
+      ? `/api/messages/${message.id}/star`
+      : `/api/messages/${message.id}/star`;
+    const method = message.starred ? "DELETE" : "POST";
+    try {
+      const res = await fetch(endpoint, { method });
+      const data = (await res.json().catch(() => null)) as {
+        message?: MessageDTO;
+        error?: string;
+      } | null;
+      if (!res.ok) {
+        setError(data?.error ?? "Star action failed.");
+        return;
+      }
+      if (data?.message) {
+        setItems((prev) => prev.map((m) => (m.id === data.message!.id ? data.message! : m)));
+      }
+    } catch {
+      setError("Network error while starring.");
+    }
+  }
+
+  async function togglePin(message: MessageDTO) {
+    const endpoint = message.pinned
+      ? `/api/conversations/${conversationId}/messages/${message.id}/pin`
+      : `/api/conversations/${conversationId}/messages/${message.id}/pin`;
+    const method = message.pinned ? "DELETE" : "POST";
+    try {
+      const res = await fetch(endpoint, { method });
+      const data = (await res.json().catch(() => null)) as {
+        ok?: boolean;
+        error?: string;
+      } | null;
+      if (!res.ok) {
+        setError(data?.error ?? "Pin action failed.");
+        return;
+      }
+      // Update local state immediately
+      setItems((prev) => prev.map((m) =>
+        m.id === message.id ? { ...m, pinned: !message.pinned } : m,
+      ));
+      if (message.pinned) {
+        setPinnedCount((c) => {
+          const next = c - 1;
+          if (next <= 0) setHasPinnedMsgs(false);
+          return Math.max(0, next);
+        });
+      } else {
+        setHasPinnedMsgs(true);
+        setPinnedCount((c) => c + 1);
+      }
+    } catch {
+      setError("Network error while pinning.");
+    }
   }
 
   function copyText(text: string) {
@@ -556,21 +645,32 @@ export function ChatView({
 
   /* -------------------------------- render --------------------------------- */
 
+  // Filter out messages deleted-for-me and compute grouped view.
+  const visibleItems = useMemo(
+    () => items.filter((m) => !m.deletedForMe),
+    [items],
+  );
+
   const grouped = useMemo(
     () =>
-      items.map((msg, i) => ({
+      visibleItems.map((msg, i) => ({
         msg,
-        showDate: i === 0 || !sameDay(items[i - 1].createdAt, msg.createdAt),
+        showDate: i === 0 || !sameDay(visibleItems[i - 1].createdAt, msg.createdAt),
         sameSenderPrev:
           i > 0 &&
-          items[i - 1].senderId === msg.senderId &&
+          visibleItems[i - 1].senderId === msg.senderId &&
           !msg.replyTo &&
-          sameDay(items[i - 1].createdAt, msg.createdAt) &&
+          sameDay(visibleItems[i - 1].createdAt, msg.createdAt) &&
           new Date(msg.createdAt).getTime() -
-            new Date(items[i - 1].createdAt).getTime() <
+            new Date(visibleItems[i - 1].createdAt).getTime() <
             5 * 60_000,
       })),
-    [items],
+    [visibleItems],
+  );
+
+  const firstPinned = useMemo(
+    () => visibleItems.find((m) => m.pinned),
+    [visibleItems],
   );
 
   return (
@@ -688,6 +788,30 @@ export function ChatView({
           ) : null}
         </div>
       </header>
+
+      {/* Pinned message indicator */}
+      {hasPinnedMsgs && firstPinned ? (
+        <button
+          type="button"
+          onClick={() => {
+            // Find the pinned message and scroll to it
+            const node = nodeRefs.current.get(firstPinned.id);
+            if (node) {
+              node.scrollIntoView({ behavior: "smooth", block: "center" });
+              setHighlightId(firstPinned.id);
+              setTimeout(() => setHighlightId(null), 1600);
+            }
+          }}
+          className="flex items-center gap-2 border-b border-[var(--border)] bg-[color-mix(in_srgb,var(--accent)_6%,transparent)] px-4 py-2 text-left text-xs text-[var(--accent-fg)] transition-colors hover:bg-[color-mix(in_srgb,var(--accent)_10%,transparent)]"
+        >
+          <Pin className="h-3.5 w-3.5 shrink-0" />
+          <span className="min-w-0 truncate">
+            {pinnedCount === 1
+              ? `Pinned message — ${firstPinned.text ? firstPinned.text.slice(0, 60) : "Attachment"}`
+              : `${pinnedCount} pinned messages`}
+          </span>
+        </button>
+      ) : null}
 
       {error ? (
         <div
@@ -934,6 +1058,7 @@ export function ChatView({
                             >
                               {msg.editedAt && !deleted ? "edited · " : ""}
                               {timeLabel(msg.createdAt)}
+                              {msg.starred ? <Star className="h-3 w-3 fill-current text-[var(--accent-fg)]" /> : null}
                               {own && !deleted ? <ReceiptIcon message={msg} /> : null}
                             </span>
                           </div>
@@ -967,7 +1092,7 @@ export function ChatView({
                             </div>
                           ) : null}
 
-                          {confirmDeleteId === msg.id ? (
+                          {pendingDelete?.id === msg.id ? (
                             <span
                               className={cn(
                                 "absolute top-1/2 z-20 flex -translate-y-1/2 items-center gap-1",
@@ -977,7 +1102,7 @@ export function ChatView({
                               <button
                                 type="button"
                                 aria-label="Confirm delete"
-                                onClick={() => void confirmDelete(msg.id)}
+                                onClick={() => void executeDelete(pendingDelete!.id, pendingDelete!.mode)}
                                 disabled={busyId === msg.id}
                                 className="flex h-7 w-7 items-center justify-center rounded-full bg-[var(--danger)] text-white"
                               >
@@ -990,7 +1115,7 @@ export function ChatView({
                               <button
                                 type="button"
                                 aria-label="Cancel delete"
-                                onClick={() => setConfirmDeleteId(null)}
+                                onClick={() => setPendingDelete(null)}
                                 className="flex h-7 w-7 items-center justify-center rounded-full border border-[var(--border-strong)] bg-[var(--surface)] text-[var(--muted)]"
                               >
                                 <X className="h-3.5 w-3.5" />
@@ -1001,6 +1126,8 @@ export function ChatView({
                               own={own}
                               deleted={deleted}
                               align={own ? "right" : "left"}
+                              starred={msg.starred}
+                              pinned={msg.pinned}
                               onReply={() => {
                                 setReplyTo(msg);
                                 composerRef.current?.focus();
@@ -1011,7 +1138,14 @@ export function ChatView({
                                 setEditingId(msg.id);
                                 setEditDraft(msg.text);
                               }}
-                              onDelete={() => setConfirmDeleteId(msg.id)}
+                              onStar={() => void toggleStar(msg)}
+                              onUnstar={() => void toggleStar(msg)}
+                              onPin={() => void togglePin(msg)}
+                              onUnpin={() => void togglePin(msg)}
+                              onDeleteForMe={() => {
+                                void executeDelete(msg.id, "for_me");
+                              }}
+                              onDeleteForEveryone={() => setPendingDelete({ id: msg.id, mode: "for_everyone" })}
                             />
                           )}
                         </>

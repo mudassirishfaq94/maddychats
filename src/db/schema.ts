@@ -242,6 +242,84 @@ export const messageAttachments = pgTable(
   (table) => [index("message_attachments_message_idx").on(table.messageId)],
 );
 
+/* ================= message stars (per-user) ================= */
+
+export const messageStars = pgTable(
+  "message_stars",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    messageId: uuid("message_id")
+      .references(() => messages.id, { onDelete: "cascade" })
+      .notNull(),
+    userId: uuid("user_id")
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    unique("message_stars_message_user_unique").on(
+      table.messageId,
+      table.userId,
+    ),
+    index("message_stars_user_idx").on(table.userId),
+  ],
+);
+
+/* ================= pinned messages (conversation-level) ================= */
+
+export const pinnedMessages = pgTable(
+  "pinned_messages",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    conversationId: uuid("conversation_id")
+      .references(() => conversations.id, { onDelete: "cascade" })
+      .notNull(),
+    messageId: uuid("message_id")
+      .references(() => messages.id, { onDelete: "cascade" })
+      .notNull(),
+    pinnedBy: uuid("pinned_by")
+      .references(() => users.id, { onDelete: "set null" })
+      .notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    unique("pinned_messages_conversation_message_unique").on(
+      table.conversationId,
+      table.messageId,
+    ),
+    index("pinned_messages_conversation_idx").on(table.conversationId),
+  ],
+);
+
+/* ================= message deletions (per-user) ================= */
+
+export const messageDeletions = pgTable(
+  "message_deletions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    messageId: uuid("message_id")
+      .references(() => messages.id, { onDelete: "cascade" })
+      .notNull(),
+    userId: uuid("user_id")
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    deletedAt: timestamp("deleted_at", { withTimezone: true, mode: "date" })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    unique("message_deletions_message_user_unique").on(
+      table.messageId,
+      table.userId,
+    ),
+    index("message_deletions_user_idx").on(table.userId),
+  ],
+);
+
 /* ================= social models (blocks, notifications) ================= */
 
 export const blocks = pgTable(
@@ -297,6 +375,8 @@ export const usersRelations = relations(users, ({ many }) => ({
   messages: many(messages),
   reactions: many(messageReactions),
   reads: many(messageReads),
+  stars: many(messageStars),
+  messageDeletions: many(messageDeletions),
   blocking: many(blocks, { relationName: "blocker" }),
   blockedBy: many(blocks, { relationName: "blocked" }),
   notifications: many(notifications, { relationName: "notificationRecipient" }),
@@ -343,6 +423,9 @@ export const messagesRelations = relations(messages, ({ one, many }) => ({
   reactions: many(messageReactions),
   reads: many(messageReads),
   attachments: many(messageAttachments),
+  stars: many(messageStars),
+  pinnedIn: many(pinnedMessages),
+  deletions: many(messageDeletions),
 }));
 
 export const messageAttachmentsRelations = relations(
@@ -406,6 +489,43 @@ export const notificationsRelations = relations(notifications, ({ one }) => ({
   }),
 }));
 
+export const messageStarsRelations = relations(messageStars, ({ one }) => ({
+  message: one(messages, {
+    fields: [messageStars.messageId],
+    references: [messages.id],
+  }),
+  user: one(users, {
+    fields: [messageStars.userId],
+    references: [users.id],
+  }),
+}));
+
+export const pinnedMessagesRelations = relations(pinnedMessages, ({ one }) => ({
+  conversation: one(conversations, {
+    fields: [pinnedMessages.conversationId],
+    references: [conversations.id],
+  }),
+  message: one(messages, {
+    fields: [pinnedMessages.messageId],
+    references: [messages.id],
+  }),
+  pinner: one(users, {
+    fields: [pinnedMessages.pinnedBy],
+    references: [users.id],
+  }),
+}));
+
+export const messageDeletionsRelations = relations(messageDeletions, ({ one }) => ({
+  message: one(messages, {
+    fields: [messageDeletions.messageId],
+    references: [messages.id],
+  }),
+  user: one(users, {
+    fields: [messageDeletions.userId],
+    references: [users.id],
+  }),
+}));
+
 /* ================================== types ================================ */
 
 export type UserRow = typeof users.$inferSelect;
@@ -418,3 +538,6 @@ export type MessageReadRow = typeof messageReads.$inferSelect;
 export type BlockRow = typeof blocks.$inferSelect;
 export type NotificationRow = typeof notifications.$inferSelect;
 export type MessageAttachmentRow = typeof messageAttachments.$inferSelect;
+export type MessageStarRow = typeof messageStars.$inferSelect;
+export type PinnedMessageRow = typeof pinnedMessages.$inferSelect;
+export type MessageDeletionRow = typeof messageDeletions.$inferSelect;

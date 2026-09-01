@@ -6,35 +6,53 @@ import {
   Copy,
   MoreHorizontal,
   Pencil,
+  Pin,
+  PinOff,
   Reply,
   SmilePlus,
+  Star,
+  StarOff,
   Trash2,
 } from "lucide-react";
 import { REACTION_CHOICES } from "@/lib/schemas";
 import { cn } from "@/lib/utils";
 
 /**
- * Hover/tap action cluster for a message: Reply · React · Copy · Edit · Delete.
- * Edit and Delete only render for the viewer's own messages.
+ * Hover/tap action cluster for a message: Reply · React · Star · Pin · Copy · Delete.
+ * Actions are gated by ownership and permissions.
  */
 export function MessageActions({
   own,
   deleted,
   align,
+  starred,
+  pinned,
   onReply,
   onReact,
   onCopy,
   onEdit,
-  onDelete,
+  onStar,
+  onUnstar,
+  onPin,
+  onUnpin,
+  onDeleteForMe,
+  onDeleteForEveryone,
 }: {
   own: boolean;
   deleted: boolean;
   align: "left" | "right";
+  starred: boolean;
+  pinned: boolean;
   onReply: () => void;
   onReact: (emoji: string) => void;
   onCopy: () => void;
   onEdit: () => void;
-  onDelete: () => void;
+  onStar: () => void;
+  onUnstar: () => void;
+  onPin: () => void;
+  onUnpin: () => void;
+  onDeleteForMe: () => void;
+  onDeleteForEveryone: () => void;
 }) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -141,10 +159,42 @@ export function MessageActions({
         {menuOpen ? (
           <div
             className={cn(
-              "card-glass absolute bottom-[calc(100%+8px)] z-30 w-36 rounded-2xl p-1 animate-fade-up",
+              "card-glass absolute bottom-[calc(100%+8px)] z-30 w-44 rounded-2xl p-1 animate-fade-up",
               align === "right" ? "right-0" : "left-0",
             )}
           >
+            <button
+              type="button"
+              onClick={() => {
+                starred ? onUnstar() : onStar();
+                setMenuOpen(false);
+              }}
+              className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-xs text-[var(--muted)] transition-colors hover:bg-[color-mix(in_srgb,var(--muted)_10%,transparent)] hover:text-[var(--text)]"
+            >
+              {starred ? (
+                <StarOff className="h-3.5 w-3.5" />
+              ) : (
+                <Star className="h-3.5 w-3.5" />
+              )}
+              {starred ? "Unstar" : "Star"}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                pinned ? onUnpin() : onPin();
+                setMenuOpen(false);
+              }}
+              className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-xs text-[var(--muted)] transition-colors hover:bg-[color-mix(in_srgb,var(--muted)_10%,transparent)] hover:text-[var(--text)]"
+            >
+              {pinned ? (
+                <PinOff className="h-3.5 w-3.5" />
+              ) : (
+                <Pin className="h-3.5 w-3.5" />
+              )}
+              {pinned ? "Unpin" : "Pin"}
+            </button>
+
             <button
               type="button"
               onClick={handleCopy}
@@ -153,31 +203,33 @@ export function MessageActions({
               <Copy className="h-3.5 w-3.5" />
               Copy text
             </button>
+
+            <div className="my-1 border-t border-[var(--border)]" />
+
+            <button
+              type="button"
+              onClick={() => {
+                onDeleteForMe();
+                setMenuOpen(false);
+              }}
+              className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-xs text-[var(--muted)] transition-colors hover:bg-[color-mix(in_srgb,var(--danger)_10%,transparent)] hover:text-[var(--danger)]"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              Delete for me
+            </button>
+
             {own ? (
-              <>
-                <button
-                  type="button"
-                  onClick={() => {
-                    onEdit();
-                    setMenuOpen(false);
-                  }}
-                  className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-xs text-[var(--muted)] transition-colors hover:bg-[color-mix(in_srgb,var(--muted)_10%,transparent)] hover:text-[var(--text)]"
-                >
-                  <Pencil className="h-3.5 w-3.5" />
-                  Edit
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    onDelete();
-                    setMenuOpen(false);
-                  }}
-                  className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-xs text-[var(--danger)] transition-colors hover:bg-[color-mix(in_srgb,var(--danger)_10%,transparent)]"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                  Delete
-                </button>
-              </>
+              <button
+                type="button"
+                onClick={() => {
+                  onDeleteForEveryone();
+                  setMenuOpen(false);
+                }}
+                className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-xs text-[var(--danger)] transition-colors hover:bg-[color-mix(in_srgb,var(--danger)_10%,transparent)]"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Delete for everyone
+              </button>
             ) : null}
           </div>
         ) : null}

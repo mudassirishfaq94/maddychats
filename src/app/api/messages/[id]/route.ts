@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 import { editMessageSchema, fieldErrors } from "@/lib/schemas";
 import { AUTH_RATE_LIMIT, rateLimit } from "@/server/rate-limit";
 import {
@@ -9,15 +10,21 @@ import {
 } from "@/server/http";
 import { getSessionUser } from "@/server/session";
 import { isUuid } from "@/server/users";
-import { publishToConversation } from "@/server/realtime";
+import { publishToConversation, publishToUsers } from "@/server/realtime";
 import {
+  deleteForMe,
   editMessage,
   getMembership,
   getMessageDTO,
+  memberIdsOf,
   softDeleteMessage,
 } from "@/server/chat";
 
 export const dynamic = "force-dynamic";
+
+const deleteSchema = z.object({
+  mode: z.enum(["for_me", "for_everyone"]),
+});
 
 /** Edit own message (sender only; deleted messages are immutable). */
 export async function PATCH(
@@ -76,28 +83,66 @@ export async function PATCH(
   return NextResponse.json({ message: dto });
 }
 
-/** Soft-delete own message. Content is never served again. */
+/**
+ * Delete a message — supports two modes:
+ *  - "for_me": per-user soft-delete (message remains for others)
+ *  - "for_everyone": sender-only global soft-delete (sets deletedAt)
+ *
+ * Defaults to "for_me" when no body is provided for backward compatibility.
+ */
 export async function DELETE(
-  _req: NextRequest,
+  req: NextRequest,
   ctx: { params: Promise<{ id: string }> },
 ) {
+  const blocked = guardSameOrigin(req);
+  if (blocked) return blocked;
+
   const me = await getSessionUser();
   if (!me) return jsonError(401, "Not authenticated.");
 
   const { id } = await ctx.params;
   if (!isUuid(id)) return jsonError(404, "Message not found.");
 
-  const result = await softDeleteMessage(id, me.id);
-  if (result === "not_found") return jsonError(404, "Message not found.");
-  if (result === "forbidden") {
-    return jsonError(403, "You can only delete your own messages.");
+  // Parse optional body — default to "for_me" if no body or empty body
+  let mode: "for_me" | "for_everyone" = "for_me";
+  const body = await readJson(req);
+  if (body) {
+    const parsed = deleteSchema.safeParse(body);
+    if (parsed.success) {
+      mode = parsed.data.mode;
+    } else {
+      return jsonError(
+        422,
+        "Invalid deletion mode.",
+        fieldErrors(parsed.error),
+      );
+    }
   }
 
-  const dto = (await getMessageDTO(result.id, me.id))!;
-  await publishToConversation(result.conversationId, {
-    type: "message:delete",
-    conversationId: result.conversationId,
-    message: dto,
-  });
+  if (mode === "for_everyone") {
+    const result = await softDeleteMessage(id, me.id);
+    if (result === "not_found") return jsonError(404, "Message not found.");
+    if (result === "forbidden") {
+      return jsonError(
+        403,
+        "You can only delete your own messages for everyone.",
+      );
+    }
+
+    const dto = await getMessageDTO(result.id, me.id);
+    await publishToConversation(result.conversationId, {
+      type: "message:delete",
+      conversationId: result.conversationId,
+      message: dto!,
+    });
+    return NextResponse.json({ message: dto });
+  }
+
+  // "for_me" mode — per-user deletion
+  const result = await deleteForMe(id, me.id);
+  if (result === "not_found") return jsonError(404, "Message not found.");
+
+  const dto = await getMessageDTO(id, me.id);
+
   return NextResponse.json({ message: dto });
 }

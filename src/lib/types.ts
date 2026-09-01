@@ -97,6 +97,12 @@ export interface MessageDTO {
   readBy: ReadReceipt[];
   attachments: AttachmentDTO[];
   sender: PublicUser;
+  /** Per-viewer state: whether this viewer starred the message. */
+  starred: boolean;
+  /** Per-viewer state: whether this message is deleted for this viewer. */
+  deletedForMe: boolean;
+  /** Conversation-level state: whether the message is pinned. */
+  pinned: boolean;
 }
 
 export interface ConversationSummary {
@@ -117,6 +123,8 @@ export interface ConversationSummary {
   markedUnread: boolean;
   /** True when either side has blocked the other. */
   blocked: boolean;
+  /** Whether any messages are pinned in this conversation. */
+  hasPinnedMessages: boolean;
   lastMessage: {
     id: string;
     text: string;
@@ -153,6 +161,19 @@ export interface RealtimeMessageEvent {
   type: "message:new" | "message:update" | "message:delete";
   conversationId: string;
   message: MessageDTO;
+}
+
+export interface RealtimePinnedEvent {
+  type: "message:pinned" | "message:unpinned";
+  conversationId: string;
+  messageId: string;
+  pinnedBy?: string;
+}
+
+export interface RealtimeDeleteForMeEvent {
+  type: "message:deleted_for_me";
+  conversationId: string;
+  messageId: string;
 }
 
 export interface RealtimeConversationEvent {
@@ -210,7 +231,9 @@ export type RealtimeEvent =
   | RealtimeReadEvent
   | RealtimeDeliveredEvent
   | RealtimeNotificationEvent
-  | RealtimeTypingEvent;
+  | RealtimeTypingEvent
+  | RealtimePinnedEvent
+  | RealtimeDeleteForMeEvent;
 
 /** Presence snapshot delivered on connect and via presence:update. */
 export interface PresenceState {

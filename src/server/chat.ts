@@ -5,9 +5,12 @@ import {
   conversationMembers,
   conversations,
   messageAttachments,
+  messageDeletions,
   messageReactions,
   messageReads,
+  messageStars,
   messages,
+  pinnedMessages,
   users,
   type ConversationRow,
   type MessageRow,
@@ -75,6 +78,9 @@ function baseDTO(row: MessageRow, sender: UserRow): MessageDTO {
     readBy: [],
     attachments: [],
     sender: toPublicUser(sender),
+    starred: false,
+    deletedForMe: false,
+    pinned: false,
   };
 }
 
@@ -196,6 +202,21 @@ export async function hydrateMessages(
     attachmentsByMessage.set(a.messageId, list);
   }
 
+  // Batch-fetch per-viewer star and deletion status, plus conversation-level pin status.
+  const [starSet, deletionSet] = await Promise.all([
+    getMyStars(ids, viewerId),
+    getMyDeletions(ids, viewerId),
+  ]);
+
+  // Determine conversation ids for pin checks (messages in the batch may come from
+  // different conversations when used in search, but the normal path is one conversation).
+  const convIds = [...new Set(dtos.map((d) => d.conversationId))];
+  const pinnedIdsPerConv = new Map<string, Set<string>>();
+  for (const cid of convIds) {
+    const pids = await getPinnedIds(ids, cid);
+    pinnedIdsPerConv.set(cid, pids);
+  }
+
   for (const dto of dtos) {
     dto.reactions = reactionsByMessage.get(dto.id) ?? [];
     // Only OTHER members' reads matter for the sender's receipt UI.
@@ -209,6 +230,10 @@ export async function hydrateMessages(
     dto.attachments = dto.deletedAt
       ? []
       : attachmentsByMessage.get(dto.id) ?? [];
+    // Per-viewer per-message state.
+    dto.starred = starSet.has(dto.id);
+    dto.deletedForMe = deletionSet.has(dto.id);
+    dto.pinned = pinnedIdsPerConv.get(dto.conversationId)?.has(dto.id) ?? false;
   }
   return dtos;
 }
@@ -308,6 +333,18 @@ export async function listConversationsFor(
     unread.rows.map((r) => [r.conversation_id, Number(r.count)]),
   );
 
+  // Pinned messages: check if any conversation has pinned messages.
+  const pinnedConvs = await db
+    .selectDistinct({ conversationId: pinnedMessages.conversationId })
+    .from(pinnedMessages)
+    .where(
+      inArray(
+        pinnedMessages.conversationId,
+        convIds,
+      ),
+    );
+  const hasPinned = new Set(pinnedConvs.map((r) => r.conversationId));
+
   // Blocking state for every counterpart in one query.
   const blockRows = await db.select().from(blocks);
   const isBlocked = (otherId: string) =>
@@ -343,6 +380,7 @@ export async function listConversationsFor(
         archived: Boolean(mine?.archivedAt),
         markedUnread: Boolean(mine?.markedUnreadAt),
         blocked: other ? isBlocked(other.id) : false,
+        hasPinnedMessages: hasPinned.has(conv.id),
         lastMessage: last
           ? {
               id: last.id,
@@ -940,4 +978,411 @@ export async function searchMessages(
       conversation: { id: r.conversation.id, name: r.conversation.name },
       sender: toPublicUser(r.sender),
     }));
+}
+
+/* =================================== stars ================================= */
+
+export async function starMessage(
+  messageId: string,
+  userId: string,
+): Promise<"ok" | "not_found" | "already_starred" | "no_membership"> {
+  const msgRows = await db
+    .select({ id: messages.id, conversationId: messages.conversationId })
+    .from(messages)
+    .where(eq(messages.id, messageId))
+    .limit(1);
+  if (!msgRows[0]) return "not_found";
+
+  const membership = await getMembership(msgRows[0].conversationId, userId);
+  if (!membership) return "no_membership";
+
+  try {
+    await db.insert(messageStars).values({ messageId, userId });
+    return "ok";
+  } catch (err) {
+    if ((err as { code?: string })?.code === "23505") return "already_starred";
+    throw err;
+  }
+}
+
+export async function unstarMessage(
+  messageId: string,
+  userId: string,
+): Promise<"ok" | "not_found" | "not_starred"> {
+  const deleted = await db
+    .delete(messageStars)
+    .where(
+      and(
+        eq(messageStars.messageId, messageId),
+        eq(messageStars.userId, userId),
+      ),
+    )
+    .returning();
+  return deleted.length > 0 ? "ok" : "not_starred";
+}
+
+/** Check if a user has starred a specific message. */
+export async function isStarred(
+  messageId: string,
+  userId: string,
+): Promise<boolean> {
+  const rows = await db
+    .select({ id: messageStars.id })
+    .from(messageStars)
+    .where(
+      and(
+        eq(messageStars.messageId, messageId),
+        eq(messageStars.userId, userId),
+      ),
+    )
+    .limit(1);
+  return rows.length > 0;
+}
+
+/** All messages a user has starred, newest first. */
+export async function listStarredMessages(
+  userId: string,
+): Promise<StarredMessageDTO[]> {
+  const rows = await db
+    .select({
+      star: messageStars,
+      message: messages,
+      sender: users,
+      conversation: conversations,
+    })
+    .from(messageStars)
+    .innerJoin(messages, eq(messageStars.messageId, messages.id))
+    .innerJoin(users, eq(messages.senderId, users.id))
+    .innerJoin(conversations, eq(messages.conversationId, conversations.id))
+    .where(eq(messageStars.userId, userId))
+    .orderBy(desc(messageStars.createdAt));
+
+  if (rows.length === 0) return [];
+
+  // Fetch attachments for all messages in one batch.
+  const msgIds = rows.map((r) => r.message.id);
+  const attachmentRows = await db
+    .select()
+    .from(messageAttachments)
+    .where(inArray(messageAttachments.messageId, msgIds));
+  const attachmentsByMsg = new Map<string, AttachmentDTO[]>();
+  for (const a of attachmentRows) {
+    if (a.messageId) {
+      const list = attachmentsByMsg.get(a.messageId) ?? [];
+      list.push({
+        id: a.id,
+        originalName: a.originalName,
+        mimeType: a.mimeType,
+        size: a.size,
+        kind: a.kind === "image" ? "image" : "file",
+        url: `/api/media/${a.id}`,
+      });
+      attachmentsByMsg.set(a.messageId, list);
+    }
+  }
+
+  return rows.map((r) => ({
+    id: r.star.id,
+    messageId: r.message.id,
+    text: r.message.deletedAt ? "" : r.message.text,
+    type: r.message.type,
+    createdAt: r.star.createdAt.toISOString(),
+    starredAt: r.star.createdAt.toISOString(),
+    deletedAt: r.message.deletedAt
+      ? r.message.deletedAt.toISOString()
+      : null,
+    sender: toPublicUser(r.sender),
+    conversation: {
+      id: r.conversation.id,
+      name: r.conversation.name,
+    },
+    attachments: r.message.deletedAt
+      ? []
+      : attachmentsByMsg.get(r.message.id) ?? [],
+  }));
+}
+
+export interface StarredMessageDTO {
+  id: string;
+  messageId: string;
+  text: string;
+  type: string;
+  createdAt: string;
+  starredAt: string;
+  deletedAt: string | null;
+  sender: ReturnType<typeof toPublicUser>;
+  conversation: { id: string; name: string | null };
+  attachments: AttachmentDTO[];
+}
+
+/* =================================== pins ================================= */
+
+/** Check whether the viewer can pin/unpin in this conversation. */
+export async function canPin(
+  conversationId: string,
+  userId: string,
+): Promise<boolean> {
+  const membership = await getMembership(conversationId, userId);
+  if (!membership) return false;
+  // DM: any participant. Group: owner or admin.
+  const convRows = await db
+    .select({ type: conversations.type })
+    .from(conversations)
+    .where(eq(conversations.id, conversationId))
+    .limit(1);
+  if (!convRows[0]) return false;
+  if (convRows[0].type === "dm") return true;
+  return membership.role === "owner" || membership.role === "admin";
+}
+
+export async function pinMessage(
+  conversationId: string,
+  messageId: string,
+  userId: string,
+): Promise<"ok" | "not_found" | "already_pinned" | "forbidden"> {
+  // Verify message belongs to conversation.
+  const msgRows = await db
+    .select({ id: messages.id })
+    .from(messages)
+    .where(
+      and(
+        eq(messages.id, messageId),
+        eq(messages.conversationId, conversationId),
+      ),
+    )
+    .limit(1);
+  if (!msgRows[0]) return "not_found";
+
+  if (!(await canPin(conversationId, userId))) return "forbidden";
+
+  try {
+    await db
+      .insert(pinnedMessages)
+      .values({ conversationId, messageId, pinnedBy: userId });
+    return "ok";
+  } catch (err) {
+    if ((err as { code?: string })?.code === "23505") return "already_pinned";
+    throw err;
+  }
+}
+
+export async function unpinMessage(
+  conversationId: string,
+  messageId: string,
+  userId: string,
+): Promise<"ok" | "not_found" | "forbidden"> {
+  if (!(await canPin(conversationId, userId))) return "forbidden";
+  const deleted = await db
+    .delete(pinnedMessages)
+    .where(
+      and(
+        eq(pinnedMessages.conversationId, conversationId),
+        eq(pinnedMessages.messageId, messageId),
+      ),
+    )
+    .returning();
+  return deleted.length > 0 ? "ok" : "not_found";
+}
+
+/** Check if a message is pinned in a conversation. */
+export async function isPinned(
+  conversationId: string,
+  messageId: string,
+): Promise<boolean> {
+  const rows = await db
+    .select({ id: pinnedMessages.id })
+    .from(pinnedMessages)
+    .where(
+      and(
+        eq(pinnedMessages.conversationId, conversationId),
+        eq(pinnedMessages.messageId, messageId),
+      ),
+    )
+    .limit(1);
+  return rows.length > 0;
+}
+
+/** Whether the conversation has any pinned messages. */
+export async function hasPinnedMessages(
+  conversationId: string,
+): Promise<boolean> {
+  const rows = await db
+    .select({ id: pinnedMessages.id })
+    .from(pinnedMessages)
+    .where(eq(pinnedMessages.conversationId, conversationId))
+    .limit(1);
+  return rows.length > 0;
+}
+
+/** All pinned messages for a conversation. */
+export async function listPinnedMessages(
+  conversationId: string,
+  viewerId: string,
+): Promise<PinnedMessageDTO[]> {
+  const rows = await db
+    .select({
+      pin: pinnedMessages,
+      message: messages,
+      sender: users,
+    })
+    .from(pinnedMessages)
+    .innerJoin(messages, eq(pinnedMessages.messageId, messages.id))
+    .innerJoin(users, eq(messages.senderId, users.id))
+    .where(eq(pinnedMessages.conversationId, conversationId))
+    .orderBy(desc(pinnedMessages.createdAt));
+  return rows.map((r) => ({
+    id: r.pin.id,
+    messageId: r.message.id,
+    conversationId,
+    text: r.message.deletedAt ? "" : r.message.text,
+    type: r.message.type,
+    pinnedAt: r.pin.createdAt.toISOString(),
+    pinnedBy: r.pin.pinnedBy,
+    deletedAt: r.message.deletedAt
+      ? r.message.deletedAt.toISOString()
+      : null,
+    sender: toPublicUser(r.sender),
+  }));
+}
+
+export interface PinnedMessageDTO {
+  id: string;
+  messageId: string;
+  conversationId: string;
+  text: string;
+  type: string;
+  pinnedAt: string;
+  pinnedBy: string;
+  deletedAt: string | null;
+  sender: ReturnType<typeof toPublicUser>;
+}
+
+/* ================================ deletion ================================ */
+
+/**
+ * "Delete for me" — hides message for the specified user only.
+ * Creates a per-user deletion record; the message stays visible to others.
+ */
+export async function deleteForMe(
+  messageId: string,
+  userId: string,
+): Promise<"ok" | "not_found" | "already_deleted"> {
+  const msgRows = await db
+    .select({ id: messages.id, conversationId: messages.conversationId })
+    .from(messages)
+    .where(eq(messages.id, messageId))
+    .limit(1);
+  if (!msgRows[0]) return "not_found";
+
+  const membership = await getMembership(msgRows[0].conversationId, userId);
+  if (!membership) return "not_found";
+
+  try {
+    await db.insert(messageDeletions).values({ messageId, userId });
+    return "ok";
+  } catch (err) {
+    if ((err as { code?: string })?.code === "23505") return "already_deleted";
+    throw err;
+  }
+}
+
+/** Check if a user has soft-deleted a specific message for themselves. */
+export async function isDeletedForMe(
+  messageId: string,
+  userId: string): Promise<boolean> {
+  const rows = await db
+    .select({ id: messageDeletions.id })
+    .from(messageDeletions)
+    .where(
+      and(
+        eq(messageDeletions.messageId, messageId),
+        eq(messageDeletions.userId, userId),
+      ),
+    )
+    .limit(1);
+  return rows.length > 0;
+}
+
+/**
+ * "Delete for everyone" — soft-deletes the message for all conversation
+ * members. Only the message sender can do this.
+ *
+ * Sets the global `deletedAt` on the message row, which hides content
+ * from all members and prevents attachment access.
+ */
+export async function deleteForEveryone(
+  messageId: string,
+  userId: string,
+): Promise<MessageRow | "not_found" | "forbidden" | "already_deleted"> {
+  const rows = await db
+    .select()
+    .from(messages)
+    .where(eq(messages.id, messageId))
+    .limit(1);
+  const msg = rows[0];
+  if (!msg) return "not_found";
+  if (msg.senderId !== userId) return "forbidden";
+  if (msg.deletedAt) return "already_deleted";
+
+  const now = new Date();
+  const updated = await db
+    .update(messages)
+    .set({ deletedAt: now, updatedAt: now })
+    .where(eq(messages.id, messageId))
+    .returning();
+  return updated[0];
+}
+
+/** Which messages in a list the viewer has deleted for themselves. */
+export async function getMyDeletions(
+  messageIds: string[],
+  userId: string,
+): Promise<Set<string>> {
+  if (messageIds.length === 0) return new Set();
+  const rows = await db
+    .select({ messageId: messageDeletions.messageId })
+    .from(messageDeletions)
+    .where(
+      and(
+        inArray(messageDeletions.messageId, messageIds),
+        eq(messageDeletions.userId, userId),
+      ),
+    );
+  return new Set(rows.map((r) => r.messageId));
+}
+
+/** Which messages in a list are starred by the viewer. */
+export async function getMyStars(
+  messageIds: string[],
+  userId: string,
+): Promise<Set<string>> {
+  if (messageIds.length === 0) return new Set();
+  const rows = await db
+    .select({ messageId: messageStars.messageId })
+    .from(messageStars)
+    .where(
+      and(
+        inArray(messageStars.messageId, messageIds),
+        eq(messageStars.userId, userId),
+      ),
+    );
+  return new Set(rows.map((r) => r.messageId));
+}
+
+/** Which messages in a list are pinned in the given conversation. */
+export async function getPinnedIds(
+  messageIds: string[],
+  conversationId: string,
+): Promise<Set<string>> {
+  if (messageIds.length === 0) return new Set();
+  const rows = await db
+    .select({ messageId: pinnedMessages.messageId })
+    .from(pinnedMessages)
+    .where(
+      and(
+        inArray(pinnedMessages.messageId, messageIds),
+        eq(pinnedMessages.conversationId, conversationId),
+      ),
+    );
+  return new Set(rows.map((r) => r.messageId));
 }
