@@ -109,6 +109,9 @@ export interface ConversationSummary {
   id: string;
   type: "dm" | "group";
   name: string | null;
+  description: string | null;
+  avatarUrl: string | null;
+  memberCount: number;
   createdAt: string;
   updatedAt: string;
   lastMessageAt: string | null;
@@ -139,10 +142,14 @@ export interface ConversationDetail {
   id: string;
   type: "dm" | "group";
   name: string | null;
+  description: string | null;
+  avatarUrl: string | null;
+  createdById: string | null;
+  myRole: "owner" | "admin" | "member";
   createdAt: string;
   updatedAt: string;
   lastMessageAt: string | null;
-  members: PublicUser[];
+  members: Array<PublicUser & { role: "owner" | "admin" | "member"; joinedAt: string }>;
 }
 
 export interface MessagePage {
@@ -177,8 +184,16 @@ export interface RealtimeDeleteForMeEvent {
 }
 
 export interface RealtimeConversationEvent {
-  type: "conversation:new" | "conversation:delete";
+  type:
+    | "conversation:new"
+    | "conversation:delete"
+    | "group:created"
+    | "group:member-added"
+    | "group:member-removed"
+    | "group:member-updated";
   conversationId: string;
+  userId?: string;
+  role?: "owner" | "admin" | "member";
 }
 
 export interface RealtimePresenceEvent {

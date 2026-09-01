@@ -66,6 +66,8 @@ export const conversations = pgTable(
     type: conversationTypeEnum("type").default("dm").notNull(),
     /** Group-only display name; null for direct messages. */
     name: text("name"),
+    description: text("description"),
+    avatarUrl: text("avatar_url"),
     /**
      * Race-safe de-dup key for 1:1 chats: `dm:<lowerUserId>:<higherUserId>`.
      * The unique constraint guarantees no duplicate direct conversations even
@@ -84,6 +86,8 @@ export const conversations = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" })
       .defaultNow()
       .notNull(),
+    /** Group deletion tombstone; preserves message history for retention/audit. */
+    deletedAt: timestamp("deleted_at", { withTimezone: true, mode: "date" }),
   },
   (table) => [index("conversations_last_message_idx").on(table.lastMessageAt)],
 );
@@ -124,6 +128,26 @@ export const conversationMembers = pgTable(
     ),
     index("conversation_members_user_idx").on(table.userId),
     index("conversation_members_conversation_idx").on(table.conversationId),
+  ],
+);
+
+export const messageMentions = pgTable(
+  "message_mentions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    messageId: uuid("message_id")
+      .references(() => messages.id, { onDelete: "cascade" })
+      .notNull(),
+    userId: uuid("user_id")
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    unique("message_mentions_message_user_unique").on(table.messageId, table.userId),
+    index("message_mentions_user_idx").on(table.userId),
   ],
 );
 
@@ -380,6 +404,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   blocking: many(blocks, { relationName: "blocker" }),
   blockedBy: many(blocks, { relationName: "blocked" }),
   notifications: many(notifications, { relationName: "notificationRecipient" }),
+  mentions: many(messageMentions),
   triggeredNotifications: many(notifications, {
     relationName: "notificationActor",
   }),
@@ -426,6 +451,18 @@ export const messagesRelations = relations(messages, ({ one, many }) => ({
   stars: many(messageStars),
   pinnedIn: many(pinnedMessages),
   deletions: many(messageDeletions),
+  mentions: many(messageMentions),
+}));
+
+export const messageMentionsRelations = relations(messageMentions, ({ one }) => ({
+  message: one(messages, {
+    fields: [messageMentions.messageId],
+    references: [messages.id],
+  }),
+  user: one(users, {
+    fields: [messageMentions.userId],
+    references: [users.id],
+  }),
 }));
 
 export const messageAttachmentsRelations = relations(
@@ -541,3 +578,4 @@ export type MessageAttachmentRow = typeof messageAttachments.$inferSelect;
 export type MessageStarRow = typeof messageStars.$inferSelect;
 export type PinnedMessageRow = typeof pinnedMessages.$inferSelect;
 export type MessageDeletionRow = typeof messageDeletions.$inferSelect;
+export type MessageMentionRow = typeof messageMentions.$inferSelect;

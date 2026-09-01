@@ -28,9 +28,10 @@ import {
   Send,
   ShieldCheck,
   Trash2,
+  Users,
   X,
 } from "lucide-react";
-import type { MessageDTO, MessagePage, PublicUser, SafeUser } from "@/lib/types";
+import type { ConversationDetail, MessageDTO, MessagePage, PublicUser, SafeUser } from "@/lib/types";
 import { Avatar } from "@/components/avatar";
 import { useRealtime } from "@/components/providers/realtime-provider";
 import { MessageActions } from "./message-actions";
@@ -102,11 +103,13 @@ export function ChatView({
   conversationId,
   me,
   other,
+  conversation,
   initial,
 }: {
   conversationId: string;
   me: SafeUser;
   other: PublicUser | null;
+  conversation: ConversationDetail;
   initial: MessagePage;
 }) {
   const router = useRouter();
@@ -147,7 +150,8 @@ export function ChatView({
   const typingStopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const remoteTypingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const otherName = other?.displayName ?? "Unknown member";
+  const isGroup = conversation.type === "group";
+  const otherName = isGroup ? conversation.name ?? "Group" : other?.displayName ?? "Unknown member";
   const otherPresence = other ? presence[other.id] : undefined;
   const otherOnline = Boolean(otherPresence?.online);
   const otherLastSeen = otherPresence?.lastSeenAt ?? other?.lastSeenAt ?? null;
@@ -676,6 +680,14 @@ export function ChatView({
     () => visibleItems.find((m) => m.pinned),
     [visibleItems],
   );
+  const mentionMatch = isGroup ? draft.match(/(?:^|\s)@([a-zA-Z0-9_]*)$/) : null;
+  const mentionOptions = mentionMatch ? conversation.members
+    .filter((member) => member.id !== me.id && (member.username.toLowerCase().startsWith(mentionMatch[1].toLowerCase()) || member.displayName.toLowerCase().includes(mentionMatch[1].toLowerCase())))
+    .slice(0, 6) : [];
+  function insertMention(username: string) {
+    setDraft((value) => value.replace(/@([a-zA-Z0-9_]*)$/, `@${username} `));
+    requestAnimationFrame(() => composerRef.current?.focus());
+  }
 
   return (
     <div className="flex h-full min-h-0">
@@ -689,7 +701,12 @@ export function ChatView({
         >
           <ChevronLeft className="h-5 w-5" />
         </Link>
-        {other ? (
+        {isGroup ? (
+          <button type="button" onClick={() => setShowDetails(true)} className="flex min-w-0 flex-1 items-center gap-2.5 text-left">
+            {conversation.avatarUrl ? <img src={conversation.avatarUrl} alt="" className="h-9 w-9 shrink-0 rounded-full object-cover" /> : <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--accent-soft)]"><Users className="h-4 w-4 text-[var(--accent-fg)]" /></span>}
+            <span className="min-w-0"><span className="block truncate text-[0.92rem] font-semibold leading-tight">{otherName}</span><span className="block truncate text-[0.72rem] text-[var(--muted)]">{conversation.members.length} members</span></span>
+          </button>
+        ) : other ? (
           <Link
             href={`/app/users/${other.id}`}
             className="flex min-w-0 flex-1 items-center gap-2.5"
@@ -759,7 +776,7 @@ export function ChatView({
           </button>
           {headerMenu ? (
             <div className="card-glass absolute right-0 top-[calc(100%+8px)] z-50 w-52 max-w-[calc(100vw-1.5rem)] rounded-2xl p-1.5 animate-fade-up">
-              {other ? (
+              {!isGroup && other ? (
                 <Link
                   href={`/app/users/${other.id}`}
                   className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-xs text-[var(--muted)] transition-colors hover:bg-[color-mix(in_srgb,var(--muted)_10%,transparent)] hover:text-[var(--text)]"
@@ -797,10 +814,11 @@ export function ChatView({
                 <button
                   type="button"
                   onClick={() => setConfirmConvDelete(true)}
+                  disabled={isGroup && conversation.myRole !== "owner"}
                   className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-xs text-[var(--danger)] transition-colors hover:bg-[color-mix(in_srgb,var(--danger)_9%,transparent)]"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
-                  Delete conversation
+                  {isGroup ? "Delete group" : "Delete conversation"}
                 </button>
               )}
             </div>
@@ -947,6 +965,7 @@ export function ChatView({
                         own ? "text-right" : "text-left",
                       )}
                     >
+                      {isGroup && !own && !sameSenderPrev ? <span className="mb-0.5 block px-2 text-[0.68rem] font-semibold text-[var(--accent-fg)]">{msg.sender.displayName}</span> : null}
                       {editingId === msg.id ? (
                         <div className="card-glass rounded-2xl p-2">
                           <textarea
@@ -1227,6 +1246,8 @@ export function ChatView({
           onCancel={attachments.cancel}
         />
 
+        {mentionOptions.length ? <div className="mb-2 max-h-48 overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--card)] p-1.5 shadow-lg">{mentionOptions.map((member) => <button key={member.id} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => insertMention(member.username)} className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left hover:bg-[var(--surface-2)]"><Avatar user={member} size={28} /><span className="min-w-0"><b className="block truncate text-xs">{member.displayName}</b><small className="text-[var(--muted)]">@{member.username}</small></span></button>)}</div> : null}
+
         <div className="flex items-end gap-2">
           <AttachButton
             onFiles={(files) => attachments.addFiles(files)}
@@ -1274,6 +1295,7 @@ export function ChatView({
         <ConversationDetails
           conversationId={conversationId}
           other={other}
+          conversation={conversation}
           localRevision={galleryRevision}
           onClose={() => setShowDetails(false)}
         />

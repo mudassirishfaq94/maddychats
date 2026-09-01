@@ -75,6 +75,18 @@ export const startConversationSchema = z.object({
   userId: z.uuid("Invalid user id"),
 });
 
+export const createGroupSchema = z.object({
+  name: z.string().trim().min(1, "Group name is required").max(100, "Group name must be 100 characters or fewer"),
+  description: z.string().trim().max(500, "Description must be 500 characters or fewer").optional().default(""),
+  memberIds: z.array(z.uuid("Invalid member id")).min(1, "Select at least one person").max(255, "A group can have at most 256 members"),
+});
+
+export const groupMemberSchema = z.object({ userId: z.uuid("Invalid user id") });
+export const groupRoleSchema = z.object({
+  role: z.enum(["admin", "member"]),
+});
+export const transferOwnershipSchema = z.object({ userId: z.uuid("Invalid user id") });
+
 export const sendMessageSchema = z.object({
   text: z
     .string()

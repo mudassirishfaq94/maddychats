@@ -16,13 +16,15 @@ import {
   decodeCursor,
   getMembership,
   getMessageDTO,
+  getConversationForUser,
   isBlockedBetween,
   listMessages,
   markMessageDelivered,
   memberIdsOf,
+  storeMessageMentions,
   MESSAGE_PAGE_SIZE,
 } from "@/server/chat";
-import { notifyNewMessage } from "@/server/notifications";
+import { notifyNewMessage, notifyUser } from "@/server/notifications";
 
 export const dynamic = "force-dynamic";
 
@@ -94,9 +96,12 @@ export async function POST(
 
   // Blocking is enforced here on the server — never in the UI alone.
   const members = await memberIdsOf(id);
-  for (const other of members.filter((m) => m !== me.id)) {
-    if (await isBlockedBetween(me.id, other)) {
-      return jsonError(403, "You cannot send messages in this conversation.");
+  const detail = await getConversationForUser(id, me.id);
+  if (detail?.type === "dm") {
+    for (const other of members.filter((m) => m !== me.id)) {
+      if (await isBlockedBetween(me.id, other)) {
+        return jsonError(403, "You cannot send messages in this conversation.");
+      }
     }
   }
 
@@ -126,5 +131,12 @@ export async function POST(
     actorName: me.displayName,
     preview: parsed.data.text,
   });
+  const mentioned = await storeMessageMentions(message.id, id, parsed.data.text, me.id);
+  await Promise.all(mentioned.map((user) => notifyUser(user.id, "mention", {
+    conversationId: id,
+    messageId: message.id,
+    actorName: me.displayName,
+    preview: parsed.data.text.slice(0, 140),
+  }, me.id)));
   return NextResponse.json({ message }, { status: 201 });
 }

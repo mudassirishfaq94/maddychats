@@ -183,7 +183,9 @@ export function ChatsLayout({
                           : "hover:bg-[color-mix(in_srgb,var(--muted)_7%,transparent)]",
                       )}
                     >
-                      {conv.otherMember ? (
+                      {conv.type === "group" && conv.avatarUrl ? (
+                        <img src={conv.avatarUrl} alt="" className="h-11 w-11 shrink-0 rounded-full object-cover" />
+                      ) : conv.otherMember ? (
                         <span className="relative shrink-0">
                           <Avatar user={conv.otherMember} size={44} />
                           <span

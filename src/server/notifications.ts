@@ -102,6 +102,15 @@ async function create(
   });
 }
 
+export async function notifyUser(
+  userId: string,
+  type: string,
+  data: Record<string, unknown>,
+  actorId: string | null,
+): Promise<void> {
+  await create(userId, type, data, actorId);
+}
+
 /**
  * Fan-out a "new message" notification to every other member who has not
  * muted the conversation.

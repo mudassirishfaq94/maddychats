@@ -4,6 +4,7 @@ import { isUuid } from "@/server/users";
 import { publishToUsers } from "@/server/realtime";
 import {
   deleteConversation,
+  deleteGroup,
   getConversationForUser,
 } from "@/server/chat";
 import { jsonError } from "@/server/http";
@@ -42,8 +43,14 @@ export async function DELETE(
   const detail = await getConversationForUser(id, me.id);
   if (!detail) return jsonError(404, "Conversation not found.");
 
-  const deleted = await deleteConversation(id, me.id);
-  if (!deleted) return jsonError(404, "Conversation not found.");
+  if (detail.type === "group") {
+    const result = await deleteGroup(id, me.id);
+    if (result === "forbidden") return jsonError(403, "Only the group owner can delete this group.");
+    if (result === "not_found") return jsonError(404, "Conversation not found.");
+  } else {
+    const deleted = await deleteConversation(id, me.id);
+    if (!deleted) return jsonError(404, "Conversation not found.");
+  }
 
   publishToUsers(
     detail.members.map((m) => m.id),

@@ -10,6 +10,7 @@ import {
   messageReads,
   messageStars,
   messages,
+  messageMentions,
   pinnedMessages,
   users,
   type ConversationRow,
@@ -286,7 +287,7 @@ export async function listConversationsFor(
   const convs = await db
     .select()
     .from(conversations)
-    .where(inArray(conversations.id, convIds));
+    .where(and(inArray(conversations.id, convIds), isNull(conversations.deletedAt)));
   if (convs.length === 0) return [];
 
   const allMembers = await db
@@ -369,6 +370,9 @@ export async function listConversationsFor(
         id: conv.id,
         type: conv.type,
         name: conv.name,
+        description: conv.description,
+        avatarUrl: conv.avatarUrl,
+        memberCount: others.length,
         createdAt: conv.createdAt.toISOString(),
         updatedAt: conv.updatedAt.toISOString(),
         lastMessageAt: conv.lastMessageAt
@@ -380,7 +384,7 @@ export async function listConversationsFor(
         muted: Boolean(mine?.mutedAt),
         archived: Boolean(mine?.archivedAt),
         markedUnread: Boolean(mine?.markedUnreadAt),
-        blocked: other ? isBlocked(other.id) : false,
+        blocked: conv.type === "dm" && other ? isBlocked(other.id) : false,
         hasPinnedMessages: hasPinned.has(conv.id),
         lastMessage: last
           ? {
@@ -418,10 +422,10 @@ export async function getConversationForUser(
     .where(eq(conversations.id, conversationId))
     .limit(1);
   const conv = rows[0];
-  if (!conv) return null;
+  if (!conv || conv.deletedAt) return null;
 
   const memberRows = await db
-    .select({ user: users })
+    .select({ user: users, member: conversationMembers })
     .from(conversationMembers)
     .innerJoin(users, eq(conversationMembers.userId, users.id))
     .where(eq(conversationMembers.conversationId, conversationId));
@@ -430,11 +434,139 @@ export async function getConversationForUser(
     id: conv.id,
     type: conv.type,
     name: conv.name,
+    description: conv.description,
+    avatarUrl: conv.avatarUrl,
+    createdById: conv.createdById,
+    myRole: membership.role as "owner" | "admin" | "member",
     createdAt: conv.createdAt.toISOString(),
     updatedAt: conv.updatedAt.toISOString(),
     lastMessageAt: conv.lastMessageAt ? conv.lastMessageAt.toISOString() : null,
-    members: memberRows.map((m) => toPublicUser(m.user)),
+    members: memberRows.map((m) => ({
+      ...toPublicUser(m.user),
+      role: m.member.role as "owner" | "admin" | "member",
+      joinedAt: m.member.joinedAt.toISOString(),
+    })),
   };
+}
+
+export async function createGroupConversation(input: {
+  creatorId: string;
+  name: string;
+  description?: string;
+  memberIds: string[];
+}): Promise<ConversationRow> {
+  const memberIds = [...new Set(input.memberIds)].filter((id) => id !== input.creatorId);
+  if (memberIds.length === 0) throw new Error("group_requires_member");
+  const existing = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(inArray(users.id, memberIds));
+  if (existing.length !== memberIds.length) throw new Error("invalid_group_members");
+
+  return db.transaction(async (tx) => {
+    const [conversation] = await tx
+      .insert(conversations)
+      .values({
+        type: "group",
+        name: input.name.trim(),
+        description: input.description?.trim() || null,
+        createdById: input.creatorId,
+      })
+      .returning();
+    await tx.insert(conversationMembers).values([
+      { conversationId: conversation.id, userId: input.creatorId, role: "owner" },
+      ...memberIds.map((userId) => ({ conversationId: conversation.id, userId, role: "member" })),
+    ]);
+    return conversation;
+  });
+}
+
+export async function getGroupWithActor(conversationId: string, actorId: string) {
+  const membership = await getMembership(conversationId, actorId);
+  if (!membership) return null;
+  const [conversation] = await db.select().from(conversations).where(eq(conversations.id, conversationId)).limit(1);
+  if (!conversation || conversation.type !== "group" || conversation.deletedAt) return null;
+  return { conversation, membership };
+}
+
+export async function addGroupMember(conversationId: string, actorId: string, userId: string) {
+  const ctx = await getGroupWithActor(conversationId, actorId);
+  if (!ctx) return "not_found" as const;
+  if (ctx.membership.role !== "owner" && ctx.membership.role !== "admin") return "forbidden" as const;
+  const [user] = await db.select({ id: users.id }).from(users).where(eq(users.id, userId)).limit(1);
+  if (!user) return "user_not_found" as const;
+  try {
+    await db.insert(conversationMembers).values({ conversationId, userId, role: "member" });
+    return "ok" as const;
+  } catch (error) {
+    if ((error as { code?: string }).code === "23505") return "already_member" as const;
+    throw error;
+  }
+}
+
+export async function removeGroupMember(conversationId: string, actorId: string, userId: string) {
+  const ctx = await getGroupWithActor(conversationId, actorId);
+  if (!ctx) return "not_found" as const;
+  if (actorId === userId) return "use_leave" as const;
+  if (ctx.membership.role !== "owner" && ctx.membership.role !== "admin") return "forbidden" as const;
+  const target = await getMembership(conversationId, userId);
+  if (!target) return "member_not_found" as const;
+  if (target.role === "owner") return "forbidden" as const;
+  if (ctx.membership.role === "admin" && target.role !== "member") return "forbidden" as const;
+  await db.delete(conversationMembers).where(and(eq(conversationMembers.conversationId, conversationId), eq(conversationMembers.userId, userId)));
+  return "ok" as const;
+}
+
+export async function changeGroupRole(conversationId: string, actorId: string, userId: string, role: "admin" | "member") {
+  const ctx = await getGroupWithActor(conversationId, actorId);
+  if (!ctx) return "not_found" as const;
+  if (ctx.membership.role !== "owner") return "forbidden" as const;
+  const target = await getMembership(conversationId, userId);
+  if (!target) return "member_not_found" as const;
+  if (target.role === "owner") return "forbidden" as const;
+  await db.update(conversationMembers).set({ role }).where(eq(conversationMembers.id, target.id));
+  return "ok" as const;
+}
+
+export async function transferGroupOwnership(conversationId: string, actorId: string, userId: string) {
+  const ctx = await getGroupWithActor(conversationId, actorId);
+  if (!ctx) return "not_found" as const;
+  if (ctx.membership.role !== "owner") return "forbidden" as const;
+  const target = await getMembership(conversationId, userId);
+  if (!target || userId === actorId) return "member_not_found" as const;
+  await db.transaction(async (tx) => {
+    await tx.update(conversationMembers).set({ role: "admin" }).where(eq(conversationMembers.id, ctx.membership.id));
+    await tx.update(conversationMembers).set({ role: "owner" }).where(eq(conversationMembers.id, target.id));
+    await tx.update(conversations).set({ createdById: userId, updatedAt: new Date() }).where(eq(conversations.id, conversationId));
+  });
+  return "ok" as const;
+}
+
+export async function leaveGroup(conversationId: string, userId: string) {
+  const ctx = await getGroupWithActor(conversationId, userId);
+  if (!ctx) return "not_found" as const;
+  if (ctx.membership.role === "owner") return "owner_must_transfer" as const;
+  await db.delete(conversationMembers).where(eq(conversationMembers.id, ctx.membership.id));
+  return "ok" as const;
+}
+
+export async function deleteGroup(conversationId: string, userId: string) {
+  const ctx = await getGroupWithActor(conversationId, userId);
+  if (!ctx) return "not_found" as const;
+  if (ctx.membership.role !== "owner") return "forbidden" as const;
+  await db.update(conversations).set({ deletedAt: new Date(), updatedAt: new Date() }).where(eq(conversations.id, conversationId));
+  return "ok" as const;
+}
+
+export async function storeMessageMentions(messageId: string, conversationId: string, text: string, actorId: string) {
+  const usernames = [...new Set([...text.matchAll(/(^|\s)@([a-zA-Z0-9_]{3,20})\b/g)].map((m) => m[2].toLowerCase()))];
+  if (usernames.length === 0) return [];
+  const rows = await db.select({ id: users.id, username: users.username }).from(users)
+    .innerJoin(conversationMembers, and(eq(conversationMembers.userId, users.id), eq(conversationMembers.conversationId, conversationId)))
+    .where(sql`lower(${users.username}) in (${sql.join(usernames.map((name) => sql`${name}`), sql`, `)})`);
+  const mentioned = rows.filter((row) => row.id !== actorId);
+  if (mentioned.length) await db.insert(messageMentions).values(mentioned.map((row) => ({ messageId, userId: row.id }))).onConflictDoNothing();
+  return mentioned;
 }
 
 export async function createDirectConversation(

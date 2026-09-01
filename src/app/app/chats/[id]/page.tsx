@@ -50,6 +50,7 @@ export default async function ChatPage({
       conversationId={detail.id}
       me={me}
       other={other}
+      conversation={detail}
       initial={initial}
     />
   );
