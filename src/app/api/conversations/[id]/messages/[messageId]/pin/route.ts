@@ -13,7 +13,7 @@ export async function POST(
   _req: NextRequest,
   ctx: {
     params: Promise<{
-      conversationId: string;
+      id: string;
       messageId: string;
     }>;
   },
@@ -33,7 +33,7 @@ export async function POST(
   const me = await getSessionUser();
   if (!me) return jsonError(401, "Not authenticated.");
 
-  const { conversationId, messageId } = await ctx.params;
+  const { id: conversationId, messageId } = await ctx.params;
   if (!isUuid(conversationId) || !isUuid(messageId))
     return jsonError(404, "Not found.");
 
@@ -59,7 +59,7 @@ export async function DELETE(
   _req: NextRequest,
   ctx: {
     params: Promise<{
-      conversationId: string;
+      id: string;
       messageId: string;
     }>;
   },
@@ -70,7 +70,7 @@ export async function DELETE(
   const me = await getSessionUser();
   if (!me) return jsonError(401, "Not authenticated.");
 
-  const { conversationId, messageId } = await ctx.params;
+  const { id: conversationId, messageId } = await ctx.params;
   if (!isUuid(conversationId) || !isUuid(messageId))
     return jsonError(404, "Not found.");
 

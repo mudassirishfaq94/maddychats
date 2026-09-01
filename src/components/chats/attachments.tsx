@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
+  ChevronLeft,
+  ChevronRight,
   Download,
   FileArchive,
   FileSpreadsheet,
@@ -28,19 +30,39 @@ function iconFor(mime: string) {
   return FileIcon;
 }
 
-/** Full-screen image viewer. */
+/** Full-screen image viewer with next/prev navigation. */
 export function Lightbox({
   src,
   alt,
+  images,
+  currentIndex,
   onClose,
+  onNavigate,
 }: {
   src: string;
   alt: string;
+  images?: AttachmentDTO[];
+  currentIndex?: number;
   onClose: () => void;
+  onNavigate?: (index: number) => void;
 }) {
+  const goNext = useCallback(() => {
+    if (images && currentIndex !== undefined && onNavigate) {
+      onNavigate((currentIndex + 1) % images.length);
+    }
+  }, [images, currentIndex, onNavigate]);
+
+  const goPrev = useCallback(() => {
+    if (images && currentIndex !== undefined && onNavigate) {
+      onNavigate((currentIndex - 1 + images.length) % images.length);
+    }
+  }, [images, currentIndex, onNavigate]);
+
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") onClose();
+      if (e.key === "ArrowRight") goNext();
+      if (e.key === "ArrowLeft") goPrev();
     }
     document.addEventListener("keydown", onKey);
     document.body.style.overflow = "hidden";
@@ -48,7 +70,9 @@ export function Lightbox({
       document.removeEventListener("keydown", onKey);
       document.body.style.overflow = "";
     };
-  }, [onClose]);
+  }, [onClose, goNext, goPrev]);
+
+  const hasNav = images && images.length > 1 && currentIndex !== undefined;
 
   return (
     <div
@@ -58,9 +82,10 @@ export function Lightbox({
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/85 p-6 backdrop-blur-sm"
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 p-4 sm:p-6 backdrop-blur-sm"
     >
-      <div className="absolute right-4 top-4 flex gap-2">
+      {/* Top controls */}
+      <div className="absolute right-4 top-4 flex gap-2 z-10">
         <a
           href={src}
           download={alt}
@@ -78,11 +103,44 @@ export function Lightbox({
           <X className="h-4.5 w-4.5" />
         </button>
       </div>
+
+      {/* Counter */}
+      {hasNav ? (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 text-sm font-medium text-white/70 z-10">
+          {(currentIndex ?? 0) + 1} / {images!.length}
+        </div>
+      ) : null}
+
+      {/* Previous */}
+      {hasNav ? (
+        <button
+          type="button"
+          onClick={goPrev}
+          aria-label="Previous image"
+          className="absolute left-4 top-1/2 -translate-y-1/2 flex h-12 w-12 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20 z-10"
+        >
+          <ChevronLeft className="h-6 w-6" />
+        </button>
+      ) : null}
+
+      {/* Next */}
+      {hasNav ? (
+        <button
+          type="button"
+          onClick={goNext}
+          aria-label="Next image"
+          className="absolute right-4 top-1/2 -translate-y-1/2 flex h-12 w-12 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20 z-10"
+        >
+          <ChevronRight className="h-6 w-6" />
+        </button>
+      ) : null}
+
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
+        key={src}
         src={src}
         alt={alt}
-        className="max-h-full max-w-full rounded-2xl object-contain shadow-2xl"
+        className="max-h-[85vh] max-w-[90vw] rounded-2xl object-contain shadow-2xl animate-fade-in"
       />
     </div>
   );
@@ -188,7 +246,10 @@ export function AttachmentList({
         <Lightbox
           src={lightbox.url}
           alt={lightbox.originalName}
+          images={images.length > 0 ? images : undefined}
+          currentIndex={images.findIndex((i) => i.id === lightbox.id)}
           onClose={() => setLightbox(null)}
+          onNavigate={(idx) => setLightbox(images[idx])}
         />
       ) : null}
     </div>

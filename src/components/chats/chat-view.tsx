@@ -19,6 +19,7 @@ import {
   Check,
   CheckCheck,
   ChevronLeft,
+  Info,
   Loader2,
   MoreVertical,
   Pin,
@@ -35,6 +36,7 @@ import { useRealtime } from "@/components/providers/realtime-provider";
 import { MessageActions } from "./message-actions";
 import { MessageSearch } from "./message-search";
 import { AttachmentList } from "./attachments";
+import { ConversationDetails } from "./conversation-details";
 import {
   AttachButton,
   AttachmentPreviews,
@@ -129,6 +131,7 @@ export function ChatView({
   const [pinnedCount, setPinnedCount] = useState(0);
   const [dragging, setDragging] = useState(false);
   const [headerMenu, setHeaderMenu] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
   const [otherTyping, setOtherTyping] = useState(false);
   const attachments = useAttachmentUpload();
 
@@ -587,9 +590,7 @@ export function ChatView({
   }
 
   async function togglePin(message: MessageDTO) {
-    const endpoint = message.pinned
-      ? `/api/conversations/${conversationId}/messages/${message.id}/pin`
-      : `/api/conversations/${conversationId}/messages/${message.id}/pin`;
+    const endpoint = `/api/conversations/${conversationId}/messages/${message.id}/pin`;
     const method = message.pinned ? "DELETE" : "POST";
     try {
       const res = await fetch(endpoint, { method });
@@ -674,7 +675,8 @@ export function ChatView({
   );
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="flex h-full min-h-0">
+      <div className="flex min-w-0 flex-1 flex-col">
       {/* ------------------------------ header ------------------------------ */}
       <header className="flex h-14 items-center gap-3 border-b border-[var(--border)] bg-[var(--surface)] px-3 sm:px-4">
         <Link
@@ -726,6 +728,20 @@ export function ChatView({
         )}
 
         <MessageSearch />
+
+        <button
+          type="button"
+          onClick={() => setShowDetails((v) => !v)}
+          aria-label="Chat details"
+          className={cn(
+            "flex h-9 w-9 items-center justify-center rounded-full transition-colors",
+            showDetails
+              ? "bg-[var(--accent-soft)] text-[var(--accent-fg)]"
+              : "text-[var(--muted)] hover:bg-[color-mix(in_srgb,var(--muted)_12%,transparent)] hover:text-[var(--text)]",
+          )}
+        >
+          <Info className="h-4 w-4" />
+        </button>
 
         <div ref={headerMenuRef} className="relative">
           <button
@@ -1248,6 +1264,16 @@ export function ChatView({
           </button>
         </div>
       </form>
+      </div>
+
+      {/* Conversation details panel */}
+      {showDetails ? (
+        <ConversationDetails
+          conversationId={conversationId}
+          other={other}
+          onClose={() => setShowDetails(false)}
+        />
+      ) : null}
     </div>
   );
 }

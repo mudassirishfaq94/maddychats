@@ -1386,3 +1386,169 @@ export async function getPinnedIds(
     );
   return new Set(rows.map((r) => r.messageId));
 }
+
+/* ============================= media gallery ============================== */
+
+/** Shared link detected in message text. */
+export interface SharedLinkItem {
+  messageId: string;
+  url: string;
+  text: string;
+  createdAt: string;
+  sender: ReturnType<typeof toPublicUser>;
+}
+
+/**
+ * List image/video attachments for a conversation.
+ * Excludes deleted-for-everyone messages and deleted-for-me messages.
+ */
+export async function listConversationMedia(
+  conversationId: string,
+  viewerId: string,
+): Promise<AttachmentDTO[]> {
+  // Get messages deleted for this viewer.
+  const myDelRows = await db
+    .select({ messageId: messageDeletions.messageId })
+    .from(messageDeletions)
+    .innerJoin(messages, eq(messages.id, messageDeletions.messageId))
+    .where(
+      and(
+        eq(messageDeletions.userId, viewerId),
+        eq(messages.conversationId, conversationId),
+      ),
+    );
+  const myDeletedIds = new Set(myDelRows.map((r) => r.messageId));
+
+  const rows = await db
+    .select({
+      attachment: messageAttachments,
+      message: messages,
+    })
+    .from(messageAttachments)
+    .innerJoin(messages, eq(messages.id, messageAttachments.messageId))
+    .where(
+      and(
+        eq(messages.conversationId, conversationId),
+        isNull(messages.deletedAt),
+        eq(messageAttachments.kind, "image"),
+      ),
+    )
+    .orderBy(desc(messages.createdAt));
+
+  return rows
+    .filter((r) => !myDeletedIds.has(r.message.id))
+    .map((r) => ({
+      id: r.attachment.id,
+      originalName: r.attachment.originalName,
+      mimeType: r.attachment.mimeType,
+      size: r.attachment.size,
+      kind: "image" as const,
+      url: `/api/media/${r.attachment.id}`,
+    }));
+}
+
+/**
+ * List file (non-image) attachments for a conversation.
+ * Excludes deleted-for-everyone and deleted-for-me messages.
+ */
+export async function listConversationFiles(
+  conversationId: string,
+  viewerId: string,
+): Promise<(AttachmentDTO & { createdAt: string })[]> {
+  const myDelRows = await db
+    .select({ messageId: messageDeletions.messageId })
+    .from(messageDeletions)
+    .innerJoin(messages, eq(messages.id, messageDeletions.messageId))
+    .where(
+      and(
+        eq(messageDeletions.userId, viewerId),
+        eq(messages.conversationId, conversationId),
+      ),
+    );
+  const myDeletedIds = new Set(myDelRows.map((r) => r.messageId));
+
+  const rows = await db
+    .select({
+      attachment: messageAttachments,
+      message: messages,
+    })
+    .from(messageAttachments)
+    .innerJoin(messages, eq(messages.id, messageAttachments.messageId))
+    .where(
+      and(
+        eq(messages.conversationId, conversationId),
+        isNull(messages.deletedAt),
+        eq(messageAttachments.kind, "file"),
+      ),
+    )
+    .orderBy(desc(messages.createdAt));
+
+  return rows
+    .filter((r) => !myDeletedIds.has(r.message.id))
+    .map((r) => ({
+      id: r.attachment.id,
+      originalName: r.attachment.originalName,
+      mimeType: r.attachment.mimeType,
+      size: r.attachment.size,
+      kind: "file" as const,
+      url: `/api/media/${r.attachment.id}`,
+      createdAt: r.message.createdAt.toISOString(),
+    }));
+}
+
+/**
+ * Extract shared links from message text in a conversation.
+ * Only non-deleted messages are scanned.
+ */
+export async function listConversationLinks(
+  conversationId: string,
+  viewerId: string,
+): Promise<SharedLinkItem[]> {
+  const myDelRows = await db
+    .select({ messageId: messageDeletions.messageId })
+    .from(messageDeletions)
+    .innerJoin(messages, eq(messages.id, messageDeletions.messageId))
+    .where(
+      and(
+        eq(messageDeletions.userId, viewerId),
+        eq(messages.conversationId, conversationId),
+      ),
+    );
+  const myDeletedIds = new Set(myDelRows.map((r) => r.messageId));
+
+  const rows = await db
+    .select({ message: messages, sender: users })
+    .from(messages)
+    .innerJoin(users, eq(messages.senderId, users.id))
+    .where(
+      and(
+        eq(messages.conversationId, conversationId),
+        isNull(messages.deletedAt),
+        sql`${messages.text} ~* ${'https?://[^\s]+'}`,
+      ),
+    )
+    .orderBy(desc(messages.createdAt))
+    .limit(200);
+
+  const urlRegex = /https?:\/\/[^\s]+/gi;
+  const results: SharedLinkItem[] = [];
+
+  for (const row of rows) {
+    if (myDeletedIds.has(row.message.id)) continue;
+    const text = row.message.text;
+    const matches = text.match(urlRegex);
+    if (!matches) continue;
+    for (const url of matches) {
+      results.push({
+        messageId: row.message.id,
+        url,
+        text: text.slice(0, 100),
+        createdAt: row.message.createdAt.toISOString(),
+        sender: toPublicUser(row.sender),
+      });
+    }
+    if (results.length >= 100) break;
+  }
+
+  return results;
+}

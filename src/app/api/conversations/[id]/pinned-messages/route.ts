@@ -15,12 +15,12 @@ export const dynamic = "force-dynamic";
 /** List pinned messages in a conversation. Members only. */
 export async function GET(
   _req: NextRequest,
-  ctx: { params: Promise<{ conversationId: string }> },
+  ctx: { params: Promise<{ id: string }> },
 ) {
   const me = await getSessionUser();
   if (!me) return jsonError(401, "Not authenticated.");
 
-  const { conversationId } = await ctx.params;
+  const { id: conversationId } = await ctx.params;
   if (!isUuid(conversationId))
     return jsonError(404, "Conversation not found.");
 
