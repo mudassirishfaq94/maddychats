@@ -1,19 +1,19 @@
 import { and, desc, eq, gt, inArray, ne, or, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { blocks, statusRecipients, statuses, statusViews, users, type StatusRow } from "@/db/schema";
+import { blocks, statusReactions, statusRecipients, statuses, statusViews, users, type StatusRow } from "@/db/schema";
 import type { StatusDTO } from "@/lib/types";
 import { deleteStored } from "./storage";
 import { toPublicUser } from "./users";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-function dto(row: StatusRow, owner: typeof users.$inferSelect, viewed: boolean, viewCount: number): StatusDTO {
+function dto(row: StatusRow, owner: typeof users.$inferSelect, viewed: boolean, viewCount: number, reactions: StatusDTO["reactions"] = []): StatusDTO {
   return {
     id: row.id, userId: row.userId, type: row.type, text: row.text,
     mediaUrl: row.mediaPath ? `/api/media/status/${row.id}` : null,
     backgroundStyle: row.backgroundStyle, privacy: row.privacy,
     createdAt: row.createdAt.toISOString(), expiresAt: row.expiresAt.toISOString(),
-    viewed, viewCount, owner: toPublicUser(owner),
+    viewed, viewCount, owner: toPublicUser(owner), reactions,
   };
 }
 
@@ -77,12 +77,15 @@ export async function listVisibleStatuses(viewerId: string) {
   for (const row of rows) if (await canViewStatus(row.status, viewerId)) visible.push(row);
   if (!visible.length) return [];
   const ids = visible.map((r) => r.status.id);
-  const [views, counts] = await Promise.all([
+  const [views, counts, reactionRows] = await Promise.all([
     db.select({ statusId: statusViews.statusId }).from(statusViews).where(and(inArray(statusViews.statusId, ids), eq(statusViews.viewerId, viewerId))),
     db.select({ statusId: statusViews.statusId, count: sql<string>`count(*)::text` }).from(statusViews).where(inArray(statusViews.statusId, ids)).groupBy(statusViews.statusId),
+    db.select({ statusId: statusReactions.statusId, userId: statusReactions.userId, emoji: statusReactions.emoji }).from(statusReactions).where(inArray(statusReactions.statusId, ids)),
   ]);
   const viewed = new Set(views.map((v) => v.statusId)); const count = new Map(counts.map((v) => [v.statusId, Number(v.count)]));
-  return visible.map((r) => dto(r.status, r.owner, viewed.has(r.status.id), count.get(r.status.id) ?? 0));
+  const reactionMap = new Map<string, Map<string, { emoji: string; count: number; mine: boolean }>>();
+  for (const reaction of reactionRows) { const group = reactionMap.get(reaction.statusId) ?? new Map(); const item = group.get(reaction.emoji) ?? { emoji: reaction.emoji, count: 0, mine: false }; item.count++; if (reaction.userId === viewerId) item.mine = true; group.set(reaction.emoji, item); reactionMap.set(reaction.statusId, group); }
+  return visible.map((r) => dto(r.status, r.owner, viewed.has(r.status.id), count.get(r.status.id) ?? 0, [...(reactionMap.get(r.status.id)?.values() ?? [])]));
 }
 
 export async function findVisibleStatus(id: string, viewerId: string) {
@@ -112,4 +115,15 @@ export async function listStatusViewers(id: string, ownerId: string) {
   if (!status) return null;
   const rows = await db.select({ viewer: users, viewedAt: statusViews.viewedAt }).from(statusViews).innerJoin(users, eq(statusViews.viewerId, users.id)).where(eq(statusViews.statusId, id)).orderBy(desc(statusViews.viewedAt));
   return rows.map((r) => ({ viewer: toPublicUser(r.viewer), viewedAt: r.viewedAt.toISOString() }));
+}
+
+export async function reactToStatus(id: string, userId: string, emoji: string | null) {
+  const row = await findVisibleStatus(id, userId); if (!row) return "not_found" as const;
+  if (row.status.userId === userId) return "forbidden" as const;
+  if (!emoji) {
+    await db.delete(statusReactions).where(and(eq(statusReactions.statusId, id), eq(statusReactions.userId, userId)));
+  } else {
+    await db.insert(statusReactions).values({ statusId: id, userId, emoji }).onConflictDoUpdate({ target: [statusReactions.statusId, statusReactions.userId], set: { emoji, createdAt: new Date() } });
+  }
+  return row.status;
 }

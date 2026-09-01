@@ -437,6 +437,18 @@ export const statusRecipients = pgTable(
   (table) => [unique("status_recipients_status_user_unique").on(table.statusId, table.userId), index("status_recipients_user_idx").on(table.userId)],
 );
 
+export const statusReactions = pgTable(
+  "status_reactions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    statusId: uuid("status_id").references(() => statuses.id, { onDelete: "cascade" }).notNull(),
+    userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+    emoji: text("emoji").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+  },
+  (table) => [unique("status_reactions_status_user_unique").on(table.statusId, table.userId), index("status_reactions_status_idx").on(table.statusId)],
+);
+
 /* ================================ relations ============================== */
 
 export const usersRelations = relations(users, ({ many }) => ({

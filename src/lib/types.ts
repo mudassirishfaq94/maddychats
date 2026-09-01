@@ -273,10 +273,11 @@ export interface StatusDTO {
   viewed: boolean;
   viewCount: number;
   owner: PublicUser;
+  reactions: Array<{ emoji: string; count: number; mine: boolean }>;
 }
 
 export interface RealtimeStatusEvent {
-  type: "status:new" | "status:deleted";
+  type: "status:new" | "status:deleted" | "status:reaction";
   statusId: string;
   userId: string;
 }
