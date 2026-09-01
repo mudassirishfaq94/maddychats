@@ -1,44 +1,47 @@
-# Dependencies
-node_modules/
-.pnp
-.pnp.js
+# dependencies
+/node_modules
 
-# Environment — NEVER commit real secrets
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# environment & secrets — NEVER commit real env files
 .env
-.env.local
-.env.*.local
-server/.env
-client/.env
+.env.*
+!.env.example
 
-# Builds
-dist/
-build/
-out/
-*.tsbuildinfo
+# database
+*.db
+*.sqlite
 
-# Local embedded PostgreSQL data, logs & sockets
-server/.pgdata/
-server/.pglog*
-**/pgdata/
-*.pglog
-.s.PGSQL.*
-**/.s.PGSQL.*
+# user-uploaded media — NEVER commit uploaded files
+server/uploads/**
+!server/uploads/avatars/.gitkeep
+!server/uploads/images/.gitkeep
+!server/uploads/files/.gitkeep
 
-# Logs
-logs/
-*.log
+# logs
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+*.log
 
-# Editor / OS
+# OS / editor
 .DS_Store
-.idea/
-.vscode/
-*.swp
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json
+.idea
 
-# Media uploads (later step)
-server/uploads/
+# typescript
+*.tsbuildinfo
+next-env.d.ts
 
-# Generated Prisma client (regenerated via `npm run db:generate` / postinstall)
-server/src/generated/
+# drizzle
+/drizzle/meta
+
+# one-time QA transfer artifacts — never commit
+public/downloads/
