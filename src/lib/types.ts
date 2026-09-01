@@ -34,7 +34,7 @@ export interface ApiFieldErrors {
   [field: string]: string;
 }
 
-/* ------------------------------ chat (Step 3) ------------------------------ */
+/* --------------------------------- chat --------------------------------- */
 
 export interface ReactionGroup {
   emoji: string;
@@ -147,6 +147,8 @@ export interface ConversationDetail {
   avatarUrl: string | null;
   createdById: string | null;
   myRole: "owner" | "admin" | "member";
+  muted: boolean;
+  blocked: boolean;
   requestPending: boolean;
   requestInitiatorId: string | null;
   createdAt: string;
@@ -163,7 +165,7 @@ export interface MessagePage {
   hasMore: boolean;
 }
 
-/* --------------------------- realtime (Step 4) ---------------------------
+/* ------------------------------- realtime -------------------------------
  * Event contract pushed to clients over the realtime stream. Shaped like
  * Socket.IO events so the transport can be swapped later without touching
  * UI logic. */

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronDown, LogOut, UserRound } from "lucide-react";
+import { ChevronDown, LogOut, Star, UserRound } from "lucide-react";
 import type { SafeUser } from "@/lib/types";
 import { useAuth } from "@/components/providers/auth-provider";
 import { Avatar } from "@/components/avatar";
@@ -82,6 +82,15 @@ export function UserMenu({ user }: { user: SafeUser }) {
           >
             <UserRound className="h-4 w-4" />
             Profile
+          </Link>
+          <Link
+            href="/app/starred"
+            role="menuitem"
+            onClick={() => setOpen(false)}
+            className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm text-[var(--muted)] transition-colors hover:bg-[color-mix(in_srgb,var(--muted)_10%,transparent)] hover:text-[var(--text)]"
+          >
+            <Star className="h-4 w-4" />
+            Starred messages
           </Link>
           <button
             type="button"

@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { CircleDashed, MessagesSquare, Star, Users } from "lucide-react";
+import { CircleDashed, MessagesSquare, Users } from "lucide-react";
 import type { SafeUser } from "@/lib/types";
 import { LogoWordmark } from "@/components/brand/logo";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -25,9 +25,8 @@ export function AppShell({
 }) {
   const pathname = usePathname();
   const onPeople = pathname.startsWith("/app/people") || pathname.startsWith("/app/users");
-  const onStarred = pathname.startsWith("/app/starred");
   const onStatus = pathname.startsWith("/app/status");
-  const onChats = !onPeople && !onStarred && !onStatus && !pathname.startsWith("/app/profile");
+  const onChats = !onPeople && !onStatus && !pathname.startsWith("/app/profile") && !pathname.startsWith("/app/starred");
 
   return (
     <div className="flex h-dvh flex-col bg-[var(--bg)]">
@@ -55,41 +54,28 @@ export function AppShell({
             <span className="hidden sm:inline">Chats</span>
           </Link>
           <Link
-            href="/app/starred"
-            aria-current={onStarred ? "page" : undefined}
+            href="/app/people"
+            aria-current={onPeople ? "page" : undefined}
             className={cn(
               "flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium transition-colors",
-              onStarred
-                ? "bg-[var(--surface-2)] text-[var(--text)]"
-                : "text-[var(--muted)] hover:text-[var(--text)]",
+              onPeople ? "bg-[var(--surface-2)] text-[var(--text)]" : "text-[var(--muted)] hover:text-[var(--text)]",
             )}
           >
-            <Star className="h-4 w-4" />
-            <span className="hidden sm:inline">Starred</span>
+            <Users className="h-4 w-4" />
+            <span className="hidden sm:inline">People</span>
           </Link>
           <Link
             href="/app/status"
             aria-current={onStatus ? "page" : undefined}
             className={cn(
               "flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium transition-colors",
-              onStatus ? "bg-[var(--surface-2)] text-[var(--text)]" : "text-[var(--muted)] hover:text-[var(--text)]",
-            )}
-          >
-            <CircleDashed className="h-4 w-4" />
-            <span className="hidden sm:inline">Status</span>
-          </Link>
-          <Link
-            href="/app/people"
-            aria-current={onPeople ? "page" : undefined}
-            className={cn(
-              "flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium transition-colors",
-              onPeople
+              onStatus
                 ? "bg-[var(--surface-2)] text-[var(--text)]"
                 : "text-[var(--muted)] hover:text-[var(--text)]",
             )}
           >
-            <Users className="h-4 w-4" />
-            <span className="hidden sm:inline">People</span>
+            <CircleDashed className="h-4 w-4" />
+            <span className="hidden sm:inline">Status</span>
           </Link>
         </nav>
 

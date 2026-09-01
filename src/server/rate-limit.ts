@@ -1,7 +1,7 @@
 /**
  * In-memory fixed-window rate limiter.
  *
- * Suitable for the single-instance V1 deployment. For multi-instance scale,
+ * Suitable for a single-instance deployment. For multi-instance scale,
  * swap the Map for Redis (e.g. sliding-window via INCR + EXPIRE) — the call
  * sites only depend on this module's function signature.
  */

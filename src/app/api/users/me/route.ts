@@ -31,7 +31,7 @@ export async function GET() {
 
 /**
  * Edit own profile (display name, username, bio). Email changes are not part
- * of V1. Username changes re-verify uniqueness and re-issue the session
+ * of this endpoint. Username changes re-verify uniqueness and re-issue the session
  * cookie so its display snapshot stays accurate.
  */
 export async function PATCH(req: NextRequest) {

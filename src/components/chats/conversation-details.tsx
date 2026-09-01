@@ -4,12 +4,14 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Download,
+  Ban,
+  Bell,
+  BellOff,
   FileArchive,
   FileSpreadsheet,
   FileText,
   File as FileIcon,
   Image as ImageIcon,
-  Link,
   Loader2,
   LogOut,
   Shield,
@@ -19,6 +21,8 @@ import {
   Trash2,
   Users,
   Play,
+  Pin,
+  Star,
   X,
 } from "lucide-react";
 import type { AttachmentDTO, ConversationDetail, PublicUser } from "@/lib/types";
@@ -27,14 +31,14 @@ import { InlineMedia, Lightbox, humanSize } from "./attachments";
 import { useRealtime } from "@/components/providers/realtime-provider";
 import { cn } from "@/lib/utils";
 
-type Tab = "media" | "files" | "links";
+type Tab = "media" | "files" | "pinned" | "starred";
 
-interface SharedLinkItem {
+interface SavedMessageItem {
   messageId: string;
-  url: string;
   text: string;
   createdAt: string;
   sender: PublicUser;
+  conversation?: { id: string };
 }
 
 /** Slide-in panel showing conversation details + shared media/files/links. */
@@ -56,7 +60,7 @@ export function ConversationDetails({
   const [files, setFiles] = useState<(AttachmentDTO & { createdAt: string })[]>(
     [],
   );
-  const [links, setLinks] = useState<SharedLinkItem[]>([]);
+  const [savedMessages, setSavedMessages] = useState<SavedMessageItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [revision, setRevision] = useState(0);
@@ -64,6 +68,8 @@ export function ConversationDetails({
   const [groupBusy, setGroupBusy] = useState<string | null>(null);
   const [memberQuery, setMemberQuery] = useState("");
   const [memberResults, setMemberResults] = useState<PublicUser[]>([]);
+  const [muted, setMuted] = useState(conversation.muted);
+  const [blocked, setBlocked] = useState(conversation.blocked);
   const router = useRouter();
   const { subscribe } = useRealtime();
 
@@ -89,6 +95,23 @@ export function ConversationDetails({
     setGroupBusy(null);
   }
 
+  async function toggleNotifications() {
+    setGroupBusy("notifications");
+    const response = await fetch(`/api/conversations/${conversationId}/controls`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: muted ? "unmute" : "mute" }) });
+    if (response.ok) { setMuted((value) => !value); router.refresh(); }
+    else setError("Notification settings could not be changed.");
+    setGroupBusy(null);
+  }
+
+  async function toggleBlock() {
+    if (!other) return;
+    setGroupBusy("block");
+    const response = await fetch(`/api/users/${other.id}/block`, { method: blocked ? "DELETE" : "POST" });
+    if (response.ok) { setBlocked((value) => !value); router.refresh(); }
+    else setError("Block settings could not be changed.");
+    setGroupBusy(null);
+  }
+
   useEffect(() => {
     return subscribe((event) => {
       if (
@@ -108,13 +131,8 @@ export function ConversationDetails({
   // Load data for current tab
   useEffect(() => {
     const controller = new AbortController();
-    const endpoint =
-      tab === "media"
-        ? "media"
-        : tab === "files"
-          ? "files"
-          : "links";
-    fetch(`/api/conversations/${conversationId}/${endpoint}`, {
+    const url = tab === "starred" ? "/api/users/me/starred-messages" : `/api/conversations/${conversationId}/${tab === "pinned" ? "pinned-messages" : tab}`;
+    fetch(url, {
       signal: controller.signal,
     })
       .then(async (response) => {
@@ -124,7 +142,8 @@ export function ConversationDetails({
       .then((data) => {
         if (tab === "media") setMedia(data.media ?? []);
         else if (tab === "files") setFiles(data.files ?? []);
-        else setLinks(data.links ?? []);
+        else if (tab === "pinned") setSavedMessages(data.pins ?? []);
+        else setSavedMessages((data.starred ?? []).filter((item: SavedMessageItem) => item.conversation?.id === conversationId));
         setError(null);
       })
       .catch((cause) => {
@@ -205,7 +224,7 @@ export function ConversationDetails({
 
         {/* Tabs */}
         <div className="flex border-b border-[var(--border)]">
-          {(["media", "files", "links"] as const).map((t) => (
+          {(["media", "files", "pinned", "starred"] as const).map((t) => (
             <button
               key={t}
               type="button"
@@ -240,12 +259,24 @@ export function ConversationDetails({
           ) : tab === "files" ? (
             <FilesList items={files} />
           ) : (
-            <LinksList items={links} />
+            <SavedMessagesList items={savedMessages} icon={tab === "pinned" ? "pinned" : "starred"} />
           )}
+        </div>
+        <div className="border-t border-[var(--border)] p-3">
+          <button type="button" disabled={groupBusy !== null} onClick={() => void toggleNotifications()} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm hover:bg-[var(--surface-2)]">
+            {muted ? <Bell className="h-4 w-4" /> : <BellOff className="h-4 w-4" />}<span className="flex-1">Notifications</span><small className="text-[var(--muted)]">{muted ? "Muted" : "On"}</small>
+          </button>
+          {other ? <button type="button" disabled={groupBusy !== null} onClick={() => void toggleBlock()} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm text-[var(--danger)] hover:bg-[color-mix(in_srgb,var(--danger)_8%,transparent)]"><Ban className="h-4 w-4" />{blocked ? `Unblock ${other.displayName.split(" ")[0]}` : `Block ${other.displayName.split(" ")[0]}`}</button> : null}
         </div>
       </div>
     </>
   );
+}
+
+function SavedMessagesList({ items, icon }: { items: SavedMessageItem[]; icon: "pinned" | "starred" }) {
+  const Icon = icon === "pinned" ? Pin : Star;
+  if (!items.length) return <div className="flex flex-col items-center py-10 text-center"><Icon className="h-8 w-8 text-[var(--muted)] opacity-40" /><p className="mt-3 text-xs text-[var(--muted)]">No {icon} messages</p></div>;
+  return <div className="space-y-2">{items.map((item) => <a key={item.messageId} href={`?message=${item.messageId}`} className="block rounded-xl border border-[var(--border)] p-3 hover:bg-[var(--surface-2)]"><div className="flex items-center gap-2 text-xs font-semibold"><Icon className="h-3.5 w-3.5" />{item.sender.displayName}</div><p className="mt-1 line-clamp-3 text-xs text-[var(--muted)]">{item.text || "Attachment"}</p></a>)}</div>;
 }
 
 /* =============================== Media Grid =============================== */
@@ -345,48 +376,6 @@ function FilesList({
               </span>
             </span>
             <Download className="h-4 w-4 shrink-0 text-[var(--muted)]" />
-          </a>
-        );
-      })}
-    </div>
-  );
-}
-
-/* =============================== Links List =============================== */
-
-function LinksList({ items }: { items: SharedLinkItem[] }) {
-  if (items.length === 0) {
-    return (
-      <div className="flex flex-col items-center py-10 text-center">
-        <Link className="h-8 w-8 text-[var(--muted)] opacity-40" />
-        <p className="mt-3 text-xs text-[var(--muted)]">No links shared yet</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-1.5">
-      {items.map((item, i) => {
-        let hostname = "";
-        try {
-          hostname = new URL(item.url).hostname;
-        } catch {
-          hostname = item.url;
-        }
-        return (
-          <a
-            key={`${item.messageId}-${i}`}
-            href={item.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex flex-col gap-0.5 rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2.5 transition-colors hover:border-[var(--border-strong)]"
-          >
-            <span className="truncate text-xs font-semibold text-[var(--accent-fg)]">
-              {item.url}
-            </span>
-            <span className="truncate text-[0.68rem] text-[var(--muted)]">
-              {hostname} · {item.sender.displayName} · {formatDate(item.createdAt)}
-            </span>
           </a>
         );
       })}

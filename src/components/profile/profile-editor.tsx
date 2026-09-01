@@ -21,7 +21,7 @@ import { cn } from "@/lib/utils";
 
 /**
  * Profile settings card — edit display name, username (uniqueness enforced
- * server-side), and bio. Email is shown read-only in V1.
+ * server-side), and bio. Email is shown read-only.
  */
 export function ProfileEditor({ user }: { user: SafeUser }) {
   const router = useRouter();
@@ -321,7 +321,7 @@ export function ProfileEditor({ user }: { user: SafeUser }) {
             <span className="badge shrink-0">verified sign-in</span>
           </div>
           <p className="field-hint">
-            Email changes are not available in V1.
+              Your email address can’t be changed here yet.
           </p>
         </div>
 

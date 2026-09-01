@@ -21,13 +21,11 @@ import {
   ChevronLeft,
   Info,
   Loader2,
-  MoreVertical,
   Pin,
   Reply as ReplyIcon,
   Star,
   Send,
   ShieldCheck,
-  Trash2,
   Users,
   X,
 } from "lucide-react";
@@ -128,13 +126,11 @@ export function ChatView({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState("");
   const [pendingDelete, setPendingDelete] = useState<{ id: string; mode: "for_me" | "for_everyone" } | null>(null);
-  const [confirmConvDelete, setConfirmConvDelete] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [highlightId, setHighlightId] = useState<string | null>(null);
   const [hasPinnedMsgs, setHasPinnedMsgs] = useState(false);
   const [pinnedCount, setPinnedCount] = useState(0);
   const [dragging, setDragging] = useState(false);
-  const [headerMenu, setHeaderMenu] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
   const [galleryRevision, setGalleryRevision] = useState(0);
   const [otherTyping, setOtherTyping] = useState(false);
@@ -148,7 +144,6 @@ export function ChatView({
   const nearBottomRef = useRef(true);
   const initialScrollDone = useRef(false);
   const nodeRefs = useRef(new Map<string, HTMLDivElement | null>());
-  const headerMenuRef = useRef<HTMLDivElement>(null);
   const typingActiveRef = useRef(false);
   const typingStopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const remoteTypingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -158,17 +153,6 @@ export function ChatView({
   const otherPresence = other ? presence[other.id] : undefined;
   const otherOnline = Boolean(otherPresence?.online);
   const otherLastSeen = otherPresence?.lastSeenAt ?? other?.lastSeenAt ?? null;
-
-  useEffect(() => {
-    function onDoc(e: MouseEvent) {
-      if (headerMenuRef.current && !headerMenuRef.current.contains(e.target as Node)) {
-        setHeaderMenu(false);
-        setConfirmConvDelete(false);
-      }
-    }
-    document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
-  }, []);
 
   /* ------------------------------ read receipts ----------------------------- */
 
@@ -585,14 +569,6 @@ export function ChatView({
     }
   }
 
-  async function deleteConversation() {
-    await fetch(`/api/conversations/${conversationId}`, {
-      method: "DELETE",
-    }).catch(() => null);
-    router.push("/app");
-    router.refresh();
-  }
-
   async function toggleStar(message: MessageDTO) {
     const endpoint = message.starred
       ? `/api/messages/${message.id}/star`
@@ -783,67 +759,6 @@ export function ChatView({
           <Info className="h-4 w-4" />
         </button>
 
-        <div ref={headerMenuRef} className="relative">
-          <button
-            type="button"
-            aria-label="Conversation options"
-            aria-haspopup="menu"
-            aria-expanded={headerMenu}
-            onClick={() => setHeaderMenu((v) => !v)}
-            className="flex h-9 w-9 items-center justify-center rounded-full text-[var(--muted)] transition-colors hover:bg-[color-mix(in_srgb,var(--muted)_12%,transparent)] hover:text-[var(--text)]"
-          >
-            <MoreVertical className="h-4 w-4" />
-          </button>
-          {headerMenu ? (
-            <div className="card-glass absolute right-0 top-[calc(100%+8px)] z-50 w-52 max-w-[calc(100vw-1.5rem)] rounded-2xl p-1.5 animate-fade-up">
-              {!isGroup && other ? (
-                <Link
-                  href={`/app/users/${other.id}`}
-                  className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-xs text-[var(--muted)] transition-colors hover:bg-[color-mix(in_srgb,var(--muted)_10%,transparent)] hover:text-[var(--text)]"
-                >
-                  <ShieldCheck className="h-3.5 w-3.5" />
-                  View profile
-                </Link>
-              ) : null}
-              {confirmConvDelete ? (
-                <div className="rounded-xl bg-[color-mix(in_srgb,var(--danger)_9%,transparent)] p-2.5">
-                  <p className="px-1 pb-2 text-[0.7rem] leading-snug text-[var(--muted)]">
-                    Delete this conversation?
-                  </p>
-                  <div className="flex gap-1.5">
-                    <button
-                      type="button"
-                      onClick={deleteConversation}
-                      className="flex-1 rounded-lg bg-[var(--danger)] px-2 py-1.5 text-[0.7rem] font-semibold text-white"
-                    >
-                      Delete
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setConfirmConvDelete(false);
-                        setHeaderMenu(false);
-                      }}
-                      className="rounded-lg px-2 py-1.5 text-[0.7rem] text-[var(--muted)]"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setConfirmConvDelete(true)}
-                  disabled={isGroup && conversation.myRole !== "owner"}
-                  className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-xs text-[var(--danger)] transition-colors hover:bg-[color-mix(in_srgb,var(--danger)_9%,transparent)]"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                  {isGroup ? "Delete group" : "Delete conversation"}
-                </button>
-              )}
-            </div>
-          ) : null}
-        </div>
       </header>
 
       {!requestAccepted ? (

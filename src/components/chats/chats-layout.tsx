@@ -124,7 +124,10 @@ export function ChatsLayout({
       >
         <div className="flex items-center justify-between gap-2 px-4 py-3">
           <h1 className="font-display text-[1.15rem] font-bold">Chats</h1>
-          <NewChatDialog />
+          <div className="flex items-center gap-1.5">
+            <NewChatDialog start="group-people" />
+            <NewChatDialog start="direct" />
+          </div>
         </div>
 
         <div className="px-3.5 pb-2.5">

@@ -4,7 +4,7 @@ import { mkdir, stat, unlink, writeFile } from "fs/promises";
 import path from "path";
 
 /**
- * Local filesystem media storage (V1).
+ * Local filesystem media storage.
  *
  * Files live under `server/uploads/{avatars,images,files}` — never inside
  * PostgreSQL, and never served directly from disk: every read goes through

@@ -20,7 +20,7 @@ type SubmitState =
   | { kind: "error"; message: string };
 
 /**
- * V1 forgot-password flow. The backend architecture is complete (validation,
+ * Forgot-password flow. The backend includes validation,
  * lookup, rate limiting, provider abstraction), but email delivery is not
  * configured in this environment — so the UI says exactly that, instead of
  * pretending an email was sent.

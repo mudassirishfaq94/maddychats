@@ -13,7 +13,7 @@ import {
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 
-/* ============================ users (Step 1) ============================ */
+/* ================================ users ================================ */
 
 /**
  * Maddy Chats — core identity table.
@@ -109,7 +109,7 @@ export const conversationMembers = pgTable(
       .notNull(),
     /** Null only for a pending direct-message request recipient. */
     acceptedAt: timestamp("accepted_at", { withTimezone: true, mode: "date" }),
-    /* ---- per-user conversation state (Step 7) ---------------------------
+    /* ---- per-user conversation state ------------------------------------
      * These are deliberately per-member so one user pinning/archiving or
      * "deleting" a chat never mutates the other participant's view. */
     pinnedAt: timestamp("pinned_at", { withTimezone: true, mode: "date" }),
@@ -164,7 +164,7 @@ export const messages = pgTable(
       .references(() => users.id, { onDelete: "cascade" })
       .notNull(),
     text: text("text").notNull(),
-    /** text | image | file … — V1 always "text"; drives future rendering. */
+    /** text | image | file … — drives message rendering. */
     type: text("type").default("text").notNull(),
     /** Threaded reply target; nulled if the original is hard-deleted. */
     replyToMessageId: uuid("reply_to_message_id").references(

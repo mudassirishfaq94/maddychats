@@ -430,6 +430,7 @@ export async function getConversationForUser(
     .from(conversationMembers)
     .innerJoin(users, eq(conversationMembers.userId, users.id))
     .where(eq(conversationMembers.conversationId, conversationId));
+  const other = conv.type === "dm" ? memberRows.find((row) => row.user.id !== userId)?.user : null;
 
   return {
     id: conv.id,
@@ -439,6 +440,8 @@ export async function getConversationForUser(
     avatarUrl: conv.avatarUrl,
     createdById: conv.createdById,
     myRole: membership.role as "owner" | "admin" | "member",
+    muted: Boolean(membership.mutedAt),
+    blocked: other ? await isBlockedBetween(userId, other.id) : false,
     requestPending: conv.type === "dm" && !membership.acceptedAt,
     requestInitiatorId: conv.type === "dm" ? conv.createdById : null,
     createdAt: conv.createdAt.toISOString(),

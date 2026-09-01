@@ -7,7 +7,7 @@ import { clientIp, guardSameOrigin, jsonError, readJson } from "@/server/http";
 export const dynamic = "force-dynamic";
 
 /**
- * V1 password-reset endpoint.
+ * Password-reset endpoint.
  *
  * Architecture is in place (validation, user lookup, rate limiting, a
  * provider abstraction point), but email delivery is NOT wired up yet — no

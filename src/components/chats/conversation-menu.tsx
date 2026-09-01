@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import {
   Archive,
   ArchiveRestore,
-  Ban,
   Bell,
   BellOff,
   Loader2,
@@ -14,7 +13,6 @@ import {
   Pin,
   PinOff,
   Trash2,
-  ShieldCheck,
 } from "lucide-react";
 import type { ConversationSummary } from "@/lib/types";
 
@@ -38,7 +36,6 @@ export function ConversationMenu({
   const [busy, setBusy] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-  const other = conversation.otherMember;
 
   useEffect(() => {
     function onDoc(e: MouseEvent) {
@@ -63,20 +60,6 @@ export function ConversationMenu({
       setConfirmClear(false);
       onDone?.();
       if (action === "clear") router.push("/app/chats");
-      router.refresh();
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function toggleBlock() {
-    if (!other) return;
-    setBusy(true);
-    try {
-      await fetch(`/api/users/${other.id}/block`, {
-        method: conversation.blocked ? "DELETE" : "POST",
-      });
-      setOpen(false);
       router.refresh();
     } finally {
       setBusy(false);
@@ -156,23 +139,6 @@ export function ConversationMenu({
           </button>
 
           <div className="my-1 border-t border-[var(--border)]" />
-
-          {other ? (
-            <button
-              type="button"
-              className={`${item} ${conversation.blocked ? "text-[var(--success)]" : "text-[var(--danger)]"}`}
-              onClick={toggleBlock}
-            >
-              {conversation.blocked ? (
-                <ShieldCheck className="h-3.5 w-3.5" />
-              ) : (
-                <Ban className="h-3.5 w-3.5" />
-              )}
-              {conversation.blocked
-                ? `Unblock ${other.displayName.split(" ")[0]}`
-                : `Block ${other.displayName.split(" ")[0]}`}
-            </button>
-          ) : null}
 
           {confirmClear ? (
             <div className="rounded-xl bg-[color-mix(in_srgb,var(--danger)_10%,transparent)] p-2">
