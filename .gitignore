@@ -54,6 +54,9 @@ next-env.d.ts
 
 # drizzle
 /drizzle/meta
+!/drizzle/meta/
+/drizzle/meta/*
+!/drizzle/meta/_journal.json
 
 # one-time QA transfer artifacts — never commit
 public/downloads/

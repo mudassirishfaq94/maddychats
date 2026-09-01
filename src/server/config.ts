@@ -3,8 +3,19 @@ import { createHash } from "crypto";
 /** Name of the HttpOnly session cookie. */
 export const SESSION_COOKIE = "maddy_session";
 
-/** Session lifetime: 7 days. */
-export const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7;
+/**
+ * Persistent session lifetime. Defaults to one year so closing/restarting the
+ * browser does not sign the user out. Production can shorten this with
+ * SESSION_TTL_DAYS. Explicit logout still revokes the token immediately.
+ */
+function sessionTtlDays(): number {
+  const configured = Number(process.env.SESSION_TTL_DAYS);
+  return Number.isFinite(configured) && configured >= 1
+    ? Math.min(Math.floor(configured), 3650)
+    : 365;
+}
+
+export const SESSION_TTL_SECONDS = 60 * 60 * 24 * sessionTtlDays();
 
 let cachedSecret: Uint8Array | null = null;
 let warned = false;

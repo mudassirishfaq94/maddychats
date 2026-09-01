@@ -9,4 +9,14 @@ CREATE TABLE IF NOT EXISTS "message_mentions" (
   CONSTRAINT "message_mentions_message_user_unique" UNIQUE("message_id", "user_id")
 );
 CREATE INDEX IF NOT EXISTS "message_mentions_user_idx" ON "message_mentions" ("user_id");
-ALTER TABLE "conversation_members" ADD CONSTRAINT "conversation_members_role_check" CHECK ("role" IN ('owner', 'admin', 'member'));
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'conversation_members_role_check'
+  ) THEN
+    ALTER TABLE "conversation_members"
+      ADD CONSTRAINT "conversation_members_role_check"
+      CHECK ("role" IN ('owner', 'admin', 'member'));
+  END IF;
+END $$;

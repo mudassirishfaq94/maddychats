@@ -43,6 +43,7 @@ Configure `.env` with local values. Never commit this file.
 | Variable | Required | Purpose |
 | --- | --- | --- |
 | `DATABASE_URL` | Yes | Server-only PostgreSQL connection string |
+| `SESSION_TTL_DAYS` | No | Persistent login lifetime in days (default: 365, maximum: 3650) |
 | `JWT_SECRET` | Production | Secret of at least 32 characters used to sign sessions |
 | `PORT` | No | Application port; defaults to `3000` |
 | `CLIENT_URL` | Recommended | Canonical application origin |
