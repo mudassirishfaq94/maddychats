@@ -89,7 +89,7 @@ const BLOCKED_EXTENSIONS = new Set([
 
 export interface ValidationOk {
   ok: true;
-  kind: "image" | "file";
+  kind: "image" | "video" | "file";
   extension: string;
   safeName: string;
 }
@@ -145,6 +145,7 @@ export function validateUpload(
   const type = mimeType.split(";")[0].trim().toLowerCase();
   const isImage = Object.prototype.hasOwnProperty.call(IMAGE_TYPES, type);
   const isDoc = Object.prototype.hasOwnProperty.call(DOCUMENT_TYPES, type);
+  const isVideo = type.startsWith("video/");
 
   if (mode === "avatar") {
     if (!isImage) {
@@ -178,7 +179,12 @@ export function validateUpload(
     };
   }
 
-  return { ok: true, kind: isImage ? "image" : "file", extension, safeName };
+  return {
+    ok: true,
+    kind: isImage ? "image" : isVideo ? "video" : "file",
+    extension,
+    safeName,
+  };
 }
 
 /** Generates a collision-free, server-controlled filename. */

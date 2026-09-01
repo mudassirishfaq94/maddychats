@@ -132,6 +132,7 @@ export function ChatView({
   const [dragging, setDragging] = useState(false);
   const [headerMenu, setHeaderMenu] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
+  const [galleryRevision, setGalleryRevision] = useState(0);
   const [otherTyping, setOtherTyping] = useState(false);
   const attachments = useAttachmentUpload();
 
@@ -234,7 +235,8 @@ export function ChatView({
         return;
       }
       if (event.type === "message:deleted_for_me" && event.conversationId === conversationId) {
-        // Another member deleted this message for themselves — no UI change needed.
+        setItems((prev) => prev.filter((message) => message.id !== event.messageId));
+        setGalleryRevision((value) => value + 1);
         return;
       }
       if (
@@ -546,6 +548,7 @@ export function ChatView({
       if (mode === "for_me") {
         // Remove from visible list immediately
         setItems((prev) => prev.filter((m) => m.id !== id));
+        setGalleryRevision((value) => value + 1);
       } else {
         const updated = data.message;
         setItems((prev) => prev.map((m) => (m.id === id ? updated : m)));
@@ -1271,6 +1274,7 @@ export function ChatView({
         <ConversationDetails
           conversationId={conversationId}
           other={other}
+          localRevision={galleryRevision}
           onClose={() => setShowDetails(false)}
         />
       ) : null}

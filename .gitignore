@@ -55,3 +55,6 @@ next-env.d.ts
 
 # one-time QA transfer artifacts — never commit
 public/downloads/
+
+# local preview tooling and logs
+.freebuff/

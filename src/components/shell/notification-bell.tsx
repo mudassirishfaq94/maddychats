@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Bell, CheckCheck, Loader2, MessageCircle, Info } from "lucide-react";
@@ -18,32 +18,31 @@ export function NotificationBell() {
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<NotificationDTO[]>([]);
   const [unread, setUnread] = useState(0);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const ref = useRef<HTMLDivElement>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await fetch("/api/notifications?limit=25", {
-        cache: "no-store",
-      });
-      if (!res.ok) return;
-      const data = (await res.json()) as {
-        notifications: NotificationDTO[];
-        unreadCount: number;
-      };
-      setItems(data.notifications);
-      setUnread(data.unreadCount);
-    } catch {
-      // silent — the bell is non-critical
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
   useEffect(() => {
-    void load();
-  }, [load]);
+    const controller = new AbortController();
+    fetch("/api/notifications?limit=25", {
+      cache: "no-store",
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        if (!response.ok) return null;
+        return (await response.json()) as {
+          notifications: NotificationDTO[];
+          unreadCount: number;
+        };
+      })
+      .then((data) => {
+        if (!data) return;
+        setItems(data.notifications);
+        setUnread(data.unreadCount);
+      })
+      .catch(() => undefined)
+      .finally(() => setLoading(false));
+    return () => controller.abort();
+  }, []);
 
   // Live updates.
   useEffect(() => {

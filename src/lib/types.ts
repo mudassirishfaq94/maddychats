@@ -62,7 +62,7 @@ export interface AttachmentDTO {
   originalName: string;
   mimeType: string;
   size: number;
-  kind: "image" | "file";
+  kind: "image" | "video" | "file";
   /** Authenticated media endpoint — never a raw filesystem path. */
   url: string;
 }
@@ -158,7 +158,7 @@ export interface MessagePage {
  * Socket.IO events so the transport can be swapped later without touching
  * UI logic. */
 export interface RealtimeMessageEvent {
-  type: "message:new" | "message:update" | "message:delete";
+  type: "message:new" | "message:update" | "message:deleted";
   conversationId: string;
   message: MessageDTO;
 }

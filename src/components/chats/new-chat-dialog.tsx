@@ -41,12 +41,7 @@ export function NewChatDialog() {
   useEffect(() => {
     if (!open) return;
     const q = query.trim();
-    if (q.length < 2) {
-      setResults([]);
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
+    if (q.length < 2) return;
     const controller = new AbortController();
     const timer = setTimeout(async () => {
       try {
@@ -139,7 +134,16 @@ export function NewChatDialog() {
               <input
                 ref={inputRef}
                 value={query}
-                onChange={(e) => setQuery(e.target.value)}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setQuery(value);
+                  if (value.trim().length < 2) {
+                    setResults([]);
+                    setLoading(false);
+                  } else {
+                    setLoading(true);
+                  }
+                }}
                 placeholder="Search people…"
                 aria-label="Search people"
                 className="field-input field-input--icon"

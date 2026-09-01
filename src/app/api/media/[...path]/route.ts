@@ -1,7 +1,12 @@
 import { NextRequest } from "next/server";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { conversationMembers, messageAttachments, messages } from "@/db/schema";
+import {
+  conversationMembers,
+  messageAttachments,
+  messageDeletions,
+  messages,
+} from "@/db/schema";
 import { getSessionUser } from "@/server/session";
 import { isUuid } from "@/server/users";
 import { jsonError } from "@/server/http";
@@ -76,10 +81,24 @@ export async function GET(
     // Deleted messages stop serving their attachments.
     if (found.message.deletedAt) return jsonError(404, "Not found.");
 
+    // A per-user deletion also revokes that user's direct attachment URL.
+    const hidden = await db
+      .select({ id: messageDeletions.id })
+      .from(messageDeletions)
+      .where(
+        and(
+          eq(messageDeletions.messageId, found.message.id),
+          eq(messageDeletions.userId, me.id),
+        ),
+      )
+      .limit(1);
+    if (hidden.length > 0) return jsonError(404, "Not found.");
+
     relativePath = found.attachment.path;
     mimeType = found.attachment.mimeType;
     downloadName = found.attachment.originalName;
-    inline = found.attachment.kind === "image";
+    inline =
+      found.attachment.kind === "image" || found.attachment.kind === "video";
   } else {
     return jsonError(404, "Not found.");
   }
@@ -92,7 +111,10 @@ export async function GET(
 
   // Guard: never serve anything resolving outside the uploads root.
   const absolute = path.resolve(UPLOAD_ROOT, relativePath);
-  if (!absolute.startsWith(UPLOAD_ROOT)) return jsonError(404, "Not found.");
+  const root = UPLOAD_ROOT.endsWith(path.sep) ? UPLOAD_ROOT : `${UPLOAD_ROOT}${path.sep}`;
+  if (absolute !== UPLOAD_ROOT && !absolute.startsWith(root)) {
+    return jsonError(404, "Not found.");
+  }
 
   return new Response(stream as unknown as ReadableStream, {
     headers: {

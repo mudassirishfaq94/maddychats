@@ -102,7 +102,7 @@ check "empty message fails cleanly" 422 "$(code /tmp/qa_a.jar POST "/api/convers
 check "cannot edit others' message" 403 "$(code /tmp/qa_b.jar PATCH "/api/messages/$MID" '{"text":"x"}')"
 check "edit own message" 200 "$(code /tmp/qa_a.jar PATCH "/api/messages/$MID" '{"text":"smoke hello edited"}')"
 check "pagination hasMore+cursor" 1 "$(json /tmp/qa_a.jar GET "/api/conversations/$CID/messages?limit=1" | python3 -c "import json,sys;d=json.load(sys.stdin);print(1 if d['hasMore'] and d['nextCursor'] else 0)" 2>/dev/null)"
-check "sender-only soft delete" 403 "$(code /tmp/qa_b.jar DELETE "/api/messages/$MID")"
+check "sender-only soft delete" 403 "$(code /tmp/qa_b.jar DELETE "/api/messages/$MID" '{"mode":"for_everyone"}')"
 
 echo "[6] receipts / reactions / replies / realtime / typing"
 check "realtime stream requires auth" 401 "$(code - GET /api/realtime/stream)"
@@ -136,7 +136,7 @@ m=[x for x in d['messages'] if x['id']=='$REPLYID']
 print(1 if m and m[0]['replyTo'] and m[0]['replyTo']['id']=='$MID' else 0)" 2>/dev/null)"
 check "edit publishes" 200 "$(code /tmp/qa_a.jar PATCH "/api/messages/$LIVE_A" '{"text":"live from A edited"}')"
 DELMID=$(json /tmp/qa_a.jar POST "/api/conversations/$CID/messages" '{"text":"delete me live"}' | jget "['message']['id']")
-check "delete publishes" 200 "$(code /tmp/qa_a.jar DELETE "/api/messages/$DELMID")"
+check "delete publishes" 200 "$(code /tmp/qa_a.jar DELETE "/api/messages/$DELMID" '{"mode":"for_everyone"}')"
 sleep 2
 kill "$SPA" "$SPB" 2>/dev/null || true
 wait "$SPA" "$SPB" 2>/dev/null || true
@@ -146,7 +146,7 @@ check "B receives typing stop live" 1 "$(grep -c '"type":"typing:update".*"typin
 check "B receives A message live" 1 "$(grep -c "\"type\":\"message:new\".*$LIVE_A" /tmp/qa_stream_b.log)"
 check "A receives B reply live" 1 "$(grep -c "\"type\":\"message:new\".*$LIVE_B" /tmp/qa_stream_a.log)"
 check "B receives edit live" 1 "$(grep -c "\"type\":\"message:update\".*$LIVE_A" /tmp/qa_stream_b.log)"
-check "B receives delete live" 1 "$(grep -c "\"type\":\"message:delete\".*$DELMID" /tmp/qa_stream_b.log)"
+check "B receives delete live" 1 "$(grep -c "\"type\":\"message:deleted\".*$DELMID" /tmp/qa_stream_b.log)"
 check "A receives read receipt live" 1 "$(grep -c '"type":"message:read"' /tmp/qa_stream_a.log)"
 
 # Simulate network disconnect + reconnect and verify presence transitions.
@@ -178,9 +178,10 @@ png = (b'\x89PNG\r\n\x1a\n' +
 open('/tmp/qa_image.png', 'wb').write(png)
 open('/tmp/qa_doc.pdf', 'wb').write(b'%PDF-1.4\n1 0 obj<</Type/Catalog>>endobj\n%%EOF\n')
 open('/tmp/qa_note.txt', 'w').write('Maddy Chats final QA text attachment.\n')
+open('/tmp/qa_x.exe', 'wb').write(b'MZ fake executable')
+with open('/tmp/qa_big.png', 'wb') as oversized:
+    oversized.truncate(11_000_000)
 PY
-printf 'MZ fake executable' > /tmp/qa_x.exe
-truncate -s 11000000 /tmp/qa_big.png
 rm -f /tmp/qa_upload_stream.log
 curl -sN -b /tmp/qa_b.jar --max-time 18 "$BASE/api/realtime/stream" > /tmp/qa_upload_stream.log 2>&1 & PUPLOAD=$!
 sleep 1
@@ -210,11 +211,17 @@ TXTMSG=$(cat /tmp/qa_txt.json | jget "['message']['id']")
 check "member B can access private media" 200 "$(code /tmp/qa_b.jar GET "/api/media/$IMGATT")"
 check "outsider cannot access private media" 404 "$(code /tmp/qa_o.jar GET "/api/media/$IMGATT")"
 check "anonymous cannot access private media" 401 "$(code - GET "/api/media/$IMGATT")"
+check "conversation media lists image" 1 "$(json /tmp/qa_b.jar GET "/api/conversations/$CID/media" | python3 -c "import json,sys;d=json.load(sys.stdin);print(1 if any(x['id']=='$IMGATT' for x in d['media']) else 0)" 2>/dev/null)"
+check "conversation files list documents" 2 "$(json /tmp/qa_b.jar GET "/api/conversations/$CID/files" | python3 -c "import json,sys;d=json.load(sys.stdin);print(len(d['files']))" 2>/dev/null)"
+check "outsider cannot list media" 404 "$(code /tmp/qa_o.jar GET "/api/conversations/$CID/media")"
+check "outsider cannot list files" 404 "$(code /tmp/qa_o.jar GET "/api/conversations/$CID/files")"
+check "outsider cannot list links" 404 "$(code /tmp/qa_o.jar GET "/api/conversations/$CID/links")"
 check "executable rejected" 422 "$(curl -s -o /dev/null -w "%{http_code}" --max-time 25 -b /tmp/qa_a.jar -X POST "$BASE/api/upload/message" -H "x-secure-context: 1" -F "conversationId=$CID" -F "files=@/tmp/qa_x.exe;type=application/octet-stream")"
 check "oversized image rejected" 422 "$(curl -s -o /dev/null -w "%{http_code}" --max-time 60 -b /tmp/qa_a.jar -X POST "$BASE/api/upload/message" -H "x-secure-context: 1" -F "conversationId=$CID" -F "files=@/tmp/qa_big.png;type=image/png")"
 check "upload to foreign conversation rejected" 404 "$(curl -s -o /dev/null -w "%{http_code}" --max-time 25 -b /tmp/qa_o.jar -X POST "$BASE/api/upload/message" -H "x-secure-context: 1" -F "conversationId=$CID" -F "files=@/tmp/qa_note.txt;type=text/plain")"
-check "delete attachment message" 200 "$(code /tmp/qa_a.jar DELETE "/api/messages/$IMGMSG")"
+check "delete attachment message" 200 "$(code /tmp/qa_a.jar DELETE "/api/messages/$IMGMSG" '{"mode":"for_everyone"}')"
 check "deleted attachment becomes inaccessible" 404 "$(code /tmp/qa_b.jar GET "/api/media/$IMGATT")"
+check "deleted attachment leaves gallery" 0 "$(json /tmp/qa_b.jar GET "/api/conversations/$CID/media" | python3 -c "import json,sys;d=json.load(sys.stdin);print(1 if any(x['id']=='$IMGATT' for x in d['media']) else 0)" 2>/dev/null)"
 
 echo "[8] notifications / controls / blocking / search"
 check "notifications endpoint" 200 "$(code /tmp/qa_b.jar GET /api/notifications)"

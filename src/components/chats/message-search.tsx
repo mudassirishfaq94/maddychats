@@ -33,13 +33,7 @@ export function MessageSearch() {
   useEffect(() => {
     if (!open) return;
     const q = query.trim();
-    if (q.length < 2) {
-      setResults([]);
-      setSearched(false);
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
+    if (q.length < 2) return;
     const controller = new AbortController();
     const timer = setTimeout(async () => {
       try {
@@ -118,7 +112,17 @@ export function MessageSearch() {
               <input
                 ref={inputRef}
                 value={query}
-                onChange={(e) => setQuery(e.target.value)}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setQuery(value);
+                  if (value.trim().length < 2) {
+                    setResults([]);
+                    setSearched(false);
+                    setLoading(false);
+                  } else {
+                    setLoading(true);
+                  }
+                }}
                 placeholder="Search your messages…"
                 aria-label="Search messages"
                 className="w-full bg-transparent py-4 pl-12 pr-12 text-[0.95rem] outline-none placeholder:text-[color-mix(in_srgb,var(--muted)_60%,transparent)]"

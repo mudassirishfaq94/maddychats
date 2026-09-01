@@ -32,6 +32,11 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  // Keep Turbopack scoped to this repository when a parent directory also
+  // contains a lockfile (common in local preview workspaces).
+  turbopack: {
+    root: process.cwd(),
+  },
   async headers() {
     return [
       {

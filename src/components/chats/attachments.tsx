@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import {
+  AlertTriangle,
   ChevronLeft,
   ChevronRight,
   Download,
@@ -9,6 +10,8 @@ import {
   FileSpreadsheet,
   FileText,
   File as FileIcon,
+  Loader2,
+  Play,
   X,
   ZoomIn,
 } from "lucide-react";
@@ -30,7 +33,7 @@ function iconFor(mime: string) {
   return FileIcon;
 }
 
-/** Full-screen image viewer with next/prev navigation. */
+/** Full-screen media viewer with next/prev navigation. */
 export function Lightbox({
   src,
   alt,
@@ -46,14 +49,20 @@ export function Lightbox({
   onClose: () => void;
   onNavigate?: (index: number) => void;
 }) {
+  const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
   const goNext = useCallback(() => {
     if (images && currentIndex !== undefined && onNavigate) {
+      setLoading(true);
+      setFailed(false);
       onNavigate((currentIndex + 1) % images.length);
     }
   }, [images, currentIndex, onNavigate]);
 
   const goPrev = useCallback(() => {
     if (images && currentIndex !== undefined && onNavigate) {
+      setLoading(true);
+      setFailed(false);
       onNavigate((currentIndex - 1 + images.length) % images.length);
     }
   }, [images, currentIndex, onNavigate]);
@@ -135,13 +144,48 @@ export function Lightbox({
         </button>
       ) : null}
 
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        key={src}
-        src={src}
-        alt={alt}
-        className="max-h-[85vh] max-w-[90vw] rounded-2xl object-contain shadow-2xl animate-fade-in"
-      />
+      {loading && !failed ? (
+        <Loader2 className="h-8 w-8 animate-spin text-white/70" />
+      ) : null}
+      {failed ? (
+        <div className="flex max-w-sm flex-col items-center gap-3 text-center text-white/75">
+          <AlertTriangle className="h-8 w-8" />
+          <p className="text-sm">This media could not be loaded.</p>
+        </div>
+      ) : images?.[currentIndex ?? 0]?.kind === "video" ? (
+        <video
+          key={src}
+          src={src}
+          controls
+          autoPlay
+          preload="metadata"
+          onLoadedData={() => setLoading(false)}
+          onError={() => {
+            setLoading(false);
+            setFailed(true);
+          }}
+          className={cn(
+            "max-h-[85vh] max-w-[90vw] rounded-2xl object-contain shadow-2xl",
+            loading && "invisible absolute",
+          )}
+        />
+      ) : (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          key={src}
+          src={src}
+          alt={alt}
+          onLoad={() => setLoading(false)}
+          onError={() => {
+            setLoading(false);
+            setFailed(true);
+          }}
+          className={cn(
+            "max-h-[85vh] max-w-[90vw] rounded-2xl object-contain shadow-2xl animate-fade-in",
+            loading && "invisible absolute",
+          )}
+        />
+      )}
     </div>
   );
 }
@@ -157,35 +201,35 @@ export function AttachmentList({
   const [lightbox, setLightbox] = useState<AttachmentDTO | null>(null);
   if (attachments.length === 0) return null;
 
-  const images = attachments.filter((a) => a.kind === "image");
-  const files = attachments.filter((a) => a.kind !== "image");
+  const media = attachments.filter(
+    (a) => a.kind === "image" || a.kind === "video",
+  );
+  const files = attachments.filter((a) => a.kind === "file");
 
   return (
     <div className="space-y-2">
-      {images.length > 0 ? (
+      {media.length > 0 ? (
         <div
           className={cn(
             "grid gap-1.5",
-            images.length === 1 ? "grid-cols-1" : "grid-cols-2",
+            media.length === 1 ? "grid-cols-1" : "grid-cols-2",
           )}
         >
-          {images.map((img) => (
+          {media.map((item) => (
             <button
-              key={img.id}
+              key={item.id}
               type="button"
-              onClick={() => setLightbox(img)}
+              onClick={() => setLightbox(item)}
               className="group/img relative overflow-hidden rounded-xl"
-              aria-label={`View ${img.originalName}`}
+              aria-label={`View ${item.originalName}`}
             >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={img.url}
-                alt={img.originalName}
-                loading="lazy"
-                className="max-h-64 w-full object-cover transition-transform duration-300 group-hover/img:scale-105"
-              />
+              <InlineMedia attachment={item} />
               <span className="absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-all duration-200 group-hover/img:bg-black/25 group-hover/img:opacity-100">
-                <ZoomIn className="h-6 w-6 text-white" />
+                {item.kind === "video" ? (
+                  <Play className="h-7 w-7 fill-white text-white" />
+                ) : (
+                  <ZoomIn className="h-6 w-6 text-white" />
+                )}
               </span>
             </button>
           ))}
@@ -246,12 +290,68 @@ export function AttachmentList({
         <Lightbox
           src={lightbox.url}
           alt={lightbox.originalName}
-          images={images.length > 0 ? images : undefined}
-          currentIndex={images.findIndex((i) => i.id === lightbox.id)}
+          images={media.length > 0 ? media : undefined}
+          currentIndex={media.findIndex((i) => i.id === lightbox.id)}
           onClose={() => setLightbox(null)}
-          onNavigate={(idx) => setLightbox(images[idx])}
+          onNavigate={(idx) => setLightbox(media[idx])}
         />
       ) : null}
     </div>
+  );
+}
+
+export function InlineMedia({
+  attachment,
+  gallery = false,
+}: {
+  attachment: AttachmentDTO;
+  gallery?: boolean;
+}) {
+  const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
+
+  if (failed) {
+    return (
+      <span className="flex h-40 w-full flex-col items-center justify-center gap-2 bg-black/10 text-xs text-[var(--muted)]">
+        <AlertTriangle className="h-5 w-5" />
+        Media unavailable
+      </span>
+    );
+  }
+
+  return (
+    <>
+      {loading ? (
+        <span className="absolute inset-0 flex items-center justify-center bg-black/10">
+          <Loader2 className="h-5 w-5 animate-spin text-white" />
+        </span>
+      ) : null}
+      {attachment.kind === "video" ? (
+        <video
+          src={attachment.url}
+          muted
+          preload="metadata"
+          onLoadedData={() => setLoading(false)}
+          onError={() => setFailed(true)}
+          className={cn(
+            "w-full object-cover transition-transform duration-300 group-hover/img:scale-105",
+            gallery ? "h-full" : "max-h-64",
+          )}
+        />
+      ) : (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={attachment.url}
+          alt={attachment.originalName}
+          loading="lazy"
+          onLoad={() => setLoading(false)}
+          onError={() => setFailed(true)}
+          className={cn(
+            "w-full object-cover transition-transform duration-300 group-hover/img:scale-105",
+            gallery ? "h-full" : "max-h-64",
+          )}
+        />
+      )}
+    </>
   );
 }

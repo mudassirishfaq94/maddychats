@@ -131,7 +131,7 @@ export async function DELETE(
 
     const dto = await getMessageDTO(result.id, me.id);
     await publishToConversation(result.conversationId, {
-      type: "message:delete",
+      type: "message:deleted",
       conversationId: result.conversationId,
       message: dto!,
     });
@@ -143,6 +143,12 @@ export async function DELETE(
   if (result === "not_found") return jsonError(404, "Message not found.");
 
   const dto = await getMessageDTO(id, me.id);
+
+  await publishToUsers([me.id], {
+    type: "message:deleted_for_me",
+    conversationId: dto!.conversationId,
+    messageId: id,
+  });
 
   return NextResponse.json({ message: dto });
 }

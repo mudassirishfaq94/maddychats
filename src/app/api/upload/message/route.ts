@@ -92,7 +92,7 @@ export async function POST(req: NextRequest) {
   const prepared: {
     file: File;
     storedName: string;
-    kind: "image" | "file";
+    kind: "image" | "video" | "file";
     safeName: string;
   }[] = [];
   for (const file of entries) {
@@ -130,7 +130,9 @@ export async function POST(req: NextRequest) {
   try {
     const messageType = prepared.every((p) => p.kind === "image")
       ? "image"
-      : "file";
+      : prepared.every((p) => p.kind === "video")
+        ? "video"
+        : "file";
 
     const created = await db.transaction(async (tx) => {
       const now = new Date();

@@ -75,7 +75,7 @@ export function ChatsLayout({
       if (
         event.type !== "message:new" &&
         event.type !== "message:update" &&
-        event.type !== "message:delete" &&
+        event.type !== "message:deleted" &&
         event.type !== "message:read" &&
         event.type !== "conversation:new" &&
         event.type !== "conversation:delete"

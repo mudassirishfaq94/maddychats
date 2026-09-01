@@ -1,20 +1,22 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Download,
   FileArchive,
   FileSpreadsheet,
   FileText,
   File as FileIcon,
-  Image,
+  Image as ImageIcon,
   Link,
   Loader2,
+  Play,
   X,
 } from "lucide-react";
 import type { AttachmentDTO, PublicUser } from "@/lib/types";
 import { Avatar } from "@/components/avatar";
-import { Lightbox, humanSize } from "./attachments";
+import { InlineMedia, Lightbox, humanSize } from "./attachments";
+import { useRealtime } from "@/components/providers/realtime-provider";
 import { cn } from "@/lib/utils";
 
 type Tab = "media" | "files" | "links";
@@ -31,10 +33,12 @@ interface SharedLinkItem {
 export function ConversationDetails({
   conversationId,
   other,
+  localRevision = 0,
   onClose,
 }: {
   conversationId: string;
   other: PublicUser | null;
+  localRevision?: number;
   onClose: () => void;
 }) {
   const [tab, setTab] = useState<Tab>("media");
@@ -44,26 +48,56 @@ export function ConversationDetails({
   );
   const [links, setLinks] = useState<SharedLinkItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [revision, setRevision] = useState(0);
+  const { subscribe } = useRealtime();
+
+  useEffect(() => {
+    return subscribe((event) => {
+      if (
+        "conversationId" in event &&
+        event.conversationId === conversationId &&
+        (event.type === "message:new" ||
+          event.type === "message:update" ||
+          event.type === "message:deleted" ||
+          event.type === "message:deleted_for_me")
+      ) {
+        setLoading(true);
+        setRevision((value) => value + 1);
+      }
+    });
+  }, [conversationId, subscribe]);
 
   // Load data for current tab
   useEffect(() => {
-    setLoading(true);
+    const controller = new AbortController();
     const endpoint =
       tab === "media"
         ? "media"
         : tab === "files"
           ? "files"
           : "links";
-    fetch(`/api/conversations/${conversationId}/${endpoint}`)
-      .then((r) => r.json())
+    fetch(`/api/conversations/${conversationId}/${endpoint}`, {
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("request_failed");
+        return response.json();
+      })
       .then((data) => {
         if (tab === "media") setMedia(data.media ?? []);
         else if (tab === "files") setFiles(data.files ?? []);
         else setLinks(data.links ?? []);
+        setError(null);
       })
-      .catch(() => {})
+      .catch((cause) => {
+        if ((cause as Error).name !== "AbortError") {
+          setError("Shared items could not be loaded.");
+        }
+      })
       .finally(() => setLoading(false));
-  }, [conversationId, tab]);
+    return () => controller.abort();
+  }, [conversationId, tab, revision, localRevision]);
 
   return (
     <>
@@ -114,7 +148,10 @@ export function ConversationDetails({
             <button
               key={t}
               type="button"
-              onClick={() => setTab(t)}
+              onClick={() => {
+                setLoading(true);
+                setTab(t);
+              }}
               className={cn(
                 "flex-1 py-2.5 text-xs font-medium capitalize transition-colors",
                 tab === t
@@ -132,6 +169,10 @@ export function ConversationDetails({
           {loading ? (
             <div className="flex justify-center py-10">
               <Loader2 className="h-5 w-5 animate-spin text-[var(--muted)]" />
+            </div>
+          ) : error ? (
+            <div className="py-10 text-center text-xs text-[var(--muted)]">
+              {error}
             </div>
           ) : tab === "media" ? (
             <MediaGrid items={media} />
@@ -154,7 +195,7 @@ function MediaGrid({ items }: { items: AttachmentDTO[] }) {
   if (items.length === 0) {
     return (
       <div className="flex flex-col items-center py-10 text-center">
-        <Image className="h-8 w-8 text-[var(--muted)] opacity-40" />
+        <ImageIcon className="h-8 w-8 text-[var(--muted)] opacity-40" />
         <p className="mt-3 text-xs text-[var(--muted)]">No media shared yet</p>
       </div>
     );
@@ -170,14 +211,13 @@ function MediaGrid({ items }: { items: AttachmentDTO[] }) {
             onClick={() => setLightboxIdx(i)}
             className="group relative aspect-square overflow-hidden rounded-xl"
           >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={item.url}
-              alt={item.originalName}
-              loading="lazy"
-              className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105"
-            />
+            <InlineMedia attachment={item} gallery />
             <span className="absolute inset-0 bg-black/0 transition-colors group-hover:bg-black/20" />
+            {item.kind === "video" ? (
+              <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                <Play className="h-7 w-7 fill-white text-white drop-shadow" />
+              </span>
+            ) : null}
           </button>
         ))}
       </div>

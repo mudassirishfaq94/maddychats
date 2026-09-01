@@ -196,7 +196,8 @@ export async function hydrateMessages(
       originalName: a.originalName,
       mimeType: a.mimeType,
       size: a.size,
-      kind: a.kind === "image" ? "image" : "file",
+      kind:
+        a.kind === "image" ? "image" : a.kind === "video" ? "video" : "file",
       url: `/api/media/${a.id}`,
     });
     attachmentsByMessage.set(a.messageId, list);
@@ -1074,7 +1075,8 @@ export async function listStarredMessages(
         originalName: a.originalName,
         mimeType: a.mimeType,
         size: a.size,
-        kind: a.kind === "image" ? "image" : "file",
+        kind:
+          a.kind === "image" ? "image" : a.kind === "video" ? "video" : "file",
         url: `/api/media/${a.id}`,
       });
       attachmentsByMsg.set(a.messageId, list);
@@ -1430,7 +1432,7 @@ export async function listConversationMedia(
       and(
         eq(messages.conversationId, conversationId),
         isNull(messages.deletedAt),
-        eq(messageAttachments.kind, "image"),
+        inArray(messageAttachments.kind, ["image", "video"]),
       ),
     )
     .orderBy(desc(messages.createdAt));
@@ -1442,7 +1444,9 @@ export async function listConversationMedia(
       originalName: r.attachment.originalName,
       mimeType: r.attachment.mimeType,
       size: r.attachment.size,
-      kind: "image" as const,
+      kind: (r.attachment.kind === "video" ? "video" : "image") as
+        | "image"
+        | "video",
       url: `/api/media/${r.attachment.id}`,
     }));
 }
