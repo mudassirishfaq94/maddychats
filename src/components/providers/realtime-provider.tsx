@@ -70,6 +70,12 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
   // Browsers allow sound only after a gesture. Prime audio on the first
   // interaction so later messages can chime while the window is hidden.
   useEffect(() => {
+    if ("serviceWorker" in navigator) {
+      void navigator.serviceWorker.register("/sw.js", { scope: "/" });
+    }
+  }, []);
+
+  useEffect(() => {
     const unlock = () => {
       const AudioContextClass = window.AudioContext ??
         (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
@@ -150,17 +156,27 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
           Notification.permission === "granted" &&
           (document.visibilityState === "hidden" || !document.hasFocus())
         ) {
-          const notification = new Notification(`${actor} sent a message`, {
+          const title = `${actor} sent a message`;
+          const url = `/app/chats/${conversationId}${messageId ? `?message=${messageId}` : ""}`;
+          const options: NotificationOptions = {
             body: preview,
             tag: `maddy-message-${messageId || event.notification.id}`,
-          });
-          notification.onclick = () => {
-            window.focus();
-            if (conversationId) {
-              window.location.href = `/app/chats/${conversationId}${messageId ? `?message=${messageId}` : ""}`;
-            }
-            notification.close();
+            icon: "/icons/maddy-192.png",
+            badge: "/icons/maddy-192.png",
+            data: { url },
           };
+          if ("serviceWorker" in navigator) {
+            void navigator.serviceWorker.ready.then((registration) =>
+              registration.showNotification(title, options),
+            );
+          } else {
+            const notification = new Notification(title, options);
+            notification.onclick = () => {
+              window.focus();
+              window.location.href = url;
+              notification.close();
+            };
+          }
         }
       }
       listeners.current.forEach((fn) => {

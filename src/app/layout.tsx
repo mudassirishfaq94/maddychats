@@ -19,6 +19,12 @@ const spaceGrotesk = Space_Grotesk({
 });
 
 export const metadata: Metadata = {
+  applicationName: "Maddy Chats",
+  manifest: "/manifest.webmanifest",
+  icons: {
+    icon: "/icons/maddy-192.png",
+    apple: "/icons/maddy-192.png",
+  },
   title: {
     default: "Maddy Chats — Chat. Connect. Stay in sync.",
     template: "%s · Maddy Chats",
@@ -32,6 +38,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   // Keeps the composer visible when the mobile keyboard opens.
   interactiveWidget: "resizes-content",
+  themeColor: "#0f766e",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
