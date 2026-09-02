@@ -16,7 +16,7 @@ export async function DELETE(req: NextRequest, { params }: Ctx) {
   if (result === "forbidden") return jsonError(403, "You cannot remove this member.");
   if (result === "use_leave") return jsonError(422, "Use leave group to remove yourself.");
   await publishToConversation(id, { type: "group:member-removed", conversationId: id, userId });
-  publishToUsers([userId], { type: "group:member-removed", conversationId: id, userId });
+  await publishToUsers([userId], { type: "group:member-removed", conversationId: id, userId });
   await notifyUser(userId, "member_removed", { conversationId: id }, me.id);
   return NextResponse.json({ ok: true });
 }

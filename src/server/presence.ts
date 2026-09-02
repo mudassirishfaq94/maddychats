@@ -1,4 +1,4 @@
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, gte, inArray, ne } from "drizzle-orm";
 import { db } from "@/db";
 import { conversationMembers, users } from "@/db/schema";
 import type { PresenceState } from "@/lib/types";
@@ -130,7 +130,10 @@ export async function presenceSnapshotFor(
   const state: PresenceState = {};
   for (const row of rows) {
     const entry = registry.get(row.id);
-    const online = Boolean(entry && entry.connections > 0);
+    const online = Boolean(
+      (entry && entry.connections > 0) ||
+      (row.lastSeenAt && row.lastSeenAt.getTime() >= Date.now() - 90_000),
+    );
     const lastSeen = entry?.lastSeenAt ?? row.lastSeenAt ?? null;
     state[row.id] = {
       online,
@@ -148,12 +151,13 @@ export async function onlineMembersOf(
   const rows = await db
     .select({ userId: conversationMembers.userId })
     .from(conversationMembers)
-    .where(
+    .innerJoin(users, eq(users.id, conversationMembers.userId))
+    .where(and(
       eq(conversationMembers.conversationId, conversationId),
-    );
-  return rows
-    .map((r) => r.userId)
-    .filter((id) => id !== excludeUserId && isOnline(id));
+      ne(conversationMembers.userId, excludeUserId),
+      gte(users.lastSeenAt, new Date(Date.now() - 90_000)),
+    ));
+  return rows.map((r) => r.userId);
 }
 
 /** Conversation ids the user belongs to (helper for delivery sweeps). */

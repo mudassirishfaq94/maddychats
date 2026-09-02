@@ -9,6 +9,6 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   const { id } = await params; const result = await deleteOwnStatus(id, me.id);
   if (result === "not_found") return jsonError(404, "Status not found.");
   if (result === "forbidden") return jsonError(403, "You can only delete your own status.");
-  publishToUsers(result.recipientIds, { type: "status:deleted", statusId: id, userId: me.id });
+  await publishToUsers(result.recipientIds, { type: "status:deleted", statusId: id, userId: me.id });
   return NextResponse.json({ ok: true });
 }

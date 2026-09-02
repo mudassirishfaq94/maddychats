@@ -68,6 +68,31 @@ export const oauthAccounts = pgTable(
   ],
 );
 
+export const passwordResetTokens = pgTable(
+  "password_reset_tokens",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+    tokenHash: text("token_hash").notNull().unique(),
+    expiresAt: timestamp("expires_at", { withTimezone: true, mode: "date" }).notNull(),
+    usedAt: timestamp("used_at", { withTimezone: true, mode: "date" }),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+  },
+  (table) => [index("password_reset_tokens_user_idx").on(table.userId)],
+);
+
+/** Short-lived cross-instance event queue used by Vercel realtime streams. */
+export const realtimeEvents = pgTable(
+  "realtime_events",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+    payload: jsonb("payload").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+  },
+  (table) => [index("realtime_events_user_created_idx").on(table.userId, table.createdAt)],
+);
+
 /* ==================== chat-ready models (prepared now) ==================== */
 
 export const conversationTypeEnum = pgEnum("conversation_type", [
@@ -675,3 +700,4 @@ export type PinnedMessageRow = typeof pinnedMessages.$inferSelect;
 export type MessageDeletionRow = typeof messageDeletions.$inferSelect;
 export type MessageMentionRow = typeof messageMentions.$inferSelect;
 export type StatusRow = typeof statuses.$inferSelect;
+export type RealtimeEventRow = typeof realtimeEvents.$inferSelect;

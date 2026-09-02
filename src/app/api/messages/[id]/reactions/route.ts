@@ -109,7 +109,7 @@ async function publishReactionUpdate(conversationId: string, messageId: string) 
     members.map(async (userId) => {
       const dto = await getMessageDTO(messageId, userId);
       if (!dto) return;
-      publishToUsers([userId], {
+      await publishToUsers([userId], {
         type: "message:update",
         conversationId,
         message: dto,

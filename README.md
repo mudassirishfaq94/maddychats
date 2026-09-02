@@ -6,6 +6,8 @@ conversations, realtime delivery and presence, typing indicators, read
 receipts, reactions, replies, search, notifications, private attachments, and
 responsive light/dark themes.
 
+For a free Vercel + Neon production setup, see [DEPLOYMENT.md](./DEPLOYMENT.md).
+
 ## Tech stack
 
 - Next.js 16 with App Router and Route Handlers

@@ -2,6 +2,11 @@ import { randomUUID } from "crypto";
 import { createReadStream } from "fs";
 import { mkdir, stat, unlink, writeFile } from "fs/promises";
 import path from "path";
+import { del, get, put } from "@vercel/blob";
+
+function isVercelBlobConfigured(): boolean {
+  return Boolean(process.env.BLOB_READ_WRITE_TOKEN);
+}
 
 /**
  * Local filesystem media storage.
@@ -35,13 +40,13 @@ function envBytes(name: string, fallbackMb: number): number {
 
 export const LIMITS = {
   get avatar() {
-    return envBytes("MAX_AVATAR_MB", 5);
+    return envBytes("MAX_AVATAR_MB", 3);
   },
   get image() {
-    return envBytes("MAX_IMAGE_MB", 10);
+    return envBytes("MAX_IMAGE_MB", 3);
   },
   get file() {
-    return envBytes("MAX_FILE_MB", 25);
+    return envBytes("MAX_FILE_MB", 3);
   },
 };
 
@@ -238,6 +243,14 @@ export async function saveBuffer(
   storedName: string,
   data: Buffer,
 ): Promise<string> {
+  if (isVercelBlobConfigured()) {
+    const relative = path.posix.join(BUCKETS[bucket], storedName);
+    const blob = await put(relative, data, {
+      access: "private",
+      addRandomSuffix: false,
+    });
+    return blob.pathname;
+  }
   await ensureBuckets();
   const relative = path.posix.join(BUCKETS[bucket], storedName);
   const absolute = resolveWithinUploads(relative);
@@ -247,6 +260,10 @@ export async function saveBuffer(
 }
 
 export async function deleteStored(relativePath: string): Promise<void> {
+  if (isVercelBlobConfigured()) {
+    await del(relativePath).catch(() => undefined);
+    return;
+  }
   const absolute = resolveWithinUploads(relativePath);
   if (!absolute) return;
   await unlink(absolute).catch(() => undefined);
@@ -267,4 +284,20 @@ export function streamStored(relativePath: string) {
   const absolute = resolveWithinUploads(relativePath);
   if (!absolute) return null;
   return createReadStream(absolute);
+}
+
+/** Reads a private Vercel Blob object, with local-disk fallback for development. */
+export async function readStored(relativePath: string): Promise<{
+  body: ReadableStream<Uint8Array> | NodeJS.ReadableStream;
+  size: number | null;
+} | null> {
+  if (isVercelBlobConfigured()) {
+    const result = await get(relativePath, { access: "private" });
+    if (!result || result.statusCode !== 200 || !result.stream) return null;
+    return { body: result.stream, size: result.blob.size };
+  }
+  const info = await statStored(relativePath);
+  if (!info?.isFile()) return null;
+  const body = streamStored(relativePath);
+  return body ? { body, size: info.size } : null;
 }

@@ -11,7 +11,7 @@ import {
 import { getSessionUser } from "@/server/session";
 import { isUuid } from "@/server/users";
 import { jsonError } from "@/server/http";
-import { statStored, streamStored, UPLOAD_ROOT } from "@/server/storage";
+import { readStored } from "@/server/storage";
 import path from "path";
 import { canViewStatus } from "@/server/status";
 
@@ -112,23 +112,13 @@ export async function GET(
     return jsonError(404, "Not found.");
   }
 
-  const info = await statStored(relativePath);
-  if (!info || !info.isFile()) return jsonError(404, "Not found.");
+  const stored = await readStored(relativePath);
+  if (!stored) return jsonError(404, "Not found.");
 
-  const stream = streamStored(relativePath);
-  if (!stream) return jsonError(404, "Not found.");
-
-  // Guard: never serve anything resolving outside the uploads root.
-  const absolute = path.resolve(UPLOAD_ROOT, relativePath);
-  const root = UPLOAD_ROOT.endsWith(path.sep) ? UPLOAD_ROOT : `${UPLOAD_ROOT}${path.sep}`;
-  if (absolute !== UPLOAD_ROOT && !absolute.startsWith(root)) {
-    return jsonError(404, "Not found.");
-  }
-
-  return new Response(stream as unknown as ReadableStream, {
+  return new Response(stored.body as BodyInit, {
     headers: {
       "Content-Type": mimeType,
-      "Content-Length": String(info.size),
+      ...(stored.size !== null ? { "Content-Length": String(stored.size) } : {}),
       "Content-Disposition": `${inline ? "inline" : "attachment"}; filename="${downloadName.replace(/"/g, "")}"`,
       "Cache-Control": "private, max-age=3600",
       "X-Content-Type-Options": "nosniff",

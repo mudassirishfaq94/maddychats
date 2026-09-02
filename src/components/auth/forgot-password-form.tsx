@@ -7,7 +7,6 @@ import {
   ArrowLeft,
   Loader2,
   Mail,
-  MailWarning,
   Send,
 } from "lucide-react";
 import { fieldErrors, forgotPasswordSchema } from "@/lib/schemas";
@@ -15,16 +14,9 @@ import { Field } from "./field";
 
 type SubmitState =
   | { kind: "idle" }
-  | { kind: "not-configured"; message: string }
   | { kind: "delivered" }
   | { kind: "error"; message: string };
 
-/**
- * Forgot-password flow. The backend includes validation,
- * lookup, rate limiting, provider abstraction), but email delivery is not
- * configured in this environment — so the UI says exactly that, instead of
- * pretending an email was sent.
- */
 export function ForgotPasswordForm() {
   const [email, setEmail] = useState("");
   const [pending, setPending] = useState(false);
@@ -65,60 +57,12 @@ export function ForgotPasswordForm() {
         if (data?.fields) setErrors(data.fields);
       } else if (data?.delivered) {
         setState({ kind: "delivered" });
-      } else {
-        setState({
-          kind: "not-configured",
-          message:
-            data?.message ??
-            "Password-reset email delivery is not configured yet.",
-        });
-      }
+      } else setState({ kind: "error", message: "The reset email could not be sent." });
     } catch {
       setState({ kind: "error", message: "Network error. Please try again." });
     } finally {
       setPending(false);
     }
-  }
-
-  if (state.kind === "not-configured") {
-    return (
-      <div className="space-y-6">
-        <div className="rounded-2xl border border-[color-mix(in_srgb,var(--warning)_40%,transparent)] bg-[color-mix(in_srgb,var(--warning)_9%,transparent)] p-5">
-          <div className="flex items-start gap-3.5">
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[color-mix(in_srgb,var(--warning)_18%,transparent)] text-[var(--warning)]">
-              <MailWarning className="h-5 w-5" />
-            </span>
-            <div>
-              <h3 className="text-sm font-semibold text-[var(--text)]">
-                Email delivery isn&apos;t configured yet
-              </h3>
-              <p className="mt-1.5 text-sm leading-relaxed text-[var(--muted)]">
-                {state.message} The reset pipeline itself is built and ready —
-                it activates as soon as an email provider (SMTP or transactional
-                API) is added to the server environment.
-              </p>
-              <p className="mt-3 text-sm leading-relaxed text-[var(--muted)]">
-                Until then, please reach out to your workspace administrator to
-                have a password reset performed manually.
-              </p>
-            </div>
-          </div>
-        </div>
-        <div className="flex gap-3">
-          <button
-            type="button"
-            onClick={() => setState({ kind: "idle" })}
-            className="btn btn-secondary flex-1"
-          >
-            Try a different email
-          </button>
-          <Link href="/login" className="btn btn-ghost flex-1">
-            <ArrowLeft className="h-4 w-4" />
-            Back to sign in
-          </Link>
-        </div>
-      </div>
-    );
   }
 
   if (state.kind === "delivered") {

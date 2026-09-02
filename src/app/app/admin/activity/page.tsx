@@ -47,9 +47,9 @@ export default function AdminActivityPage() {
     }
   }, [filter]);
 
-  useEffect(() => { fetchActivities(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => { fetchActivities(1); }, [filter]); // eslint-disable-line react-hooks/exhaustive-deps
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => { fetchActivities(1); }, [fetchActivities]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   function getIcon(type: string) {
     switch (type) {

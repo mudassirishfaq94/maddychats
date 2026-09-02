@@ -40,12 +40,13 @@ export async function readJson(
 }
 
 /**
- * Multipart upload cap: 5 files × 25 MB + request overhead. Enforced from
- * Content-Length before any formData parsing happens.
+ * Vercel Functions cap request bodies at 4.5 MB. Keep multipart uploads below
+ * 4 MB (including form overhead); larger direct-to-storage uploads can be
+ * added later without changing the private media-serving contract.
  */
 export function guardUploadSize(req: NextRequest): NextResponse | null {
   const length = Number(req.headers.get("content-length"));
-  if (Number.isFinite(length) && length > 135 * 1024 * 1024) {
+  if (Number.isFinite(length) && length > 4 * 1024 * 1024) {
     return jsonError(413, "Upload too large.");
   }
   return null;

@@ -64,6 +64,27 @@
       "when": 1788370000000,
       "tag": "0008_google_oauth",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1788372000000,
+      "tag": "0009_password_reset",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1788374000000,
+      "tag": "0010_vercel_realtime",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1788376000000,
+      "tag": "0011_postgres_api_hardening",
+      "breakpoints": true
     }
   ]
 }

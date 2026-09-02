@@ -97,7 +97,7 @@ async function create(
     .values({ userId, actorId, type, data })
     .returning();
   const dto = toNotificationDTO(rows[0]);
-  publishToUsers([userId], {
+  await publishToUsers([userId], {
     type: "notification:new",
     notification: dto,
   });

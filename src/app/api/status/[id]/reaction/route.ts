@@ -13,6 +13,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const { id } = await params; const result = await reactToStatus(id, me.id, emoji);
   if (result === "not_found") return jsonError(404, "Status not found.");
   if (result === "forbidden") return jsonError(403, "You cannot react to your own status.");
-  publishToUsers(await visibleRecipientIds(result), { type: "status:reaction", statusId: id, userId: me.id });
+  await publishToUsers(await visibleRecipientIds(result), { type: "status:reaction", statusId: id, userId: me.id });
   return NextResponse.json({ ok: true, emoji });
 }

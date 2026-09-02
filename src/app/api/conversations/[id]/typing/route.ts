@@ -64,7 +64,7 @@ export async function POST(
     }
   }
 
-  publishToUsers(recipients, {
+  await publishToUsers(recipients, {
     type: "typing:update",
     conversationId: id,
     userId: me.id,

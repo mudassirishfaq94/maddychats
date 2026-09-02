@@ -10,6 +10,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (result === "not_found") return jsonError(404, "Group not found.");
   if (result === "owner_must_transfer") return jsonError(409, "Transfer ownership before leaving.");
   await publishToConversation(id, { type: "group:member-removed", conversationId: id, userId: me.id });
-  publishToUsers([me.id], { type: "group:member-removed", conversationId: id, userId: me.id });
+  await publishToUsers([me.id], { type: "group:member-removed", conversationId: id, userId: me.id });
   return NextResponse.json({ ok: true });
 }

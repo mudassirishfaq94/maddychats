@@ -1,147 +1,94 @@
 import { NextRequest } from "next/server";
 import { getSessionUser } from "@/server/session";
 import { jsonError } from "@/server/http";
-import {
-  publishToConversation,
-  publishToUsers,
-  subscribe,
-} from "@/server/realtime";
-import {
-  addConnection,
-  connectionCount,
-  peersOf,
-  presenceSnapshotFor,
-  removeConnection,
-  touch,
-} from "@/server/presence";
+import { eventsForUser, publishToConversation, publishToUsers } from "@/server/realtime";
+import { addConnection, peersOf, presenceSnapshotFor, removeConnection, touch } from "@/server/presence";
 import { markDeliveredFor } from "@/server/chat";
 import type { RealtimeEvent } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+export const maxDuration = 300;
 
 const HEARTBEAT_MS = 25_000;
+const POLL_MS = 1_000;
+const STREAM_LIFETIME_MS = 280_000;
 
-/**
- * Server-Sent Events stream — realtime transport + presence channel.
- *
- * On connect we register presence, sweep undelivered messages, and push a
- * presence snapshot. Heartbeats keep the connection warm and refresh
- * in-memory presence WITHOUT writing to PostgreSQL every tick (see
- * `presence.touch`, which flushes at most once a minute).
- */
-/** Caps concurrent realtime streams per account (resource-exhaustion guard). */
-const MAX_STREAMS_PER_USER = 5;
-
+/** Database-backed SSE stream that remains reliable across Vercel instances. */
 export async function GET(req: NextRequest) {
   const me = await getSessionUser();
   if (!me) return jsonError(401, "Not authenticated.");
-  if (connectionCount(me.id) >= MAX_STREAMS_PER_USER) {
-    return jsonError(429, "Too many realtime connections.");
-  }
 
   const encoder = new TextEncoder();
-
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       let closed = false;
+      let cursor = new Date(Date.now() - 1_000);
+      const sent = new Set<string>();
       const send = (chunk: string) => {
         if (closed) return;
-        try {
-          controller.enqueue(encoder.encode(chunk));
-        } catch {
-          closed = true;
-        }
+        try { controller.enqueue(encoder.encode(chunk)); } catch { closed = true; }
       };
-      const sendEvent = (event: unknown) =>
-        send(`data: ${JSON.stringify(event)}\n\n`);
+      const sendEvent = (event: unknown) => send(`data: ${JSON.stringify(event)}\n\n`);
+      send(": maddy-chats realtime connected\n\n");
 
-      send(`: maddy-chats realtime connected\n\n`);
-
-      const unsubscribe = subscribe(me.id, (event: RealtimeEvent) => {
-        sendEvent(event);
-      });
-
-      // ---- presence: announce this user to everyone who shares a chat ----
       const cameOnline = await addConnection(me.id);
       const peers = await peersOf(me.id);
-      if (cameOnline && peers.length > 0) {
-        publishToUsers(peers, {
-          type: "presence:update",
-          userId: me.id,
-          online: true,
-          lastSeenAt: new Date().toISOString(),
-        });
+      if (cameOnline && peers.length) {
+        await publishToUsers(peers, { type: "presence:update", userId: me.id, online: true, lastSeenAt: new Date().toISOString() });
       }
-
-      // ---- snapshot of who is online right now ----
       const snapshot = await presenceSnapshotFor(me.id);
       for (const [userId, state] of Object.entries(snapshot)) {
-        sendEvent({
-          type: "presence:update",
-          userId,
-          online: state.online,
-          lastSeenAt: state.lastSeenAt,
-        });
+        sendEvent({ type: "presence:update", userId, online: state.online, lastSeenAt: state.lastSeenAt });
       }
-
-      // ---- delivery sweep: anything waiting for us is now delivered ----
       try {
         const delivered = await markDeliveredFor(me.id);
         const deliveredAt = new Date().toISOString();
         for (const [conversationId, messageIds] of delivered) {
-          await publishToConversation(conversationId, {
-            type: "message:delivered",
-            conversationId,
-            messageIds,
-            deliveredAt,
-          });
+          await publishToConversation(conversationId, { type: "message:delivered", conversationId, messageIds, deliveredAt });
         }
-      } catch {
-        // delivery sweep must never break the stream
-      }
+      } catch { /* delivery sweep must not break the stream */ }
 
+      let polling = false;
+      const poll = async () => {
+        if (closed || polling) return;
+        polling = true;
+        try {
+          const rows = await eventsForUser(me.id, cursor);
+          for (const row of rows) {
+            if (!sent.has(row.id)) {
+              sent.add(row.id);
+              sendEvent(row.payload as RealtimeEvent);
+            }
+            if (row.createdAt > cursor) cursor = row.createdAt;
+          }
+          if (sent.size > 500) sent.clear();
+        } catch { /* the next poll retries */ }
+        finally { polling = false; }
+      };
+      const poller = setInterval(() => void poll(), POLL_MS);
       const heartbeat = setInterval(() => {
         void touch(me.id);
-        // Re-verify the session periodically: if the user signed out (token
-        // revoked) or the account vanished, close the stream immediately.
-        void getSessionUser().then((still) => {
-          if (still) {
-            send(`: ping ${Date.now()}\n\n`);
-          } else {
-            cleanup();
-          }
-        });
+        send(`: ping ${Date.now()}\n\n`);
       }, HEARTBEAT_MS);
 
       const cleanup = () => {
+        if (closed) return;
+        closed = true;
+        clearInterval(poller);
         clearInterval(heartbeat);
-        unsubscribe();
-        void (async () => {
-          const wentOffline = await removeConnection(me.id);
+        clearTimeout(lifetime);
+        void removeConnection(me.id).then(async (wentOffline) => {
           if (wentOffline) {
             const list = await peersOf(me.id);
-            if (list.length > 0) {
-              publishToUsers(list, {
-                type: "presence:update",
-                userId: me.id,
-                online: false,
-                lastSeenAt: new Date().toISOString(),
-              });
-            }
+            if (list.length) await publishToUsers(list, { type: "presence:update", userId: me.id, online: false, lastSeenAt: new Date().toISOString() });
           }
-        })();
-        if (!closed) {
-          closed = true;
-          try {
-            controller.close();
-          } catch {
-            // already closed
-          }
-        }
+        });
+        try { controller.close(); } catch { /* already closed */ }
       };
-
+      const lifetime = setTimeout(cleanup, STREAM_LIFETIME_MS);
       req.signal.addEventListener("abort", cleanup, { once: true });
+      void poll();
     },
   });
 

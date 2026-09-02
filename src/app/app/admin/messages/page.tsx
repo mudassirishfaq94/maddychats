@@ -47,7 +47,9 @@ export default function AdminMessagesPage() {
     }
   }, [search]);
 
-  useEffect(() => { fetchMessages(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  /* eslint-disable react-hooks/set-state-in-effect, react-hooks/exhaustive-deps */
+  useEffect(() => { fetchMessages(); }, []);
+  /* eslint-enable react-hooks/set-state-in-effect, react-hooks/exhaustive-deps */
 
   function handleSearch() {
     setSearch(searchInput);

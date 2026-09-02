@@ -91,7 +91,7 @@ export function LoginForm({ next }: { next?: string }) {
         <div className="mt-2.5 text-right">
           <Link
             href="/forgot-password"
-            className="text-xs font-medium text-[var(--muted)] transition-colors hover:text-[var(--accent)]"
+            className="text-sm font-semibold text-[var(--accent-fg)] underline-offset-4 transition-opacity hover:underline hover:opacity-80"
           >
             Forgot password?
           </Link>

@@ -1,20 +1,25 @@
 {
   "name": "nextjs-postgresql-template",
   "private": true,
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "db:migrate": "drizzle-kit migrate"
   },
   "dependencies": {
+    "@vercel/blob": "2.8.0",
     "bcryptjs": "^3.0.3",
     "dotenv": "17.3.1",
     "drizzle-orm": "0.45.2",
     "jose": "^6.2.10",
     "lucide-react": "^1.38.0",
-    "next": "16.2.6",
+    "next": "16.3.4",
     "pg": "8.20.0",
     "react": "19.2.6",
     "react-dom": "19.2.6",

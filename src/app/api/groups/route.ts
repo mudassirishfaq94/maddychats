@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
   try {
     const conversation = await createGroupConversation({ creatorId: me.id, ...parsed.data });
     const memberIds = [...new Set(parsed.data.memberIds)].filter((id) => id !== me.id);
-    publishToUsers([me.id, ...memberIds], { type: "group:created", conversationId: conversation.id });
+    await publishToUsers([me.id, ...memberIds], { type: "group:created", conversationId: conversation.id });
     await Promise.all(memberIds.map((id) => notifyUser(id, "member_added", { conversationId: conversation.id, groupName: conversation.name }, me.id)));
     return NextResponse.json({ conversation: await getConversationForUser(conversation.id, me.id) }, { status: 201 });
   } catch (error) {

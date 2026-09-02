@@ -44,6 +44,14 @@ export const forgotPasswordSchema = z.object({
   email: z.email("Enter a valid email address"),
 });
 
+export const resetPasswordSchema = z
+  .object({
+    token: z.string().min(32, "This reset link is invalid"),
+    password: z.string().min(8, "Password must be at least 8 characters").max(72, "Password must be 72 characters or fewer").regex(/[a-z]/, "Add a lowercase letter").regex(/[A-Z]/, "Add an uppercase letter").regex(/[0-9]/, "Add a number"),
+    confirmPassword: z.string(),
+  })
+  .refine((value) => value.password === value.confirmPassword, { message: "Passwords do not match", path: ["confirmPassword"] });
+
 /**
  * Profile edit payload — at least one field required. Empty bio clears it.
  */

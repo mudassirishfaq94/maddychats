@@ -19,7 +19,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (result === "user_not_found") return jsonError(404, "User not found.");
   if (result === "already_member") return jsonError(409, "User is already a member.");
   await publishToConversation(id, { type: "group:member-added", conversationId: id, userId: parsed.data.userId, role: "member" });
-  publishToUsers([parsed.data.userId], { type: "group:member-added", conversationId: id, userId: parsed.data.userId, role: "member" });
+  await publishToUsers([parsed.data.userId], { type: "group:member-added", conversationId: id, userId: parsed.data.userId, role: "member" });
   await notifyUser(parsed.data.userId, "member_added", { conversationId: id }, me.id);
   return NextResponse.json({ conversation: await getConversationForUser(id, me.id) });
 }

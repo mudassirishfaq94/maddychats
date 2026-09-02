@@ -52,7 +52,7 @@ export async function DELETE(
     if (!deleted) return jsonError(404, "Conversation not found.");
   }
 
-  publishToUsers(
+  await publishToUsers(
     detail.members.map((m) => m.id),
     { type: "conversation:delete", conversationId: id },
   );

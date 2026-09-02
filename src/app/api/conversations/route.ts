@@ -84,7 +84,7 @@ export async function POST(req: NextRequest) {
 
   if (created) {
     // Let both members' sidebars light up immediately.
-    publishToUsers([me.id, target.id], {
+    await publishToUsers([me.id, target.id], {
       type: "conversation:new",
       conversationId: conversation.id,
     });

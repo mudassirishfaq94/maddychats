@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
     if (valid.length !== selectedUserIds.length) { if (mediaPath) await deleteStored(mediaPath); return jsonError(422, "One or more selected users are invalid."); }
   }
   const status = await createStatus({ userId: me.id, type, text, mediaPath, mediaMimeType, backgroundStyle, privacy, selectedUserIds });
-  publishToUsers(await visibleRecipientIds(status), { type: "status:new", statusId: status.id, userId: me.id });
+  await publishToUsers(await visibleRecipientIds(status), { type: "status:new", statusId: status.id, userId: me.id });
   return NextResponse.json({ status: {
     id: status.id,
     type: status.type,
