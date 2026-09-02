@@ -51,6 +51,9 @@ Add these under **Project Settings → Environment Variables**:
 - `BLOB_READ_WRITE_TOKEN` — normally injected by the Blob integration
 - `SESSION_TTL_DAYS` — `365`
 - `MAX_AVATAR_MB`, `MAX_IMAGE_MB`, `MAX_FILE_MB` — `3`
+- `NEXT_PUBLIC_VAPID_PUBLIC_KEY` — public key from `npm run vapid:generate`
+- `VAPID_PRIVATE_KEY` — private key from the same command (keep secret)
+- `VAPID_SUBJECT` — a contact URI such as `mailto:you@example.com`
 
 Optional features require `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`,
 `GOOGLE_CALLBACK_URL`, `RESEND_API_KEY`, and `EMAIL_FROM`.
@@ -58,6 +61,11 @@ Optional features require `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`,
 Deploy, visit `/api/health`, and test two accounts, messages, reactions,
 statuses, and private media. Never put either database URL, the JWT secret, or
 the Blob token in source control or chat.
+
+After adding the three VAPID values, redeploy (the public key is embedded at
+build time). On every Android or desktop device, open **Settings →
+Notifications** in Maddy Chats and select **Enable** once. The installed PWA
+can then receive new-message notifications while it is closed.
 
 ## 4. Add a custom domain later
 

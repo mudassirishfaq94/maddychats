@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { conversationMembers, conversations, notifications } from "@/db/schema";
 import { publishToUsers } from "./realtime";
 import { getNotificationPreferences } from "./notification-preferences";
+import { sendMessagePush } from "./web-push";
 
 /**
  * Notification service. Rows persist in PostgreSQL so unread counts survive
@@ -153,6 +154,14 @@ export async function notifyNewMessage(input: {
           },
           input.actorId,
         );
+        if (preferences.pushNotifications) {
+          await sendMessagePush(m.userId, {
+            actorName: input.actorName,
+            preview: input.preview.slice(0, 140),
+            conversationId: input.conversationId,
+            messageId: input.messageId,
+          });
+        }
       }),
   );
 }

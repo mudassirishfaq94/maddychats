@@ -152,6 +152,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
         if (preferences?.notificationSound) playNotificationSound();
         if (
           preferences?.pushNotifications &&
+          localStorage.getItem("maddy:web-push-subscribed") !== "1" &&
           "Notification" in window &&
           Notification.permission === "granted" &&
           (document.visibilityState === "hidden" || !document.hasFocus())

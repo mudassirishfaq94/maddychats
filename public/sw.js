@@ -3,6 +3,23 @@ self.addEventListener("activate", (event) => {
   event.waitUntil(self.clients.claim());
 });
 
+self.addEventListener("push", (event) => {
+  let payload = {};
+  try {
+    payload = event.data?.json() || {};
+  } catch {
+    payload = { body: event.data?.text() || "You have a new message." };
+  }
+  event.waitUntil(self.registration.showNotification(payload.title || "Maddy Chats", {
+    body: payload.body || "You have a new message.",
+    icon: "/icons/maddy-192.png",
+    badge: "/icons/maddy-192.png",
+    tag: payload.tag || "maddy-message",
+    data: { url: payload.url || "/app/chats" },
+    vibrate: [180, 80, 180],
+  }));
+});
+
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const target = event.notification.data?.url || "/app/chats";

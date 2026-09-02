@@ -456,6 +456,27 @@ export const notificationPreferences = pgTable("notification_preferences", {
     .notNull(),
 });
 
+/** Browser/device endpoints used for standards-based Web Push delivery. */
+export const pushSubscriptions = pgTable(
+  "push_subscriptions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    endpoint: text("endpoint").notNull().unique(),
+    p256dh: text("p256dh").notNull(),
+    auth: text("auth").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [index("push_subscriptions_user_idx").on(table.userId)],
+);
+
 /* ======================== temporary status updates ======================== */
 
 export const statusTypeEnum = pgEnum("status_type", ["text", "image", "video"]);

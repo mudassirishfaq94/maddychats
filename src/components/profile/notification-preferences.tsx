@@ -24,6 +24,8 @@ export function NotificationPreferences() {
   const [browserPermission, setBrowserPermission] = useState<NotificationPermission | "unsupported">(() =>
     typeof window !== "undefined" && "Notification" in window ? Notification.permission : "unsupported",
   );
+  const [pushSubscribed, setPushSubscribed] = useState(false);
+  const [subscribing, setSubscribing] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -39,16 +41,68 @@ export function NotificationPreferences() {
     return () => controller.abort();
   }, []);
 
-  async function toggle(key: keyof Preferences) {
-    if (!preferences || saving) return;
-    const next = !preferences[key];
-    if (key === "pushNotifications" && next && "Notification" in window) {
+  useEffect(() => {
+    if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
+    void navigator.serviceWorker.ready
+      .then((registration) => registration.pushManager.getSubscription())
+      .then((subscription) => setPushSubscribed(Boolean(subscription)));
+  }, []);
+
+  function applicationServerKey(value: string): Uint8Array<ArrayBuffer> {
+    const padding = "=".repeat((4 - value.length % 4) % 4);
+    const raw = atob((value + padding).replace(/-/g, "+").replace(/_/g, "/"));
+    const bytes = new Uint8Array(raw.length);
+    for (let index = 0; index < raw.length; index += 1) bytes[index] = raw.charCodeAt(index);
+    return bytes;
+  }
+
+  async function subscribeForPush(): Promise<boolean> {
+    if (!("Notification" in window) || !("serviceWorker" in navigator) || !("PushManager" in window)) {
+      setMessage("Push notifications are not supported on this device or browser.");
+      return false;
+    }
+    const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+    if (!publicKey) {
+      setMessage("Push notifications are not configured on this deployment yet.");
+      return false;
+    }
+    setSubscribing(true);
+    try {
       const permission = await Notification.requestPermission();
       setBrowserPermission(permission);
       if (permission !== "granted") {
-        setMessage("Desktop notifications were not allowed by the browser.");
-        return;
+        setMessage("Notifications are blocked. Allow them in this app's site settings.");
+        return false;
       }
+      const registration = await navigator.serviceWorker.ready;
+      const existing = await registration.pushManager.getSubscription();
+      const subscription = existing ?? await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: applicationServerKey(publicKey),
+      });
+      const response = await fetch("/api/notifications/push", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(subscription.toJSON()),
+      });
+      if (!response.ok) throw new Error("The device could not be registered.");
+      setPushSubscribed(true);
+      localStorage.setItem("maddy:web-push-subscribed", "1");
+      setMessage("Push alerts enabled on this device.");
+      return true;
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Push notifications could not be enabled.");
+      return false;
+    } finally {
+      setSubscribing(false);
+    }
+  }
+
+  async function toggle(key: keyof Preferences) {
+    if (!preferences || saving) return;
+    const next = !preferences[key];
+    if (key === "pushNotifications" && next && !(await subscribeForPush())) {
+      return;
     }
     setSaving(key);
     setMessage(null);
@@ -69,16 +123,7 @@ export function NotificationPreferences() {
   }
 
   async function enableBrowserNotifications() {
-    if (!("Notification" in window)) return;
-    const permission = await Notification.requestPermission();
-    setBrowserPermission(permission);
-    setMessage(
-      permission === "granted"
-        ? "Desktop notifications enabled."
-        : permission === "denied"
-          ? "Notifications are blocked. Allow them in your browser's site settings."
-          : "Notification permission was not granted.",
-    );
+    await subscribeForPush();
   }
 
   return (
@@ -91,15 +136,15 @@ export function NotificationPreferences() {
         <div className="flex justify-center py-10">{message ? <p className="text-sm text-[var(--danger)]">{message}</p> : <Loader2 className="h-5 w-5 animate-spin text-[var(--muted)]" />}</div>
       ) : (
         <>
-        {preferences.pushNotifications && browserPermission !== "granted" && browserPermission !== "unsupported" ? (
+        {preferences.pushNotifications && !pushSubscribed && browserPermission !== "unsupported" ? (
           <div className="mt-5 flex items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--card-2)] p-4">
             <BellRing className="h-5 w-5 shrink-0 text-[var(--accent-fg)]" />
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold">Enable desktop alerts</p>
-              <p className="text-xs text-[var(--muted)]">Allow this browser to show messages while the tab is in the background.</p>
+              <p className="text-sm font-semibold">Enable push alerts on this device</p>
+              <p className="text-xs text-[var(--muted)]">Receive messages in Android&apos;s notification panel, even when Maddy Chats is closed.</p>
             </div>
-            <button type="button" onClick={() => void enableBrowserNotifications()} className="rounded-xl bg-[var(--accent)] px-3 py-2 text-xs font-semibold text-white">
-              {browserPermission === "denied" ? "How to allow" : "Enable"}
+            <button type="button" disabled={subscribing} onClick={() => void enableBrowserNotifications()} className="rounded-xl bg-[var(--accent)] px-3 py-2 text-xs font-semibold text-white disabled:opacity-60">
+              {subscribing ? "Enabling…" : browserPermission === "denied" ? "Try again" : "Enable"}
             </button>
           </div>
         ) : null}
