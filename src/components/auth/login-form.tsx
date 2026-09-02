@@ -93,7 +93,7 @@ export function LoginForm({ next }: { next?: string }) {
             href="/forgot-password"
             className="text-xs font-medium text-[var(--muted)] transition-colors hover:text-[var(--accent)]"
           >
-            Forgot your password?
+            Forgot password?
           </Link>
         </div>
       </div>

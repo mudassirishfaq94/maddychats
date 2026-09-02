@@ -24,7 +24,10 @@ export const registerSchema = z
     password: z
       .string()
       .min(8, "Password must be at least 8 characters")
-      .max(72, "Password must be 72 characters or fewer"),
+      .max(72, "Password must be 72 characters or fewer")
+      .regex(/[a-z]/, "Password is too weak — add a lowercase letter")
+      .regex(/[A-Z]/, "Password is too weak — add an uppercase letter")
+      .regex(/[0-9]/, "Password is too weak — add a number"),
     confirmPassword: z.string(),
   })
   .refine((v) => v.password === v.confirmPassword, {

@@ -63,6 +63,14 @@ export function clientUrl(): string {
   return url.replace(/\/+$/, "");
 }
 
+/** Exact OAuth callback registered with Google; defaults to this app origin. */
+export function googleCallbackUrl(): string {
+  return (
+    process.env.GOOGLE_CALLBACK_URL ??
+    `${clientUrl()}/api/auth/google/callback`
+  );
+}
+
 /**
  * Session cookies are marked Secure when the app is served over HTTPS
  * (production-style), and left off for local HTTP development so sessions

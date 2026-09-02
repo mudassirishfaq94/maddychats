@@ -53,6 +53,21 @@ export const users = pgTable(
   ],
 );
 
+export const oauthAccounts = pgTable(
+  "oauth_accounts",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+    provider: text("provider").notNull(),
+    providerAccountId: text("provider_account_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+  },
+  (table) => [
+    unique("oauth_accounts_provider_account_unique").on(table.provider, table.providerAccountId),
+    index("oauth_accounts_user_idx").on(table.userId),
+  ],
+);
+
 /* ==================== chat-ready models (prepared now) ==================== */
 
 export const conversationTypeEnum = pgEnum("conversation_type", [

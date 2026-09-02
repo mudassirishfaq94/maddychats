@@ -14,7 +14,7 @@ import { verifySessionToken } from "@/server/jwt";
  */
 
 const PROTECTED_PREFIXES = ["/app"];
-const AUTH_PAGES = ["/login", "/register", "/forgot-password"];
+const AUTH_PAGES = ["/login", "/signup", "/register", "/forgot-password"];
 
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
@@ -48,5 +48,5 @@ export async function proxy(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/app/:path*", "/login", "/register", "/forgot-password"],
+  matcher: ["/app/:path*", "/login", "/signup", "/register", "/forgot-password"],
 };

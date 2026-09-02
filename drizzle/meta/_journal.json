@@ -57,6 +57,13 @@
       "when": 1788293000000,
       "tag": "0007_background_opacity",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1788370000000,
+      "tag": "0008_google_oauth",
+      "breakpoints": true
     }
   ]
 }

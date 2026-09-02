@@ -1,6 +1,6 @@
 import { and, asc, eq, ilike, ne, or, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { users, type UserRow } from "@/db/schema";
+import { notificationPreferences, users, type UserRow } from "@/db/schema";
 import type { PublicUser, SafeUser } from "@/lib/types";
 import type { ProfileUpdateInput } from "@/lib/schemas";
 
@@ -87,16 +87,19 @@ export async function createUser(input: {
   email: string;
   passwordHash: string;
 }): Promise<UserRow> {
-  const rows = await db
-    .insert(users)
-    .values({
-      displayName: input.displayName.trim(),
-      username: input.username.trim(),
-      email: input.email.trim().toLowerCase(),
-      passwordHash: input.passwordHash,
-    })
-    .returning();
-  return rows[0];
+  return db.transaction(async (tx) => {
+    const rows = await tx
+      .insert(users)
+      .values({
+        displayName: input.displayName.trim(),
+        username: input.username.trim(),
+        email: input.email.trim().toLowerCase(),
+        passwordHash: input.passwordHash,
+      })
+      .returning();
+    await tx.insert(notificationPreferences).values({ userId: rows[0].id });
+    return rows[0];
+  });
 }
 
 export async function touchLastSeen(id: string): Promise<void> {

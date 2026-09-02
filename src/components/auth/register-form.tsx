@@ -128,7 +128,7 @@ export function RegisterForm() {
           icon={<Lock className="h-4 w-4" />}
           value={form.password}
           onChange={update("password")}
-          placeholder="At least 8 characters"
+          placeholder="8+ characters, upper/lowercase and a number"
           autoComplete="new-password"
           error={errors.password}
           trailing={
@@ -185,7 +185,7 @@ export function RegisterForm() {
       </button>
 
       <p className="text-center text-xs leading-relaxed text-[var(--muted)]">
-        Passwords are hashed with bcrypt before they ever touch the database.
+        Your password is securely hashed and never stored as plain text.
       </p>
     </form>
   );
