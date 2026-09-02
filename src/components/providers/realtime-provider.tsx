@@ -15,6 +15,11 @@ import type { PresenceState, RealtimeEvent } from "@/lib/types";
 
 type Listener = (event: RealtimeEvent) => void;
 
+interface NotificationPreferences {
+  pushNotifications: boolean;
+  notificationSound: boolean;
+}
+
 interface RealtimeContextValue {
   /** True while the SSE stream is open. EventSource auto-reconnects. */
   connected: boolean;
@@ -33,10 +38,72 @@ const RealtimeContext = createContext<RealtimeContextValue | null>(null);
  * (re)connection, so logging out kills the channel server-side too.
  */
 export function RealtimeProvider({ children }: { children: ReactNode }) {
-  const { status } = useAuth();
+  const { status, user } = useAuth();
   const [connected, setConnected] = useState(false);
   const [presence, setPresence] = useState<PresenceState>({});
   const listeners = useRef(new Set<Listener>());
+  const notificationPreferences = useRef<NotificationPreferences | null>(null);
+  const audioContext = useRef<AudioContext | null>(null);
+
+  const playNotificationSound = useCallback(() => {
+    const AudioContextClass = window.AudioContext ??
+      (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioContextClass) return;
+    const context = audioContext.current ?? new AudioContextClass();
+    audioContext.current = context;
+    if (context.state !== "running") return;
+    const start = context.currentTime;
+    for (const [frequency, offset] of [[880, 0], [1174.66, 0.11]] as const) {
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+      oscillator.type = "sine";
+      oscillator.frequency.value = frequency;
+      gain.gain.setValueAtTime(0.0001, start + offset);
+      gain.gain.exponentialRampToValueAtTime(0.16, start + offset + 0.015);
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + offset + 0.16);
+      oscillator.connect(gain).connect(context.destination);
+      oscillator.start(start + offset);
+      oscillator.stop(start + offset + 0.17);
+    }
+  }, []);
+
+  // Browsers allow sound only after a gesture. Prime audio on the first
+  // interaction so later messages can chime while the window is hidden.
+  useEffect(() => {
+    const unlock = () => {
+      const AudioContextClass = window.AudioContext ??
+        (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!AudioContextClass) return;
+      const context = audioContext.current ?? new AudioContextClass();
+      audioContext.current = context;
+      void context.resume();
+    };
+    window.addEventListener("pointerdown", unlock, { once: true });
+    window.addEventListener("keydown", unlock, { once: true });
+    return () => {
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("keydown", unlock);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (status !== "authenticated") return;
+    const controller = new AbortController();
+    void fetch("/api/notifications/preferences", { cache: "no-store", signal: controller.signal })
+      .then((response) => response.ok ? response.json() : null)
+      .then((data: { preferences?: NotificationPreferences } | null) => {
+        if (data?.preferences) notificationPreferences.current = data.preferences;
+      })
+      .catch(() => undefined);
+    const update = (event: Event) => {
+      notificationPreferences.current = (event as CustomEvent<NotificationPreferences>).detail;
+    };
+    window.addEventListener("maddy:notification-preferences", update);
+    return () => {
+      controller.abort();
+      window.removeEventListener("maddy:notification-preferences", update);
+    };
+  }, [status]);
 
   const subscribe = useCallback((listener: Listener) => {
     listeners.current.add(listener);
@@ -68,6 +135,34 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
           },
         }));
       }
+      if (event.type === "notification:new" && event.notification.type === "message") {
+        const preferences = notificationPreferences.current;
+        const data = event.notification.data;
+        const actor = String(data?.actorName ?? "Someone");
+        const preview = String(data?.preview ?? "New message");
+        const conversationId = String(data?.conversationId ?? "");
+        const messageId = String(data?.messageId ?? "");
+
+        if (preferences?.notificationSound) playNotificationSound();
+        if (
+          preferences?.pushNotifications &&
+          "Notification" in window &&
+          Notification.permission === "granted" &&
+          (document.visibilityState === "hidden" || !document.hasFocus())
+        ) {
+          const notification = new Notification(`${actor} sent a message`, {
+            body: preview,
+            tag: `maddy-message-${messageId || event.notification.id}`,
+          });
+          notification.onclick = () => {
+            window.focus();
+            if (conversationId) {
+              window.location.href = `/app/chats/${conversationId}${messageId ? `?message=${messageId}` : ""}`;
+            }
+            notification.close();
+          };
+        }
+      }
       listeners.current.forEach((fn) => {
         try {
           fn(event);
@@ -82,7 +177,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
       setConnected(false);
       setPresence({});
     };
-  }, [status]);
+  }, [playNotificationSound, status, user?.id]);
 
   const value = useMemo<RealtimeContextValue>(
     () => ({ connected, subscribe, presence }),

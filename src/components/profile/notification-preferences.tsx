@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Bell, Loader2, Smartphone, Volume2, Users } from "lucide-react";
+import { Bell, BellRing, Loader2, Smartphone, Volume2, Users } from "lucide-react";
 
 interface Preferences {
   messageNotifications: boolean;
@@ -21,6 +21,9 @@ export function NotificationPreferences() {
   const [preferences, setPreferences] = useState<Preferences | null>(null);
   const [saving, setSaving] = useState<keyof Preferences | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [browserPermission, setBrowserPermission] = useState<NotificationPermission | "unsupported">(() =>
+    typeof window !== "undefined" && "Notification" in window ? Notification.permission : "unsupported",
+  );
 
   useEffect(() => {
     const controller = new AbortController();
@@ -39,6 +42,14 @@ export function NotificationPreferences() {
   async function toggle(key: keyof Preferences) {
     if (!preferences || saving) return;
     const next = !preferences[key];
+    if (key === "pushNotifications" && next && "Notification" in window) {
+      const permission = await Notification.requestPermission();
+      setBrowserPermission(permission);
+      if (permission !== "granted") {
+        setMessage("Desktop notifications were not allowed by the browser.");
+        return;
+      }
+    }
     setSaving(key);
     setMessage(null);
     const response = await fetch("/api/notifications/preferences", {
@@ -51,9 +62,23 @@ export function NotificationPreferences() {
     } else {
       const data = await response.json() as { preferences: Preferences };
       setPreferences(data.preferences);
+      window.dispatchEvent(new CustomEvent("maddy:notification-preferences", { detail: data.preferences }));
       setMessage("Notification settings saved.");
     }
     setSaving(null);
+  }
+
+  async function enableBrowserNotifications() {
+    if (!("Notification" in window)) return;
+    const permission = await Notification.requestPermission();
+    setBrowserPermission(permission);
+    setMessage(
+      permission === "granted"
+        ? "Desktop notifications enabled."
+        : permission === "denied"
+          ? "Notifications are blocked. Allow them in your browser's site settings."
+          : "Notification permission was not granted.",
+    );
   }
 
   return (
@@ -65,6 +90,19 @@ export function NotificationPreferences() {
       {!preferences ? (
         <div className="flex justify-center py-10">{message ? <p className="text-sm text-[var(--danger)]">{message}</p> : <Loader2 className="h-5 w-5 animate-spin text-[var(--muted)]" />}</div>
       ) : (
+        <>
+        {preferences.pushNotifications && browserPermission !== "granted" && browserPermission !== "unsupported" ? (
+          <div className="mt-5 flex items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--card-2)] p-4">
+            <BellRing className="h-5 w-5 shrink-0 text-[var(--accent-fg)]" />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold">Enable desktop alerts</p>
+              <p className="text-xs text-[var(--muted)]">Allow this browser to show messages while the tab is in the background.</p>
+            </div>
+            <button type="button" onClick={() => void enableBrowserNotifications()} className="rounded-xl bg-[var(--accent)] px-3 py-2 text-xs font-semibold text-white">
+              {browserPermission === "denied" ? "How to allow" : "Enable"}
+            </button>
+          </div>
+        ) : null}
         <div className="mt-5 divide-y divide-[var(--border)] rounded-2xl border border-[var(--border)] bg-[var(--card-2)] px-4">
           {rows.map(({ key, label, hint, icon: Icon }) => (
             <div key={key} className="flex items-center gap-3 py-4">
@@ -76,6 +114,7 @@ export function NotificationPreferences() {
             </div>
           ))}
         </div>
+        </>
       )}
       {preferences && message ? <p role="status" className={`mt-3 text-xs ${message.includes("saved") ? "text-[var(--success)]" : "text-[var(--danger)]"}`}>{message}</p> : null}
     </section>
