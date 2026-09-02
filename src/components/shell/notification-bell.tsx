@@ -115,7 +115,7 @@ export function NotificationBell() {
       </button>
 
       {open ? (
-        <div className="card-glass absolute right-0 top-[calc(100%+10px)] z-50 w-80 max-w-[calc(100vw-1.25rem)] overflow-hidden rounded-2xl animate-fade-up">
+        <div className="card-glass fixed left-2 right-2 top-16 z-50 w-auto max-w-none overflow-hidden rounded-2xl animate-fade-up sm:absolute sm:left-auto sm:right-0 sm:top-[calc(100%+10px)] sm:w-80 sm:max-w-[calc(100vw-1.25rem)]">
           <div className="flex items-center justify-between border-b border-[var(--border)] px-4 py-3">
             <p className="text-sm font-bold">Notifications</p>
             {unread > 0 ? (
@@ -130,7 +130,7 @@ export function NotificationBell() {
             ) : null}
           </div>
 
-          <div className="max-h-80 overflow-y-auto p-1.5">
+          <div className="max-h-[min(20rem,calc(100dvh-9rem))] overflow-y-auto p-1.5">
             {loading && items.length === 0 ? (
               <p className="flex items-center justify-center gap-2 py-8 text-sm text-[var(--muted)]">
                 <Loader2 className="h-4 w-4 animate-spin" />
