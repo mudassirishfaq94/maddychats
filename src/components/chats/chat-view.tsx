@@ -765,10 +765,10 @@ export function ChatView({
   }
 
   return (
-    <div className="flex h-full min-h-0">
+    <div className="flex h-full w-full min-w-0 overflow-hidden">
       <div className="flex min-w-0 flex-1 flex-col">
       {/* ------------------------------ header ------------------------------ */}
-      <header className="flex h-14 items-center gap-3 border-b border-[var(--border)] bg-[var(--surface)] px-3 sm:px-4">
+      <header className="flex h-14 min-w-0 items-center gap-2 border-b border-[var(--border)] bg-[var(--surface)] px-2 sm:gap-3 sm:px-4">
         <Link
           href="/app/chats"
           aria-label="Back to chats"
@@ -1393,7 +1393,7 @@ export function ChatView({
             onFiles={(files) => attachments.addFiles(files)}
             disabled={sendPending || !requestAccepted}
           />
-          <div className="flex-1 rounded-2xl bg-[var(--input-bg)] px-3.5">
+          <div className="min-w-0 flex-1 rounded-2xl bg-[var(--input-bg)] px-3.5">
             <textarea
               ref={composerRef}
               value={draft}

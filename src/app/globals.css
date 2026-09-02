@@ -104,6 +104,13 @@ body {
   transition: background-color 0.25s ease, color 0.25s ease;
 }
 
+html,
+body {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: clip;
+}
+
 .font-display {
   font-family: var(--font-display), var(--font-sans), ui-sans-serif, sans-serif;
   letter-spacing: -0.02em;

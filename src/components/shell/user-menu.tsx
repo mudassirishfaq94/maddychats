@@ -46,7 +46,7 @@ export function UserMenu({ user }: { user: SafeUser }) {
         onClick={() => setOpen((v) => !v)}
         aria-haspopup="menu"
         aria-expanded={open}
-        className="flex items-center gap-2 rounded-full border border-[var(--border)] py-1 pl-1 pr-2.5 transition-all duration-200 hover:border-[var(--border-strong)] hover:bg-[color-mix(in_srgb,var(--muted)_8%,transparent)]"
+        className="flex items-center gap-0 rounded-full border border-[var(--border)] p-1 transition-all duration-200 hover:border-[var(--border-strong)] hover:bg-[color-mix(in_srgb,var(--muted)_8%,transparent)] sm:gap-2 sm:py-1 sm:pl-1 sm:pr-2.5"
       >
         <Avatar user={user} size={30} />
         <span className="hidden max-w-28 truncate text-sm font-semibold sm:block">
@@ -54,7 +54,7 @@ export function UserMenu({ user }: { user: SafeUser }) {
         </span>
         <ChevronDown
           className={cn(
-            "h-3.5 w-3.5 text-[var(--muted)] transition-transform duration-200",
+            "hidden h-3.5 w-3.5 text-[var(--muted)] transition-transform duration-200 sm:block",
             open && "rotate-180",
           )}
         />

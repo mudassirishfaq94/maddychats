@@ -113,7 +113,7 @@ export function ChatsLayout({
   }, [conversations, filter, showArchived]);
 
   return (
-    <div className="flex h-full min-h-0 bg-[var(--bg)]">
+    <div className="flex h-full w-full min-w-0 overflow-hidden bg-[var(--bg)]">
       {/* ------------------------ conversation sidebar ------------------------ */}
       <aside
         className={cn(

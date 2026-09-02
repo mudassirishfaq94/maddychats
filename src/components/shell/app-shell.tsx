@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { CircleDashed, MessagesSquare, Shield, Users } from "lucide-react";
 import type { SafeUser } from "@/lib/types";
-import { LogoWordmark } from "@/components/brand/logo";
+import { LogoMark, LogoWordmark } from "@/components/brand/logo";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { NotificationBell } from "./notification-bell";
 import { MessageSearch } from "@/components/chats/message-search";
@@ -29,22 +29,23 @@ export function AppShell({
   const onChats = !onPeople && !onStatus && !pathname.startsWith("/app/profile") && !pathname.startsWith("/app/starred");
 
   return (
-    <div className="flex h-dvh flex-col bg-[var(--bg)]">
+    <div className="flex h-dvh w-full min-w-0 flex-col overflow-hidden bg-[var(--bg)]">
       <a href="#main-content" className="skip-link">
         Skip to content
       </a>
 
-      <header className="z-40 flex h-14 shrink-0 items-center gap-1 border-b border-[var(--border)] bg-[var(--surface)] px-3 sm:px-4">
-        <Link href="/app" aria-label="Maddy Chats home" className="mr-1 sm:mr-3">
-          <LogoWordmark size={26} />
+      <header className="z-40 flex h-14 w-full min-w-0 shrink-0 items-center gap-0.5 overflow-visible border-b border-[var(--border)] bg-[var(--surface)] px-2 sm:gap-1 sm:px-4">
+        <Link href="/app" aria-label="Maddy Chats home" className="mr-0.5 shrink-0 sm:mr-3">
+          <LogoMark size={25} className="sm:hidden" />
+          <LogoWordmark size={26} className="hidden sm:inline-flex" />
         </Link>
 
-        <nav aria-label="Primary" className="flex items-center gap-0.5">
+        <nav aria-label="Primary" className="flex min-w-0 items-center gap-0 sm:gap-0.5">
           <Link
             href="/app"
             aria-current={onChats ? "page" : undefined}
             className={cn(
-              "flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium transition-colors",
+              "flex h-9 w-9 items-center justify-center rounded-full text-sm font-medium transition-colors sm:w-auto sm:gap-1.5 sm:px-3 sm:py-1.5",
               onChats
                 ? "bg-[var(--surface-2)] text-[var(--text)]"
                 : "text-[var(--muted)] hover:text-[var(--text)]",
@@ -57,7 +58,7 @@ export function AppShell({
             href="/app/people"
             aria-current={onPeople ? "page" : undefined}
             className={cn(
-              "flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium transition-colors",
+              "flex h-9 w-9 items-center justify-center rounded-full text-sm font-medium transition-colors sm:w-auto sm:gap-1.5 sm:px-3 sm:py-1.5",
               onPeople ? "bg-[var(--surface-2)] text-[var(--text)]" : "text-[var(--muted)] hover:text-[var(--text)]",
             )}
           >
@@ -68,7 +69,7 @@ export function AppShell({
             href="/app/status"
             aria-current={onStatus ? "page" : undefined}
             className={cn(
-              "flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium transition-colors",
+              "flex h-9 w-9 items-center justify-center rounded-full text-sm font-medium transition-colors sm:w-auto sm:gap-1.5 sm:px-3 sm:py-1.5",
               onStatus
                 ? "bg-[var(--surface-2)] text-[var(--text)]"
                 : "text-[var(--muted)] hover:text-[var(--text)]",
@@ -79,15 +80,15 @@ export function AppShell({
           </Link>
         </nav>
 
-        <div className="ml-auto flex items-center gap-1">
-          <MessageSearch />
+        <div className="ml-auto flex min-w-0 shrink-0 items-center gap-0.5 sm:gap-1">
+          <span className="hidden md:inline-flex"><MessageSearch /></span>
           <NotificationBell />
           {user.email === "mudassarmalak090@gmail.com" ? (
             <Link
               href="/app/admin"
               aria-label="Admin Panel"
               className={cn(
-                "flex h-9 w-9 items-center justify-center rounded-full transition-colors",
+                "hidden h-9 w-9 items-center justify-center rounded-full transition-colors md:flex",
                 pathname.startsWith("/app/admin")
                   ? "bg-[var(--accent-soft)] text-[var(--accent-fg)]"
                   : "text-[var(--muted)] hover:bg-[color-mix(in_srgb,var(--muted)_12%,transparent)] hover:text-[var(--text)]",
@@ -96,7 +97,7 @@ export function AppShell({
               <Shield className="h-4 w-4" />
             </Link>
           ) : null}
-          <ThemeToggle />
+          <ThemeToggle className="hidden min-[390px]:inline-flex" />
           <UserMenu user={user} />
         </div>
       </header>
