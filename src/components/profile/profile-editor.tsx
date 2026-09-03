@@ -145,7 +145,7 @@ export function ProfileEditor({ user }: { user: SafeUser }) {
 
   return (
     <section
-      className="card-glass rounded-3xl p-6 sm:p-8 animate-fade-up"
+      className="card-glass min-w-0 rounded-3xl p-4 sm:p-8 animate-fade-up"
       style={{ "--d": "160ms" } as React.CSSProperties}
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -163,31 +163,24 @@ export function ProfileEditor({ user }: { user: SafeUser }) {
         ) : null}
       </div>
 
-      <div className="mt-6 flex items-center gap-4 rounded-2xl border border-[var(--border)] bg-[var(--card-2)] p-4">
-        <span className="relative">
-          <Avatar user={user} size={56} ring />
-          <button
-            type="button"
-            onClick={() => avatarInputRef.current?.click()}
-            disabled={avatarBusy}
-            aria-label="Change avatar"
-            className="absolute -bottom-1 -right-1 flex h-7 w-7 items-center justify-center rounded-full border-2 border-[var(--card-2)] text-white"
-            style={{ background: "var(--accent)" }}
-          >
-            {avatarBusy ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Camera className="h-3.5 w-3.5" />
-            )}
-          </button>
-        </span>
-        <div className="min-w-0">
+      <div className="mt-6 flex min-w-0 items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--card-2)] p-3 sm:gap-4 sm:p-4">
+        <span className="shrink-0"><Avatar user={user} size={64} ring /></span>
+        <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold">Profile photo</p>
           <p className="mt-0.5 text-xs leading-relaxed text-[var(--muted)]">
-            JPG, PNG, WEBP or GIF — up to 5 MB. Stored on the server, served
-            through the authenticated media endpoint.
+            JPG, PNG, WEBP or GIF · up to 3 MB
           </p>
         </div>
+        <button
+          type="button"
+          onClick={() => avatarInputRef.current?.click()}
+          disabled={avatarBusy}
+          aria-label="Change profile photo"
+          className="flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl bg-[var(--accent)] px-3 text-xs font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-60"
+        >
+          {avatarBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
+          <span className="hidden min-[370px]:inline">Change</span>
+        </button>
         <input
           ref={avatarInputRef}
           type="file"

@@ -33,7 +33,7 @@ export default async function ProfilePage() {
 
   return (
     <AppShell user={user}>
-    <div className="mx-auto h-full w-full max-w-5xl overflow-y-auto px-4 py-6 sm:px-6">
+    <div className="mx-auto h-full w-full min-w-0 max-w-5xl overflow-y-auto overflow-x-hidden px-3 py-5 sm:px-6 sm:py-6">
       <Link
         href="/app"
         className="inline-flex items-center gap-2 text-sm font-medium text-[var(--muted)] transition-colors hover:text-[var(--text)] animate-fade-up"
@@ -44,13 +44,13 @@ export default async function ProfilePage() {
 
       {/* ---------- profile header ---------- */}
       <section
-        className="card-glass mt-6 flex flex-col items-start gap-6 rounded-3xl p-8 sm:flex-row sm:items-center animate-fade-up"
+        className="card-glass mt-5 flex min-w-0 flex-col items-center gap-5 rounded-3xl p-5 text-center sm:mt-6 sm:flex-row sm:gap-6 sm:p-8 sm:text-left animate-fade-up"
         style={{ "--d": "80ms" } as React.CSSProperties}
       >
         <Avatar user={user} size={92} ring />
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-3">
-            <h1 className="font-display text-3xl font-bold">{user.displayName}</h1>
+          <div className="flex min-w-0 flex-col items-center gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+            <h1 className="max-w-full break-words font-display text-2xl font-bold sm:text-3xl">{user.displayName}</h1>
             <span className="badge badge-accent">
               <span className="pulse-dot h-1.5 w-1.5 rounded-full bg-[var(--success)]" />
               Online
@@ -61,24 +61,16 @@ export default async function ProfilePage() {
             {user.bio ?? "No bio yet — hit Edit profile to introduce yourself."}
           </p>
         </div>
-        <div className="flex flex-col items-start gap-1.5 self-stretch rounded-2xl border border-dashed border-[var(--border-strong)] px-4 py-3 sm:items-end">
-          <span className="text-xs font-semibold uppercase tracking-wider text-[var(--muted)]">
-            Avatar
-          </span>
-          <span className="text-xs text-[var(--muted)]">
-            Use the camera button below to update it
-          </span>
-        </div>
       </section>
 
       {/* ---------- editor + meta ---------- */}
-      <div className="mt-5 grid items-start gap-5 lg:grid-cols-[1.5fr_1fr]">
-        <div className="space-y-5">
+      <div className="mt-5 grid min-w-0 grid-cols-[minmax(0,1fr)] items-start gap-5 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
+        <div className="min-w-0 space-y-5">
           <ProfileEditor user={user} />
           <NotificationPreferences />
         </div>
 
-        <div className="space-y-4">
+        <div className="min-w-0 space-y-4">
           {meta.map(({ icon: Icon, label, value }, i) => (
             <div
               key={label}
@@ -102,7 +94,7 @@ export default async function ProfilePage() {
               <Fingerprint className="h-3.5 w-3.5 text-[var(--accent)]" />
               User ID
             </p>
-            <p className="mt-2.5 font-mono text-[0.8rem] leading-relaxed text-[var(--muted)]">
+            <p className="mt-2.5 break-all font-mono text-[0.8rem] leading-relaxed text-[var(--muted)]">
               {user.id}
             </p>
           </div>
