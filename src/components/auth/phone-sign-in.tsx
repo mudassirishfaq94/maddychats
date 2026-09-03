@@ -219,14 +219,19 @@ export function PhoneSignIn({
 
       {stage === "phone" ? (
         <div className="mt-4 space-y-3">
-          <label className="field-label" htmlFor="phone-country">Phone number</label>
-          <div className="flex min-w-0 gap-2">
-            <select id="phone-country" value={country} onChange={(event) => setCountry(event.target.value as CountryCode)} disabled={busy} aria-label="Country code" className="field-input w-[42%] shrink-0 px-2! text-xs!">
-              {countries.map((item) => <option key={item.code} value={item.code}>{item.name} (+{item.callingCode})</option>)}
-            </select>
-            <div className="relative min-w-0 flex-1">
-              <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-[var(--muted)]">+{selectedCallingCode}</span>
-              <input value={nationalNumber} onChange={(event) => setNationalNumber(event.target.value.replace(/[^\d\s()-]/g, ""))} disabled={busy} inputMode="tel" autoComplete="tel-national" placeholder="50 123 4567" aria-label="Phone number" className="field-input min-w-0 pl-12!" />
+          <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+            <div className="min-w-0">
+              <label className="field-label" htmlFor="phone-country">Country</label>
+              <select id="phone-country" value={country} onChange={(event) => setCountry(event.target.value as CountryCode)} disabled={busy} className="field-input min-w-0 px-3! text-sm!">
+                {countries.map((item) => <option key={item.code} value={item.code}>{item.name} (+{item.callingCode})</option>)}
+              </select>
+            </div>
+            <div className="min-w-0">
+              <label className="field-label" htmlFor="phone-national-number">Phone number</label>
+              <div className="relative min-w-0">
+                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm font-medium text-[var(--muted)]">+{selectedCallingCode}</span>
+                <input id="phone-national-number" value={nationalNumber} onChange={(event) => setNationalNumber(event.target.value.replace(/[^\d\s()-]/g, ""))} disabled={busy} inputMode="tel" autoComplete="tel-national" placeholder="50 123 4567" className="field-input min-w-0 pl-14!" />
+              </div>
             </div>
           </div>
           <button type="button" onClick={() => void sendCode()} disabled={busy || !nationalNumber.trim()} className="btn btn-primary w-full">

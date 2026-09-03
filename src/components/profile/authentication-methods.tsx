@@ -78,7 +78,7 @@ export function AuthenticationMethods({
             <a href="/api/auth/google?mode=link&next=/app/profile" className="btn btn-secondary">Add Google</a>
           </MethodRow>
           <MethodRow icon={Phone} label="Phone" connected={methods.phone}>
-            <div className="w-full sm:w-auto [&>button]:mt-0!">
+            <div className="min-w-0 basis-full [&>button]:mt-0! sm:pl-[3.25rem]">
               <PhoneSignIn mode="link" onLinked={load} />
             </div>
           </MethodRow>
