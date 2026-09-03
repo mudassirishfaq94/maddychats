@@ -1596,7 +1596,19 @@ export function ChatView({
           </div>
         )}
         {recorder.error ? (
-          <p className="mt-1.5 text-xs text-[var(--danger)]">{recorder.error}</p>
+          <div className="mt-1.5 rounded-xl border border-[color-mix(in_srgb,var(--danger)_30%,transparent)] bg-[color-mix(in_srgb,var(--danger)_8%,transparent)] px-3 py-2">
+            <p className="whitespace-pre-line text-xs leading-relaxed text-[var(--danger)]">{recorder.error}</p>
+            <button
+              type="button"
+              onClick={() => {
+                recorder.clearRecording();
+                void recorder.startRecording();
+              }}
+              className="mt-1.5 text-xs font-semibold text-[var(--danger)] underline underline-offset-2 hover:opacity-80"
+            >
+              Try again
+            </button>
+          </div>
         ) : null}
       </form>
       </div>

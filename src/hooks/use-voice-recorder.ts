@@ -50,26 +50,37 @@ export function useVoiceRecorder(): UseVoiceRecorderReturn {
     // Microphone requires a secure context (HTTPS or localhost).
     if (typeof window !== "undefined" && !window.isSecureContext) {
       setError(
-        "Microphone requires HTTPS. Access this page via localhost or ask your admin to enable HTTPS.",
+        "Microphone requires HTTPS. Access this page via localhost or ask your admin to enable HTTPS."
       );
       return;
     }
 
     if (!navigator.mediaDevices?.getUserMedia) {
       setError(
-        "Microphone is not supported in this browser. Please try Chrome, Edge, or Firefox.",
+        "Microphone is not supported in this browser or the page is not served over HTTPS."
       );
       return;
     }
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          sampleRate: 44100,
-        },
-      });
+      // First check current permission state to give better error messages
+      try {
+        const permissionStatus = await navigator.permissions.query({ name: "microphone" as PermissionName });
+        if (permissionStatus.state === "denied") {
+          setError(
+            "Microphone access was previously denied and is now blocked. To fix this:\n" +
+            "\n1. Click the lock icon (🔒) in your browser's address bar\n" +
+            "2. Find 'Microphone' and set it to 'Allow'\n" +
+            "3. Refresh the page and try again"
+          );
+          return;
+        }
+      } catch {
+        // permissions.query not supported — continue with getUserMedia
+      }
+
+      // Use simple constraints for maximum compatibility
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
       streamRef.current = stream;
       chunksRef.current = [];
@@ -121,9 +132,13 @@ export function useVoiceRecorder(): UseVoiceRecorderReturn {
     } catch (err) {
       const name = (err as DOMException).name || "";
       const message = (err as Error).message || "";
-      if (name === "NotAllowedError" || name === "PermissionDeniedError" || message.toLowerCase().includes("permission")) {
+      console.error("[voice-recorder] Error:", name, message, err);
+      if (name === "NotAllowedError" || name === "PermissionDeniedError") {
         setError(
-          "Microphone permission was denied. Click the lock/microphone icon in your browser\'s address bar and allow microphone access, then try again."
+          "Microphone access denied. To fix this:\n" +
+          "\n1. Click the lock icon (🔒) or microphone icon in your browser's address bar\n" +
+          "2. Set Microphone to 'Allow'\n" +
+          "3. Refresh the page and try again"
         );
       } else if (name === "NotFoundError" || name === "DevicesNotFoundError") {
         setError("No microphone found. Please connect a microphone and try again.");
