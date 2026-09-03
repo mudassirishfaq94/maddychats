@@ -120,6 +120,23 @@ export function useVoiceRecorder(): UseVoiceRecorderReturn {
       const message = (err as Error).message || "";
       console.error("[voice-recorder] Error:", name, message, err);
       if (name === "NotAllowedError" || name === "PermissionDeniedError") {
+        const permissionsPolicy =
+          typeof document !== "undefined"
+            ? (document as Document & {
+                permissionsPolicy?: { allowsFeature: (feature: string) => boolean };
+              }).permissionsPolicy
+            : undefined;
+        const blockedByPolicy =
+          permissionsPolicy?.allowsFeature("microphone") === false;
+
+        if (blockedByPolicy) {
+          setError(
+            "Microphone access is disabled by this site's security policy. Reload the page after the updated deployment is live."
+          );
+          setState("idle");
+          return;
+        }
+
         setError(
           "Microphone access denied by the browser.\n\n" +
           "Try these steps:\n" +

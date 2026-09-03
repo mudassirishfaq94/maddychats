@@ -6,7 +6,9 @@ const securityHeaders = [
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   {
     key: "Permissions-Policy",
-    value: "camera=(), microphone=(), geolocation=(), interest-cohort=()",
+    // Voice messages need microphone access in the first-party app. Keep it
+    // unavailable to cross-origin frames and continue disabling unused APIs.
+    value: "camera=(), microphone=(self), geolocation=(), interest-cohort=()",
   },
   { key: "X-DNS-Prefetch-Control", value: "on" },
 ];
