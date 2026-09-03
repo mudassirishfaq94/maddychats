@@ -40,7 +40,7 @@ export function NewChatDialog({ start = "choose" }: { start?: "choose" | "direct
 
   useEffect(() => {
     if (!open || (mode !== "direct" && mode !== "group-people")) return;
-    const q = query.trim(); if (q.length < 1) return;
+    const q = query.trim(); if (q.length < 3) return;
     const controller = new AbortController();
     const timer = setTimeout(async () => {
       try {
@@ -96,17 +96,17 @@ export function NewChatDialog({ start = "choose" }: { start?: "choose" | "direct
 
         {(mode === "direct" || mode === "group-people") ? <>
           {mode === "group-people" && selected.length ? <div className="mt-3 flex gap-2 overflow-x-auto pb-1">{selected.map((u) => <button type="button" key={u.id} onClick={() => setSelected((s) => s.filter((x) => x.id !== u.id))} className="flex shrink-0 flex-col items-center text-[0.65rem]"><Avatar user={u} size={34} /><span className="mt-1 max-w-14 truncate">{u.displayName}</span></button>)}</div> : null}
-          <div className="relative mt-4"><Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted)]" /><input ref={inputRef} value={query} onChange={(e) => { const value = e.target.value; setQuery(value); setLoading(value.trim().length >= 1); }} placeholder="Search by full name…" className="field-input field-input--icon" /></div>
+          <div className="relative mt-4"><Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted)]" /><input ref={inputRef} value={query} onChange={(e) => { const value = e.target.value; setQuery(value); setLoading(value.trim().length >= 3); }} placeholder="Type exact full name or username…" className="field-input field-input--icon" /></div>
           <div className="mt-3 max-h-[48vh] overflow-y-auto">
             {loading ? (
               <p className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin" /></p>
-            ) : query.trim().length < 1 ? (
-              <p className="py-8 text-center text-sm text-[var(--muted)]">Type a name to search for people on Maddy Chats</p>
+            ) : query.trim().length < 3 ? (
+              <p className="py-8 text-center text-sm text-[var(--muted)]">Type a full name or username to search</p>
             ) : results.length === 0 ? (
               <div className="flex flex-col items-center py-8">
                 <UserX className="h-8 w-8 text-[var(--muted)]" />
                 <p className="mt-2 text-sm font-medium">No users found</p>
-                <p className="mt-1 text-xs text-[var(--muted)]">Try a different name or spelling</p>
+                <p className="mt-1 text-xs text-[var(--muted)]">Try typing the exact full name or username</p>
               </div>
             ) : (
               <ul className="space-y-1">

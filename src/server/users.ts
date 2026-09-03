@@ -141,20 +141,19 @@ export async function updateUserProfile(
 }
 
 /**
- * People search — matches username and display name (case-insensitive
- * substring), never returns the searcher themselves, capped for safety.
+ * People search — EXACT match only on full display name or full username
+ * (case-insensitive). Users must type the complete name/username to find
+ * someone. Normalizes whitespace so "John  Smith" matches "John Smith".
  */
 export async function searchUsers(
   query: string,
   excludeUserId: string,
   limit = 20,
 ): Promise<UserRow[]> {
-  const trimmed = query.trim();
+  const trimmed = query.trim().replace(/\s+/g, " ");
   if (!trimmed) return [];
-  const pattern = `%${trimmed}%`;
-  const prefix = `${trimmed}%`;
-  // Rank results: exact match > starts-with > contains
-  // This gives the most relevant results first
+  // Exact match only: normalize whitespace in both the stored name and the query
+  // to ensure "John  Smith" matches "John Smith"
   return db
     .select()
     .from(users)
@@ -162,22 +161,13 @@ export async function searchUsers(
       and(
         ne(users.id, excludeUserId),
         or(
-          ilike(users.username, pattern),
-          ilike(users.displayName, pattern),
+          // Exact match on full display name (normalize whitespace)
+          sql`lower(regexp_replace(${users.displayName}, '\\s+', ' ', 'g')) = lower(regexp_replace(${trimmed}, '\\s+', ' ', 'g'))`,
+          // Exact match on full username (case-insensitive)
+          sql`lower(${users.username}) = lower(${trimmed})`,
         ),
       ),
     )
-    .orderBy(
-      sql`
-        CASE
-          WHEN lower(${users.displayName}) = lower(${trimmed}) THEN 0
-          WHEN lower(${users.displayName}) LIKE lower(${prefix}) THEN 1
-          WHEN lower(${users.username}) LIKE lower(${prefix}) THEN 2
-          WHEN lower(${users.displayName}) LIKE lower(${pattern}) THEN 3
-          ELSE 4
-        END,
-        ${users.displayName}
-      `,
-    )
+    .orderBy(asc(users.displayName))
     .limit(limit);
 }

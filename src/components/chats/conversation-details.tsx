@@ -74,7 +74,7 @@ export function ConversationDetails({
   const { subscribe } = useRealtime();
 
   useEffect(() => {
-    if (group.type !== "group" || memberQuery.trim().length < 2) return;
+    if (group.type !== "group" || memberQuery.trim().length < 3) return;
     const controller = new AbortController();
     const timer = setTimeout(() => void fetch(`/api/users/search?q=${encodeURIComponent(memberQuery.trim())}`, { signal: controller.signal })
       .then((r) => r.json()).then((data) => setMemberResults((data.users ?? []).filter((u: PublicUser) => !group.members.some((m) => m.id === u.id))))
