@@ -61,7 +61,15 @@ function authErrorMessage(error: unknown): string {
   }
 }
 
-export function PhoneSignIn({ next = "/app" }: { next?: string }) {
+export function PhoneSignIn({
+  next = "/app",
+  mode = "signin",
+  onLinked,
+}: {
+  next?: string;
+  mode?: "signin" | "link";
+  onLinked?: () => void | Promise<void>;
+}) {
   const [stage, setStage] = useState<Stage>("closed");
   const [country, setCountry] = useState<CountryCode>("AE");
   const [nationalNumber, setNationalNumber] = useState("");
@@ -141,17 +149,21 @@ export function PhoneSignIn({ next = "/app" }: { next?: string }) {
     try {
       const credential = await confirmation.confirm(otp);
       const idToken = await credential.user.getIdToken(true);
-      const response = await fetch("/api/auth/phone", {
+      const response = await fetch(mode === "link" ? "/api/auth/phone/link" : "/api/auth/phone", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ idToken }),
       });
-      const data = await response.json().catch(() => null) as { error?: string } | null;
-      if (!response.ok) throw new Error(data?.error ?? "Maddy Chats sign-in could not be completed.");
+      const data = await response.json().catch(() => null) as { error?: string; isNewUser?: boolean } | null;
+      if (!response.ok) throw new Error(data?.error ?? (mode === "link" ? "Phone number could not be linked." : "Maddy Chats sign-in could not be completed."));
       setStage("success");
       const { firebaseAuth } = await import("@/lib/firebase-client");
       await signOutFirebase(firebaseAuth).catch(() => undefined);
-      window.location.assign(target);
+      if (mode === "link") {
+        await onLinked?.();
+        return;
+      }
+      window.location.assign(data?.isNewUser ? "/app/profile?onboarding=1" : target);
     } catch (cause) {
       setError(authErrorMessage(cause));
     } finally {
@@ -179,7 +191,7 @@ export function PhoneSignIn({ next = "/app" }: { next?: string }) {
     return (
       <button type="button" onClick={() => setStage("phone")} className="btn btn-secondary mt-3 w-full">
         <Phone className="h-4 w-4" />
-        Continue with Phone
+        {mode === "link" ? "Add phone" : "Continue with Phone"}
       </button>
     );
   }
@@ -193,9 +205,9 @@ export function PhoneSignIn({ next = "/app" }: { next?: string }) {
           </button>
         ) : <Phone className="h-4 w-4 text-[var(--accent-fg)]" />}
         <div className="min-w-0 flex-1">
-          <h2 className="text-sm font-semibold">{stage === "otp" ? "Enter verification code" : stage === "success" ? "Phone verified" : "Sign in with phone"}</h2>
+          <h2 className="text-sm font-semibold">{stage === "otp" ? "Enter verification code" : stage === "success" ? (mode === "link" ? "Phone connected" : "Phone verified") : (mode === "link" ? "Connect phone" : "Sign in with phone")}</h2>
           <p className="mt-0.5 text-xs text-[var(--muted)]">
-            {stage === "otp" ? `We sent a code to ${sentNumber}` : stage === "success" ? "Opening Maddy Chats…" : "SMS rates may apply."}
+            {stage === "otp" ? `We sent a code to ${sentNumber}` : stage === "success" ? (mode === "link" ? "Authentication methods updated." : "Opening Maddy Chats…") : "SMS rates may apply."}
           </p>
         </div>
         <button type="button" onClick={close} aria-label="Cancel phone sign-in" className="flex h-8 w-8 items-center justify-center rounded-full text-[var(--muted)] hover:bg-[var(--surface-2)]">

@@ -6,10 +6,18 @@ import { db } from "@/db";
 import { notificationPreferences, oauthAccounts, users } from "@/db/schema";
 import { clientUrl, googleCallbackUrl, SESSION_COOKIE } from "@/server/config";
 import { hashPassword } from "@/server/password";
-import { createSessionToken, sessionCookieOptions } from "@/server/session";
+import { createSessionToken, getSessionUser, sessionCookieOptions } from "@/server/session";
 import { requestIsSecure } from "@/server/http";
 
 const googleKeys = createRemoteJWKSet(new URL("https://www.googleapis.com/oauth2/v3/certs"));
+const GOOGLE_OAUTH_COOKIES = ["google_oauth_state", "google_oauth_nonce", "google_oauth_verifier", "google_oauth_next", "google_oauth_mode"];
+
+function finishGoogleOAuth(response: NextResponse) {
+  for (const name of GOOGLE_OAUTH_COOKIES) {
+    response.cookies.set(name, "", { path: "/api/auth/google", maxAge: 0 });
+  }
+  return response;
+}
 
 function redirectError(code: string) {
   return NextResponse.redirect(new URL(`/login?error=${code}`, clientUrl()));
@@ -22,6 +30,7 @@ async function handleGoogleCallback(req: NextRequest) {
   const nonce = req.cookies.get("google_oauth_nonce")?.value;
   const verifier = req.cookies.get("google_oauth_verifier")?.value;
   const next = req.cookies.get("google_oauth_next")?.value ?? "/app";
+  const linking = req.cookies.get("google_oauth_mode")?.value === "link";
   if (!code || !state || !expectedState || state !== expectedState || !nonce || !verifier) return redirectError("google_invalid_state");
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
@@ -37,6 +46,41 @@ async function handleGoogleCallback(req: NextRequest) {
     ({ payload: claims } = await jwtVerify(tokens.id_token, googleKeys, { issuer: ["https://accounts.google.com", "accounts.google.com"], audience: clientId }));
   } catch { return redirectError("google_failed"); }
   if (claims.nonce !== nonce || !claims.sub || typeof claims.email !== "string" || claims.email_verified !== true) return redirectError("google_unverified");
+
+  if (linking) {
+    const currentUser = await getSessionUser();
+    if (!currentUser) return finishGoogleOAuth(NextResponse.redirect(new URL("/login?next=/app/profile", clientUrl())));
+
+    const [identityOwner] = await db
+      .select({ userId: oauthAccounts.userId })
+      .from(oauthAccounts)
+      .where(and(eq(oauthAccounts.provider, "google"), eq(oauthAccounts.providerAccountId, claims.sub)))
+      .limit(1);
+    if (identityOwner && identityOwner.userId !== currentUser.id) {
+      return finishGoogleOAuth(NextResponse.redirect(new URL("/app/profile?auth_error=google_in_use", clientUrl())));
+    }
+
+    const [currentGoogle] = await db
+      .select({ providerAccountId: oauthAccounts.providerAccountId })
+      .from(oauthAccounts)
+      .where(and(eq(oauthAccounts.userId, currentUser.id), eq(oauthAccounts.provider, "google")))
+      .limit(1);
+    if (currentGoogle && currentGoogle.providerAccountId !== claims.sub) {
+      return finishGoogleOAuth(NextResponse.redirect(new URL("/app/profile?auth_error=google_already_linked", clientUrl())));
+    }
+    if (!identityOwner && !currentGoogle) {
+      try {
+        await db.insert(oauthAccounts).values({
+          userId: currentUser.id,
+          provider: "google",
+          providerAccountId: claims.sub,
+        });
+      } catch {
+        return finishGoogleOAuth(NextResponse.redirect(new URL("/app/profile?auth_error=google_in_use", clientUrl())));
+      }
+    }
+    return finishGoogleOAuth(NextResponse.redirect(new URL("/app/profile?auth_linked=google", clientUrl())));
+  }
 
   let account = await db.select({ user: users }).from(oauthAccounts).innerJoin(users, eq(oauthAccounts.userId, users.id)).where(and(eq(oauthAccounts.provider, "google"), eq(oauthAccounts.providerAccountId, claims.sub))).limit(1);
   let user = account[0]?.user;
@@ -69,8 +113,7 @@ async function handleGoogleCallback(req: NextRequest) {
 
   const response = NextResponse.redirect(new URL(next.startsWith("/") && !next.startsWith("//") ? next : "/app", clientUrl()));
   response.cookies.set(SESSION_COOKIE, await createSessionToken(user.id, user.username), sessionCookieOptions(requestIsSecure(req)));
-  for (const name of ["google_oauth_state", "google_oauth_nonce", "google_oauth_verifier", "google_oauth_next"]) response.cookies.set(name, "", { path: "/api/auth/google", maxAge: 0 });
-  return response;
+  return finishGoogleOAuth(response);
 }
 
 export async function GET(req: NextRequest) {

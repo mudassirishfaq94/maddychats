@@ -2,10 +2,15 @@ import { createHash, randomBytes } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { clientUrl, googleCallbackUrl } from "@/server/config";
 import { requestIsSecure } from "@/server/http";
+import { getSessionUser } from "@/server/session";
 
 const COOKIE_AGE = 10 * 60;
 
 export async function GET(req: NextRequest) {
+  const linking = req.nextUrl.searchParams.get("mode") === "link";
+  if (linking && !(await getSessionUser())) {
+    return NextResponse.redirect(new URL("/login?next=/app/profile", clientUrl()));
+  }
   const clientId = process.env.GOOGLE_CLIENT_ID;
   if (!clientId || !process.env.GOOGLE_CLIENT_SECRET) {
     return NextResponse.redirect(new URL("/login?error=google_not_configured", clientUrl()));
@@ -25,5 +30,6 @@ export async function GET(req: NextRequest) {
   response.cookies.set("google_oauth_nonce", nonce, options);
   response.cookies.set("google_oauth_verifier", verifier, options);
   response.cookies.set("google_oauth_next", safeNext, options);
+  response.cookies.set("google_oauth_mode", linking ? "link" : "signin", options);
   return response;
 }

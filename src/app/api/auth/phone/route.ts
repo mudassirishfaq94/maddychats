@@ -86,9 +86,11 @@ export async function POST(req: NextRequest) {
     return jsonError(401, "Phone verification is invalid or has expired.");
   }
   let user = await findPhoneUser(identity.uid);
+  let isNewUser = false;
   if (!user) {
     try {
       user = await provisionPhoneUser(identity.uid);
+      isNewUser = true;
     } catch {
       // A simultaneous request may have created the provider mapping first.
       user = await findPhoneUser(identity.uid);
@@ -96,7 +98,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const response = NextResponse.json({ user: toSafeUser(user) });
+  const response = NextResponse.json({ user: toSafeUser(user), isNewUser });
   response.cookies.set(
     SESSION_COOKIE,
     await createSessionToken(user.id, user.username),
