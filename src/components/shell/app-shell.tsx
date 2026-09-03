@@ -28,6 +28,7 @@ export function AppShell({
   const onPeople = pathname.startsWith("/app/people") || pathname.startsWith("/app/users");
   const onStatus = pathname.startsWith("/app/status");
   const onChats = !onPeople && !onStatus && !pathname.startsWith("/app/profile") && !pathname.startsWith("/app/starred");
+  const inChat = pathname.startsWith("/app/chats/");
 
   return (
     <div className="flex h-dvh w-full min-w-0 flex-col overflow-hidden bg-[var(--bg)] pb-0 sm:pb-0">
@@ -45,7 +46,7 @@ export function AppShell({
           </span>
         </Link>
 
-        <nav aria-label="Primary" className="flex min-w-0 items-center gap-0 sm:gap-0.5">
+        <nav aria-label="Primary" className="hidden min-w-0 items-center gap-0 sm:flex sm:gap-0.5">
           <Link
             href="/app"
             aria-current={onChats ? "page" : undefined}
@@ -87,7 +88,10 @@ export function AppShell({
 
         <div className="ml-auto flex min-w-0 shrink-0 items-center gap-0.5 sm:gap-1">
           <span className="hidden md:inline-flex"><MessageSearch /></span>
-          <NotificationBell />
+          {/* Hide extra icons on mobile when inside a chat (chat header has its own controls) */}
+          <span className={cn("hidden sm:inline-flex", inChat && "md:inline-flex")}>
+            <NotificationBell />
+          </span>
           {user.email === "mudassarmalak090@gmail.com" ? (
             <Link
               href="/app/admin"
@@ -107,7 +111,7 @@ export function AppShell({
         </div>
       </header>
 
-      <main id="main-content" className="min-h-0 flex-1 overflow-hidden pb-[env(safe-area-inset-bottom)] sm:pb-0">
+      <main id="main-content" className="min-h-0 flex-1 overflow-hidden pb-[calc(56px+env(safe-area-inset-bottom))] sm:pb-0">
         {children}
       </main>
 

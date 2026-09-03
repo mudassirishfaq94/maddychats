@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import type * as React from "react";
-import { Archive, BellOff, MessageSquarePlus, Pin, Search } from "lucide-react";
+import { Archive, BellOff, Pin, Search } from "lucide-react";
 import type { ConversationSummary } from "@/lib/types";
 import { Avatar } from "@/components/avatar";
 import { LogoMark } from "@/components/brand/logo";
@@ -64,7 +64,6 @@ export function ChatsLayout({
     : null;
   const [filter, setFilter] = useState("");
   const [showArchived, setShowArchived] = useState(false);
-  const [mobileNewText, setMobileNewText] = useState(false);
 
   // Live activity → debounced server refresh keeps previews ordered & fresh.
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -127,10 +126,7 @@ export function ChatsLayout({
           <h1 className="font-display text-[1.15rem] font-bold">Chats</h1>
           <div className="flex items-center gap-1.5">
             <NewChatDialog start="group-people" />
-            {/* On mobile, the FAB handles New Text — only show button on desktop */}
-            <span className="hidden sm:inline-flex">
-              <NewChatDialog start="direct" />
-            </span>
+            <NewChatDialog start="direct" />
           </div>
         </div>
 
@@ -269,22 +265,6 @@ export function ChatsLayout({
           )}
         </div>
       </aside>
-
-      {/* Mobile FAB: New Text — only visible on mobile when no chat is active */}
-      {!activeId && (
-        <button
-          type="button"
-          onClick={() => setMobileNewText(true)}
-          aria-label="New Text"
-          className="fixed bottom-[calc(env(safe-area-inset-bottom)+60px)] right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-[var(--accent)] text-white shadow-lg transition-transform active:scale-95 sm:hidden"
-        >
-          <MessageSquarePlus className="h-6 w-6" />
-          <span className="sr-only">New Text</span>
-        </button>
-      )}
-
-      {/* Mobile-triggered NewChatDialog */}
-      <NewChatDialog start="direct" openExternally={mobileNewText} onExternalClose={() => setMobileNewText(false)} />
 
       {/* ------------------------------ chat area ------------------------------ */}
       <section
