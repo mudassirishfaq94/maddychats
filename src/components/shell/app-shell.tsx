@@ -8,6 +8,7 @@ import type { SafeUser } from "@/lib/types";
 import { LogoMark, LogoWordmark } from "@/components/brand/logo";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { NotificationBell } from "./notification-bell";
+import { MobileNav } from "./mobile-nav";
 import { MessageSearch } from "@/components/chats/message-search";
 import { UserMenu } from "./user-menu";
 import { cn } from "@/lib/utils";
@@ -29,7 +30,7 @@ export function AppShell({
   const onChats = !onPeople && !onStatus && !pathname.startsWith("/app/profile") && !pathname.startsWith("/app/starred");
 
   return (
-    <div className="flex h-dvh w-full min-w-0 flex-col overflow-hidden bg-[var(--bg)]">
+    <div className="flex h-dvh w-full min-w-0 flex-col overflow-hidden bg-[var(--bg)] pb-0 sm:pb-0">
       <a href="#main-content" className="skip-link">
         Skip to content
       </a>
@@ -106,9 +107,11 @@ export function AppShell({
         </div>
       </header>
 
-      <main id="main-content" className="min-h-0 flex-1 overflow-hidden">
+      <main id="main-content" className="min-h-0 flex-1 overflow-hidden pb-[env(safe-area-inset-bottom)] sm:pb-0">
         {children}
       </main>
+
+      <MobileNav />
     </div>
   );
 }

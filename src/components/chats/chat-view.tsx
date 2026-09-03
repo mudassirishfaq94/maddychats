@@ -1421,7 +1421,7 @@ export function ChatView({
               sendPending
             }
             aria-label="Send message"
-            className="btn btn-primary h-10 w-10 shrink-0 rounded-full! p-0!"
+            className="btn btn-primary h-10 w-10 min-h-[44px] min-w-[44px] shrink-0 rounded-full! p-0!"
           >
             {sendPending ? (
               <Loader2 className="h-4 w-4 animate-spin" />

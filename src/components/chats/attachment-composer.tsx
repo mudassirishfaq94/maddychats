@@ -247,6 +247,7 @@ export function AttachButton({
         )}
       >
         <Paperclip className="h-4.5 w-4.5" />
+        <span className="sr-only">Attach</span>
       </button>
     </>
   );
