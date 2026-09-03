@@ -428,3 +428,13 @@ html.light .chat-message-area {
     height: 2rem;
   }
 }
+
+/* PWA keyboard handling — ensure composer stays visible */
+@supports (padding: env(safe-area-inset-bottom)) {
+  /* When keyboard is open on iOS PWA, reduce bottom padding */
+  @media (display-mode: standalone) {
+    .chat-composer {
+      padding-bottom: max(env(safe-area-inset-bottom), 0.5rem);
+    }
+  }
+}
