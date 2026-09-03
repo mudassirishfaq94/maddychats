@@ -56,6 +56,9 @@ import { getPattern } from "@/lib/chat-patterns";
 import { EmojiPicker } from "./emoji-picker";
 import { AudioMessage } from "./audio-message";
 import { useVoiceRecorder } from "@/hooks/use-voice-recorder";
+import { LongPressTouchable } from "./long-press-touchable";
+import { MobileMessageMenu } from "./mobile-message-menu";
+import { ForwardDialog } from "./forward-dialog";
 
 function formatDuration(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -159,6 +162,8 @@ export function ChatView({
   const attachments = useAttachmentUpload();
   const recorder = useVoiceRecorder();
   const [showEmoji, setShowEmoji] = useState(false);
+  const [mobileMenuMsg, setMobileMenuMsg] = useState<MessageDTO | null>(null);
+  const [forwardMsg, setForwardMsg] = useState<MessageDTO | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const topSentinelRef = useRef<HTMLDivElement>(null);
@@ -539,6 +544,20 @@ export function ChatView({
     } finally {
       setSendPending(false);
     }
+  }
+
+  async function forwardMessage(conversationId: string) {
+    if (!forwardMsg) return;
+    // Forward by sending the same text to the target conversation
+    const res = await fetch(`/api/conversations/${conversationId}/messages`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        text: forwardMsg.text || "",
+        replyToMessageId: null,
+      }),
+    });
+    if (!res.ok) throw new Error("Forward failed");
   }
 
   async function toggleReaction(message: MessageDTO, emoji: string) {
@@ -1103,6 +1122,11 @@ export function ChatView({
                         </div>
                       ) : (
                         <>
+                          <LongPressTouchable
+                            onLongPress={() => {
+                              if (!deleted) setMobileMenuMsg(msg);
+                            }}
+                          >
                           <div
                             className={cn(
                               "inline-block max-w-full rounded-2xl px-3 py-2 text-left align-middle",
@@ -1305,6 +1329,7 @@ export function ChatView({
                               {own && !deleted ? <ReceiptIcon message={msg} /> : null}
                             </span>
                           </div>
+                          </LongPressTouchable>
 
                           {msg.reactions.length > 0 ? (
                             <div
@@ -1626,6 +1651,43 @@ export function ChatView({
           onClose={() => setShowDetails(false)}
         />
       ) : null}
+
+      {/* Mobile long-press context menu */}
+      <MobileMessageMenu
+        open={mobileMenuMsg !== null}
+        onClose={() => setMobileMenuMsg(null)}
+        own={mobileMenuMsg?.senderId === me.id}
+        text={mobileMenuMsg?.text ?? ""}
+        onCopy={() => {
+          if (mobileMenuMsg) copyText(mobileMenuMsg.text);
+        }}
+        onReply={() => {
+          if (mobileMenuMsg) {
+            setReplyTo(mobileMenuMsg);
+            composerRef.current?.focus();
+          }
+        }}
+        onForward={() => {
+          if (mobileMenuMsg) setForwardMsg(mobileMenuMsg);
+        }}
+        onReact={(emoji) => {
+          if (mobileMenuMsg) void toggleReaction(mobileMenuMsg, emoji);
+        }}
+        onDeleteForMe={() => {
+          if (mobileMenuMsg) void executeDelete(mobileMenuMsg.id, "for_me");
+        }}
+        onDeleteForEveryone={() => {
+          if (mobileMenuMsg) setPendingDelete({ id: mobileMenuMsg.id, mode: "for_everyone" });
+        }}
+      />
+
+      {/* Forward dialog */}
+      <ForwardDialog
+        open={forwardMsg !== null}
+        message={forwardMsg}
+        onClose={() => setForwardMsg(null)}
+        onForward={forwardMessage}
+      />
     </div>
   );
 }
