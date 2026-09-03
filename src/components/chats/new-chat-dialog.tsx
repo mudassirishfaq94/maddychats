@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, ArrowLeft, Camera, Check, Loader2, MessageCircle, Search, SquarePen, Users, X } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Camera, Check, Loader2, MessageCircle, Search, SquarePen, Users, X, UserX } from "lucide-react";
 import type { ConversationDetail, PublicUser } from "@/lib/types";
 import { Avatar } from "@/components/avatar";
 
@@ -40,7 +40,7 @@ export function NewChatDialog({ start = "choose" }: { start?: "choose" | "direct
 
   useEffect(() => {
     if (!open || (mode !== "direct" && mode !== "group-people")) return;
-    const q = query.trim(); if (q.length < 2) return;
+    const q = query.trim(); if (q.length < 1) return;
     const controller = new AbortController();
     const timer = setTimeout(async () => {
       try {
@@ -96,8 +96,48 @@ export function NewChatDialog({ start = "choose" }: { start?: "choose" | "direct
 
         {(mode === "direct" || mode === "group-people") ? <>
           {mode === "group-people" && selected.length ? <div className="mt-3 flex gap-2 overflow-x-auto pb-1">{selected.map((u) => <button type="button" key={u.id} onClick={() => setSelected((s) => s.filter((x) => x.id !== u.id))} className="flex shrink-0 flex-col items-center text-[0.65rem]"><Avatar user={u} size={34} /><span className="mt-1 max-w-14 truncate">{u.displayName}</span></button>)}</div> : null}
-          <div className="relative mt-4"><Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted)]" /><input ref={inputRef} value={query} onChange={(e) => { const value = e.target.value; setQuery(value); if (value.trim().length < 2) { setResults([]); setLoading(false); } else setLoading(true); }} placeholder="Search people…" className="field-input field-input--icon" /></div>
-          <div className="mt-3 max-h-[48vh] overflow-y-auto">{loading ? <p className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin" /></p> : <ul className="space-y-1">{results.map((person) => { const chosen = selected.some((u) => u.id === person.id); return <li key={person.id}><button type="button" disabled={starting} onClick={() => mode === "direct" ? void startDirect(person) : setSelected((s) => chosen ? s.filter((u) => u.id !== person.id) : [...s, person])} className="flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-left hover:bg-[var(--surface-2)]"><Avatar user={person} size={38} /><span className="min-w-0 flex-1"><b className="block truncate text-sm">{person.displayName}</b><small className="text-[var(--muted)]">@{person.username}</small></span>{chosen ? <Check className="h-5 w-5 text-[var(--accent-fg)]" /> : null}</button></li>; })}</ul>}</div>
+          <div className="relative mt-4"><Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted)]" /><input ref={inputRef} value={query} onChange={(e) => { const value = e.target.value; setQuery(value); setLoading(value.trim().length >= 1); }} placeholder="Search by full name…" className="field-input field-input--icon" /></div>
+          <div className="mt-3 max-h-[48vh] overflow-y-auto">
+            {loading ? (
+              <p className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin" /></p>
+            ) : query.trim().length < 1 ? (
+              <p className="py-8 text-center text-sm text-[var(--muted)]">Type a name to search for people on Maddy Chats</p>
+            ) : results.length === 0 ? (
+              <div className="flex flex-col items-center py-8">
+                <UserX className="h-8 w-8 text-[var(--muted)]" />
+                <p className="mt-2 text-sm font-medium">No users found</p>
+                <p className="mt-1 text-xs text-[var(--muted)]">Try a different name or spelling</p>
+              </div>
+            ) : (
+              <ul className="space-y-1">
+                {results.map((person) => {
+                  const chosen = selected.some((u) => u.id === person.id);
+                  return (
+                    <li key={person.id}>
+                      <button
+                        type="button"
+                        disabled={starting}
+                        onClick={() => mode === "direct" ? void startDirect(person) : setSelected((s) => chosen ? s.filter((u) => u.id !== person.id) : [...s, person])}
+                        className="flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-left hover:bg-[var(--surface-2)]"
+                      >
+                        <Avatar user={person} size={38} />
+                        <span className="min-w-0 flex-1">
+                          <b className="block truncate text-sm">{person.displayName}</b>
+                          <span className="flex items-center gap-1">
+                            <small className="text-[var(--muted)]">@{person.username}</small>
+                            {person.lastSeenAt && (
+                              <span className="inline-block h-1.5 w-1.5 rounded-full bg-green-500" title="Online" />
+                            )}
+                          </span>
+                        </span>
+                        {chosen ? <Check className="h-5 w-5 text-[var(--accent-fg)]" /> : null}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
           {mode === "group-people" ? <button type="button" disabled={!selected.length} onClick={() => setMode("group-info")} className="btn btn-primary mt-4 w-full disabled:opacity-50">Next ({selected.length})</button> : null}
         </> : null}
 

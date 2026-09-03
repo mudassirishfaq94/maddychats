@@ -149,7 +149,12 @@ export async function searchUsers(
   excludeUserId: string,
   limit = 20,
 ): Promise<UserRow[]> {
-  const pattern = `%${query}%`;
+  const trimmed = query.trim();
+  if (!trimmed) return [];
+  const pattern = `%${trimmed}%`;
+  const prefix = `${trimmed}%`;
+  // Rank results: exact match > starts-with > contains
+  // This gives the most relevant results first
   return db
     .select()
     .from(users)
@@ -162,6 +167,17 @@ export async function searchUsers(
         ),
       ),
     )
-    .orderBy(asc(users.username))
+    .orderBy(
+      sql`
+        CASE
+          WHEN lower(${users.displayName}) = lower(${trimmed}) THEN 0
+          WHEN lower(${users.displayName}) LIKE lower(${prefix}) THEN 1
+          WHEN lower(${users.username}) LIKE lower(${prefix}) THEN 2
+          WHEN lower(${users.displayName}) LIKE lower(${pattern}) THEN 3
+          ELSE 4
+        END,
+        ${users.displayName}
+      `,
+    )
     .limit(limit);
 }

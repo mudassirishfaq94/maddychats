@@ -6,7 +6,7 @@ import { AUTH_RATE_LIMIT, rateLimit } from "@/server/rate-limit";
 
 export const dynamic = "force-dynamic";
 
-const MAX_QUERY_LENGTH = 40;
+const MAX_QUERY_LENGTH = 80;
 
 /**
  * People search — case-insensitive match on username and display name.

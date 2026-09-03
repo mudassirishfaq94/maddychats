@@ -99,6 +99,13 @@
       "when": 1788465600000,
       "tag": "0013_auth_identity_uniqueness",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1788552000000,
+      "tag": "0008_search_index",
+      "breakpoints": true
     }
   ]
 }
