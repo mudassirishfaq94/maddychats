@@ -101,7 +101,7 @@ export function NotificationBell() {
         onClick={() => setOpen((v) => !v)}
         aria-label={`Notifications${unread > 0 ? ` (${unread} unread)` : ""}`}
         aria-expanded={open}
-        className="relative inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border)] text-[var(--muted)] transition-all hover:border-[var(--border-strong)] hover:text-[var(--text)]"
+        className="relative inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full border border-[var(--border)] text-[var(--muted)] transition-all hover:border-[var(--border-strong)] hover:text-[var(--text)]"
       >
         <Bell className="h-4 w-4" />
         {unread > 0 ? (

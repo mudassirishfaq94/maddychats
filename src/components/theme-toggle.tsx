@@ -74,7 +74,7 @@ export function ThemeToggle({ className }: { className?: string }) {
         aria-label="Change theme"
         aria-haspopup="menu"
         aria-expanded={open}
-        className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border)] text-[var(--muted)] transition-all duration-200 hover:text-[var(--text)] hover:border-[var(--border-strong)] hover:bg-[color-mix(in_srgb,var(--muted)_10%,transparent)]"
+        className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full border border-[var(--border)] text-[var(--muted)] transition-all duration-200 hover:text-[var(--text)] hover:border-[var(--border-strong)] hover:bg-[color-mix(in_srgb,var(--muted)_10%,transparent)]"
       >
         {theme === null ? (
           <span className="h-4 w-4" />

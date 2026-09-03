@@ -134,7 +134,7 @@ export function EmojiPicker({ onSelect, onClose }: EmojiPickerProps) {
   return (
     <div
       ref={ref}
-      className="absolute bottom-full left-0 z-50 mb-2 w-[320px] max-w-[calc(100vw-2rem)] rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-xl animate-fade-up sm:left-0"
+      className="absolute bottom-full left-0 z-50 mb-2 w-[min(320px,calc(100vw-1rem))] rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-xl animate-fade-up"
       role="dialog"
       aria-label="Emoji picker"
     >

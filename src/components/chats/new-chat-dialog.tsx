@@ -79,7 +79,7 @@ export function NewChatDialog({ start = "choose", openExternally, onExternalClos
 
   const title = mode === "choose" ? "New chat" : mode === "direct" ? "New message" : mode === "group-people" ? "Select people" : "Group info";
   return <>
-    <button type="button" onClick={() => setInternalOpen(true)} aria-label={start === "group-people" ? "New group" : "New chat"} title={start === "group-people" ? "New group" : "New chat"} className={start === "group-people" ? "btn h-9 gap-1.5 rounded-xl! px-2.5! text-xs!" : "btn btn-primary h-9 gap-1.5 rounded-xl! px-2.5! text-xs!"}>{start === "group-people" ? <Users className="h-4 w-4" /> : <SquarePen className="h-4 w-4" />}<span className="hidden sm:inline">{start === "group-people" ? "New group" : "New chat"}</span></button>
+    <button type="button" onClick={() => setInternalOpen(true)} aria-label={start === "group-people" ? "New group" : "New chat"} title={start === "group-people" ? "New group" : "New chat"} className={start === "group-people" ? "btn min-h-[44px] min-w-[44px] gap-1.5 rounded-xl! px-2.5! text-xs!" : "btn btn-primary min-h-[44px] min-w-[44px] gap-1.5 rounded-xl! px-2.5! text-xs!"}>{start === "group-people" ? <Users className="h-4 w-4" /> : <SquarePen className="h-4 w-4" />}<span className="hidden sm:inline">{start === "group-people" ? "New group" : "New chat"}</span></button>
     {open ? <div role="dialog" aria-modal="true" aria-label={title} className="dialog-backdrop pt-[6vh] animate-fade-up" onMouseDown={(e) => { if (e.target === e.currentTarget) close(); }}>
       <div className="card-glass dialog-card max-w-md rounded-3xl p-5">
         <div className="flex items-center justify-between">

@@ -100,7 +100,7 @@ export function ConversationMenu({
           setOpen((v) => !v);
         }}
         aria-label="Conversation options"
-        className="flex h-8 w-8 items-center justify-center rounded-full text-[var(--muted)] transition-colors hover:bg-[color-mix(in_srgb,var(--muted)_12%,transparent)] hover:text-[var(--text)]"
+        className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full text-[var(--muted)] transition-colors hover:bg-[color-mix(in_srgb,var(--muted)_12%,transparent)] hover:text-[var(--text)]"
       >
         {busy ? (
           <Loader2 className="h-4 w-4 animate-spin" />

@@ -842,14 +842,14 @@ export function ChatView({
   }
 
   return (
-    <div className="flex h-full w-full min-w-0 overflow-hidden overflow-x-hidden pb-[56px] sm:pb-0">
+    <div className="flex h-full w-full min-w-0 overflow-hidden overflow-x-hidden">
       <div className="flex min-w-0 flex-1 flex-col">
       {/* ------------------------------ header ------------------------------ */}
       <header className="flex h-14 min-w-0 items-center gap-2 border-b border-[var(--border)] bg-[var(--surface)] px-2 sm:gap-3 sm:px-4">
         <Link
           href="/app/chats"
           aria-label="Back to chats"
-          className="flex h-8 w-8 items-center justify-center rounded-full text-[var(--muted)] transition-colors hover:bg-[color-mix(in_srgb,var(--muted)_12%,transparent)] hover:text-[var(--text)] lg:hidden"
+          className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full text-[var(--muted)] transition-colors hover:bg-[color-mix(in_srgb,var(--muted)_12%,transparent)] hover:text-[var(--text)] lg:hidden"
         >
           <ChevronLeft className="h-5 w-5" />
         </Link>
@@ -906,13 +906,13 @@ export function ChatView({
           onClick={() => setShowDetails((v) => !v)}
           aria-label="Chat details"
           className={cn(
-            "flex h-9 w-9 items-center justify-center rounded-full transition-colors",
+            "flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full transition-colors",
             showDetails
               ? "bg-[var(--accent-soft)] text-[var(--accent-fg)]"
               : "text-[var(--muted)] hover:bg-[color-mix(in_srgb,var(--muted)_12%,transparent)] hover:text-[var(--text)]",
           )}
         >
-          <Info className="h-4 w-4" />
+          <Info className="h-5 w-5" />
         </button>
 
       </header>

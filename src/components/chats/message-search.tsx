@@ -91,7 +91,7 @@ export function MessageSearch() {
         onClick={() => setOpen(true)}
         aria-label="Search messages"
         title="Search messages"
-        className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border)] text-[var(--muted)] transition-all hover:border-[var(--border-strong)] hover:text-[var(--text)]"
+        className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full border border-[var(--border)] text-[var(--muted)] transition-all hover:border-[var(--border-strong)] hover:text-[var(--text)]"
       >
         <Search className="h-4 w-4" />
       </button>
