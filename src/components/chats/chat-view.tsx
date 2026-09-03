@@ -1492,11 +1492,14 @@ export function ChatView({
               <>
                 {/* Recorded — preview */}
                 {recorder.audioUrl ? (
-                  <audio src={recorder.audioUrl} controls className="h-9 flex-1" preload="metadata" />
+                  <div className="min-w-0 flex-1">
+                    <AudioMessage
+                      src={recorder.audioUrl}
+                      own={false}
+                      duration={recorder.duration}
+                    />
+                  </div>
                 ) : null}
-                <span className="text-sm tabular-nums text-[var(--muted)]">
-                  {formatDuration(recorder.duration)}
-                </span>
                 <button
                   type="button"
                   onClick={() => recorder.clearRecording()}
