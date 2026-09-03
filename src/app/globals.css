@@ -121,6 +121,20 @@ body {
   word-break: break-word;
 }
 
+/* Original Maddy Chats doodles, scoped to the conversation canvas only. */
+.chat-message-area {
+  background-image: url("/patterns/maddy-doodles-dark.svg");
+  background-repeat: repeat;
+  background-position: center top;
+  background-size: clamp(290px, 34vw, 360px) auto;
+  /* The pattern stays anchored to the canvas while its messages scroll. */
+  background-attachment: scroll;
+}
+
+html.light .chat-message-area {
+  background-image: url("/patterns/maddy-doodles-light.svg");
+}
+
 ::selection {
   background: var(--accent-soft);
   color: var(--text);

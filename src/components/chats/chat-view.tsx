@@ -993,7 +993,7 @@ export function ChatView({
           }
         }}
         className={cn(
-          "relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 py-4 sm:px-6",
+          "chat-message-area relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 py-4 sm:px-6",
           dragging && "outline-2 outline-dashed outline-offset-[-10px] outline-[var(--accent)]",
         )}
         style={bgStyle}
