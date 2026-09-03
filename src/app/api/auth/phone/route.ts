@@ -5,7 +5,6 @@ import { db } from "@/db";
 import { notificationPreferences, oauthAccounts, users } from "@/db/schema";
 import { phoneAuthExchangeSchema } from "@/lib/schemas";
 import { SESSION_COOKIE } from "@/server/config";
-import { verifyFirebaseIdToken } from "@/server/firebase-admin";
 import { clientIp, guardSameOrigin, jsonError, readJson, requestIsSecure } from "@/server/http";
 import { hashPassword } from "@/server/password";
 import { AUTH_RATE_LIMIT, rateLimit } from "@/server/rate-limit";
@@ -72,6 +71,15 @@ export async function POST(req: NextRequest) {
 
   let identity;
   try {
+    const missingAdminVariables = [
+      "FIREBASE_PROJECT_ID",
+      "FIREBASE_CLIENT_EMAIL",
+      "FIREBASE_PRIVATE_KEY",
+    ].filter((name) => !process.env[name]?.trim());
+    if (missingAdminVariables.length) {
+      return jsonError(503, `Phone sign-in server configuration is missing: ${missingAdminVariables.join(", ")}.`);
+    }
+    const { verifyFirebaseIdToken } = await import("@/server/firebase-admin");
     identity = await verifyFirebaseIdToken(parsed.data.idToken);
     if (
       !identity.phoneNumber ||

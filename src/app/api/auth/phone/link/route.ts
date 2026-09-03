@@ -3,7 +3,6 @@ import { NextRequest } from "next/server";
 import { db } from "@/db";
 import { oauthAccounts } from "@/db/schema";
 import { phoneAuthExchangeSchema } from "@/lib/schemas";
-import { verifyFirebaseIdToken } from "@/server/firebase-admin";
 import { guardSameOrigin, jsonError, readJson } from "@/server/http";
 import { getSessionUser } from "@/server/session";
 
@@ -24,6 +23,15 @@ export async function POST(req: NextRequest) {
 
   let identity;
   try {
+    const missingAdminVariables = [
+      "FIREBASE_PROJECT_ID",
+      "FIREBASE_CLIENT_EMAIL",
+      "FIREBASE_PRIVATE_KEY",
+    ].filter((name) => !process.env[name]?.trim());
+    if (missingAdminVariables.length) {
+      return jsonError(503, `Phone authentication server configuration is missing: ${missingAdminVariables.join(", ")}.`);
+    }
+    const { verifyFirebaseIdToken } = await import("@/server/firebase-admin");
     identity = await verifyFirebaseIdToken(parsed.data.idToken);
     if (!identity.phoneNumber || identity.decodedToken.firebase.sign_in_provider !== "phone") {
       return jsonError(401, "A verified Firebase phone identity is required.");
