@@ -1416,6 +1416,7 @@ export function ChatView({
                               }}
                               onReact={(emoji) => void toggleReaction(msg, emoji)}
                               onCopy={() => copyText(msg.text)}
+                              onForward={() => setForwardMsg(msg)}
                               onEdit={() => {
                                 setEditingId(msg.id);
                                 setEditDraft(msg.text);

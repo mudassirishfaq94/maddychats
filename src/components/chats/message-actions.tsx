@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   Check,
   Copy,
+  Forward,
   MoreHorizontal,
   Pencil,
   Pin,
@@ -30,6 +31,7 @@ export function MessageActions({
   onReply,
   onReact,
   onCopy,
+  onForward,
   onEdit,
   onStar,
   onUnstar,
@@ -46,6 +48,7 @@ export function MessageActions({
   onReply: () => void;
   onReact: (emoji: string) => void;
   onCopy: () => void;
+  onForward: () => void;
   onEdit: () => void;
   onStar: () => void;
   onUnstar: () => void;
@@ -193,6 +196,18 @@ export function MessageActions({
                 <Pin className="h-3.5 w-3.5" />
               )}
               {pinned ? "Unpin" : "Pin"}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                onForward();
+                setMenuOpen(false);
+              }}
+              className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-xs text-[var(--muted)] transition-colors hover:bg-[color-mix(in_srgb,var(--muted)_10%,transparent)] hover:text-[var(--text)]"
+            >
+              <Forward className="h-3.5 w-3.5" />
+              Forward
             </button>
 
             <button
