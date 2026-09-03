@@ -408,3 +408,23 @@ html.light .chat-message-area {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Landscape mode optimizations */
+@media (orientation: landscape) and (max-height: 500px) {
+  /* Reduce header height in landscape */
+  .chat-header {
+    height: 3rem;
+  }
+
+  /* Reduce composer padding in landscape */
+  .chat-composer {
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
+  }
+
+  /* Smaller avatars in landscape */
+  .chat-avatar {
+    width: 2rem;
+    height: 2rem;
+  }
+}

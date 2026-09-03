@@ -109,6 +109,7 @@ export const sendMessageSchema = z.object({
     .min(1, "Message cannot be empty")
     .max(MAX_MESSAGE_LENGTH, "Message must be 2000 characters or fewer"),
   replyToMessageId: z.uuid("Invalid message id").nullish(),
+  forwarded: z.boolean().optional().default(false),
 });
 
 export const editMessageSchema = z.object({

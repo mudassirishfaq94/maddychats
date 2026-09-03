@@ -110,6 +110,7 @@ export async function POST(
     me.id,
     parsed.data.text,
     parsed.data.replyToMessageId ?? null,
+    parsed.data.forwarded,
   );
 
   // Recipient already connected → the message is delivered on arrival.

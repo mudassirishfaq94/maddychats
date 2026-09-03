@@ -52,9 +52,15 @@ async function generateWaveformFromUrl(url: string): Promise<number[]> {
     const blob = await response.blob();
     return generateWaveformFromBlob(blob);
   } catch {
+    // Improved fallback: generate a more realistic-looking waveform
+    // using multiple sine waves at different frequencies
     return Array.from({ length: BAR_COUNT }, (_, i) => {
       const x = i / BAR_COUNT;
-      return 0.3 + 0.7 * Math.abs(Math.sin(x * 7 + 1.3) * Math.cos(x * 3.7));
+      const wave1 = Math.sin(x * 12 + 0.5) * 0.3;
+      const wave2 = Math.sin(x * 7.3 + 1.2) * 0.25;
+      const wave3 = Math.sin(x * 19.1 + 2.1) * 0.15;
+      const envelope = Math.sin(x * Math.PI); // bell curve envelope
+      return Math.max(0.15, Math.min(1, (0.4 + wave1 + wave2 + wave3) * envelope + 0.2));
     });
   }
 }

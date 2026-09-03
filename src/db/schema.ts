@@ -217,6 +217,8 @@ export const messages = pgTable(
       (): AnyPgColumn => messages.id,
       { onDelete: "set null" },
     ),
+    /** Whether this message was forwarded from another conversation. */
+    forwarded: boolean("forwarded").default(false).notNull(),
     /** Set once any other member is connected — powers the "Delivered" tick. */
     deliveredAt: timestamp("delivered_at", { withTimezone: true, mode: "date" }),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" })

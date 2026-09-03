@@ -553,13 +553,13 @@ export function ChatView({
 
   async function forwardMessage(conversationId: string) {
     if (!forwardMsg) return;
-    // Forward by sending the same text to the target conversation
     const res = await fetch(`/api/conversations/${conversationId}/messages`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         text: forwardMsg.text || "",
         replyToMessageId: null,
+        forwarded: true,
       }),
     });
     if (!res.ok) throw new Error("Forward failed");
@@ -1144,6 +1144,11 @@ export function ChatView({
                                 : undefined
                             }
                           >
+                            {msg.forwarded ? (
+                              <span className="mb-1 block text-[0.6rem] font-medium italic text-[var(--muted)] opacity-70">
+                                Forwarded
+                              </span>
+                            ) : null}
                             {msg.replyTo ? (
                               <button
                                 type="button"

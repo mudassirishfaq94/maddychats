@@ -82,6 +82,7 @@ function baseDTO(row: MessageRow, sender: UserRow): MessageDTO {
     starred: false,
     deletedForMe: false,
     pinned: false,
+    forwarded: Boolean(row.forwarded),
   };
 }
 
@@ -700,6 +701,7 @@ export async function createMessage(
   senderId: string,
   text: string,
   replyToMessageId?: string | null,
+  forwarded = false,
 ): Promise<MessageDTO> {
   // A reply target must belong to the same conversation.
   let replyId: string | null = null;
@@ -727,6 +729,7 @@ export async function createMessage(
         text,
         type: "text",
         replyToMessageId: replyId,
+        forwarded,
       })
       .returning();
     await tx

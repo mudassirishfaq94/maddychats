@@ -103,6 +103,8 @@ export interface MessageDTO {
   deletedForMe: boolean;
   /** Conversation-level state: whether the message is pinned. */
   pinned: boolean;
+  /** Whether this message was forwarded from another conversation. */
+  forwarded: boolean;
 }
 
 export interface ConversationSummary {
