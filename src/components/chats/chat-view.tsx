@@ -14,6 +14,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import type * as React from "react";
 import {
   AlertTriangle,
+  ArrowDown,
   ArrowUp,
   Ban,
   Check,
@@ -170,6 +171,7 @@ export function ChatView({
   const topSentinelRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const nearBottomRef = useRef(true);
+  const [showScrollDown, setShowScrollDown] = useState(false);
   const initialScrollDone = useRef(false);
   const nodeRefs = useRef(new Map<string, HTMLDivElement | null>());
   const typingActiveRef = useRef(false);
@@ -360,8 +362,10 @@ export function ChatView({
   function onScroll() {
     const el = scrollRef.current;
     if (!el) return;
-    nearBottomRef.current =
+    const isNearBottom =
       el.scrollHeight - el.scrollTop - el.clientHeight < NEAR_BOTTOM_PX;
+    nearBottomRef.current = isNearBottom;
+    setShowScrollDown(!isNearBottom);
   }
 
   function jumpTo(messageId: string) {
@@ -1051,12 +1055,10 @@ export function ChatView({
                   }}
                 >
                   {showDate ? (
-                    <div className="my-4 flex items-center gap-4">
-                      <span className="h-px flex-1 bg-[var(--border)]" />
-                      <span className="text-[0.66rem] font-medium text-[var(--muted)]">
+                    <div className="my-4 flex justify-center">
+                      <span className="rounded-full bg-[color-mix(in_srgb,var(--muted)_12%,transparent)] px-3 py-1 text-[0.66rem] font-medium text-[var(--muted)]">
                         {dayLabel(msg.createdAt)}
                       </span>
-                      <span className="h-px flex-1 bg-[var(--border)]" />
                     </div>
                   ) : null}
 
@@ -1077,7 +1079,7 @@ export function ChatView({
 
                     <div
                       className={cn(
-                        "relative max-w-[80%] sm:max-w-[70%]",
+                        "relative max-w-[85%] sm:max-w-[65%] md:max-w-[55%]",
                         own ? "text-right" : "text-left",
                       )}
                     >
@@ -1320,15 +1322,17 @@ export function ChatView({
 
                             <span
                               className={cn(
-                                "mt-0.5 flex items-center gap-1 text-[0.64rem]",
+                                "mt-0.5 flex items-center gap-0.5 text-[0.62rem] tabular-nums",
                                 own
                                   ? "justify-end text-[var(--bubble-own-sub)]"
                                   : "text-[var(--muted)]",
                               )}
                             >
-                              {msg.editedAt && !deleted ? "edited · " : ""}
-                              {timeLabel(msg.createdAt)}
-                              {msg.starred ? <Star className="h-3 w-3 fill-current text-[var(--accent-fg)]" /> : null}
+                              {msg.editedAt && !deleted ? (
+                                <span className="text-[0.58rem] italic opacity-70">edited</span>
+                              ) : null}
+                              <span>{timeLabel(msg.createdAt)}</span>
+                              {msg.starred ? <Star className="h-2.5 w-2.5 fill-current text-[var(--accent-fg)]" /> : null}
                               {own && !deleted ? <ReceiptIcon message={msg} /> : null}
                             </span>
                           </div>
@@ -1337,7 +1341,7 @@ export function ChatView({
                           {msg.reactions.length > 0 ? (
                             <div
                               className={cn(
-                                "mt-1 flex flex-wrap gap-1",
+                                "mt-1 flex flex-wrap gap-0.5",
                                 own ? "justify-end" : "justify-start",
                               )}
                             >
@@ -1346,18 +1350,20 @@ export function ChatView({
                                   key={r.emoji}
                                   type="button"
                                   onClick={() => void toggleReaction(msg, r.emoji)}
-                                  title={r.mine ? "Remove your reaction" : "React"}
+                                  aria-label={`${r.emoji} reaction, ${r.count}${r.mine ? ", yours" : ""}`}
                                   className={cn(
-                                    "flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs transition-transform duration-150 hover:scale-105",
+                                    "flex items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-[0.7rem] transition-transform duration-150 hover:scale-105",
                                     r.mine
                                       ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-fg)]"
                                       : "border-[var(--border)] bg-[var(--surface)] text-[var(--muted)]",
                                   )}
                                 >
-                                  <span>{r.emoji}</span>
-                                  <span className="tabular-nums font-semibold">
-                                    {r.count}
-                                  </span>
+                                  <span className="leading-none">{r.emoji}</span>
+                                  {r.count > 1 ? (
+                                    <span className="tabular-nums font-semibold leading-none">
+                                      {r.count}
+                                    </span>
+                                  ) : null}
                                 </button>
                               ))}
                             </div>
@@ -1426,6 +1432,21 @@ export function ChatView({
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {/* Scroll to bottom button */}
+        {showScrollDown && (
+          <div className="sticky bottom-2 z-20 flex justify-center pb-2">
+            <button
+              type="button"
+              onClick={() => scrollToBottom(true)}
+              aria-label="Scroll to latest messages"
+              className="flex h-9 items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-[var(--muted)] shadow-md transition-colors hover:bg-[var(--surface-2)] hover:text-[var(--text)]"
+            >
+              <ArrowDown className="h-3.5 w-3.5" />
+              New messages
+            </button>
           </div>
         )}
 
