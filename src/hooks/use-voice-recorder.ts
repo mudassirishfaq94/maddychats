@@ -68,10 +68,12 @@ export function useVoiceRecorder(): UseVoiceRecorderReturn {
         const permissionStatus = await navigator.permissions.query({ name: "microphone" as PermissionName });
         if (permissionStatus.state === "denied") {
           setError(
-            "Microphone access was previously denied and is now blocked. To fix this:\n" +
-            "\n1. Click the lock icon (🔒) in your browser's address bar\n" +
-            "2. Find 'Microphone' and set it to 'Allow'\n" +
-            "3. Refresh the page and try again"
+            "Microphone access was previously denied and is now blocked.\n\n" +
+            "To fix this, open Chrome settings:\n" +
+            "\n1. Type this in your address bar: chrome://settings/content/microphone\n" +
+            "2. Find 'maddychats.vercel.app' under 'Blocked'\n" +
+            "3. Click the trash icon (🗑️) to remove it\n" +
+            "4. Come back here and click 'Try again'"
           );
           return;
         }
@@ -135,10 +137,10 @@ export function useVoiceRecorder(): UseVoiceRecorderReturn {
       console.error("[voice-recorder] Error:", name, message, err);
       if (name === "NotAllowedError" || name === "PermissionDeniedError") {
         setError(
-          "Microphone access denied. To fix this:\n" +
-          "\n1. Click the lock icon (🔒) or microphone icon in your browser's address bar\n" +
-          "2. Set Microphone to 'Allow'\n" +
-          "3. Refresh the page and try again"
+          "Microphone access denied. To fix this:\n\n" +
+          "1. Type this in your address bar: chrome://settings/content/microphone\n" +
+          "2. Find this site under 'Blocked' and remove it\n" +
+          "3. Come back here and click 'Try again'"
         );
       } else if (name === "NotFoundError" || name === "DevicesNotFoundError") {
         setError("No microphone found. Please connect a microphone and try again.");
