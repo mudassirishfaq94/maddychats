@@ -5,7 +5,7 @@ import { db } from "@/db";
 import { notificationPreferences, oauthAccounts, users } from "@/db/schema";
 import { phoneAuthExchangeSchema } from "@/lib/schemas";
 import { SESSION_COOKIE } from "@/server/config";
-import { verifyFirebasePhoneToken } from "@/server/firebase-token";
+import { verifyFirebasePhoneToken } from "@/server/firebase-admin";
 import { clientIp, guardSameOrigin, jsonError, readJson, requestIsSecure } from "@/server/http";
 import { hashPassword } from "@/server/password";
 import { AUTH_RATE_LIMIT, rateLimit } from "@/server/rate-limit";

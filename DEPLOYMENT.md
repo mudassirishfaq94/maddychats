@@ -66,8 +66,8 @@ Authorized domains**. Add the six `NEXT_PUBLIC_FIREBASE_*` Web app values from
 Firebase project settings and add `FIREBASE_PROJECT_ID` for server-side ID
 token verification.
 
-The browser uses Firebase only for reCAPTCHA and SMS verification. The server
-verifies the resulting Firebase ID token and issues the existing HttpOnly
+The browser uses Firebase only for reCAPTCHA and SMS verification. Firebase
+Admin verifies the resulting Firebase ID token and the server issues the existing HttpOnly
 Maddy Chats session. OTP values are never sent to or stored in Neon.
 
 Deploy, visit `/api/health`, and test two accounts, messages, reactions,
