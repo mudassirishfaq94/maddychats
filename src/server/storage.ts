@@ -87,8 +87,16 @@ const DOCUMENT_TYPES: Record<string, string[]> = {
   "application/vnd.openxmlformats-officedocument.presentationml.presentation": [
     ".pptx",
   ],
+};
+
+const AUDIO_TYPES: Record<string, string[]> = {
   "audio/mpeg": [".mp3"],
   "audio/wav": [".wav"],
+  "audio/webm": [".webm"],
+  "audio/ogg": [".ogg"],
+  "audio/mp4": [".m4a"],
+  "audio/aac": [".aac"],
+  "audio/x-m4a": [".m4a"],
 };
 
 /** Extensions that must never be accepted, whatever MIME type is claimed. */
@@ -101,7 +109,7 @@ const BLOCKED_EXTENSIONS = new Set([
 
 export interface ValidationOk {
   ok: true;
-  kind: "image" | "video" | "file";
+  kind: "image" | "video" | "file" | "audio";
   extension: string;
   safeName: string;
 }
@@ -157,6 +165,7 @@ export function validateUpload(
   const type = mimeType.split(";")[0].trim().toLowerCase();
   const isImage = Object.prototype.hasOwnProperty.call(IMAGE_TYPES, type);
   const isDoc = Object.prototype.hasOwnProperty.call(DOCUMENT_TYPES, type);
+  const isAudio = Object.prototype.hasOwnProperty.call(AUDIO_TYPES, type);
   const isVideo = type.startsWith("video/");
 
   if (mode === "avatar") {
@@ -175,7 +184,7 @@ export function validateUpload(
     return { ok: true, kind: "image", extension, safeName };
   }
 
-  if (!isImage && !isDoc && !isVideo) {
+  if (!isImage && !isDoc && !isVideo && !isAudio) {
     return { ok: false, error: "That file type is not supported." };
   }
 
@@ -187,6 +196,17 @@ export function validateUpload(
       return { ok: false, error: `That file is too large (max ${Math.round(LIMITS.image / 1024 / 1024)} MB).` };
     }
     return { ok: true, kind: "image", extension, safeName };
+  }
+
+  if (isAudio) {
+    const allowed = AUDIO_TYPES[type];
+    if (!allowed || !allowed.includes(extension)) {
+      return { ok: false, error: "File extension does not match its content type." };
+    }
+    if (size > LIMITS.file) {
+      return { ok: false, error: `That audio is too large (max ${Math.round(LIMITS.file / 1024 / 1024)} MB).` };
+    }
+    return { ok: true, kind: "audio", extension, safeName };
   }
 
   if (isVideo) {

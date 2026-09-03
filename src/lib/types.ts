@@ -62,7 +62,7 @@ export interface AttachmentDTO {
   originalName: string;
   mimeType: string;
   size: number;
-  kind: "image" | "video" | "file";
+  kind: "image" | "video" | "file" | "audio";
   /** Authenticated media endpoint — never a raw filesystem path. */
   url: string;
 }

@@ -21,15 +21,20 @@ import {
   ChevronLeft,
   Info,
   Loader2,
+  Mic,
   Pin,
   Reply as ReplyIcon,
+  SmilePlus,
   Star,
   Send,
   ShieldCheck,
+  StopCircle,
+  Trash2,
   Users,
   X,
   Image as ImageIcon,
   Play,
+  Pause,
   Type,
   MessageSquare,
   Quote,
@@ -48,6 +53,15 @@ import {
 } from "./attachment-composer";
 import { cn, formatDate, timeAgo, initials, avatarHue } from "@/lib/utils";
 import { getPattern } from "@/lib/chat-patterns";
+import { EmojiPicker } from "./emoji-picker";
+import { AudioMessage } from "./audio-message";
+import { useVoiceRecorder } from "@/hooks/use-voice-recorder";
+
+function formatDuration(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
 
 const NEAR_BOTTOM_PX = 140;
 
@@ -143,6 +157,8 @@ export function ChatView({
   const [requestAccepted, setRequestAccepted] = useState(!conversation.requestPending);
   const [acceptingRequest, setAcceptingRequest] = useState(false);
   const attachments = useAttachmentUpload();
+  const recorder = useVoiceRecorder();
+  const [showEmoji, setShowEmoji] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const topSentinelRef = useRef<HTMLDivElement>(null);
@@ -480,6 +496,48 @@ export function ChatView({
     } finally {
       setSendPending(false);
       composerRef.current?.focus();
+    }
+  }
+
+  async function sendVoiceMessage() {
+    if (!recorder.audioBlob || sendPending) return;
+    setSendPending(true);
+    setError(null);
+    try {
+      const ext = recorder.audioBlob.type.includes("webm") ? ".webm" : ".ogg";
+      const file = new File([recorder.audioBlob], `voice${ext}`, {
+        type: recorder.audioBlob.type,
+      });
+      const form = new FormData();
+      form.append("conversationId", conversationId);
+      form.append("files", file, file.name);
+      if (replyTo?.id) form.append("replyToMessageId", replyTo.id);
+
+      const res = await fetch("/api/upload/message", {
+        method: "POST",
+        body: form,
+      });
+      const data = (await res.json().catch(() => null)) as {
+        message?: MessageDTO;
+        error?: string;
+      } | null;
+      if (!res.ok || !data?.message) {
+        setError(data?.error ?? "Voice message failed to send.");
+        return;
+      }
+      const created = data.message;
+      setItems((prev) =>
+        prev.some((m) => m.id === created.id) ? prev : [...prev, created],
+      );
+      setReplyTo(null);
+      recorder.clearRecording();
+      nearBottomRef.current = true;
+      scrollToBottom(true);
+      router.refresh();
+    } catch {
+      setError("Network error. Voice message was not sent.");
+    } finally {
+      setSendPending(false);
     }
   }
 
@@ -1155,7 +1213,14 @@ export function ChatView({
                               </span>
                             ) : (
                               <>
-                                {msg.attachments.length > 0 ? (
+                                {msg.type === "audio" && msg.attachments.length > 0 ? (
+                                  <div className="mb-1.5 min-w-[220px]">
+                                    <AudioMessage
+                                      src={msg.attachments[0].url}
+                                      own={own}
+                                    />
+                                  </div>
+                                ) : msg.attachments.length > 0 ? (
                                   <div className={cn(msg.text && "mb-1.5")}>
                                     <AttachmentList
                                       attachments={msg.attachments}
@@ -1353,7 +1418,14 @@ export function ChatView({
 
       {/* ------------------------------ composer ------------------------------ */}
       <form
-        onSubmit={send}
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (recorder.state === "recorded" && recorder.audioBlob) {
+            void sendVoiceMessage();
+          } else {
+            void send(e);
+          }
+        }}
         className="flex shrink-0 flex-col border-t border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 sm:px-4"
       >
         {replyTo ? (
@@ -1388,48 +1460,144 @@ export function ChatView({
 
         {mentionOptions.length ? <div className="mb-2 max-h-48 overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--card)] p-1.5 shadow-lg">{mentionOptions.map((member) => <button key={member.id} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => insertMention(member.username)} className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left hover:bg-[var(--surface-2)]"><Avatar user={member} size={28} /><span className="min-w-0"><b className="block truncate text-xs">{member.displayName}</b><small className="text-[var(--muted)]">@{member.username}</small></span></button>)}</div> : null}
 
-        <div className="flex items-end gap-2">
-          <AttachButton
-            onFiles={(files) => attachments.addFiles(files)}
-            disabled={sendPending || !requestAccepted}
-          />
-          <div className="min-w-0 flex-1 rounded-2xl bg-[var(--input-bg)] px-3.5">
-            <textarea
-              ref={composerRef}
-              value={draft}
-              onChange={(e) => {
-                setDraft(e.target.value);
-                growComposer();
-                if (e.target.value.trim()) noteTyping();
-                else signalTyping(false);
-              }}
-              onBlur={() => signalTyping(false)}
-              onKeyDown={onComposerKey}
-              placeholder={requestAccepted ? "Message…" : "Accept this request to reply"}
-              disabled={!requestAccepted}
-              aria-label="Message text"
-              rows={1}
-              maxLength={2000}
-              className="w-full resize-none bg-transparent py-2.5 text-[0.93rem] outline-none placeholder:text-[color-mix(in_srgb,var(--muted)_60%,transparent)]"
-            />
-          </div>
-          <button
-            type="submit"
-            disabled={
-              !requestAccepted ||
-              (!draft.trim() && attachments.pending.length === 0) ||
-              sendPending
-            }
-            aria-label="Send message"
-            className="btn btn-primary h-10 w-10 min-h-[44px] min-w-[44px] shrink-0 rounded-full! p-0!"
-          >
-            {sendPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
+        {/* Voice recording UI */}
+        {recorder.state !== "idle" ? (
+          <div className="mb-2 flex items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--card-2)] px-4 py-3">
+            {recorder.state === "recording" ? (
+              <>
+                <span className="flex h-3 w-3 animate-pulse rounded-full bg-red-500" />
+                <span className="flex-1 text-sm font-medium">
+                  Recording {formatDuration(recorder.duration)}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    recorder.cancelRecording();
+                  }}
+                  className="flex h-9 items-center gap-1.5 rounded-xl px-3 text-sm text-[var(--muted)] hover:bg-[var(--surface-2)]"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  <span className="hidden sm:inline">Cancel</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => recorder.stopRecording()}
+                  className="flex h-10 w-10 items-center justify-center rounded-full bg-red-500 text-white transition-transform active:scale-95"
+                  aria-label="Stop recording"
+                >
+                  <StopCircle className="h-5 w-5" />
+                </button>
+              </>
             ) : (
-              <Send className="h-4 w-4" />
+              <>
+                {/* Recorded — preview */}
+                {recorder.audioUrl ? (
+                  <audio src={recorder.audioUrl} controls className="h-9 flex-1" preload="metadata" />
+                ) : null}
+                <span className="text-sm tabular-nums text-[var(--muted)]">
+                  {formatDuration(recorder.duration)}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => recorder.clearRecording()}
+                  className="flex h-9 items-center gap-1.5 rounded-xl px-3 text-sm text-[var(--muted)] hover:bg-[var(--surface-2)]"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  <span className="hidden sm:inline">Delete</span>
+                </button>
+                <button
+                  type="submit"
+                  disabled={sendPending}
+                  className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--accent)] text-white transition-transform active:scale-95"
+                  aria-label="Send voice message"
+                >
+                  {sendPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Send className="h-4 w-4" />
+                  )}
+                </button>
+              </>
             )}
-          </button>
-        </div>
+          </div>
+        ) : (
+          <div className="flex items-end gap-2">
+            {/* Emoji button */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setShowEmoji((v) => !v)}
+                aria-label="Emoji"
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-[var(--border)] text-[var(--muted)] transition-colors hover:border-[var(--border-strong)] hover:text-[var(--text)]"
+              >
+                <SmilePlus className="h-4.5 w-4.5" />
+                <span className="sr-only">Emoji</span>
+              </button>
+              {showEmoji ? (
+                <EmojiPicker
+                  onSelect={(emoji) => {
+                    setDraft((prev) => prev + emoji);
+                    composerRef.current?.focus();
+                  }}
+                  onClose={() => setShowEmoji(false)}
+                />
+              ) : null}
+            </div>
+
+            <AttachButton
+              onFiles={(files) => attachments.addFiles(files)}
+              disabled={sendPending || !requestAccepted}
+            />
+            <div className="min-w-0 flex-1 rounded-2xl bg-[var(--input-bg)] px-3.5">
+              <textarea
+                ref={composerRef}
+                value={draft}
+                onChange={(e) => {
+                  setDraft(e.target.value);
+                  growComposer();
+                  if (e.target.value.trim()) noteTyping();
+                  else signalTyping(false);
+                }}
+                onBlur={() => signalTyping(false)}
+                onKeyDown={onComposerKey}
+                placeholder={requestAccepted ? "Message…" : "Accept this request to reply"}
+                disabled={!requestAccepted}
+                aria-label="Message text"
+                rows={1}
+                maxLength={2000}
+                className="w-full resize-none bg-transparent py-2.5 text-[0.93rem] outline-none placeholder:text-[color-mix(in_srgb,var(--muted)_60%,transparent)]"
+              />
+            </div>
+            {draft.trim() || attachments.pending.length > 0 ? (
+              <button
+                type="submit"
+                disabled={sendPending || !requestAccepted}
+                aria-label="Send message"
+                className="btn btn-primary h-10 w-10 min-h-[44px] min-w-[44px] shrink-0 rounded-full! p-0!"
+              >
+                {sendPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Send className="h-4 w-4" />
+                )}
+              </button>
+            ) : (
+              <button
+                type="button"
+                disabled={!requestAccepted}
+                onClick={() => void recorder.startRecording()}
+                aria-label="Record voice message"
+                className="flex h-10 w-10 min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-full border border-[var(--border)] text-[var(--muted)] transition-colors hover:border-[var(--border-strong)] hover:text-[var(--text)] disabled:opacity-50"
+              >
+                <Mic className="h-4.5 w-4.5" />
+                <span className="sr-only">Record voice message</span>
+              </button>
+            )}
+          </div>
+        )}
+        {recorder.error ? (
+          <p className="mt-1.5 text-xs text-[var(--danger)]">{recorder.error}</p>
+        ) : null}
       </form>
       </div>
 

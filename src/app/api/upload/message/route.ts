@@ -92,7 +92,7 @@ export async function POST(req: NextRequest) {
   const prepared: {
     file: File;
     storedName: string;
-    kind: "image" | "video" | "file";
+    kind: "image" | "video" | "file" | "audio";
     safeName: string;
   }[] = [];
   for (const file of entries) {
@@ -128,11 +128,13 @@ export async function POST(req: NextRequest) {
 
   const written: string[] = [];
   try {
-    const messageType = prepared.every((p) => p.kind === "image")
+    const messageType: string = prepared.every((p) => p.kind === "image")
       ? "image"
       : prepared.every((p) => p.kind === "video")
         ? "video"
-        : "file";
+        : prepared.every((p) => p.kind === "audio")
+          ? "audio"
+          : "file";
 
     const created = await db.transaction(async (tx) => {
       const now = new Date();
@@ -154,6 +156,7 @@ export async function POST(req: NextRequest) {
         if (buffer.byteLength > limit) throw new Error("too_large");
 
         const bucket = item.kind === "image" ? "images" : "files";
+        const attachmentKind: string = item.kind === "audio" ? "audio" : item.kind;
         const relative = await saveBuffer(bucket, item.storedName, buffer);
         written.push(relative);
 
@@ -164,7 +167,7 @@ export async function POST(req: NextRequest) {
           mimeType: item.file.type,
           size: buffer.byteLength,
           path: relative,
-          kind: item.kind,
+          kind: attachmentKind,
         });
       }
 
