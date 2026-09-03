@@ -53,6 +53,33 @@ export function useGlobalAudioPlayer() {
 }
 
 /**
+ * MediaRecorder WebM files do not always contain a seekable duration header.
+ * Decode the samples to get the authoritative duration instead of using the
+ * common "seek very far" workaround, which can produce bogus multi-minute
+ * durations for recordings that are only a few seconds long.
+ */
+async function decodeAudioDuration(src: string, signal: AbortSignal): Promise<number> {
+  const response = await fetch(src, { signal });
+  if (!response.ok) throw new Error("Audio could not be loaded");
+  const data = await response.arrayBuffer();
+  if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+
+  const AudioContextClass = window.AudioContext ??
+    (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  if (!AudioContextClass) return 0;
+
+  const context = new AudioContextClass();
+  try {
+    const decoded = await context.decodeAudioData(data);
+    return Number.isFinite(decoded.duration) && decoded.duration > 0
+      ? decoded.duration
+      : 0;
+  } finally {
+    await context.close();
+  }
+}
+
+/**
  * Hook for an individual voice message to manage its playback.
  */
 export function useVoicePlayback(voiceId: string, src: string) {
@@ -62,32 +89,27 @@ export function useVoicePlayback(voiceId: string, src: string) {
   const [duration, setDuration] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
-  const recoveringRef = useRef(false);
 
   // Create audio element once
   useEffect(() => {
+    const controller = new AbortController();
+    let decodedDurationResolved = false;
     const audio = new Audio();
     audio.preload = "metadata";
     audio.src = src;
     audioRef.current = audio;
 
     const readDuration = () => {
+      if (decodedDurationResolved) return;
       const d = Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : 0;
-      if (d) {
-        setDuration(d);
-        if (recoveringRef.current) {
-          recoveringRef.current = false;
-          audio.currentTime = 0;
-        }
-      } else if (audio.duration === Infinity && !recoveringRef.current) {
-        recoveringRef.current = true;
-        audio.currentTime = Number.MAX_SAFE_INTEGER;
-      }
+      if (d) setDuration(d);
     };
 
     const onTimeUpdate = () => {
-      if (!recoveringRef.current) setCurrentTime(audio.currentTime);
-      readDuration();
+      const time = Number.isFinite(audio.currentTime) && audio.currentTime > 0
+        ? audio.currentTime
+        : 0;
+      setCurrentTime(time);
     };
     const onPlay = () => {
       setPlaying(true);
@@ -115,7 +137,20 @@ export function useVoicePlayback(voiceId: string, src: string) {
     audio.addEventListener("loadeddata", onLoadedData);
     audio.addEventListener("error", onError);
 
+    // This also repairs duration for existing malformed WebM voice notes.
+    void decodeAudioDuration(src, controller.signal)
+      .then((decodedDuration) => {
+        if (decodedDuration) {
+          decodedDurationResolved = true;
+          setDuration(decodedDuration);
+        }
+      })
+      .catch((decodeError: unknown) => {
+        if ((decodeError as DOMException)?.name !== "AbortError") readDuration();
+      });
+
     return () => {
+      controller.abort();
       audio.removeEventListener("loadedmetadata", readDuration);
       audio.removeEventListener("durationchange", readDuration);
       audio.removeEventListener("timeupdate", onTimeUpdate);
