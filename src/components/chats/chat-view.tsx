@@ -842,7 +842,7 @@ export function ChatView({
   }
 
   return (
-    <div className="flex h-full w-full min-w-0 overflow-hidden pb-[56px] sm:pb-0">
+    <div className="flex h-full w-full min-w-0 overflow-hidden overflow-x-hidden pb-[56px] sm:pb-0">
       <div className="flex min-w-0 flex-1 flex-col">
       {/* ------------------------------ header ------------------------------ */}
       <header className="flex h-14 min-w-0 items-center gap-2 border-b border-[var(--border)] bg-[var(--surface)] px-2 sm:gap-3 sm:px-4">
@@ -988,7 +988,7 @@ export function ChatView({
           }
         }}
         className={cn(
-          "relative min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6",
+          "relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 py-4 sm:px-6",
           dragging && "outline-2 outline-dashed outline-offset-[-10px] outline-[var(--accent)]",
         )}
         style={bgStyle}
