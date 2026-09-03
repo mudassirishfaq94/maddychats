@@ -58,6 +58,18 @@ Add these under **Project Settings → Environment Variables**:
 Optional features require `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`,
 `GOOGLE_CALLBACK_URL`, `RESEND_API_KEY`, and `EMAIL_FROM`.
 
+### Firebase Phone Authentication
+
+Enable the **Phone** provider in Firebase Authentication and add the Vercel
+production and preview hostnames under **Authentication → Settings →
+Authorized domains**. Add the six `NEXT_PUBLIC_FIREBASE_*` Web app values from
+Firebase project settings and add `FIREBASE_PROJECT_ID` for server-side ID
+token verification.
+
+The browser uses Firebase only for reCAPTCHA and SMS verification. The server
+verifies the resulting Firebase ID token and issues the existing HttpOnly
+Maddy Chats session. OTP values are never sent to or stored in Neon.
+
 Deploy, visit `/api/health`, and test two accounts, messages, reactions,
 statuses, and private media. Never put either database URL, the JWT secret, or
 the Blob token in source control or chat.
