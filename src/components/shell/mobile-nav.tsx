@@ -4,7 +4,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   CircleDashed,
-  MessageSquarePlus,
   MessagesSquare,
   User,
   Users,
@@ -62,18 +61,4 @@ export function MobileNav() {
   );
 }
 
-/**
- * Floating "New Text" action button for mobile.
- * Positioned above the bottom nav with safe-area inset.
- */
-export function MobileNewTextFab() {
-  return (
-    <Link
-      href="/app"
-      aria-label="New Text"
-      className="fixed bottom-[calc(env(safe-area-inset-bottom)+52px)] right-4 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-[var(--accent)] text-white shadow-lg transition-transform active:scale-95 sm:hidden"
-    >
-      <MessageSquarePlus className="h-6 w-6" />
-    </Link>
-  );
-}
+
