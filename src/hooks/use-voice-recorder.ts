@@ -63,25 +63,9 @@ export function useVoiceRecorder(): UseVoiceRecorderReturn {
     }
 
     try {
-      // First check current permission state to give better error messages
-      try {
-        const permissionStatus = await navigator.permissions.query({ name: "microphone" as PermissionName });
-        if (permissionStatus.state === "denied") {
-          setError(
-            "Microphone access was previously denied and is now blocked.\n\n" +
-            "To fix this, open Chrome settings:\n" +
-            "\n1. Type this in your address bar: chrome://settings/content/microphone\n" +
-            "2. Find 'maddychats.vercel.app' under 'Blocked'\n" +
-            "3. Click the trash icon (🗑️) to remove it\n" +
-            "4. Come back here and click 'Try again'"
-          );
-          return;
-        }
-      } catch {
-        // permissions.query not supported — continue with getUserMedia
-      }
-
-      // Use simple constraints for maximum compatibility
+      // Use simple constraints for maximum compatibility.
+      // Do NOT pre-check permissions.query() — it is unreliable and often
+      // returns 'denied' even when the user has granted access (known browser bug).
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
       streamRef.current = stream;
@@ -137,10 +121,13 @@ export function useVoiceRecorder(): UseVoiceRecorderReturn {
       console.error("[voice-recorder] Error:", name, message, err);
       if (name === "NotAllowedError" || name === "PermissionDeniedError") {
         setError(
-          "Microphone access denied. To fix this:\n\n" +
-          "1. Type this in your address bar: chrome://settings/content/microphone\n" +
-          "2. Find this site under 'Blocked' and remove it\n" +
-          "3. Come back here and click 'Try again'"
+          "Microphone access denied by the browser.\n\n" +
+          "Try these steps:\n" +
+          "1. Type chrome://settings/content/microphone in your address bar\n" +
+          "2. Make sure 'Sites can ask to use your microphone' is selected\n" +
+          "3. Remove maddychats.vercel.app from any block list if present\n" +
+          "4. Reload this page (Ctrl+Shift+R) and click 'Try again'\n\n" +
+          "If it still fails, try opening this page in an incognito window (Ctrl+Shift+N)."
         );
       } else if (name === "NotFoundError" || name === "DevicesNotFoundError") {
         setError("No microphone found. Please connect a microphone and try again.");
