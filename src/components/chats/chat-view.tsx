@@ -842,7 +842,7 @@ export function ChatView({
   }
 
   return (
-    <div className="flex h-full w-full min-w-0 overflow-hidden">
+    <div className="flex h-full w-full min-w-0 overflow-hidden pb-[56px] sm:pb-0">
       <div className="flex min-w-0 flex-1 flex-col">
       {/* ------------------------------ header ------------------------------ */}
       <header className="flex h-14 min-w-0 items-center gap-2 border-b border-[var(--border)] bg-[var(--surface)] px-2 sm:gap-3 sm:px-4">
@@ -1451,7 +1451,7 @@ export function ChatView({
             void send(e);
           }
         }}
-        className="flex shrink-0 flex-col border-t border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 sm:px-4"
+        className="flex shrink-0 flex-col border-t border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 shadow-[0_-2px_8px_rgba(0,0,0,0.06)] sm:px-4"
       >
         {replyTo ? (
           <div className="mb-2 flex items-start gap-2.5 rounded-xl border-l-2 border-[var(--accent)] bg-[var(--accent-soft)] px-3 py-2">
