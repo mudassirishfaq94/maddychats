@@ -63,8 +63,14 @@ Optional features require `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`,
 Enable the **Phone** provider in Firebase Authentication and add the Vercel
 production and preview hostnames under **Authentication → Settings →
 Authorized domains**. Add the six `NEXT_PUBLIC_FIREBASE_*` Web app values from
-Firebase project settings and add `FIREBASE_PROJECT_ID` for server-side ID
-token verification.
+Firebase project settings. For server-side ID token verification, add
+`FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, and `FIREBASE_PRIVATE_KEY` from
+the Firebase service-account JSON. Keep the private key's `\n` line breaks
+escaped when entering it as a single-line environment-variable value.
+
+The three Firebase Admin variables are server-only secrets. Never prefix them
+with `NEXT_PUBLIC_`, commit them, or expose the service-account JSON to the
+browser.
 
 The browser uses Firebase only for reCAPTCHA and SMS verification. Firebase
 Admin verifies the resulting Firebase ID token and the server issues the existing HttpOnly

@@ -1,30 +1,35 @@
-import { getApp, getApps, initializeApp } from "firebase-admin/app";
-import { getAuth } from "firebase-admin/auth";
+import "server-only";
+
+import { cert, getApp, getApps, initializeApp } from "firebase-admin/app";
+import { getAuth, type DecodedIdToken } from "firebase-admin/auth";
 
 function firebaseAdminApp() {
   if (getApps().length) return getApp();
   const projectId = process.env.FIREBASE_PROJECT_ID;
-  if (!projectId) throw new Error("Firebase Admin is not configured.");
-  return initializeApp({ projectId });
+  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+  const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n");
+  if (!projectId || !clientEmail || !privateKey) {
+    throw new Error("Firebase Admin is not configured.");
+  }
+  return initializeApp({
+    credential: cert({ projectId, clientEmail, privateKey }),
+  });
 }
 
-export interface FirebasePhoneIdentity {
+export interface VerifiedFirebaseIdentity {
   uid: string;
-  phoneNumber: string;
+  phoneNumber: string | null;
+  decodedToken: DecodedIdToken;
 }
 
 /**
  * Firebase Admin verifies the ID token signature, issuer, audience and expiry.
- * Only verified phone-provider claims are allowed into Maddy's session flow.
  */
-export async function verifyFirebasePhoneToken(idToken: string): Promise<FirebasePhoneIdentity> {
-  const decoded = await getAuth(firebaseAdminApp()).verifyIdToken(idToken);
-  if (
-    !decoded.uid ||
-    !decoded.phone_number ||
-    decoded.firebase.sign_in_provider !== "phone"
-  ) {
-    throw new Error("A verified Firebase phone identity is required.");
-  }
-  return { uid: decoded.uid, phoneNumber: decoded.phone_number };
+export async function verifyFirebaseIdToken(idToken: string): Promise<VerifiedFirebaseIdentity> {
+  const decodedToken = await getAuth(firebaseAdminApp()).verifyIdToken(idToken);
+  return {
+    uid: decodedToken.uid,
+    phoneNumber: decodedToken.phone_number ?? null,
+    decodedToken,
+  };
 }

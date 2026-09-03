@@ -5,7 +5,7 @@ import { db } from "@/db";
 import { notificationPreferences, oauthAccounts, users } from "@/db/schema";
 import { phoneAuthExchangeSchema } from "@/lib/schemas";
 import { SESSION_COOKIE } from "@/server/config";
-import { verifyFirebasePhoneToken } from "@/server/firebase-admin";
+import { verifyFirebaseIdToken } from "@/server/firebase-admin";
 import { clientIp, guardSameOrigin, jsonError, readJson, requestIsSecure } from "@/server/http";
 import { hashPassword } from "@/server/password";
 import { AUTH_RATE_LIMIT, rateLimit } from "@/server/rate-limit";
@@ -72,7 +72,13 @@ export async function POST(req: NextRequest) {
 
   let identity;
   try {
-    identity = await verifyFirebasePhoneToken(parsed.data.idToken);
+    identity = await verifyFirebaseIdToken(parsed.data.idToken);
+    if (
+      !identity.phoneNumber ||
+      identity.decodedToken.firebase.sign_in_provider !== "phone"
+    ) {
+      return jsonError(401, "A verified Firebase phone identity is required.");
+    }
   } catch (error) {
     if (error instanceof Error && error.message.includes("not configured")) {
       return jsonError(503, "Phone sign-in is not configured yet.");
