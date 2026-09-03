@@ -64,6 +64,7 @@ export const oauthAccounts = pgTable(
   },
   (table) => [
     unique("oauth_accounts_provider_account_unique").on(table.provider, table.providerAccountId),
+    unique("oauth_accounts_user_provider_unique").on(table.userId, table.provider),
     index("oauth_accounts_user_idx").on(table.userId),
   ],
 );

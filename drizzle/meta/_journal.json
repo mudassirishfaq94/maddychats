@@ -92,6 +92,13 @@
       "when": 1788400000000,
       "tag": "0012_web_push_subscriptions",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1788465600000,
+      "tag": "0013_auth_identity_uniqueness",
+      "breakpoints": true
     }
   ]
 }
