@@ -1,146 +1,143 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
 import { Mic2, Pause, Play } from "lucide-react";
+import type { PublicUser } from "@/lib/types";
+import { Avatar } from "@/components/avatar";
+import { Waveform } from "./waveform";
+import { useVoicePlayback } from "@/hooks/use-audio-player";
 import { cn } from "@/lib/utils";
-
-const WAVEFORM = [7, 12, 18, 10, 22, 15, 9, 19, 25, 13, 8, 17, 23, 14, 10, 20, 26, 16, 8, 13, 21, 11, 18, 24, 14, 9, 19, 12, 22, 16, 10, 17];
 
 function finiteTime(value: number): number {
   return Number.isFinite(value) && value > 0 ? value : 0;
 }
 
 function formatDuration(seconds: number): string {
-  const safeSeconds = finiteTime(seconds);
-  const m = Math.floor(safeSeconds / 60);
-  const s = Math.floor(safeSeconds % 60);
-  return `${m}:${s.toString().padStart(2, "0")}`;
+  const s = finiteTime(seconds);
+  const m = Math.floor(s / 60);
+  const sec = Math.floor(s % 60);
+  return `${m}:${sec.toString().padStart(2, "0")}`;
 }
 
-export function AudioMessage({ src, own, duration: initialDuration }: { src: string; own: boolean; duration?: number }) {
-  const audioRef = useRef<HTMLAudioElement>(null);
-  const recoveringDurationRef = useRef(false);
-  const [playing, setPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(finiteTime(initialDuration ?? 0));
+export function AudioMessage({
+  src,
+  own,
+  duration: initialDuration,
+  sender,
+}: {
+  src: string;
+  own: boolean;
+  duration?: number;
+  sender?: PublicUser;
+}) {
+  const voiceId = `voice-${src}`;
+  const {
+    playing,
+    currentTime,
+    duration,
+    loading,
+    error,
+    togglePlay,
+    seek,
+  } = useVoicePlayback(voiceId, src);
 
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
+  const totalDuration = duration || finiteTime(initialDuration ?? 0);
+  const progress = totalDuration ? (currentTime / totalDuration) * 100 : 0;
 
-    const readDuration = () => {
-      const nextDuration = finiteTime(audio.duration);
-      if (nextDuration) {
-        setDuration(nextDuration);
-        if (recoveringDurationRef.current) {
-          recoveringDurationRef.current = false;
-          audio.currentTime = 0;
-        }
-      } else if (audio.duration === Infinity && !recoveringDurationRef.current) {
-        // MediaRecorder WebM files may omit duration metadata. Seeking beyond
-        // the end makes Chromium calculate the real duration.
-        recoveringDurationRef.current = true;
-        audio.currentTime = Number.MAX_SAFE_INTEGER;
-      }
-    };
-
-    const onTimeUpdate = () => {
-      if (!recoveringDurationRef.current) setCurrentTime(finiteTime(audio.currentTime));
-      readDuration();
-    };
-    const onPlay = () => { setPlaying(true); };
-    const onPause = () => { setPlaying(false); };
-    const onEnded = () => {
-      setPlaying(false);
-      setCurrentTime(0);
-      audio.currentTime = 0;
-    };
-
-    audio.addEventListener("loadedmetadata", readDuration);
-    audio.addEventListener("durationchange", readDuration);
-    audio.addEventListener("timeupdate", onTimeUpdate);
-    audio.addEventListener("play", onPlay);
-    audio.addEventListener("pause", onPause);
-    audio.addEventListener("ended", onEnded);
-    return () => {
-      audio.removeEventListener("loadedmetadata", readDuration);
-      audio.removeEventListener("durationchange", readDuration);
-      audio.removeEventListener("timeupdate", onTimeUpdate);
-      audio.removeEventListener("play", onPlay);
-      audio.removeEventListener("pause", onPause);
-      audio.removeEventListener("ended", onEnded);
-    };
-  }, [src]);
-
-  const togglePlay = useCallback(async () => {
-    const audio = audioRef.current;
-    if (!audio) return;
-    if (!audio.paused) {
-      audio.pause();
-      return;
-    }
-    try { await audio.play(); } catch { setPlaying(false); }
-  }, []);
-
-  const seek = useCallback((value: number) => {
-    const audio = audioRef.current;
-    if (!audio || !duration) return;
-    const nextTime = Math.min(duration, Math.max(0, value));
-    audio.currentTime = nextTime;
-    setCurrentTime(nextTime);
-  }, [duration]);
-
-  const progress = duration ? Math.min(100, (currentTime / duration) * 100) : 0;
+  if (error) {
+    return (
+      <div
+        className={cn(
+          "flex items-center gap-3 rounded-2xl px-4 py-3",
+          own
+            ? "rounded-br-md text-white/70"
+            : "rounded-bl-md border border-[var(--border)] bg-[var(--bubble-other-bg)]",
+        )}
+        style={own ? { background: "var(--bubble-own-bg)" } : undefined}
+      >
+        <Mic2 className="h-4 w-4 opacity-50" />
+        <span className="text-xs opacity-70">Voice message unavailable</span>
+      </div>
+    );
+  }
 
   return (
-    <div className="flex min-w-[250px] max-w-[340px] items-center gap-3 py-0.5">
-      <audio ref={audioRef} src={src} preload="metadata" className="hidden" />
-      <button
-        type="button"
-        onClick={() => void togglePlay()}
-        aria-label={playing ? "Pause voice message" : "Play voice message"}
+    <div
+      className={cn(
+        "flex items-end gap-2",
+        own ? "flex-row-reverse" : "flex-row",
+      )}
+    >
+      {/* Avatar */}
+      {sender && (
+        <span className="mb-0.5 shrink-0">
+          <Avatar user={sender} size={28} />
+        </span>
+      )}
+
+      {/* Voice bubble */}
+      <div
         className={cn(
-          "flex h-11 w-11 shrink-0 items-center justify-center rounded-full shadow-sm transition-all hover:scale-105 active:scale-95",
-          own ? "bg-white/20 text-white hover:bg-white/30" : "bg-[var(--accent)] text-white hover:brightness-110",
+          "flex max-w-[300px] min-w-[220px] items-center gap-3 rounded-2xl px-3 py-2.5",
+          own
+            ? "rounded-br-md"
+            : "rounded-bl-md border border-[var(--border)] bg-[var(--bubble-other-bg)]",
         )}
+        style={own ? { background: "var(--bubble-own-bg)" } : undefined}
       >
-        {playing ? <Pause className="h-4.5 w-4.5 fill-current" /> : <Play className="ml-0.5 h-4.5 w-4.5 fill-current" />}
-      </button>
+        {/* Play/Pause button */}
+        <button
+          type="button"
+          onClick={() => void togglePlay()}
+          aria-label={playing ? "Pause" : "Play"}
+          className={cn(
+            "flex h-10 w-10 shrink-0 items-center justify-center rounded-full shadow-sm transition-all active:scale-95",
+            own
+              ? "bg-white/20 text-white hover:bg-white/30"
+              : "bg-[var(--accent)] text-white hover:brightness-110",
+          )}
+        >
+          {loading ? (
+            <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+          ) : playing ? (
+            <Pause className="h-4 w-4 fill-current" />
+          ) : (
+            <Play className="ml-0.5 h-4 w-4 fill-current" />
+          )}
+        </button>
 
-      <div className="min-w-0 flex-1">
-        <div className="relative flex h-7 items-center gap-[2px]">
-          {WAVEFORM.map((height, index) => (
-            <span
-              key={index}
-              className={cn(
-                "w-1 flex-1 rounded-full transition-colors",
-                index / WAVEFORM.length <= progress / 100
-                  ? own ? "bg-white" : "bg-[var(--accent)]"
-                  : own ? "bg-white/35" : "bg-[var(--muted)]/35",
-              )}
-              style={{ height }}
-            />
-          ))}
-          <input
-            type="range"
-            min={0}
-            max={duration || 0}
-            step={0.05}
-            value={Math.min(currentTime, duration || 0)}
-            onChange={(event) => seek(Number(event.target.value))}
-            aria-label="Seek voice message"
-            disabled={!duration}
-            className="absolute inset-0 h-full w-full cursor-pointer opacity-0 disabled:cursor-default"
+        {/* Waveform + time */}
+        <div className="min-w-0 flex-1">
+          <Waveform
+            src={src}
+            progress={progress}
+            playing={playing}
+            own={own}
+            onSeek={totalDuration ? (fraction) => seek(fraction * totalDuration) : undefined}
+            height={28}
+            loading={loading}
           />
-        </div>
 
-        <div className="mt-0.5 flex items-center justify-between gap-3">
-          <span className={cn("text-[0.68rem] tabular-nums", own ? "text-white/70" : "text-[var(--muted)]")}>
-            {playing || currentTime > 0 ? `${formatDuration(currentTime)} / ${formatDuration(duration)}` : formatDuration(duration)}
-          </span>
-          <span className={cn("flex items-center gap-1 text-[0.62rem] font-medium uppercase tracking-wide", own ? "text-white/55" : "text-[var(--muted)]")}>
-            <Mic2 className="h-3 w-3" /> Voice
-          </span>
+          <div className="mt-1 flex items-center justify-between">
+            <span
+              className={cn(
+                "text-[0.65rem] tabular-nums",
+                own ? "text-white/60" : "text-[var(--muted)]",
+              )}
+            >
+              {playing || currentTime > 0
+                ? `${formatDuration(currentTime)} / ${formatDuration(totalDuration)}`
+                : formatDuration(totalDuration)}
+            </span>
+            <span
+              className={cn(
+                "flex items-center gap-1 text-[0.6rem] font-medium uppercase tracking-wide",
+                own ? "text-white/45" : "text-[var(--muted)]",
+              )}
+            >
+              <Mic2 className="h-2.5 w-2.5" />
+              Voice
+            </span>
+          </div>
         </div>
       </div>
     </div>

@@ -55,6 +55,7 @@ import { cn, formatDate, timeAgo, initials, avatarHue } from "@/lib/utils";
 import { getPattern } from "@/lib/chat-patterns";
 import { EmojiPicker } from "./emoji-picker";
 import { AudioMessage } from "./audio-message";
+import { RecordingWaveform } from "./waveform";
 import { useVoiceRecorder } from "@/hooks/use-voice-recorder";
 import { LongPressTouchable } from "./long-press-touchable";
 import { MobileMessageMenu } from "./mobile-message-menu";
@@ -1242,6 +1243,8 @@ export function ChatView({
                                     <AudioMessage
                                       src={msg.attachments[0].url}
                                       own={own}
+                                      sender={msg.sender}
+                                      duration={undefined}
                                     />
                                   </div>
                                 ) : msg.attachments.length > 0 ? (
@@ -1491,23 +1494,22 @@ export function ChatView({
             {recorder.state === "recording" ? (
               <>
                 <span className="flex h-3 w-3 animate-pulse rounded-full bg-red-500" />
-                <span className="flex-1 text-sm font-medium">
-                  Recording {formatDuration(recorder.duration)}
+                <RecordingWaveform active height={24} className="min-w-0 flex-1" />
+                <span className="shrink-0 text-sm font-medium tabular-nums">
+                  {formatDuration(recorder.duration)}
                 </span>
                 <button
                   type="button"
-                  onClick={() => {
-                    recorder.cancelRecording();
-                  }}
-                  className="flex h-9 items-center gap-1.5 rounded-xl px-3 text-sm text-[var(--muted)] hover:bg-[var(--surface-2)]"
+                  onClick={() => recorder.cancelRecording()}
+                  className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl text-[var(--muted)] hover:bg-[var(--surface-2)]"
+                  aria-label="Cancel recording"
                 >
                   <Trash2 className="h-4 w-4" />
-                  <span className="hidden sm:inline">Cancel</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => recorder.stopRecording()}
-                  className="flex h-10 w-10 items-center justify-center rounded-full bg-red-500 text-white transition-transform active:scale-95"
+                  className="flex h-10 w-10 min-h-[44px] min-w-[44px] items-center justify-center rounded-full bg-red-500 text-white transition-transform active:scale-95"
                   aria-label="Stop recording"
                 >
                   <StopCircle className="h-5 w-5" />
@@ -1520,7 +1522,8 @@ export function ChatView({
                   <div className="min-w-0 flex-1">
                     <AudioMessage
                       src={recorder.audioUrl}
-                      own={false}
+                      own={true}
+                      sender={me}
                       duration={recorder.duration}
                     />
                   </div>
@@ -1550,6 +1553,11 @@ export function ChatView({
           </div>
         ) : (
           <div className="flex items-end gap-2">
+            <AttachButton
+              onFiles={(files) => attachments.addFiles(files)}
+              disabled={sendPending || !requestAccepted}
+            />
+
             {/* Emoji button */}
             <div className="relative">
               <button
@@ -1571,11 +1579,6 @@ export function ChatView({
                 />
               ) : null}
             </div>
-
-            <AttachButton
-              onFiles={(files) => attachments.addFiles(files)}
-              disabled={sendPending || !requestAccepted}
-            />
             <div className="min-w-0 flex-1 rounded-2xl bg-[var(--input-bg)] px-3.5">
               <textarea
                 ref={composerRef}
