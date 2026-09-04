@@ -23,18 +23,12 @@ const firebaseConfig = {
     process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
     "NEXT_PUBLIC_FIREBASE_PROJECT_ID",
   ),
-  storageBucket: required(
-    process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-    "NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET",
-  ),
-  messagingSenderId: required(
-    process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-    "NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID",
-  ),
-  appId: required(
-    process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
-    "NEXT_PUBLIC_FIREBASE_APP_ID",
-  ),
+  // These values are used by other Firebase products, but Firebase Auth does
+  // not need them to send or verify phone sign-in codes.
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || undefined,
+  messagingSenderId:
+    process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || undefined,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || undefined,
 };
 
 /** Reuses the existing app during Fast Refresh instead of initializing twice. */

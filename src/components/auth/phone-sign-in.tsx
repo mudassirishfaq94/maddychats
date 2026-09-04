@@ -31,7 +31,10 @@ function authErrorMessage(error: unknown): string {
     ? String(error.code)
     : "";
   if (error instanceof Error && error.message.includes("required for Firebase")) {
-    return "Phone sign-in is not configured yet.";
+    const variable = error.message.match(/^(NEXT_PUBLIC_FIREBASE_[A-Z_]+)/)?.[1];
+    return variable
+      ? `Phone sign-in is missing ${variable} in this deployment. Redeploy after adding it in Vercel.`
+      : "Phone sign-in is not configured in this deployment yet.";
   }
   switch (code) {
     case "auth/invalid-phone-number":
