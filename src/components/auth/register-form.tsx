@@ -93,7 +93,7 @@ export function RegisterForm() {
         icon={<User className="h-4 w-4" />}
         value={form.displayName}
         onChange={update("displayName")}
-        placeholder="Maddy Reyes"
+        placeholder="Zara Malik"
         autoComplete="name"
         autoFocus
         error={errors.displayName}
@@ -104,7 +104,7 @@ export function RegisterForm() {
         icon={<AtSign className="h-4 w-4" />}
         value={form.username}
         onChange={update("username")}
-        placeholder="maddy"
+        placeholder="zara"
         autoComplete="username"
         hint="Unique. Letters, numbers and underscores."
         error={errors.username}

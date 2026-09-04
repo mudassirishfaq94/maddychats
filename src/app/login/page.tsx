@@ -4,7 +4,6 @@ import type { Metadata } from "next";
 import { AuthLayout } from "@/components/auth/auth-layout";
 import { LoginForm } from "@/components/auth/login-form";
 import { GoogleSignIn } from "@/components/auth/google-sign-in";
-import { PhoneSignIn } from "@/components/auth/phone-sign-in";
 import { getSessionUser } from "@/server/session";
 
 export const metadata: Metadata = { title: "Sign in" };
@@ -34,7 +33,7 @@ export default async function LoginPage({
       subtitle="Sign in to pick up right where you left off."
       footer={
         <>
-          New to Maddy Chats?{" "}
+          New to ZipTalk?{" "}
           <Link
             href="/signup"
             className="font-semibold text-[var(--accent)] transition-opacity hover:opacity-80"
@@ -47,7 +46,6 @@ export default async function LoginPage({
       {googleError ? <p role="alert" className="mb-4 rounded-xl border border-[color-mix(in_srgb,var(--danger)_35%,transparent)] bg-[color-mix(in_srgb,var(--danger)_10%,transparent)] px-4 py-3 text-sm text-[var(--danger)]">{googleError}</p> : null}
       <LoginForm next={next} />
       <GoogleSignIn next={next} />
-      <PhoneSignIn next={next} />
     </AuthLayout>
   );
 }

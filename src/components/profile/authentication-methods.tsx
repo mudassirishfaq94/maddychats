@@ -1,13 +1,11 @@
 "use client";
 
-import { useCallback, useState } from "react";
-import { Check, KeyRound, Link2, Mail, Phone } from "lucide-react";
-import { PhoneSignIn } from "@/components/auth/phone-sign-in";
+import { useState } from "react";
+import { Check, KeyRound, Link2, Mail } from "lucide-react";
 
 export interface AuthenticationMethodState {
   email: boolean;
   google: boolean;
-  phone: boolean;
 }
 
 function MethodRow({
@@ -44,18 +42,8 @@ export function AuthenticationMethods({
   initialMethods: AuthenticationMethodState;
   notice?: { kind: "success" | "error"; text: string } | null;
 }) {
-  const [methods, setMethods] = useState(initialMethods);
-  const [error, setError] = useState<string | null>(notice?.kind === "error" ? notice.text : null);
-
-  const load = useCallback(async () => {
-    const response = await fetch("/api/auth/methods", { cache: "no-store" });
-    const data = await response.json().catch(() => null) as { methods?: AuthenticationMethodState; error?: string } | null;
-    if (!response.ok || !data?.methods) {
-      setError(data?.error ?? "Authentication methods could not be loaded.");
-      return;
-    }
-    setMethods(data.methods);
-  }, []);
+  const [methods] = useState(initialMethods);
+  const [error] = useState<string | null>(notice?.kind === "error" ? notice.text : null);
 
   return (
     <section className="card-glass min-w-0 rounded-3xl p-4 sm:p-8 animate-fade-up">
@@ -77,13 +65,8 @@ export function AuthenticationMethods({
           <MethodRow icon={Link2} label="Google" connected={methods.google}>
             <a href="/api/auth/google?mode=link&next=/app/profile" className="btn btn-secondary">Add Google</a>
           </MethodRow>
-          <MethodRow icon={Phone} label="Phone" connected={methods.phone}>
-            <div className="min-w-0 basis-full [&>button]:mt-0! sm:pl-[3.25rem]">
-              <PhoneSignIn mode="link" onLinked={load} />
-            </div>
-          </MethodRow>
       </div>
-      <p className="mt-5 text-xs leading-relaxed text-[var(--muted)]">If a method belongs to another Maddy Chats account, linking stops and shows a conflict. Accounts and chat histories are never merged automatically.</p>
+      <p className="mt-5 text-xs leading-relaxed text-[var(--muted)]">If a method belongs to another ZipTalk account, linking stops and shows a conflict. Accounts and chat histories are never merged automatically.</p>
     </section>
   );
 }

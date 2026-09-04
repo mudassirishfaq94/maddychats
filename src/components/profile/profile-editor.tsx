@@ -152,7 +152,7 @@ export function ProfileEditor({ user }: { user: SafeUser }) {
         <div>
           <h2 className="font-display text-xl font-bold">Profile settings</h2>
           <p className="mt-1 text-sm text-[var(--muted)]">
-            How you appear across Maddy Chats.
+            How you appear across ZipTalk.
           </p>
         </div>
         {!editing ? (
@@ -263,7 +263,7 @@ export function ProfileEditor({ user }: { user: SafeUser }) {
             <p className="field-error">{errors.username}</p>
           ) : (
             <p className="field-hint">
-              Unique across Maddy Chats — letters, numbers, underscores.
+              Unique across ZipTalk — letters, numbers, underscores.
             </p>
           )}
         </div>

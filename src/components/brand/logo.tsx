@@ -1,8 +1,7 @@
 import { cn } from "@/lib/utils";
 
 /**
- * Maddy Chats brand mark — a monochrome chat bubble with a single accent
- * pulse line. Clean, ownable, free of gradients.
+ * ZipTalk brand mark — a fast "Z" conversation trail inside a chat bubble.
  */
 export function LogoMark({
   size = 30,
@@ -19,16 +18,16 @@ export function LogoMark({
       fill="none"
       className={className}
       role="img"
-      aria-label="Maddy Chats"
+      aria-label="ZipTalk"
     >
       <path
-        d="M20 3.5C10.9 3.5 3.5 10 3.5 18c0 4.6 2.3 8.7 6 11.4-.2 2.3-1.4 4.9-3.2 6.6-.3.3 0 .9.5.8 4.7-.6 8.2-2.1 10.4-3.4.9.1 1.9.1 2.8.1 9.1 0 16.5-6.5 16.5-14.5S29.1 3.5 20 3.5Z"
+        d="M7 4.5h26a4.5 4.5 0 0 1 4.5 4.5v19A4.5 4.5 0 0 1 33 32.5H19l-9.5 5v-5H7A4.5 4.5 0 0 1 2.5 28V9A4.5 4.5 0 0 1 7 4.5Z"
         fill="currentColor"
       />
       <path
-        d="M10.5 19.5h4l2.2-4.5 3.2 8 2.4-5 1.4 1.5h5.8"
+        d="M11 12h18L12 25h17"
         stroke="var(--accent)"
-        strokeWidth="2.4"
+        strokeWidth="3"
         strokeLinecap="round"
         strokeLinejoin="round"
       />
@@ -40,22 +39,31 @@ export function LogoWordmark({
   size = 30,
   className,
   textClassName,
+  byline = false,
 }: {
   size?: number;
   className?: string;
   textClassName?: string;
+  byline?: boolean;
 }) {
   return (
     <span className={cn("inline-flex items-center gap-2.5", className)}>
       <LogoMark size={size} />
-      <span
-        className={cn(
-          "font-display font-bold leading-none tracking-tight",
-          textClassName,
-        )}
-        style={{ fontSize: size * 0.58 }}
-      >
-        Maddy <span className="text-[var(--muted)] font-semibold">Chats</span>
+      <span className="flex min-w-0 flex-col">
+        <span
+          className={cn(
+            "font-display font-bold leading-none tracking-tight",
+            textClassName,
+          )}
+          style={{ fontSize: size * 0.58 }}
+        >
+          Zip<span className="text-[var(--accent-fg)]">Talk</span>
+        </span>
+        {byline ? (
+          <span className="mt-0.5 whitespace-nowrap text-[0.5rem] leading-none text-[var(--muted)]">
+            App by Mudassir Ishfaq
+          </span>
+        ) : null}
       </span>
     </span>
   );

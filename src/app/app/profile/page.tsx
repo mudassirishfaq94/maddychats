@@ -40,12 +40,11 @@ export default async function ProfilePage({
   const initialMethods = {
     email: !user.email.endsWith("@auth.maddychats.invalid"),
     google: providers.has("google"),
-    phone: providers.has("firebase_phone"),
   };
   const notice = query.auth_linked === "google"
     ? { kind: "success" as const, text: "Google was connected to this account." }
     : query.auth_error === "google_in_use"
-      ? { kind: "error" as const, text: "That Google identity belongs to another Maddy Chats account. Sign out and use Google sign-in to recover it; accounts are not merged automatically." }
+      ? { kind: "error" as const, text: "That Google identity belongs to another ZipTalk account. Sign out and use Google sign-in to recover it; accounts are not merged automatically." }
       : query.auth_error === "google_already_linked"
         ? { kind: "error" as const, text: "A different Google identity is already connected to this account." }
         : null;
@@ -70,7 +69,7 @@ export default async function ProfilePage({
 
       {query.onboarding === "1" ? (
         <div className="mt-5 rounded-2xl border border-[color-mix(in_srgb,var(--accent)_35%,transparent)] bg-[color-mix(in_srgb,var(--accent)_10%,transparent)] p-4 text-sm">
-          <p className="font-semibold">Welcome to Maddy Chats</p>
+          <p className="font-semibold">Welcome to ZipTalk</p>
           <p className="mt-1 text-[var(--muted)]">Complete your display name, username, photo, and bio so people can recognize you.</p>
         </div>
       ) : null}

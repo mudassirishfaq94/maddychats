@@ -19,18 +19,21 @@ const spaceGrotesk = Space_Grotesk({
 });
 
 export const metadata: Metadata = {
-  applicationName: "Maddy Chats",
+  applicationName: "ZipTalk",
   manifest: "/manifest.webmanifest",
   icons: {
-    icon: "/icons/maddy-192.png",
-    apple: "/icons/maddy-192.png",
+    icon: "/icons/ziptalk-192.png",
+    apple: "/icons/ziptalk-192.png",
   },
   title: {
-    default: "Maddy Chats — Chat. Connect. Stay in sync.",
-    template: "%s · Maddy Chats",
+    default: "ZipTalk — Chat. Connect. Stay in sync.",
+    template: "%s · ZipTalk",
   },
   description:
-    "Maddy Chats is a real-time chat application. Secure accounts, beautiful conversations, always in sync.",
+    "ZipTalk is a real-time chat application by Mudassir Ishfaq.",
+  authors: [{ name: "Mudassir Ishfaq" }],
+  creator: "Mudassir Ishfaq",
+  appleWebApp: { capable: true, title: "ZipTalk", statusBarStyle: "black-translucent" },
 };
 
 export const viewport: Viewport = {

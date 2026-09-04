@@ -162,8 +162,8 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
           const options: NotificationOptions = {
             body: preview,
             tag: `maddy-message-${messageId || event.notification.id}`,
-            icon: "/icons/maddy-192.png",
-            badge: "/icons/maddy-192.png",
+            icon: "/icons/ziptalk-192.png",
+            badge: "/icons/ziptalk-192.png",
             data: { url },
           };
           if ("serviceWorker" in navigator) {

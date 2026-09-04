@@ -8,7 +8,7 @@ import { LogoWordmark, LogoMark } from "@/components/brand/logo";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 export const metadata: Metadata = {
-  title: "Maddy Chats — Simple chat. Real connections.",
+  title: "ZipTalk — Simple chat. Real connections.",
 };
 export const dynamic = "force-dynamic";
 
@@ -93,7 +93,7 @@ export default async function LandingPage() {
               <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--surface-2)] text-[var(--muted)]">
                 <LogoMark size={20} />
               </span>
-              <span className="text-sm font-semibold">maddy</span>
+              <span className="text-sm font-semibold">ZipTalk</span>
               <span className="flex items-center gap-1.5 text-xs text-[var(--accent-fg)]">
                 <span className="h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />
                 Online
@@ -153,7 +153,8 @@ export default async function LandingPage() {
       </section>
 
       <footer className="mt-auto border-t border-[var(--border)] py-5 text-center text-xs text-[var(--muted)]">
-        Maddy Chats — simple chat, real connections.
+        ZipTalk — simple chat, real connections.
+        <span className="ml-2 opacity-70">App by Mudassir Ishfaq</span>
       </footer>
     </main>
   );

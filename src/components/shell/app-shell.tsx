@@ -37,12 +37,12 @@ export function AppShell({
       </a>
 
       <header className="z-40 flex h-14 w-full min-w-0 shrink-0 items-center gap-0.5 overflow-visible border-b border-[var(--border)] bg-[var(--surface)] px-2 sm:gap-1 sm:px-4">
-        <Link href="/app" aria-label="Maddy Chats home" className="mr-0.5 shrink-0 sm:mr-3">
+        <Link href="/app" aria-label="ZipTalk home" className="mr-0.5 shrink-0 sm:mr-3">
           <span className="flex items-center sm:hidden">
-            <LogoMark size={25} />
+            <LogoWordmark size={25} byline />
           </span>
           <span className="hidden items-center sm:flex">
-            <LogoWordmark size={26} />
+            <LogoWordmark size={26} byline />
           </span>
         </Link>
 

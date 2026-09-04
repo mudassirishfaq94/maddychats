@@ -1,6 +1,6 @@
-# Maddy Chats
+# ZipTalk
 
-Maddy Chats is a full-stack direct-messaging application built with Next.js,
+ZipTalk is a full-stack direct-messaging application built with Next.js,
 React, TypeScript, PostgreSQL, and Drizzle ORM. It supports persistent private
 conversations, realtime delivery and presence, typing indicators, read
 receipts, reactions, replies, search, notifications, private attachments, and

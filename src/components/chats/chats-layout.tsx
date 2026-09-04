@@ -276,7 +276,8 @@ export function ChatsLayout({
         ) : (
           <div className="flex h-full flex-col items-center justify-center px-8 text-center">
             <LogoMark size={54} className="text-[var(--text)]" />
-            <h2 className="font-display mt-6 text-xl font-bold">Maddy Chats</h2>
+            <h2 className="font-display mt-6 text-xl font-bold">ZipTalk</h2>
+            <p className="mt-1 text-xs text-[var(--muted)]">App by Mudassir Ishfaq</p>
             <p className="mx-auto mt-2 max-w-[16rem] text-sm leading-relaxed text-[var(--muted)]">
               Select a conversation to start chatting.
             </p>

@@ -40,10 +40,6 @@ export const loginSchema = z.object({
   password: z.string().min(1, "Enter your password"),
 });
 
-export const phoneAuthExchangeSchema = z.object({
-  idToken: z.string().min(100, "Invalid Firebase token").max(16_384),
-});
-
 export const forgotPasswordSchema = z.object({
   email: z.email("Enter a valid email address"),
 });

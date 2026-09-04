@@ -20,7 +20,6 @@ export async function GET() {
     methods: {
       email: !user.email.endsWith("@auth.maddychats.invalid"),
       google: providers.has("google"),
-      phone: providers.has("firebase_phone"),
     },
   });
 }

@@ -23,7 +23,7 @@ export function AuthLayout({
     <main className="grid min-h-dvh bg-[var(--bg)] lg:grid-cols-[1fr_1fr]">
       {/* ------- brand panel ------- */}
       <section className="relative hidden flex-col justify-between border-r border-[var(--border)] bg-[var(--surface)] p-12 lg:flex">
-        <Link href="/" aria-label="Maddy Chats home" className="animate-fade-up">
+        <Link href="/" aria-label="ZipTalk home" className="animate-fade-up">
           <LogoWordmark size={30} />
         </Link>
 
@@ -53,7 +53,7 @@ export function AuthLayout({
                 <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[var(--surface-2)] text-[var(--muted)]">
                   <LogoMark size={17} />
                 </span>
-                <span className="text-sm font-semibold">maddy</span>
+                <span className="text-sm font-semibold">ZipTalk</span>
                 <span className="flex items-center gap-1 text-[0.68rem] text-[var(--accent-fg)]">
                   <span className="h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />
                   Online
@@ -79,7 +79,7 @@ export function AuthLayout({
       {/* ------- form panel ------- */}
       <section className="flex flex-col px-5 py-6 sm:px-10">
         <div className="flex items-center justify-between">
-          <Link href="/" className="lg:hidden" aria-label="Maddy Chats home">
+          <Link href="/" className="lg:hidden" aria-label="ZipTalk home">
             <LogoWordmark size={26} />
           </Link>
           <span className="hidden lg:block" />
@@ -113,7 +113,7 @@ export function AuthLayout({
         </div>
 
         <p className="text-center text-xs text-[var(--muted)] opacity-70">
-          Protected sign-in — HttpOnly sessions, hashed passwords.
+          App by Mudassir Ishfaq · Protected sign-in
         </p>
       </section>
     </main>

@@ -106,7 +106,7 @@ export function PeopleSearch() {
             <Compass className="mx-auto h-8 w-8 text-[var(--accent)]" />
             <p className="mt-4 font-semibold">Find your people</p>
             <p className="mx-auto mt-1.5 max-w-xs text-sm leading-relaxed text-[var(--muted)]">
-              Type at least 2 characters to search everyone on Maddy Chats by
+              Type at least 2 characters to search everyone on ZipTalk by
               username or display name.
             </p>
           </div>

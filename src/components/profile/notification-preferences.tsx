@@ -130,7 +130,7 @@ export function NotificationPreferences() {
     <section className="card-glass rounded-3xl p-6 sm:p-8">
       <div>
         <h2 className="font-display text-xl font-bold">Notifications</h2>
-        <p className="mt-1 text-sm text-[var(--muted)]">Choose how Maddy Chats alerts you.</p>
+        <p className="mt-1 text-sm text-[var(--muted)]">Choose how ZipTalk alerts you.</p>
       </div>
       {!preferences ? (
         <div className="flex justify-center py-10">{message ? <p className="text-sm text-[var(--danger)]">{message}</p> : <Loader2 className="h-5 w-5 animate-spin text-[var(--muted)]" />}</div>
@@ -141,7 +141,7 @@ export function NotificationPreferences() {
             <BellRing className="h-5 w-5 shrink-0 text-[var(--accent-fg)]" />
             <div className="min-w-0 flex-1">
               <p className="text-sm font-semibold">Enable push alerts on this device</p>
-              <p className="text-xs text-[var(--muted)]">Receive messages in Android&apos;s notification panel, even when Maddy Chats is closed.</p>
+              <p className="text-xs text-[var(--muted)]">Receive messages in Android&apos;s notification panel, even when ZipTalk is closed.</p>
             </div>
             <button type="button" disabled={subscribing} onClick={() => void enableBrowserNotifications()} className="rounded-xl bg-[var(--accent)] px-3 py-2 text-xs font-semibold text-white disabled:opacity-60">
               {subscribing ? "Enabling…" : browserPermission === "denied" ? "Try again" : "Enable"}
