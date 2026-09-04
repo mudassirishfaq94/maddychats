@@ -915,6 +915,51 @@ export const groupInviteLinks = pgTable(
 
 export type GroupInviteLinkRow = typeof groupInviteLinks.$inferSelect;
 
+/** Scheduled messages — messages that will be sent at a future time. */
+export const scheduledMessages = pgTable(
+  "scheduled_messages",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    senderId: uuid("sender_id")
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    conversationId: uuid("conversation_id")
+      .references(() => conversations.id, { onDelete: "cascade" })
+      .notNull(),
+    text: text("text").notNull(),
+    replyToMessageId: uuid("reply_to_message_id").references(() => messages.id, {
+      onDelete: "set null",
+    }),
+    scheduledFor: timestamp("scheduled_for", { withTimezone: true, mode: "date" }).notNull(),
+    sent: boolean("sent").default(false).notNull(),
+    sentMessageId: uuid("sent_message_id").references(() => messages.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("scheduled_messages_sender_idx").on(table.senderId),
+    index("scheduled_messages_conv_idx").on(table.conversationId),
+    index("scheduled_messages_scheduled_idx").on(table.scheduledFor),
+    index("scheduled_messages_sent_idx").on(table.sent),
+  ],
+);
+
+export type ScheduledMessageRow = typeof scheduledMessages.$inferSelect;
+
+export const scheduledMessagesRelations = relations(scheduledMessages, ({ one }) => ({
+  sender: one(users, {
+    fields: [scheduledMessages.senderId],
+    references: [users.id],
+  }),
+  conversation: one(conversations, {
+    fields: [scheduledMessages.conversationId],
+    references: [conversations.id],
+  }),
+}));
+
 export const groupInviteLinksRelations = relations(groupInviteLinks, ({ one }) => ({
   conversation: one(conversations, {
     fields: [groupInviteLinks.conversationId],

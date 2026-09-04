@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   CircleDashed,
   MessagesSquare,
-  User,
+  Settings,
   Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -14,7 +14,7 @@ const NAV_ITEMS = [
   { href: "/app", icon: MessagesSquare, label: "Chats", match: "/app" },
   { href: "/app/people", icon: Users, label: "People", match: "/app/people" },
   { href: "/app/status", icon: CircleDashed, label: "Status", match: "/app/status" },
-  { href: "/app/profile", icon: User, label: "Profile", match: "/app/profile" },
+  { href: "/app/settings", icon: Settings, label: "Settings", match: "/app/settings" },
 ] as const;
 
 export function MobileNav() {

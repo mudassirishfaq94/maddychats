@@ -29,6 +29,7 @@ import {
   SmilePlus,
   Star,
   Send,
+  Clock,
   ShieldCheck,
   StopCircle,
   Trash2,
@@ -169,6 +170,9 @@ export function ChatView({
   const [mobileMenuMsg, setMobileMenuMsg] = useState<MessageDTO | null>(null);
   const [forwardMsg, setForwardMsg] = useState<MessageDTO | null>(null);
   const [reportMsg, setReportMsg] = useState<MessageDTO | null>(null);
+  const [showSchedule, setShowSchedule] = useState(false);
+  const [scheduledTime, setScheduledTime] = useState("");
+  const [scheduledMessages, setScheduledMessages] = useState<Array<{ id: string; text: string; scheduledFor: string }>>([]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const topSentinelRef = useRef<HTMLDivElement>(null);
@@ -600,6 +604,41 @@ export function ChatView({
       }),
     });
     if (!res.ok) throw new Error("Forward failed");
+  }
+
+  async function scheduleSendMessage() {
+    if (!draft.trim() || !scheduledTime) return;
+    const scheduledFor = new Date(scheduledTime);
+    if (scheduledFor <= new Date()) {
+      setError("Scheduled time must be in the future.");
+      return;
+    }
+    setSendPending(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/conversations/${conversationId}/scheduled`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: draft.trim(),
+          scheduledFor: scheduledFor.toISOString(),
+          replyToMessageId: replyTo?.id ?? null,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error || "Failed to schedule message.");
+      }
+      setDraft("");
+      setReplyTo(null);
+      setShowSchedule(false);
+      setScheduledTime("");
+      setError(null);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setSendPending(false);
+    }
   }
 
   async function toggleReaction(message: MessageDTO, emoji: string) {
@@ -1519,10 +1558,10 @@ export function ChatView({
           {otherTyping ? (
             <div className="mt-2 flex items-end gap-2 animate-msg-in">
               {other ? <Avatar user={other} size={26} /> : null}
-              <div className="flex items-center gap-1 rounded-2xl rounded-bl-md border border-[var(--border)] bg-[var(--bubble-other-bg)] px-3 py-2.5">
-                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--muted)]" />
-                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--muted)] [animation-delay:150ms]" />
-                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--muted)] [animation-delay:300ms]" />
+              <div className="flex items-center gap-1 rounded-2xl rounded-bl-md border border-[var(--border)] bg-[var(--bubble-other-bg)] px-3.5 py-3">
+                <span className="typing-dot h-2 w-2 rounded-full bg-[var(--muted)]" style={{ animationDelay: "0ms" }} />
+                <span className="typing-dot h-2 w-2 rounded-full bg-[var(--muted)]" style={{ animationDelay: "160ms" }} />
+                <span className="typing-dot h-2 w-2 rounded-full bg-[var(--muted)]" style={{ animationDelay: "320ms" }} />
                 <span className="sr-only">{otherName} is typing</span>
               </div>
             </div>
@@ -1697,18 +1736,30 @@ export function ChatView({
               />
             </div>
             {draft.trim() || attachments.pending.length > 0 ? (
-              <button
-                type="submit"
-                disabled={sendPending || !requestAccepted}
-                aria-label="Send message"
-                className="btn btn-primary h-10 w-10 min-h-[44px] min-w-[44px] shrink-0 rounded-full! p-0!"
-              >
-                {sendPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Send className="h-4 w-4" />
-                )}
-              </button>
+              <div className="flex shrink-0 items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setShowSchedule(true)}
+                  disabled={sendPending || !requestAccepted}
+                  aria-label="Schedule message"
+                  className="flex h-9 w-9 min-h-[36px] min-w-[36px] items-center justify-center rounded-full border border-[var(--border)] text-[var(--muted)] transition-colors hover:border-[var(--border-strong)] hover:text-[var(--text)]"
+                  title="Schedule message"
+                >
+                  <Clock className="h-4 w-4" />
+                </button>
+                <button
+                  type="submit"
+                  disabled={sendPending || !requestAccepted}
+                  aria-label="Send message"
+                  className="btn btn-primary h-10 w-10 min-h-[44px] min-w-[44px] shrink-0 rounded-full! p-0!"
+                >
+                  {sendPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Send className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
             ) : (
               <button
                 type="button"
@@ -1803,6 +1854,48 @@ export function ChatView({
           targetName={reportMsg.sender.displayName}
           onClose={() => setReportMsg(null)}
         />
+      ) : null}
+
+      {/* Schedule message dialog */}
+      {showSchedule ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="card-glass w-full max-w-md rounded-3xl p-6 animate-fade-up">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Clock className="h-4.5 w-4.5 text-[var(--accent)]" />
+                <h3 className="text-base font-bold">Schedule Message</h3>
+              </div>
+              <button type="button" onClick={() => { setShowSchedule(false); setScheduledTime(""); }} className="flex h-8 w-8 items-center justify-center rounded-full text-[var(--muted)] hover:bg-[var(--surface-2)]"><X className="h-4 w-4" /></button>
+            </div>
+            <p className="mt-2 text-xs text-[var(--muted)]">Send this message at a specific time:</p>
+            <div className="mt-4">
+              <input
+                type="datetime-local"
+                value={scheduledTime}
+                onChange={(e) => setScheduledTime(e.target.value)}
+                min={new Date().toISOString().slice(0, 16)}
+                className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2.5 text-sm text-[var(--text)] focus:border-[var(--accent)] focus:outline-none"
+              />
+            </div>
+            {draft.trim() ? (
+              <div className="mt-3 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-3">
+                <p className="text-[0.65rem] font-semibold uppercase tracking-wider text-[var(--muted)]">Message</p>
+                <p className="mt-1 line-clamp-3 text-sm">{draft.trim()}</p>
+              </div>
+            ) : null}
+            <div className="mt-5 flex justify-end gap-2">
+              <button type="button" onClick={() => { setShowSchedule(false); setScheduledTime(""); }} className="rounded-xl px-4 py-2 text-sm font-medium text-[var(--muted)] hover:bg-[var(--surface-2)]">Cancel</button>
+              <button
+                type="button"
+                onClick={() => void scheduleSendMessage()}
+                disabled={!scheduledTime || !draft.trim() || sendPending}
+                className="rounded-xl bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+              >
+                {sendPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Schedule"}
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
     </div>
   );

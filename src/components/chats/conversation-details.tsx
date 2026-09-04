@@ -242,12 +242,16 @@ export function ConversationDetails({
                 <button
                   type="button"
                   onClick={() => {
-                    setShowInviteLinks(!showInviteLinks);
-                    if (!showInviteLinks && inviteLinks.length === 0) {
+                    const next = !showInviteLinks;
+                    setShowInviteLinks(next);
+                    if (next && inviteLinks.length === 0) {
                       fetch(`/api/groups/${conversationId}/invites`)
-                        .then((r) => r.json())
+                        .then((r) => {
+                          if (!r.ok) throw new Error("Failed to load invite links");
+                          return r.json();
+                        })
                         .then((data) => setInviteLinks(data.links ?? []))
-                        .catch(() => {});
+                        .catch((err) => setError(err.message || "Could not load invite links. Make sure the database migration has been applied."));
                     }
                   }}
                   className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium text-[var(--accent-fg)] hover:bg-[var(--accent-soft)]"
@@ -263,12 +267,22 @@ export function ConversationDetails({
                       onClick={async () => {
                         setGroupBusy("invite");
                         try {
-                          const res = await fetch(`/api/groups/${conversationId}/invites`, { method: "POST" });
+                          const res = await fetch(`/api/groups/${conversationId}/invites`, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({}),
+                          });
+                          if (!res.ok) {
+                            const data = await res.json().catch(() => null);
+                            throw new Error(data?.error || `Server error ${res.status}`);
+                          }
                           const data = await res.json();
                           if (data.link) {
                             setInviteLinks((prev) => [data.link, ...prev]);
                           }
-                        } catch {}
+                        } catch (err) {
+                          setError((err as Error).message || "Failed to create invite link.");
+                        }
                         setGroupBusy(null);
                       }}
                       className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-[var(--accent)] py-2 text-[0.68rem] font-medium text-[var(--accent-fg)] hover:bg-[var(--accent-soft)]"
