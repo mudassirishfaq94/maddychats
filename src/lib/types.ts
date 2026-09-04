@@ -159,6 +159,11 @@ export interface ConversationDetail {
   lastMessageAt: string | null;
   backgroundStyle: string | null;
   backgroundOpacity: number;
+  /** Group settings */
+  adminOnlyMessaging: boolean;
+  rules: string | null;
+  announcements: string | null;
+  slowModeSeconds: number;
   members: Array<PublicUser & { role: "owner" | "admin" | "member"; joinedAt: string }>;
 }
 

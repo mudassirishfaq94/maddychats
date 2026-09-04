@@ -457,6 +457,10 @@ export async function getConversationForUser(
     lastMessageAt: conv.lastMessageAt ? conv.lastMessageAt.toISOString() : null,
     backgroundStyle: conv.backgroundStyle ?? null,
     backgroundOpacity: conv.backgroundOpacity ?? 100,
+    adminOnlyMessaging: Boolean(conv.adminOnlyMessaging),
+    rules: conv.rules ?? null,
+    announcements: conv.announcements ?? null,
+    slowModeSeconds: conv.slowModeSeconds ?? 0,
     members: memberRows.map((m) => ({
       ...toPublicUser(m.user),
       role: m.member.role as "owner" | "admin" | "member",

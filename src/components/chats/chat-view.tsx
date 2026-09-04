@@ -1025,6 +1025,28 @@ export function ChatView({
         </div>
       ) : null}
 
+      {/* Group announcements */}
+      {isGroup && conversation.announcements ? (
+        <div className="mx-4 mt-3 rounded-xl border border-[color-mix(in_srgb,var(--accent)_30%,transparent)] bg-[color-mix(in_srgb,var(--accent)_8%,transparent)] px-4 py-3">
+          <div className="flex items-center gap-2 text-xs font-semibold text-[var(--accent-fg)]">
+            <span>📢</span>
+            <span>Announcement</span>
+          </div>
+          <p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">{conversation.announcements}</p>
+        </div>
+      ) : null}
+
+      {/* Group rules */}
+      {isGroup && conversation.rules ? (
+        <div className="mx-4 mt-2 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3">
+          <div className="flex items-center gap-2 text-xs font-semibold text-[var(--muted)]">
+            <span>📋</span>
+            <span>Group Rules</span>
+          </div>
+          <p className="mt-1 whitespace-pre-wrap text-xs leading-relaxed text-[var(--muted)]">{conversation.rules}</p>
+        </div>
+      ) : null}
+
       {/* Pinned message indicator */}
       {hasPinnedMsgs && firstPinned ? (
         <button

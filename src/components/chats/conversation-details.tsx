@@ -318,6 +318,14 @@ export function ConversationDetails({
                 ) : null}
               </div>
             ) : null}
+            {(group.myRole === "owner" || group.myRole === "admin") ? (
+              <GroupSettingsPanel
+                conversationId={conversationId}
+                group={group}
+                busy={groupBusy !== null}
+                onUpdate={(patch) => setGroup((prev) => ({ ...prev, ...patch }))}
+              />
+            ) : null}
             <button type="button" disabled={groupBusy !== null} onClick={() => void groupAction(`/api/groups/${conversationId}/leave`, "POST")} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold text-[var(--danger)] hover:bg-[color-mix(in_srgb,var(--danger)_8%,transparent)]"><LogOut className="h-4 w-4" />Leave group</button>
           </div>
         ) : other ? (
@@ -813,6 +821,143 @@ function CustomBackgroundInput({
           <X className="h-3 w-3" />
           Remove custom background
         </button>
+      ) : null}
+    </div>
+  );
+}
+
+/* =================== Group Settings Panel =================== */
+
+function GroupSettingsPanel({
+  conversationId,
+  group,
+  busy,
+  onUpdate,
+}: {
+  conversationId: string;
+  group: { adminOnlyMessaging: boolean; rules: string | null; announcements: string | null; slowModeSeconds: number };
+  busy: boolean;
+  onUpdate: (patch: Record<string, unknown>) => void;
+}) {
+  const [showSettings, setShowSettings] = useState(false);
+  const [rules, setRules] = useState(group.rules ?? "");
+  const [announcements, setAnnouncements] = useState(group.announcements ?? "");
+  const [slowMode, setSlowMode] = useState(group.slowModeSeconds);
+  const [adminOnly, setAdminOnly] = useState(group.adminOnlyMessaging);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  async function saveSetting(patch: Record<string, unknown>) {
+    setSaving(true);
+    setSaved(false);
+    try {
+      const res = await fetch(`/api/groups/${conversationId}/settings`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      });
+      if (res.ok) {
+        onUpdate(patch);
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2000);
+      }
+    } catch {}
+    setSaving(false);
+  }
+
+  return (
+    <div className="mt-3">
+      <button
+        type="button"
+        onClick={() => setShowSettings(!showSettings)}
+        className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium text-[var(--accent-fg)] hover:bg-[var(--accent-soft)]"
+      >
+        <span className="text-lg">⚙️</span>
+        {showSettings ? "Hide settings" : "Group settings"}
+        {saving && <Loader2 className="ml-auto h-3 w-3 animate-spin" />}
+        {saved && !saving && <span className="ml-auto text-[var(--success)]">✓</span>}
+      </button>
+
+      {showSettings ? (
+        <div className="mt-2 space-y-4 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-3">
+          {/* Admin-only messaging */}
+          <label className="flex items-center justify-between">
+            <span className="text-xs font-medium">Admin-only messaging</span>
+            <button
+              type="button"
+              role="checkbox"
+              aria-checked={adminOnly}
+              onClick={() => {
+                const next = !adminOnly;
+                setAdminOnly(next);
+                void saveSetting({ adminOnlyMessaging: next });
+              }}
+              disabled={busy}
+              className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${adminOnly ? "bg-[var(--accent)]" : "bg-[var(--surface)]"}`}
+            >
+              <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${adminOnly ? "translate-x-[18px]" : "translate-x-0.5"}`} />
+            </button>
+          </label>
+
+          {/* Slow mode */}
+          <div>
+            <span className="text-xs font-medium">Slow mode</span>
+            <div className="mt-1.5 flex gap-1.5">
+              {[0, 10, 30, 60, 300].map((sec) => (
+                <button
+                  key={sec}
+                  type="button"
+                  disabled={busy}
+                  onClick={() => {
+                    setSlowMode(sec);
+                    void saveSetting({ slowModeSeconds: sec });
+                  }}
+                  className={`rounded-lg px-2 py-1 text-[0.6rem] font-medium transition-colors ${
+                    slowMode === sec
+                      ? "bg-[var(--accent)] text-white"
+                      : "bg-[var(--surface)] text-[var(--muted)] hover:bg-[color-mix(in_srgb,var(--muted)_10%,transparent)]"
+                  }`}
+                >
+                  {sec === 0 ? "Off" : sec < 60 ? `${sec}s` : `${sec / 60}m`}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Rules */}
+          <div>
+            <span className="text-xs font-medium">Group rules</span>
+            <textarea
+              value={rules}
+              onChange={(e) => setRules(e.target.value)}
+              onBlur={() => {
+                if (rules !== (group.rules ?? "")) {
+                  void saveSetting({ rules: rules.trim() || null });
+                }
+              }}
+              placeholder="e.g. Be respectful, no spam, English only..."
+              rows={3}
+              className="mt-1.5 w-full resize-none rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-2 text-xs text-[var(--text)] placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:outline-none"
+            />
+          </div>
+
+          {/* Announcements */}
+          <div>
+            <span className="text-xs font-medium">Announcements</span>
+            <textarea
+              value={announcements}
+              onChange={(e) => setAnnouncements(e.target.value)}
+              onBlur={() => {
+                if (announcements !== (group.announcements ?? "")) {
+                  void saveSetting({ announcements: announcements.trim() || null });
+                }
+              }}
+              placeholder="Pin important messages for all members..."
+              rows={2}
+              className="mt-1.5 w-full resize-none rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-2 text-xs text-[var(--text)] placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:outline-none"
+            />
+          </div>
+        </div>
       ) : null}
     </div>
   );

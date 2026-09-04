@@ -147,6 +147,16 @@ export const conversations = pgTable(
       .notNull(),
     /** Group deletion tombstone; preserves message history for retention/audit. */
     deletedAt: timestamp("deleted_at", { withTimezone: true, mode: "date" }),
+    /** Group settings: admin-only messaging */
+    adminOnlyMessaging: boolean("admin_only_messaging").default(false).notNull(),
+    /** Group rules displayed to members */
+    rules: text("rules"),
+    /** Group announcements pinned at top */
+    announcements: text("announcements"),
+    /** Slow mode: minimum seconds between messages per user (0 = off) */
+    slowModeSeconds: integer("slow_mode_seconds").default(0).notNull(),
+    /** Last message sender — for system message tracking */
+    lastMessageBy: uuid("last_message_by").references((): AnyPgColumn => users.id, { onDelete: "set null" }),
   },
   (table) => [index("conversations_last_message_idx").on(table.lastMessageAt)],
 );

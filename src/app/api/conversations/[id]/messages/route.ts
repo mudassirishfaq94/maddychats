@@ -118,9 +118,27 @@ export async function POST(
     }
   }
 
+  // Group settings enforcement
+  const detail = await getConversationForUser(id, me.id);
+  if (detail?.type === "group") {
+    // Admin-only messaging
+    if (detail.adminOnlyMessaging && membership.role === "member") {
+      return jsonError(403, "Only admins can send messages in this group.");
+    }
+
+    // Slow mode
+    if (detail.slowModeSeconds > 0 && membership.role !== "owner") {
+      const lastMsg = detail.lastMessageAt ? new Date(detail.lastMessageAt).getTime() : 0;
+      const elapsed = (Date.now() - lastMsg) / 1000;
+      if (elapsed < detail.slowModeSeconds) {
+        const waitSec = Math.ceil(detail.slowModeSeconds - elapsed);
+        return jsonError(429, `Slow mode: wait ${waitSec} second${waitSec !== 1 ? "s" : ""} before sending another message.`);
+      }
+    }
+  }
+
   // Blocking is enforced here on the server — never in the UI alone.
   const members = await memberIdsOf(id);
-  const detail = await getConversationForUser(id, me.id);
   if (detail?.type === "dm") {
     for (const other of members.filter((m) => m !== me.id)) {
       if (await isBlockedBetween(me.id, other)) {
