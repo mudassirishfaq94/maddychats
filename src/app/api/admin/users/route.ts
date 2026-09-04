@@ -1,164 +1,86 @@
 import { NextRequest, NextResponse } from "next/server";
-import { eq, like, or, desc, asc, sql, and, gte, lte, ne } from "drizzle-orm";
-import { db } from "@/db";
-import { users, messages, conversationMembers, notifications } from "@/db/schema";
-import { requireAdmin } from "@/server/admin";
+import { requireAdmin, suspendUser, unsuspendUser, setUserRole, auditLog } from "@/server/admin";
 import { guardSameOrigin, jsonError, readJson } from "@/server/http";
-import bcrypt from "bcryptjs";
+import { db } from "@/db";
+import { users } from "@/db/schema";
+import { sql } from "drizzle-orm";
 
-/** GET /api/admin/users — List users with search, filter, pagination */
+export const dynamic = "force-dynamic";
+
+/** List all users (admin only) */
 export async function GET(req: NextRequest) {
   const blocked = guardSameOrigin(req);
   if (blocked) return blocked;
 
   try {
-    await requireAdmin();
+    const admin = await requireAdmin();
+
+    const allUsers = await db
+      .select({
+        id: users.id,
+        username: users.username,
+        displayName: users.displayName,
+        email: users.email,
+        role: users.role,
+        suspendedAt: users.suspendedAt,
+        suspendedUntil: users.suspendedUntil,
+        suspensionReason: users.suspensionReason,
+        createdAt: users.createdAt,
+        lastSeenAt: users.lastSeenAt,
+      })
+      .from(users)
+      .orderBy(sql`${users.createdAt} DESC`);
+
+    return NextResponse.json({ users: allUsers });
   } catch (e) {
     if ((e as Error).message === "UNAUTHENTICATED") return jsonError(401, "Not authenticated.");
     return jsonError(403, "Admin access required.");
   }
-
-  const url = new URL(req.url);
-  const search = url.searchParams.get("q")?.trim() ?? "";
-  const page = Math.max(1, parseInt(url.searchParams.get("page") ?? "1", 10));
-  const limit = Math.min(100, Math.max(1, parseInt(url.searchParams.get("limit") ?? "20", 10)));
-  const sort = url.searchParams.get("sort") === "asc" ? "asc" : "desc";
-  const sortBy = url.searchParams.get("sortBy") ?? "createdAt";
-
-  const sortColumn =
-    sortBy === "username" ? users.username :
-    sortBy === "displayName" ? users.displayName :
-    sortBy === "email" ? users.email :
-    users.createdAt;
-
-  const offset = (page - 1) * limit;
-
-  // Build where clause
-  const searchCondition = search
-    ? or(
-        like(users.username, `%${search}%`),
-        like(users.displayName, `%${search}%`),
-        like(users.email, `%${search}%`),
-      )
-    : undefined;
-
-  // Get total count
-  const [{ count }] = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(users)
-    .where(searchCondition);
-
-  // Get users with stats
-  const userList = await db
-    .select({
-      id: users.id,
-      username: users.username,
-      displayName: users.displayName,
-      email: users.email,
-      avatarUrl: users.avatarUrl,
-      bio: users.bio,
-      createdAt: users.createdAt,
-      lastSeenAt: users.lastSeenAt,
-      tokenInvalidBeforeAt: users.tokenInvalidBeforeAt,
-    })
-    .from(users)
-    .where(searchCondition)
-    .orderBy(sort === "asc" ? asc(sortColumn) : desc(sortColumn))
-    .limit(limit)
-    .offset(offset);
-
-  // Get message counts for each user
-  const userIds = userList.map((u) => u.id);
-  const messageCounts = userIds.length
-    ? await db
-        .select({
-          userId: messages.senderId,
-          count: sql<number>`count(*)::int`,
-        })
-        .from(messages)
-        .where(sql`${messages.senderId} IN ${userIds}`)
-        .groupBy(messages.senderId)
-    : [];
-
-  const messageCountMap = new Map(messageCounts.map((mc) => [mc.userId, mc.count]));
-
-  // Get conversation counts
-  const conversationCounts = userIds.length
-    ? await db
-        .select({
-          userId: conversationMembers.userId,
-          count: sql<number>`count(*)::int`,
-        })
-        .from(conversationMembers)
-        .where(sql`${conversationMembers.userId} IN ${userIds}`)
-        .groupBy(conversationMembers.userId)
-    : [];
-
-  const conversationCountMap = new Map(conversationCounts.map((cc) => [cc.userId, cc.count]));
-
-  const usersWithStats = userList.map((u) => ({
-    ...u,
-    createdAt: u.createdAt.toISOString(),
-    lastSeenAt: u.lastSeenAt?.toISOString() ?? null,
-    isBanned: u.tokenInvalidBeforeAt !== null,
-    messageCount: messageCountMap.get(u.id) ?? 0,
-    conversationCount: conversationCountMap.get(u.id) ?? 0,
-  }));
-
-  return NextResponse.json({
-    users: usersWithStats,
-    pagination: {
-      page,
-      limit,
-      total: count,
-      totalPages: Math.ceil(count / limit),
-    },
-  });
 }
 
-/** POST /api/admin/users — Create a new user */
-export async function POST(req: NextRequest) {
+/** Update user role or suspend/unsuspend */
+export async function PATCH(req: NextRequest) {
   const blocked = guardSameOrigin(req);
   if (blocked) return blocked;
 
   try {
-    await requireAdmin();
+    const admin = await requireAdmin();
+    const body = await readJson(req);
+    const data = (body ?? {}) as Record<string, unknown>;
+
+    const userId = data.userId ? String(data.userId) : null;
+    const action = data.action ? String(data.action) : null;
+
+    if (!userId || !action) return jsonError(422, "userId and action are required.");
+
+    switch (action) {
+      case "role": {
+        const role = data.role ? String(data.role) : null;
+        if (!role || !["user", "moderator", "admin"].includes(role)) {
+          return jsonError(422, "Valid role is required (user, moderator, admin).");
+        }
+        await setUserRole(admin.id, userId, role as "user" | "moderator" | "admin");
+        break;
+      }
+      case "suspend": {
+        const reason = data.reason ? String(data.reason) : "No reason provided";
+        const days = data.days ? Number(data.days) : undefined;
+        const until = days ? new Date(Date.now() + days * 86_400_000) : undefined;
+        await suspendUser(admin.id, userId, { reason, until });
+        break;
+      }
+      case "unsuspend": {
+        await unsuspendUser(admin.id, userId);
+        break;
+      }
+      default:
+        return jsonError(422, `Unknown action: ${action}`);
+    }
+
+    return NextResponse.json({ success: true });
   } catch (e) {
     if ((e as Error).message === "UNAUTHENTICATED") return jsonError(401, "Not authenticated.");
-    return jsonError(403, "Admin access required.");
+    if ((e as Error).message === "FORBIDDEN") return jsonError(403, "Admin access required.");
+    return jsonError(500, "Action failed.");
   }
-
-  const body = await readJson(req);
-  if (!body) return jsonError(400, "Invalid request body.");
-
-  const { username, displayName, email, password } = body;
-  if (!username || !displayName || !email || !password) {
-    return jsonError(400, "Username, display name, email, and password are required.");
-  }
-
-  // Check uniqueness
-  const uname = String(username);
-  const eaddr = String(email);
-  const existing = await db
-    .select({ id: users.id })
-    .from(users)
-    .where(or(eq(users.username, uname), eq(users.email, eaddr)))
-    .limit(1);
-
-  if (existing.length > 0) {
-    return jsonError(409, "Username or email already exists.");
-  }
-
-  const passwordHash = await bcrypt.hash(String(password), 12);
-  const [created] = await db
-    .insert(users)
-    .values({
-      username: String(username),
-      displayName: String(displayName),
-      email: String(email),
-      passwordHash,
-    })
-    .returning({ id: users.id, username: users.username });
-
-  return NextResponse.json({ ok: true, user: created }, { status: 201 });
 }

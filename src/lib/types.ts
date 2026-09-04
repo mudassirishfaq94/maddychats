@@ -9,6 +9,7 @@ export interface SafeUser {
   email: string;
   avatarUrl: string | null;
   bio: string | null;
+  role: "user" | "moderator" | "admin";
   createdAt: string;
   updatedAt: string;
   lastSeenAt: string | null;

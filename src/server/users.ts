@@ -17,6 +17,7 @@ export function toSafeUser(user: UserRow): SafeUser {
     email: user.email,
     avatarUrl: user.avatarUrl,
     bio: user.bio,
+    role: (user.role as "user" | "moderator" | "admin") ?? "user",
     createdAt: user.createdAt.toISOString(),
     updatedAt: user.updatedAt.toISOString(),
     lastSeenAt: user.lastSeenAt ? user.lastSeenAt.toISOString() : null,

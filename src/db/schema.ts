@@ -21,6 +21,12 @@ import {
  * `passwordHash` holds a bcrypt hash and must NEVER be selected into API
  * responses (see `toSafeUser` / `toPublicUser` in src/server/users.ts).
  */
+export const userRoleEnum = pgEnum("user_role", [
+  "user",
+  "moderator",
+  "admin",
+]);
+
 export const users = pgTable(
   "users",
   {
@@ -31,6 +37,13 @@ export const users = pgTable(
     passwordHash: text("password_hash").notNull(),
     avatarUrl: text("avatar_url"),
     bio: text("bio"),
+    /** Database-backed role: user | moderator | admin */
+    role: userRoleEnum("role").default("user").notNull(),
+    /** Suspension: null = not suspended */
+    suspendedAt: timestamp("suspended_at", { withTimezone: true, mode: "date" }),
+    suspendedUntil: timestamp("suspended_until", { withTimezone: true, mode: "date" }),
+    suspensionReason: text("suspension_reason"),
+    suspendedBy: uuid("suspended_by").references((): AnyPgColumn => users.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" })
       .defaultNow()
       .notNull(),

@@ -9,6 +9,9 @@ import {
   MessageSquare,
   Shield,
   Activity,
+  Flag,
+  HardDrive,
+  Lock,
   ChevronLeft,
   Menu,
   X,
@@ -18,8 +21,10 @@ import { cn } from "@/lib/utils";
 const NAV_ITEMS = [
   { href: "/app/admin", label: "Overview", icon: BarChart3 },
   { href: "/app/admin/users", label: "Users", icon: Users },
-  { href: "/app/admin/messages", label: "Messages", icon: MessageSquare },
-  { href: "/app/admin/activity", label: "Activity", icon: Activity },
+  { href: "/app/admin/reports", label: "Reports", icon: Flag },
+  { href: "/app/admin/storage", label: "Storage", icon: HardDrive },
+  { href: "/app/admin/security", label: "Security", icon: Lock },
+  { href: "/app/admin/audit", label: "Audit Log", icon: Activity },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
