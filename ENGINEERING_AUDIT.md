@@ -48,7 +48,7 @@ The largest remaining scalability issue is realtime delivery: every connected cl
 - **No Content Security Policy:** current headers cover framing, MIME sniffing, permissions, referrers, and HSTS, but CSP is absent. Introduce a nonce-based report-only CSP, observe violations, then enforce it.
 - **No automated test suite:** there is no unit/integration/E2E test command. Priority cases are authorization boundaries, blocked users, CSRF, upload authorization, group roles, pagination cursors, message deletion, and session revocation.
 - **Lint currently fails:** two existing components synchronously reset state inside effects (`forward-dialog.tsx`, `mobile-message-menu.tsx`). There are also seven raw `<img>` warnings. These are not production-build blockers, but should be corrected and made CI-blocking.
-- **Dependency advisory check was inconclusive:** the npm advisory endpoint did not return during two attempts. Run `npm audit --omit=dev` in CI with network access and fail on high/critical production advisories. Several non-security package updates are available; update in small tested batches.
+- **Dependency advisories remain:** GitHub reports five alerts on the pushed default branch (two high, three moderate). The local npm advisory endpoint did not return during two attempts, so affected dependency paths were not safely auto-upgraded in this pass. Review Dependabot's exact paths, update in small tested batches, and make `npm audit --omit=dev` a required CI check.
 
 ### Low / maintainability
 
