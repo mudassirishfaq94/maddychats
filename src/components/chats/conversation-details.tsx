@@ -24,10 +24,12 @@ import {
   Pin,
   Star,
   X,
+  AlertTriangle,
 } from "lucide-react";
 import type { AttachmentDTO, ConversationDetail, PublicUser } from "@/lib/types";
 import { Avatar } from "@/components/avatar";
 import { InlineMedia, Lightbox, humanSize } from "./attachments";
+import { useEncryptedAttachmentUrl } from "./e2ee-context";
 import { useRealtime } from "@/components/providers/realtime-provider";
 import { cn } from "@/lib/utils";
 import { Toggle } from "@/components/ui/toggle";
@@ -517,31 +519,49 @@ function FilesList({
 
   return (
     <div className="space-y-1.5">
-      {items.map((item) => {
-        const Icon = iconFor(item.mimeType);
-        return (
-          <a
-            key={item.id}
-            href={item.url}
-            download={item.originalName}
-            className="flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2.5 transition-colors hover:border-[var(--border-strong)]"
-          >
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[color-mix(in_srgb,var(--accent)_16%,transparent)]">
-              <Icon className="h-4.5 w-4.5 text-[var(--accent-fg)]" />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-xs font-semibold">
-                {item.originalName}
-              </span>
-              <span className="block text-[0.68rem] text-[var(--muted)]">
-                {humanSize(item.size)} · {formatDate(item.createdAt)}
-              </span>
-            </span>
-            <Download className="h-4 w-4 shrink-0 text-[var(--muted)]" />
-          </a>
-        );
-      })}
+      {items.map((item) => (
+        <DetailsFileChip key={item.id} item={item} />
+      ))}
     </div>
+  );
+}
+
+function DetailsFileChip({
+  item,
+}: {
+  item: AttachmentDTO & { createdAt: string };
+}) {
+  const { url, failed } = useEncryptedAttachmentUrl(item);
+  const Icon = iconFor(item.mimeType);
+  const unavailable = Boolean(item.encrypted && (failed || !url));
+  return (
+    <span className="flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2.5">
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[color-mix(in_srgb,var(--accent)_16%,transparent)]">
+        <Icon className="h-4.5 w-4.5 text-[var(--accent-fg)]" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-xs font-semibold">
+          {item.originalName}
+        </span>
+        <span className="block text-[0.68rem] text-[var(--muted)]">
+          {unavailable
+            ? "Locked — could not decrypt"
+            : `${humanSize(item.size)} · ${formatDate(item.createdAt)}`}
+        </span>
+      </span>
+      {!unavailable ? (
+        <a
+          href={url ?? undefined}
+          download={item.originalName}
+          aria-label={`Download ${item.originalName}`}
+          className="text-[var(--muted)] hover:text-[var(--text)]"
+        >
+          <Download className="h-4 w-4 shrink-0" />
+        </a>
+      ) : (
+        <AlertTriangle className="h-4 w-4 shrink-0 text-[var(--muted)]" />
+      )}
+    </span>
   );
 }
 

@@ -242,6 +242,8 @@ export const messages = pgTable(
     ),
     /** Whether this message was forwarded from another conversation. */
     forwarded: boolean("forwarded").default(false).notNull(),
+    /** True when the text column holds E2EE ciphertext (client holds the key). */
+    encrypted: boolean("encrypted").default(false).notNull(),
     /** Set once any other member is connected — powers the "Delivered" tick. */
     deliveredAt: timestamp("delivered_at", { withTimezone: true, mode: "date" }),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" })
@@ -334,6 +336,10 @@ export const messageAttachments = pgTable(
     kind: text("kind").default("file").notNull(),
     /** Voice transcription text */
     transcript: text("transcript"),
+    /** True when stored bytes are E2EE ciphertext; encKey holds the wrapped key. */
+    encrypted: boolean("encrypted").default(false).notNull(),
+    /** Symmetric media key wrapped with the conversation key (base64). */
+    encKey: text("enc_key"),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" })
       .defaultNow()
       .notNull(),
@@ -952,6 +958,8 @@ export const scheduledMessages = pgTable(
       .references(() => conversations.id, { onDelete: "cascade" })
       .notNull(),
     text: text("text").notNull(),
+    /** True when the text column holds E2EE ciphertext. */
+    encrypted: boolean("encrypted").default(false).notNull(),
     replyToMessageId: uuid("reply_to_message_id").references(() => messages.id, {
       onDelete: "set null",
     }),

@@ -1,12 +1,13 @@
 "use client";
 
-import { Mic2, Pause, Play, Captions, Loader2 } from "lucide-react";
+import { Mic2, Pause, Play, Captions, Loader2, Lock } from "lucide-react";
 import { useState } from "react";
-import type { PublicUser } from "@/lib/types";
+import type { AttachmentDTO, PublicUser } from "@/lib/types";
 import { Avatar } from "@/components/avatar";
 import { Waveform } from "./waveform";
 import { useVoicePlayback } from "@/hooks/use-audio-player";
 import { cn } from "@/lib/utils";
+import { useEncryptedAttachmentUrl } from "./e2ee-context";
 
 function finiteTime(value: number): number {
   return Number.isFinite(value) && value > 0 ? value : 0;
@@ -26,6 +27,7 @@ export function AudioMessage({
   sender,
   transcript: initialTranscript,
   attachmentId,
+  attachment,
 }: {
   src: string;
   own: boolean;
@@ -33,8 +35,15 @@ export function AudioMessage({
   sender?: PublicUser;
   transcript?: string | null;
   attachmentId?: string;
+  /** When given (E2EE voice), bytes are fetched + decrypted client-side. */
+  attachment?: AttachmentDTO;
 }) {
-  const voiceId = `voice-${src}`;
+  const resolved = useEncryptedAttachmentUrl(attachment);
+  // Encrypted voice resolves to a decrypted object URL; local previews pass src.
+  const effectiveSrc = attachment?.encrypted ? (resolved.url ?? "") : src;
+  const decrypting = Boolean(attachment?.encrypted && !resolved.url && !resolved.failed);
+
+  const voiceId = `voice-${effectiveSrc || attachment?.id || src}`;
   const {
     playing,
     currentTime,
@@ -45,7 +54,24 @@ export function AudioMessage({
     seek,
     playbackRate,
     cyclePlaybackRate,
-  } = useVoicePlayback(voiceId, src);
+  } = useVoicePlayback(voiceId, effectiveSrc);
+
+  if (decrypting) {
+    return (
+      <div
+        className={cn(
+          "flex items-center gap-3 rounded-2xl px-4 py-3",
+          own
+            ? "rounded-br-md text-white/70"
+            : "rounded-bl-md border border-[var(--border)] bg-[var(--bubble-other-bg)]",
+        )}
+        style={own ? { background: "var(--bubble-own-bg)" } : undefined}
+      >
+        <Loader2 className="h-4 w-4 animate-spin opacity-70" />
+        <span className="text-xs opacity-80">Decrypting securely…</span>
+      </div>
+    );
+  }
 
   const totalDuration = duration || finiteTime(initialDuration ?? 0);
   const progress = totalDuration ? (currentTime / totalDuration) * 100 : 0;
@@ -97,7 +123,8 @@ export function AudioMessage({
         <button
           type="button"
           onClick={() => void togglePlay()}
-          aria-label={playing ? "Pause" : "Play"}
+          disabled={!effectiveSrc}
+          aria-label={playing ? "Pause voice message" : "Play voice message"}
           className={cn(
             "flex h-10 w-10 shrink-0 items-center justify-center rounded-full shadow-sm transition-all active:scale-95",
             own
@@ -117,7 +144,7 @@ export function AudioMessage({
         {/* Waveform + time */}
         <div className="min-w-0 flex-1">
           <Waveform
-            src={src}
+            src={effectiveSrc}
             progress={progress}
             playing={playing}
             own={own}
@@ -159,6 +186,17 @@ export function AudioMessage({
               Voice
             </span>
           </div>
+          {attachment?.encrypted ? (
+            <span
+              className={cn(
+                "mt-1 flex items-center gap-1 text-[0.58rem] font-medium uppercase tracking-wide",
+                own ? "text-white/40" : "text-[var(--muted)]",
+              )}
+            >
+              <Lock className="h-2.5 w-2.5" />
+              End-to-end encrypted
+            </span>
+          ) : null}
 
           {/* Transcript */}
           {transcript ? (

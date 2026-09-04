@@ -70,17 +70,44 @@ export function useAttachmentUpload() {
     conversationId: string,
     text: string,
     replyToMessageId: string | null,
+    encryptFile?: (file: File) => Promise<{
+      file: File;
+      wrappedKey: string;
+      originalMime: string;
+    }>,
+    encryptText?: (plain: string) => Promise<string>,
   ): Promise<{ ok: true; message: MessageDTO } | { ok: false; error: string }> {
     return new Promise((resolve) => {
       if (pending.length === 0) {
         resolve({ ok: false, error: "No files selected." });
         return;
       }
+      (async () => {
+        try {
       const form = new FormData();
       form.append("conversationId", conversationId);
-      if (text) form.append("text", text);
       if (replyToMessageId) form.append("replyToMessageId", replyToMessageId);
-      pending.forEach((p) => form.append("files", p.file, p.file.name));
+
+      if (encryptFile) {
+        // E2EE mode: every file is encrypted client-side before upload; the
+        // server stores only ciphertext plus a conversation-wrapped key.
+        form.append("encrypted", "true");
+        for (const p of pending) {
+          const out = await encryptFile(p.file);
+          form.append("files", out.file, p.file.name);
+          form.append("keys", out.wrappedKey);
+          form.append("origTypes", out.originalMime);
+        }
+        if (text) {
+          const encryptedCaption = encryptText
+            ? await encryptText(text)
+            : text;
+          form.append("text", encryptedCaption);
+        }
+      } else {
+        if (text) form.append("text", text);
+        pending.forEach((p) => form.append("files", p.file, p.file.name));
+      }
 
       const xhr = new XMLHttpRequest();
       xhrRef.current = xhr;
@@ -121,6 +148,12 @@ export function useAttachmentUpload() {
 
       setProgress(0);
       xhr.send(form);
+        } catch {
+          xhrRef.current = null;
+          setProgress(null);
+          resolve({ ok: false, error: "Encryption failed before upload." });
+        }
+      })();
     });
   }
 

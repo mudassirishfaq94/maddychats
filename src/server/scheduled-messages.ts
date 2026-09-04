@@ -15,6 +15,7 @@ export async function scheduleMessage(input: {
   text: string;
   replyToMessageId?: string | null;
   scheduledFor: Date;
+  encrypted?: boolean;
 }) {
   const [scheduled] = await db
     .insert(scheduledMessages)
@@ -24,6 +25,7 @@ export async function scheduleMessage(input: {
       text: input.text,
       replyToMessageId: input.replyToMessageId ?? null,
       scheduledFor: input.scheduledFor,
+      encrypted: input.encrypted ?? false,
     })
     .returning();
 
@@ -113,6 +115,7 @@ export async function processScheduledMessages(): Promise<{
           senderId: scheduled.senderId,
           text: scheduled.text,
           replyToMessageId: scheduled.replyToMessageId ?? null,
+          encrypted: scheduled.encrypted,
         }).returning();
         await tx.update(scheduledMessages)
           .set({ sent: true, sentMessageId: created.id })
@@ -150,7 +153,9 @@ export async function processScheduledMessages(): Promise<{
         messageId: message.id,
         actorId: scheduled.senderId,
         actorName: sender?.displayName ?? "Scheduled message",
-        preview: scheduled.text.slice(0, 140),
+        preview: scheduled.encrypted
+          ? "\u{1F512} Encrypted message"
+          : scheduled.text.slice(0, 140),
       });
 
       processed++;

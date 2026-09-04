@@ -110,8 +110,12 @@ export async function POST(
     return jsonError(429, spamCheck.reason ?? "Too many messages.");
   }
 
-  // Duplicate detection
-  if (parsed.data.text) {
+  // Plaintext-only checks are skipped for E2EE ciphertext — the server can
+  // never see the plaintext, so duplicates/mentions are undetectable.
+  const isEncrypted = parsed.data.encrypted === true;
+
+  // Duplicate detection (plaintext messages only)
+  if (!isEncrypted && parsed.data.text) {
     const isDupe = await isDuplicateMessage(me.id, parsed.data.text, id);
     if (isDupe) {
       return jsonError(429, "Duplicate message detected. Please wait before sending the same message again.");
@@ -153,6 +157,7 @@ export async function POST(
     parsed.data.text,
     parsed.data.replyToMessageId ?? null,
     parsed.data.forwarded,
+    isEncrypted,
   );
 
   // Recipient already connected → the message is delivered on arrival.
@@ -172,14 +177,18 @@ export async function POST(
     messageId: message.id,
     actorId: me.id,
     actorName: me.displayName,
-    preview: parsed.data.text,
+    preview: isEncrypted
+      ? "\u{1F512} Encrypted message"
+      : parsed.data.text,
   });
-  const mentioned = await storeMessageMentions(message.id, id, parsed.data.text, me.id);
-  await Promise.all(mentioned.map((user) => notifyUser(user.id, "mention", {
-    conversationId: id,
-    messageId: message.id,
-    actorName: me.displayName,
-    preview: parsed.data.text.slice(0, 140),
-  }, me.id)));
+  if (!isEncrypted) {
+    const mentioned = await storeMessageMentions(message.id, id, parsed.data.text, me.id);
+    await Promise.all(mentioned.map((user) => notifyUser(user.id, "mention", {
+      conversationId: id,
+      messageId: message.id,
+      actorName: me.displayName,
+      preview: parsed.data.text.slice(0, 140),
+    }, me.id)));
+  }
   return NextResponse.json({ message }, { status: 201 });
 }

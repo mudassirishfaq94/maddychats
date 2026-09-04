@@ -61,7 +61,12 @@ export async function PATCH(
     );
   }
 
-  const result = await editMessage(id, me.id, parsed.data.text);
+  const result = await editMessage(
+    id,
+    me.id,
+    parsed.data.text,
+    parsed.data.encrypted === true,
+  );
   if (result === "not_found") return jsonError(404, "Message not found.");
   if (result === "forbidden") {
     return jsonError(403, "You can only edit your own messages.");

@@ -51,6 +51,7 @@ export async function POST(
   const text = data.text ? String(data.text).trim() : "";
   const scheduledFor = data.scheduledFor ? new Date(String(data.scheduledFor)) : null;
   const replyToMessageId = data.replyToMessageId ? String(data.replyToMessageId) : null;
+  const encrypted = data.encrypted === true;
 
   if (!text) return jsonError(422, "Message text is required.");
   if (!scheduledFor || isNaN(scheduledFor.getTime())) return jsonError(422, "Valid scheduledFor date is required.");
@@ -62,6 +63,7 @@ export async function POST(
     text,
     replyToMessageId,
     scheduledFor,
+    encrypted,
   });
 
   return NextResponse.json({ scheduled }, { status: 201 });

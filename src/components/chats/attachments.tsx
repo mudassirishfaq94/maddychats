@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import type { AttachmentDTO } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { useEncryptedAttachmentUrl } from "./e2ee-context";
 
 export function humanSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -49,20 +50,26 @@ export function Lightbox({
   onClose: () => void;
   onNavigate?: (index: number) => void;
 }) {
+  const current = images?.[currentIndex ?? 0];
+  const resolved = useEncryptedAttachmentUrl(current);
+  // The active image may be E2EE — use the decrypted object URL when ready.
+  const activeSrc = current?.encrypted ? (resolved.url ?? "") : src;
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    setLoading(true);
+    setFailed(false);
+  }, [activeSrc]);
+
   const goNext = useCallback(() => {
     if (images && currentIndex !== undefined && onNavigate) {
-      setLoading(true);
-      setFailed(false);
       onNavigate((currentIndex + 1) % images.length);
     }
   }, [images, currentIndex, onNavigate]);
 
   const goPrev = useCallback(() => {
     if (images && currentIndex !== undefined && onNavigate) {
-      setLoading(true);
-      setFailed(false);
       onNavigate((currentIndex - 1 + images.length) % images.length);
     }
   }, [images, currentIndex, onNavigate]);
@@ -82,6 +89,8 @@ export function Lightbox({
   }, [onClose, goNext, goPrev]);
 
   const hasNav = images && images.length > 1 && currentIndex !== undefined;
+  const downloadHref = current?.encrypted ? (resolved.url ?? undefined) : src;
+  const isDecrypting = Boolean(current?.encrypted && !resolved.url && !resolved.failed);
 
   return (
     <div
@@ -96,8 +105,9 @@ export function Lightbox({
       {/* Top controls */}
       <div className="absolute right-4 top-4 flex gap-2 z-10">
         <a
-          href={src}
+          href={downloadHref}
           download={alt}
+          aria-disabled={!downloadHref}
           className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
           aria-label="Download image"
         >
@@ -144,48 +154,57 @@ export function Lightbox({
         </button>
       ) : null}
 
-      {loading && !failed ? (
+      {isDecrypting ? (
+        <div className="flex flex-col items-center gap-3 text-white/80">
+          <Loader2 className="h-8 w-8 animate-spin" />
+          <p className="text-sm">Decrypting securely…</p>
+        </div>
+      ) : null}
+      {!isDecrypting && loading && !failed ? (
         <Loader2 className="h-8 w-8 animate-spin text-white/70" />
       ) : null}
-      {failed ? (
+      {!isDecrypting && failed ? (
         <div className="flex max-w-sm flex-col items-center gap-3 text-center text-white/75">
           <AlertTriangle className="h-8 w-8" />
           <p className="text-sm">This media could not be loaded.</p>
         </div>
-      ) : images?.[currentIndex ?? 0]?.kind === "video" ? (
-        <video
-          key={src}
-          src={src}
-          controls
-          autoPlay
-          preload="metadata"
-          onLoadedData={() => setLoading(false)}
-          onError={() => {
-            setLoading(false);
-            setFailed(true);
-          }}
-          className={cn(
-            "max-h-[85vh] max-w-[90vw] rounded-2xl object-contain shadow-2xl",
-            loading && "invisible absolute",
-          )}
-        />
-      ) : (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          key={src}
-          src={src}
-          alt={alt}
-          onLoad={() => setLoading(false)}
-          onError={() => {
-            setLoading(false);
-            setFailed(true);
-          }}
-          className={cn(
-            "max-h-[85vh] max-w-[90vw] rounded-2xl object-contain shadow-2xl animate-fade-in",
-            loading && "invisible absolute",
-          )}
-        />
-      )}
+      ) : null}
+      {!isDecrypting && activeSrc ? (
+        images?.[currentIndex ?? 0]?.kind === "video" ? (
+          <video
+            key={activeSrc}
+            src={activeSrc}
+            controls
+            autoPlay
+            preload="metadata"
+            onLoadedData={() => setLoading(false)}
+            onError={() => {
+              setLoading(false);
+              setFailed(true);
+            }}
+            className={cn(
+              "max-h-[85vh] max-w-[90vw] rounded-2xl object-contain shadow-2xl",
+              loading && "invisible absolute",
+            )}
+          />
+        ) : (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            key={activeSrc}
+            src={activeSrc}
+            alt={alt}
+            onLoad={() => setLoading(false)}
+            onError={() => {
+              setLoading(false);
+              setFailed(true);
+            }}
+            className={cn(
+              "max-h-[85vh] max-w-[90vw] rounded-2xl object-contain shadow-2xl animate-fade-in",
+              loading && "invisible absolute",
+            )}
+          />
+        )
+      ) : null}
     </div>
   );
 }
@@ -236,55 +255,9 @@ export function AttachmentList({
         </div>
       ) : null}
 
-      {files.map((f) => {
-        const Icon = iconFor(f.mimeType);
-        return (
-          <a
-            key={f.id}
-            href={f.url}
-            download={f.originalName}
-            className={cn(
-              "flex items-center gap-3 rounded-xl border px-3 py-2.5 transition-colors",
-              own
-                ? "border-[color-mix(in_srgb,var(--bubble-own-fg)_20%,transparent)] bg-[color-mix(in_srgb,var(--bubble-own-fg)_8%,transparent)] hover:bg-[color-mix(in_srgb,var(--bubble-own-fg)_14%,transparent)]"
-                : "border-[var(--border)] bg-[var(--card-2)] hover:border-[var(--border-strong)]",
-            )}
-          >
-            <span
-              className={cn(
-                "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg",
-                own ? "bg-white/20" : "bg-[color-mix(in_srgb,var(--accent)_16%,transparent)]",
-              )}
-            >
-              <Icon
-                className={cn(
-                  "h-4.5 w-4.5",
-                  own ? "text-[var(--bubble-own-fg)]" : "text-[var(--accent-fg)]",
-                )}
-              />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-xs font-semibold">
-                {f.originalName}
-              </span>
-              <span
-                className={cn(
-                  "block text-[0.68rem]",
-                  own ? "text-[var(--bubble-own-sub)]" : "text-[var(--muted)]",
-                )}
-              >
-                {humanSize(f.size)}
-              </span>
-            </span>
-            <Download
-              className={cn(
-                "h-4 w-4 shrink-0",
-                own ? "text-[var(--bubble-own-sub)]" : "text-[var(--muted)]",
-              )}
-            />
-          </a>
-        );
-      })}
+      {files.map((f) => (
+        <FileChip key={f.id} file={f} own={own} />
+      ))}
 
       {lightbox ? (
         <Lightbox
@@ -300,6 +273,76 @@ export function AttachmentList({
   );
 }
 
+/** A downloadable file chip that transparently decrypts E2EE files. */
+function FileChip({ file, own }: { file: AttachmentDTO; own: boolean }) {
+  const { url, failed } = useEncryptedAttachmentUrl(file);
+  const Icon = iconFor(file.mimeType);
+  const unavailable = Boolean(file.encrypted && (failed || !url));
+  return (
+    <span
+      className={cn(
+        "flex items-center gap-3 rounded-xl border px-3 py-2.5",
+        own
+          ? "border-[color-mix(in_srgb,var(--bubble-own-fg)_20%,transparent)] bg-[color-mix(in_srgb,var(--bubble-own-fg)_8%,transparent)]"
+          : "border-[var(--border)] bg-[var(--card-2)]",
+        unavailable && "opacity-80",
+      )}
+    >
+      <span
+        className={cn(
+          "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg",
+          own ? "bg-white/20" : "bg-[color-mix(in_srgb,var(--accent)_16%,transparent)]",
+        )}
+      >
+        <Icon
+          className={cn(
+            "h-4.5 w-4.5",
+            own ? "text-[var(--bubble-own-fg)]" : "text-[var(--accent-fg)]",
+          )}
+        />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-xs font-semibold">
+          {file.originalName}
+        </span>
+        <span
+          className={cn(
+            "block text-[0.68rem]",
+            own ? "text-[var(--bubble-own-sub)]" : "text-[var(--muted)]",
+          )}
+        >
+          {file.encrypted && unavailable
+            ? "Locked — could not decrypt"
+            : `${humanSize(file.size)}${file.encrypted ? " · end-to-end encrypted" : ""}`}
+        </span>
+      </span>
+      {unavailable ? (
+        <AlertTriangle
+          className={cn(
+            "h-4 w-4 shrink-0",
+            own ? "text-[var(--bubble-own-sub)]" : "text-[var(--muted)]",
+          )}
+        />
+      ) : (
+        <a
+          href={url ?? undefined}
+          download={file.originalName}
+          aria-disabled={!url}
+          aria-label={`Download ${file.originalName}`}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <Download
+            className={cn(
+              "h-4 w-4 shrink-0",
+              own ? "text-[var(--bubble-own-sub)]" : "text-[var(--muted)]",
+            )}
+          />
+        </a>
+      )}
+    </span>
+  );
+}
+
 export function InlineMedia({
   attachment,
   gallery = false,
@@ -307,14 +350,25 @@ export function InlineMedia({
   attachment: AttachmentDTO;
   gallery?: boolean;
 }) {
+  const { url, failed } = useEncryptedAttachmentUrl(attachment);
   const [loading, setLoading] = useState(true);
-  const [failed, setFailed] = useState(false);
+  const [failedRender, setFailedRender] = useState(false);
+  const showFailed = failed || failedRender;
 
-  if (failed) {
+  if (showFailed) {
     return (
       <span className="flex h-40 w-full flex-col items-center justify-center gap-2 bg-black/10 text-xs text-[var(--muted)]">
         <AlertTriangle className="h-5 w-5" />
         Media unavailable
+      </span>
+    );
+  }
+
+  if (!url) {
+    return (
+      <span className="absolute inset-0 flex items-center justify-center bg-black/10">
+        <Loader2 className="h-5 w-5 animate-spin text-white" />
+        <span className="sr-only">Decrypting securely…</span>
       </span>
     );
   }
@@ -328,11 +382,11 @@ export function InlineMedia({
       ) : null}
       {attachment.kind === "video" ? (
         <video
-          src={attachment.url}
+          src={url}
           muted
           preload="metadata"
           onLoadedData={() => setLoading(false)}
-          onError={() => setFailed(true)}
+          onError={() => setFailedRender(true)}
           className={cn(
             "w-full object-cover transition-transform duration-300 group-hover/img:scale-105",
             gallery ? "h-full" : "max-h-64",
@@ -341,11 +395,11 @@ export function InlineMedia({
       ) : (
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src={attachment.url}
+          src={url}
           alt={attachment.originalName}
           loading="lazy"
           onLoad={() => setLoading(false)}
-          onError={() => setFailed(true)}
+          onError={() => setFailedRender(true)}
           className={cn(
             "w-full object-cover transition-transform duration-300 group-hover/img:scale-105",
             gallery ? "h-full" : "max-h-64",

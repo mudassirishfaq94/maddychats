@@ -15,9 +15,25 @@ import {
   decryptKeyFromSender,
   encryptMessage,
   decryptMessage,
+  encryptBytes,
+  decryptBytes,
+  conversationFingerprint,
   encryptPrivateKeyForStorage,
   decryptPrivateKeyFromStorage,
 } from "@/lib/crypto";
+
+interface PeerDevice {
+  deviceId: string;
+  publicKey: string;
+}
+
+interface Peer {
+  userId: string;
+  displayName: string;
+  username: string;
+  avatarUrl: string | null;
+  devices: PeerDevice[];
+}
 
 interface E2EEState {
   initialized: boolean;
@@ -147,7 +163,7 @@ export function useE2EE(userId: string | undefined) {
       const targetPublicKey = await importPublicKey(targetPublicKeyBase64);
       const encryptedKey = await encryptKeyForUser(key, targetPublicKey);
 
-      await fetch("/api/e2ee/conversation-keys", {
+      const res = await fetch("/api/e2ee/conversation-keys", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -157,8 +173,88 @@ export function useE2EE(userId: string | undefined) {
           deviceId: state.deviceId,
         }),
       });
+      return res.ok;
     },
     [getConversationKey, state.deviceId],
+  );
+
+  /**
+   * Prepare a conversation for E2EE: fetch-or-create its symmetric key, share
+   * it to every device of every peer, and return the verification fingerprint.
+   *
+   * ready=false means at least one peer has no registered device key yet, so
+   * the caller should send plaintext this session (messages only become E2EE
+   * once every participant has keys — the UI says so honestly).
+   */
+  const prepareConversation = useCallback(
+    async (conversationId: string): Promise<{ ready: boolean; fingerprint: string | null }> => {
+      const key = await getConversationKey(conversationId);
+      let peers: Peer[] = [];
+      try {
+        const res = await fetch(`/api/e2ee/peers?conversationId=${encodeURIComponent(conversationId)}`);
+        if (res.ok) {
+          const data = (await res.json()) as { peers?: Peer[] };
+          peers = data.peers ?? [];
+        }
+      } catch {
+        peers = [];
+      }
+
+      // No peers (self chat, fresh group with only you) → encryption works.
+      const ready = peers.every((p) => p.devices.length > 0);
+      if (ready) {
+        for (const peer of peers) {
+          for (const device of peer.devices) {
+            try {
+              await shareKey(conversationId, peer.userId, device.deviceId, device.publicKey);
+            } catch {
+              // best-effort per device
+            }
+          }
+        }
+      }
+
+      let fingerprint: string | null = null;
+      try {
+        fingerprint = await conversationFingerprint(key);
+      } catch {
+        fingerprint = null;
+      }
+      return { ready, fingerprint };
+    },
+    [getConversationKey, shareKey],
+  );
+
+  /** Encrypt arbitrary bytes (media) with the conversation key. */
+  const encryptBytesForConversation = useCallback(
+    async (data: ArrayBuffer | Uint8Array, conversationId: string): Promise<string> => {
+      const key = await getConversationKey(conversationId);
+      return encryptBytes(data, key);
+    },
+    [getConversationKey],
+  );
+
+  /** Decrypt media bytes produced by encryptBytesForConversation. */
+  const decryptBytesForConversation = useCallback(
+    async (ciphertextBase64: string, conversationId: string): Promise<ArrayBuffer> => {
+      const key = await getConversationKey(conversationId);
+      return decryptBytes(ciphertextBase64, key);
+    },
+    [getConversationKey],
+  );
+
+  /** Unwrap a per-file media key (wrapped by the conversation key) and decrypt. */
+  const decryptMedia = useCallback(
+    async (encryptedBytesB64: string, wrappedKeyB64: string, conversationId: string): Promise<ArrayBuffer> => {
+      const conversationKey = await getConversationKey(conversationId);
+      // The wrapper holds the utf8 text of the media key's base64, so decode
+      // it back to text before importing (never re-encode it).
+      const wrappedKey = await decryptBytes(wrappedKeyB64, conversationKey);
+      const mediaKeyB64 = new TextDecoder().decode(wrappedKey);
+      const mediaKey = await importSymmetricKey(mediaKeyB64);
+      return decryptBytes(encryptedBytesB64, mediaKey);
+    },
+    [getConversationKey],
   );
 
   return {
@@ -167,5 +263,9 @@ export function useE2EE(userId: string | undefined) {
     decrypt,
     shareKey,
     getConversationKey,
+    prepareConversation,
+    encryptBytesForConversation,
+    decryptBytesForConversation,
+    decryptMedia,
   };
 }

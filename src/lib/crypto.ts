@@ -86,14 +86,14 @@ export async function exportSymmetricKey(key: CryptoKey): Promise<string> {
   return bufferToBase64(raw);
 }
 
-/** Import a symmetric key from base64 */
+/** Import a symmetric key from base64 (extractable so fingerprints work). */
 export async function importSymmetricKey(base64: string): Promise<CryptoKey> {
   const buffer = base64ToBuffer(base64);
   return crypto.subtle.importKey(
     "raw",
     buffer,
     { name: ALGORITHM, length: KEY_LENGTH },
-    false,
+    true,
     ["encrypt", "decrypt"],
   );
 }
@@ -152,7 +152,42 @@ export async function decryptMessage(
   ciphertextBase64: string,
   key: CryptoKey,
 ): Promise<string> {
+  const decrypted = await decryptBytes(ciphertextBase64, key);
+  return new TextDecoder().decode(decrypted);
+}
+
+/** Encrypt arbitrary bytes (media files) with a symmetric key; IV is prepended. */
+export async function encryptBytes(
+  data: ArrayBuffer | Uint8Array,
+  key: CryptoKey,
+): Promise<string> {
+  const iv = crypto.getRandomValues(new Uint8Array(IV_LENGTH));
+  const input: ArrayBuffer =
+    data instanceof Uint8Array
+      ? (data.buffer.slice(
+          data.byteOffset,
+          data.byteOffset + data.byteLength,
+        ) as ArrayBuffer)
+      : data;
+  const encrypted = await crypto.subtle.encrypt(
+    { name: ALGORITHM, iv },
+    key,
+    input,
+  );
+  const encBytes = new Uint8Array(encrypted);
+  const combined = new Uint8Array(iv.length + encBytes.byteLength);
+  combined.set(iv);
+  combined.set(encBytes, iv.length);
+  return bufferToBase64(combined.buffer);
+}
+
+/** Decrypt bytes previously produced by encryptBytes. */
+export async function decryptBytes(
+  ciphertextBase64: string,
+  key: CryptoKey,
+): Promise<ArrayBuffer> {
   const combined = new Uint8Array(base64ToBuffer(ciphertextBase64));
+  if (combined.byteLength <= IV_LENGTH) throw new Error("bad_ciphertext");
   const iv = combined.slice(0, IV_LENGTH);
   const ciphertext = combined.slice(IV_LENGTH);
   const decrypted = await crypto.subtle.decrypt(
@@ -160,7 +195,21 @@ export async function decryptMessage(
     key,
     ciphertext,
   );
-  return new TextDecoder().decode(decrypted);
+  return decrypted;
+}
+
+/**
+ * Human-verifiable fingerprint for a conversation key: 30 digits in six
+ * groups of five (SHA-256 of the raw key). Both participants can compare it
+ * out-of-band to confirm they share the same key.
+ */
+export async function conversationFingerprint(key: CryptoKey): Promise<string> {
+  const raw = await crypto.subtle.exportKey("raw", key);
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", raw));
+  const digits: number[] = [];
+  for (let i = 0; i < 30; i++) digits.push(digest[i] % 10);
+  const s = digits.join("");
+  return `${s.slice(0, 5)} ${s.slice(5, 10)} ${s.slice(10, 15)} ${s.slice(15, 20)} ${s.slice(20, 25)} ${s.slice(25, 30)}`;
 }
 
 /** Encrypt the private key with a passphrase for server storage */

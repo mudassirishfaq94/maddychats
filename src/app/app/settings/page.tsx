@@ -19,6 +19,7 @@ import { PrivacySettings } from "@/components/profile/privacy-settings";
 import { NotificationPreferences } from "@/components/profile/notification-preferences";
 import { TwoFactorAuth } from "@/components/profile/two-factor-auth";
 import { LoginHistory } from "@/components/profile/login-history";
+import { E2EEStatus } from "@/components/profile/e2ee-status";
 import { AccountDataSection } from "@/components/profile/account-data";
 
 export const metadata: Metadata = { title: "Settings" };
@@ -157,6 +158,7 @@ export default async function SettingsPage() {
               Security
             </h2>
             <div className="space-y-4">
+              <E2EEStatus userId={user.id} />
               <TwoFactorAuth />
               <LoginHistory />
             </div>

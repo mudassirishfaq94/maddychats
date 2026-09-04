@@ -83,6 +83,38 @@ function baseDTO(row: MessageRow, sender: UserRow): MessageDTO {
     deletedForMe: false,
     pinned: false,
     forwarded: Boolean(row.forwarded),
+    encrypted: Boolean(row.encrypted),
+  };
+}
+
+function toAttachmentDTO(
+  a: {
+    id: string;
+    originalName: string;
+    mimeType: string;
+    size: number;
+    kind: string | null;
+    encrypted: boolean | null;
+    encKey: string | null;
+  },
+): AttachmentDTO {
+  const kind =
+    a.kind === "image"
+      ? "image"
+      : a.kind === "video"
+        ? "video"
+        : a.kind === "audio"
+          ? "audio"
+          : "file";
+  return {
+    id: a.id,
+    originalName: a.originalName,
+    mimeType: a.mimeType,
+    size: a.size,
+    kind,
+    url: `/api/media/${a.id}`,
+    encrypted: Boolean(a.encrypted),
+    encKey: a.encKey ?? null,
   };
 }
 
@@ -178,6 +210,7 @@ export async function hydrateMessages(
         senderId: p.message.senderId,
         senderName: p.sender.displayName,
         deleted: p.message.deletedAt !== null,
+        encrypted: Boolean(p.message.encrypted),
       });
     }
   }
@@ -199,8 +232,16 @@ export async function hydrateMessages(
       mimeType: a.mimeType,
       size: a.size,
       kind:
-        a.kind === "image" ? "image" : a.kind === "video" ? "video" : "file",
+        a.kind === "image"
+          ? "image"
+          : a.kind === "video"
+            ? "video"
+            : a.kind === "audio"
+              ? "audio"
+              : "file",
       url: `/api/media/${a.id}`,
+      encrypted: Boolean(a.encrypted),
+      encKey: a.encKey ?? null,
     });
     attachmentsByMessage.set(a.messageId, list);
   }
@@ -305,9 +346,10 @@ export async function listConversationsFor(
     type: string;
     created_at: string;
     deleted_at: string | null;
+    encrypted: boolean;
   }>(sql`
     SELECT DISTINCT ON (conversation_id)
-      id, conversation_id, sender_id, text, type, created_at, deleted_at
+      id, conversation_id, sender_id, text, type, created_at, deleted_at, encrypted
     FROM messages
     WHERE conversation_id IN (${sql.join(
       convIds.map((id) => sql`${id}`),
@@ -405,6 +447,7 @@ export async function listConversationsFor(
               deletedAt: last.deleted_at
                 ? new Date(last.deleted_at).toISOString()
                 : null,
+              encrypted: Boolean(last.encrypted),
             }
           : null,
       } satisfies ConversationSummary;
@@ -713,6 +756,7 @@ export async function createMessage(
   text: string,
   replyToMessageId?: string | null,
   forwarded = false,
+  encrypted = false,
 ): Promise<MessageDTO> {
   // A reply target must belong to the same conversation.
   let replyId: string | null = null;
@@ -741,6 +785,7 @@ export async function createMessage(
         type: "text",
         replyToMessageId: replyId,
         forwarded,
+        encrypted,
       })
       .returning();
     await tx
@@ -757,6 +802,7 @@ export async function editMessage(
   messageId: string,
   userId: string,
   text: string,
+  encrypted = false,
 ): Promise<MessageRow | "not_found" | "forbidden" | "deleted"> {
   const rows = await db
     .select()
@@ -771,7 +817,7 @@ export async function editMessage(
   const now = new Date();
   const updated = await db
     .update(messages)
-    .set({ text, editedAt: now, updatedAt: now })
+    .set({ text, editedAt: now, updatedAt: now, encrypted })
     .where(eq(messages.id, messageId))
     .returning();
   return updated[0];
@@ -1235,15 +1281,7 @@ export async function listStarredMessages(
   for (const a of attachmentRows) {
     if (a.messageId) {
       const list = attachmentsByMsg.get(a.messageId) ?? [];
-      list.push({
-        id: a.id,
-        originalName: a.originalName,
-        mimeType: a.mimeType,
-        size: a.size,
-        kind:
-          a.kind === "image" ? "image" : a.kind === "video" ? "video" : "file",
-        url: `/api/media/${a.id}`,
-      });
+      list.push(toAttachmentDTO(a));
       attachmentsByMsg.set(a.messageId, list);
     }
   }
@@ -1604,16 +1642,7 @@ export async function listConversationMedia(
 
   return rows
     .filter((r) => !myDeletedIds.has(r.message.id))
-    .map((r) => ({
-      id: r.attachment.id,
-      originalName: r.attachment.originalName,
-      mimeType: r.attachment.mimeType,
-      size: r.attachment.size,
-      kind: (r.attachment.kind === "video" ? "video" : "image") as
-        | "image"
-        | "video",
-      url: `/api/media/${r.attachment.id}`,
-    }));
+    .map((r) => toAttachmentDTO(r.attachment));
 }
 
 /**
@@ -1655,12 +1684,7 @@ export async function listConversationFiles(
   return rows
     .filter((r) => !myDeletedIds.has(r.message.id))
     .map((r) => ({
-      id: r.attachment.id,
-      originalName: r.attachment.originalName,
-      mimeType: r.attachment.mimeType,
-      size: r.attachment.size,
-      kind: "file" as const,
-      url: `/api/media/${r.attachment.id}`,
+      ...toAttachmentDTO(r.attachment),
       createdAt: r.message.createdAt.toISOString(),
     }));
 }

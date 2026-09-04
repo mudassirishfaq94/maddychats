@@ -99,13 +99,17 @@ export const groupRoleSchema = z.object({
 export const transferOwnershipSchema = z.object({ userId: z.uuid("Invalid user id") });
 
 export const sendMessageSchema = z.object({
+  // When E2EE is active the client sends ciphertext (base64), which is longer
+  // than the plaintext limit — so allow up to 4x while the client still caps
+  // plaintext at MAX_MESSAGE_LENGTH.
   text: z
     .string()
     .trim()
     .min(1, "Message cannot be empty")
-    .max(MAX_MESSAGE_LENGTH, "Message must be 2000 characters or fewer"),
+    .max(MAX_MESSAGE_LENGTH * 4, "Encrypted message payload is invalid"),
   replyToMessageId: z.uuid("Invalid message id").nullish(),
   forwarded: z.boolean().optional().default(false),
+  encrypted: z.boolean().optional().default(false),
 });
 
 export const editMessageSchema = z.object({
@@ -113,7 +117,8 @@ export const editMessageSchema = z.object({
     .string()
     .trim()
     .min(1, "Message cannot be empty")
-    .max(MAX_MESSAGE_LENGTH, "Message must be 2000 characters or fewer"),
+    .max(MAX_MESSAGE_LENGTH * 4, "Encrypted message payload is invalid"),
+  encrypted: z.boolean().optional().default(false),
 });
 
 /** Emoji reactions — short grapheme strings only. */

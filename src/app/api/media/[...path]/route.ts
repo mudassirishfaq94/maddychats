@@ -104,10 +104,18 @@ export async function GET(
     if (hidden.length > 0) return jsonError(404, "Not found.");
 
     relativePath = found.attachment.path;
-    mimeType = found.attachment.mimeType;
-    downloadName = found.attachment.originalName;
-    inline =
-      found.attachment.kind === "image" || found.attachment.kind === "video";
+    // E2EE attachments are stored as opaque ciphertext — never stream them
+    // inline or sniffable; the client downloads the blob and decrypts it.
+    if (found.attachment.encrypted) {
+      mimeType = "application/octet-stream";
+      downloadName = found.attachment.originalName;
+      inline = false;
+    } else {
+      mimeType = found.attachment.mimeType;
+      downloadName = found.attachment.originalName;
+      inline =
+        found.attachment.kind === "image" || found.attachment.kind === "video";
+    }
   } else {
     return jsonError(404, "Not found.");
   }

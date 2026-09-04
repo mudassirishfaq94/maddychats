@@ -59,14 +59,14 @@ export async function POST(req: NextRequest) {
   const membership = await getMembership(conversationId, user.id);
   if (!membership) return jsonError(404, "Conversation not found.");
 
-  // Verify target has a registered key
+  // Verify target has registered at least one device key.
   const [targetKey] = await db
     .select({ id: e2eeKeys.id })
     .from(e2eeKeys)
-    .where(and(eq(e2eeKeys.userId, targetUserId), eq(e2eeKeys.deviceId, deviceId)))
+    .where(eq(e2eeKeys.userId, targetUserId))
     .limit(1);
 
-  if (!targetKey) return jsonError(404, "Target device key not found.");
+  if (!targetKey) return jsonError(404, "Target user has no registered device key.");
 
   // Upsert the encrypted key
   const [existing] = await db

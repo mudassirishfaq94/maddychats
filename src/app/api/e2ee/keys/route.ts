@@ -4,16 +4,27 @@ import { db } from "@/db";
 import { e2eeKeys } from "@/db/schema";
 import { getSessionUser } from "@/server/session";
 import { guardSameOrigin, jsonError, readJson } from "@/server/http";
+import { isUuid } from "@/server/users";
 
 export const dynamic = "force-dynamic";
 
-/** List user's registered device keys */
+/**
+ * List device keys. Without ?userId the caller gets their own keys; with
+ * ?userId=<uuid> they get that user's PUBLIC keys (needed for key exchange).
+ * Public keys are public by design — they can only encrypt, never decrypt.
+ */
 export async function GET(req: NextRequest) {
   const blocked = guardSameOrigin(req);
   if (blocked) return blocked;
 
   const user = await getSessionUser();
   if (!user) return jsonError(401, "Not authenticated.");
+
+  const targetId = req.nextUrl.searchParams.get("userId");
+  if (targetId && !isUuid(targetId)) {
+    return jsonError(422, "Invalid userId.");
+  }
+  const ownerId = targetId && isUuid(targetId) ? targetId : user.id;
 
   const keys = await db
     .select({
@@ -24,7 +35,7 @@ export async function GET(req: NextRequest) {
       lastUsedAt: e2eeKeys.lastUsedAt,
     })
     .from(e2eeKeys)
-    .where(eq(e2eeKeys.userId, user.id));
+    .where(eq(e2eeKeys.userId, ownerId));
 
   return NextResponse.json({ keys });
 }

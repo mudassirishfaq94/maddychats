@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import type * as React from "react";
-import { Archive, BellOff, Pin, Search } from "lucide-react";
+import { Archive, BellOff, Lock, Pin, Search } from "lucide-react";
 import type { ConversationSummary } from "@/lib/types";
 import { Avatar } from "@/components/avatar";
 import { LogoMark } from "@/components/brand/logo";
@@ -17,6 +17,10 @@ function previewText(conv: ConversationSummary): string {
   const last = conv.lastMessage;
   if (!last) return "No messages yet";
   if (last.deletedAt) return "Message deleted";
+  if (last.encrypted) {
+    // Ciphertext must never be shown as a preview.
+    return last.text ? "Encrypted message" : "Attachment";
+  }
   return last.text || "Attachment";
 }
 
@@ -272,16 +276,25 @@ export function ChatsLayout({
                           </span>
                         </span>
                         <span className="mt-0.5 flex items-center gap-2">
+                          <span className="flex min-w-0 flex-1 items-center gap-1.5">
                           <span
                             className={cn(
-                              "block flex-1 truncate text-[0.82rem]",
+                              "block min-w-0 truncate text-[0.82rem]",
                               conv.unreadCount > 0 && !conv.muted
                                 ? "font-medium text-[var(--text)]"
                                 : "text-[var(--muted)]",
                               conv.lastMessage?.deletedAt && "italic",
                             )}
                           >
-                            {previewText(conv)}
+                            {conv.lastMessage?.encrypted ? (
+                              <>
+                                <Lock className="mr-0.5 inline h-3 w-3 -translate-y-px text-[var(--accent-fg)]" aria-label="End-to-end encrypted" />
+                                {previewText(conv)}
+                              </>
+                            ) : (
+                              previewText(conv)
+                            )}
+                          </span>
                           </span>
                           {conv.unreadCount > 0 || conv.markedUnread ? (
                             <span

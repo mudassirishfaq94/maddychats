@@ -41,6 +41,7 @@ import {
   Type,
   MessageSquare,
   Quote,
+  Copy,
 } from "lucide-react";
 import type { ConversationDetail, MessageDTO, MessagePage, PublicUser, SafeUser } from "@/lib/types";
 import { Avatar } from "@/components/avatar";
@@ -64,6 +65,13 @@ import { LongPressTouchable } from "./long-press-touchable";
 import { MobileMessageMenu } from "./mobile-message-menu";
 import { ForwardDialog } from "./forward-dialog";
 import { ReportDialog } from "@/components/profile/report-dialog";
+import { E2EEMediaProvider } from "./e2ee-context";
+import { useE2EE } from "@/hooks/use-e2ee";
+import {
+  encryptBytes,
+  exportSymmetricKey,
+  generateConversationKey,
+} from "@/lib/crypto";
 
 function formatDuration(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -72,6 +80,13 @@ function formatDuration(seconds: number): string {
 }
 
 const NEAR_BOTTOM_PX = 140;
+
+function b64ToBytes(base64: string): Uint8Array {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
 
 function timeLabel(iso: string): string {
   return new Intl.DateTimeFormat("en", {
@@ -166,6 +181,144 @@ export function ChatView({
   const [acceptingRequest, setAcceptingRequest] = useState(false);
   const attachments = useAttachmentUpload();
   const recorder = useVoiceRecorder();
+
+  /* --------------------------- end-to-end encryption ---------------------- */
+
+  const e2ee = useE2EE(me.id);
+  const [e2eeState, setE2eeState] = useState<{
+    ready: boolean;
+    fingerprint: string | null;
+    checking: boolean;
+    peersMissingKeys: number;
+  }>({ ready: false, fingerprint: null, checking: true, peersMissingKeys: 0 });
+  const [showEncryptionInfo, setShowEncryptionInfo] = useState(false);
+  const [decryptedTexts, setDecryptedTexts] = useState<Map<string, string>>(new Map());
+  const [decryptedReplies, setDecryptedReplies] = useState<Map<string, string>>(new Map());
+  const preparedRef = useRef(false);
+
+  // On open: fetch-or-create the conversation key, share it with every peer
+  // device, and learn whether this chat can actually be E2EE right now.
+  useEffect(() => {
+    if (!e2ee.initialized || preparedRef.current) return;
+    preparedRef.current = true;
+    let alive = true;
+    (async () => {
+      try {
+        const { ready, fingerprint } = await e2ee.prepareConversation(conversationId);
+        if (!alive) return;
+        let missing = 0;
+        try {
+          const res = await fetch(`/api/e2ee/peers?conversationId=${encodeURIComponent(conversationId)}`);
+          if (res.ok) {
+            const data = (await res.json()) as { peers?: { devices: unknown[] }[] };
+            missing = (data.peers ?? []).filter((p) => p.devices.length === 0).length;
+          }
+        } catch {
+          missing = 0;
+        }
+        setE2eeState({ ready, fingerprint, checking: false, peersMissingKeys: missing });
+      } catch {
+        if (alive) {
+          setE2eeState({ ready: false, fingerprint: null, checking: false, peersMissingKeys: 0 });
+        }
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [e2ee.initialized, conversationId]);
+
+  // Decrypt any encrypted message text (initial history, older pages, and
+  // realtime arrivals all flow through `items`).
+  useEffect(() => {
+    if (!e2ee.initialized) return;
+    const encItems = items.filter((m) => m.encrypted);
+    if (encItems.length === 0) return;
+    let alive = true;
+    (async () => {
+      const nextTexts = new Map(decryptedTexts);
+      const nextReplies = new Map(decryptedReplies);
+      for (const m of encItems) {
+        if (!nextTexts.has(m.id) && m.text) {
+          try {
+            nextTexts.set(m.id, await e2ee.decrypt(m.text, conversationId));
+          } catch {
+            nextTexts.set(m.id, "\u{1F512} This message could not be decrypted on this device.");
+          }
+        }
+        if (
+          m.replyTo?.encrypted &&
+          m.replyTo.text &&
+          !nextReplies.has(m.replyTo.id)
+        ) {
+          try {
+            nextReplies.set(m.replyTo.id, await e2ee.decrypt(m.replyTo.text, conversationId));
+          } catch {
+            nextReplies.set(m.replyTo.id, "\u{1F512} Undecryptable");
+          }
+        }
+      }
+      if (!alive) return;
+      if (nextTexts.size !== decryptedTexts.size) {
+        setDecryptedTexts(nextTexts);
+      }
+      if (nextReplies.size !== decryptedReplies.size) {
+        setDecryptedReplies(nextReplies);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items, e2ee.initialized, conversationId, e2ee]);
+
+  /** Plaintext for a message: decrypted locally, or raw when not encrypted. */
+  const textOf = useCallback((m: { encrypted: boolean; text: string; id: string }) => {
+    if (!m.encrypted) return m.text;
+    return decryptedTexts.get(m.id) ?? "";
+  }, [decryptedTexts]);
+
+  /** Safe text for clipboard/edit: never copy ciphertext. */
+  const copyableText = useCallback((m: { encrypted: boolean; text: string; id: string }) => {
+    if (!m.encrypted) return m.text;
+    return decryptedTexts.get(m.id) ?? "";
+  }, [decryptedTexts]);
+
+  /** Pending = encrypted but not yet decrypted locally. */
+  const isPendingDecrypt = useCallback(
+    (m: { encrypted: boolean; id: string }) =>
+      m.encrypted && decryptedTexts.get(m.id) === undefined,
+    [decryptedTexts],
+  );
+
+  /** True when this conversation can send E2EE right now. */
+  const canEncrypt = e2ee.initialized && e2eeState.ready;
+
+  /** Encrypt a pending file into a ciphertext blob + conversation-wrapped key. */
+  const encryptPendingFile = useCallback(
+    async (file: File) => {
+      const conversationKey = await e2ee.getConversationKey(conversationId);
+      const mediaKey = await generateConversationKey();
+      const mediaKeyB64 = await exportSymmetricKey(mediaKey);
+      const cipherB64 = await encryptBytes(await file.arrayBuffer(), mediaKey);
+      const wrappedKeyB64 = await encryptBytes(
+        new TextEncoder().encode(mediaKeyB64),
+        conversationKey,
+      );
+      const bytes = b64ToBytes(cipherB64);
+      const cipherBuf = bytes.slice().buffer as ArrayBuffer;
+      return {
+        file: new File([cipherBuf], file.name, {
+          type: "application/octet-stream",
+        }),
+        wrappedKey: wrappedKeyB64,
+        originalMime: file.type || "application/octet-stream",
+      };
+    },
+    [conversationId, e2ee],
+  );
+
   const [showEmoji, setShowEmoji] = useState(false);
   const [mobileMenuMsg, setMobileMenuMsg] = useState<MessageDTO | null>(null);
   const [forwardMsg, setForwardMsg] = useState<MessageDTO | null>(null);
@@ -497,6 +650,10 @@ export function ChatView({
         conversationId,
         text,
         replyTo?.id ?? null,
+        canEncrypt ? encryptPendingFile : undefined,
+        canEncrypt
+          ? (plain) => e2ee.encrypt(plain, conversationId)
+          : undefined,
       );
       setSendPending(false);
       if (!result.ok) {
@@ -519,10 +676,19 @@ export function ChatView({
     setSendPending(true);
     setError(null);
     try {
+      // E2EE: plaintext never leaves this device — send AES-GCM ciphertext.
+      const willEncrypt = canEncrypt;
+      const payload = willEncrypt
+        ? await e2ee.encrypt(text, conversationId)
+        : text;
       const res = await fetch(`/api/conversations/${conversationId}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, replyToMessageId: replyTo?.id ?? null }),
+        body: JSON.stringify({
+          text: payload,
+          replyToMessageId: replyTo?.id ?? null,
+          encrypted: willEncrypt,
+        }),
       });
       const data = (await res.json().catch(() => null)) as {
         message?: MessageDTO;
@@ -561,7 +727,17 @@ export function ChatView({
       });
       const form = new FormData();
       form.append("conversationId", conversationId);
-      form.append("files", file, file.name);
+      // E2EE: encrypt the audio bytes before they reach the server.
+      const willEncrypt = canEncrypt;
+      if (willEncrypt) {
+        const enc = await encryptPendingFile(file);
+        form.append("encrypted", "true");
+        form.append("files", enc.file, file.name);
+        form.append("keys", enc.wrappedKey);
+        form.append("origTypes", enc.originalMime);
+      } else {
+        form.append("files", file, file.name);
+      }
       if (replyTo?.id) form.append("replyToMessageId", replyTo.id);
 
       const res = await fetch("/api/upload/message", {
@@ -592,15 +768,24 @@ export function ChatView({
     }
   }
 
-  async function forwardMessage(conversationId: string) {
+  async function forwardMessage(targetConversationId: string) {
     if (!forwardMsg) return;
-    const res = await fetch(`/api/conversations/${conversationId}/messages`, {
+    // Decrypt the source locally, then re-encrypt for the target conversation
+    // (keys are per-conversation, so ciphertext is never reused across chats).
+    const plain = copyableText(forwardMsg);
+    const prep = await e2ee.prepareConversation(targetConversationId);
+    const willEncrypt = e2ee.initialized && prep.ready && plain.length > 0;
+    const text = willEncrypt
+      ? await e2ee.encrypt(plain, targetConversationId)
+      : plain;
+    const res = await fetch(`/api/conversations/${targetConversationId}/messages`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        text: forwardMsg.text || "",
+        text: text || forwardMsg.text || "",
         replyToMessageId: null,
         forwarded: true,
+        encrypted: willEncrypt,
       }),
     });
     if (!res.ok) throw new Error("Forward failed");
@@ -616,13 +801,18 @@ export function ChatView({
     setSendPending(true);
     setError(null);
     try {
+      const willEncrypt = canEncrypt;
+      const payload = willEncrypt
+        ? await e2ee.encrypt(draft.trim(), conversationId)
+        : draft.trim();
       const res = await fetch(`/api/conversations/${conversationId}/scheduled`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          text: draft.trim(),
+          text: payload,
           scheduledFor: scheduledFor.toISOString(),
           replyToMessageId: replyTo?.id ?? null,
+          encrypted: willEncrypt,
         }),
       });
       if (!res.ok) {
@@ -935,6 +1125,7 @@ export function ChatView({
   }
 
   return (
+    <E2EEMediaProvider conversationId={conversationId} decryptMedia={e2ee.decryptMedia}>
     <div className="flex h-full w-full min-w-0 overflow-hidden overflow-x-hidden">
       <div className="flex min-w-0 flex-1 flex-col">
       {/* ------------------------------ header ------------------------------ */}
@@ -982,7 +1173,9 @@ export function ChatView({
                   ? "Online"
                   : otherLastSeen
                     ? `Last seen ${timeAgo(otherLastSeen)}`
-                    : "Offline"}
+                    : e2eeState.ready
+                      ? "End-to-end encrypted"
+                      : "Offline"}
               </span>
             </span>
           </Link>
@@ -993,6 +1186,42 @@ export function ChatView({
         )}
 
         <MessageSearch />
+
+        <button
+          type="button"
+          onClick={() => setShowEncryptionInfo(true)}
+          aria-label={
+            e2eeState.ready
+              ? "End-to-end encryption is active. View details"
+              : "Encryption status"
+          }
+          title={
+            e2eeState.checking
+              ? "Checking encryption…"
+              : e2eeState.ready
+                ? "End-to-end encrypted"
+                : e2eeState.peersMissingKeys > 0
+                  ? "Waiting for the other participant(s) to set up encryption"
+                  : "Encryption unavailable"
+          }
+          className={cn(
+            "flex min-h-[44px] shrink-0 items-center justify-center gap-1 rounded-full px-2 transition-colors sm:px-2.5",
+            e2eeState.ready
+              ? "text-[var(--accent-fg)] hover:bg-[var(--accent-soft)]"
+              : "text-[var(--muted)] hover:bg-[var(--surface-2)]",
+          )}
+        >
+          {e2eeState.checking ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : e2eeState.ready ? (
+            <Lock className="h-4 w-4" />
+          ) : (
+            <ShieldCheck className="h-4 w-4" />
+          )}
+          <span className="hidden text-[0.62rem] font-bold uppercase tracking-wide md:inline">
+            {e2eeState.ready ? "E2E" : "Sec"}
+          </span>
+        </button>
 
         <button
           type="button"
@@ -1009,6 +1238,37 @@ export function ChatView({
         </button>
 
       </header>
+
+      {/* E2EE status banner — visible proof chats are encrypted */}
+      {e2eeState.ready && requestAccepted ? (
+        <button
+          type="button"
+          onClick={() => setShowEncryptionInfo(true)}
+          className="flex items-center gap-2 border-b border-[color-mix(in_srgb,var(--accent)_25%,transparent)] bg-[color-mix(in_srgb,var(--accent)_7%,var(--surface))] px-4 py-1.5 text-left transition-colors hover:bg-[color-mix(in_srgb,var(--accent)_12%,var(--surface))]"
+        >
+          <Lock className="h-3 w-3 shrink-0 text-[var(--accent-fg)]" />
+          <span className="min-w-0 flex-1 truncate text-[0.7rem] text-[var(--muted)]">
+            Messages are end-to-end encrypted — only you and the recipient(s) can read them.
+          </span>
+          <span className="shrink-0 text-[0.62rem] font-bold uppercase tracking-wide text-[var(--accent-fg)]">
+            Learn more
+          </span>
+        </button>
+      ) : e2eeState.peersMissingKeys > 0 && !e2eeState.checking ? (
+        <button
+          type="button"
+          onClick={() => setShowEncryptionInfo(true)}
+          className="flex items-center gap-2 border-b border-[var(--border)] bg-[color-mix(in_srgb,var(--warning,#f59e0b)_8%,var(--surface))] px-4 py-1.5 text-left transition-colors hover:bg-[var(--surface-2)]"
+        >
+          <ShieldCheck className="h-3 w-3 shrink-0 text-amber-500" />
+          <span className="min-w-0 flex-1 truncate text-[0.7rem] text-[var(--muted)]">
+            Encryption is being set up — ask the other person to open Maddy Chats once.
+          </span>
+          <span className="shrink-0 text-[0.62rem] font-bold uppercase tracking-wide text-amber-600">
+            Details
+          </span>
+        </button>
+      ) : null}
 
       {!requestAccepted ? (
         <div className="border-b border-[var(--border)] bg-[color-mix(in_srgb,var(--accent)_8%,var(--surface))] px-4 py-3">
@@ -1065,7 +1325,17 @@ export function ChatView({
           <Pin className="h-3.5 w-3.5 shrink-0" />
           <span className="min-w-0 truncate">
             {pinnedCount === 1
-              ? `Pinned message — ${firstPinned.text ? firstPinned.text.slice(0, 60) : "Attachment"}`
+              ? `Pinned message — ${
+                  (firstPinned.encrypted
+                    ? textOf(firstPinned) || "\u{1F512} Encrypted message"
+                    : firstPinned.text
+                  )
+                    ? (firstPinned.encrypted
+                        ? textOf(firstPinned) || "\u{1F512} Encrypted message"
+                        : firstPinned.text
+                      ).slice(0, 60)
+                    : "Attachment"
+                }`
               : `${pinnedCount} pinned messages`}
           </span>
         </button>
@@ -1344,10 +1614,17 @@ export function ChatView({
                                             <Ban className="inline h-3 w-3" />
                                             Message deleted
                                           </span>
+                                        ) : msg.replyTo.encrypted && decryptedReplies.get(msg.replyTo.id) === undefined ? (
+                                          <span className="flex items-center gap-1 opacity-70">
+                                            <Lock className="inline h-3 w-3" />
+                                            Decrypting…
+                                          </span>
                                         ) : (
                                           <>
                                             <Quote className="mr-0.5 inline h-2.5 w-2.5 opacity-50" />
-                                            {msg.replyTo.text}
+                                            {msg.replyTo.encrypted
+                                              ? decryptedReplies.get(msg.replyTo.id) ?? ""
+                                              : msg.replyTo.text}
                                           </>
                                         )}
                                       </span>
@@ -1368,22 +1645,29 @@ export function ChatView({
                                   <div className="mb-1.5 min-w-[220px]">
                                     <AudioMessage
                                       src={msg.attachments[0].url}
+                                      attachment={msg.attachments[0]}
                                       own={own}
                                       sender={msg.sender}
                                       duration={undefined}
+                                      attachmentId={msg.attachments[0].id}
                                     />
                                   </div>
                                 ) : msg.attachments.length > 0 ? (
-                                  <div className={cn(msg.text && "mb-1.5")}>
+                                  <div className={cn(textOf(msg) && "mb-1.5")}>
                                     <AttachmentList
                                       attachments={msg.attachments}
                                       own={own}
                                     />
                                   </div>
                                 ) : null}
-                                {msg.text ? (
+                                {msg.encrypted && isPendingDecrypt(msg) ? (
+                                  <span className="flex items-center gap-1.5 text-[0.8rem] opacity-80">
+                                    <Lock className="h-3 w-3" />
+                                    Decrypting securely…
+                                  </span>
+                                ) : textOf(msg) ? (
                                   (() => {
-                                    const parsed = parseStatusReply(msg.text);
+                                    const parsed = parseStatusReply(textOf(msg));
                                     if (parsed.isStatusReply) {
                                       const statusGradients: Record<string, string> = {
                                         text: "linear-gradient(135deg, #0c8c7e22, #0c8c7e08)",
@@ -1436,7 +1720,7 @@ export function ChatView({
                                     }
                                     return (
                                       <p className="whitespace-pre-wrap break-words text-[0.9rem] leading-relaxed">
-                                        {msg.text}
+                                        {textOf(msg)}
                                       </p>
                                     );
                                   })()
@@ -1452,6 +1736,9 @@ export function ChatView({
                                   : "text-[var(--muted)]",
                               )}
                             >
+                              {msg.encrypted ? (
+                                <Lock className="h-2.5 w-2.5 opacity-60" aria-label="End-to-end encrypted" />
+                              ) : null}
                               {msg.editedAt && !deleted ? (
                                 <span className="text-[0.58rem] italic opacity-70">edited</span>
                               ) : null}
@@ -1534,12 +1821,16 @@ export function ChatView({
                                 composerRef.current?.focus();
                               }}
                               onReact={(emoji) => void toggleReaction(msg, emoji)}
-                              onCopy={() => copyText(msg.text)}
+                              onCopy={() => {
+                                const t = copyableText(msg);
+                                if (t) copyText(t);
+                              }}
                               onForward={() => setForwardMsg(msg)}
                               onReport={() => setReportMsg(msg)}
                               onEdit={() => {
+                                if (isPendingDecrypt(msg)) return;
                                 setEditingId(msg.id);
-                                setEditDraft(msg.text);
+                                setEditDraft(copyableText(msg));
                               }}
                               onStar={() => void toggleStar(msg)}
                               onUnstar={() => void toggleStar(msg)}
@@ -1612,7 +1903,11 @@ export function ChatView({
                 {replyTo.senderId === me.id ? "yourself" : replyTo.sender.displayName}
               </span>
               <span className="line-clamp-1 block text-xs text-[var(--muted)]">
-                {replyTo.deletedAt ? "Message deleted" : replyTo.text}
+                {replyTo.deletedAt
+                  ? "Message deleted"
+                  : isPendingDecrypt(replyTo)
+                    ? "\u{1F512} Decrypting…"
+                    : copyableText(replyTo)}
               </span>
             </span>
             <button
@@ -1830,9 +2125,12 @@ export function ChatView({
         open={mobileMenuMsg !== null}
         onClose={() => setMobileMenuMsg(null)}
         own={mobileMenuMsg?.senderId === me.id}
-        text={mobileMenuMsg?.text ?? ""}
+        text={mobileMenuMsg ? copyableText(mobileMenuMsg) : ""}
         onCopy={() => {
-          if (mobileMenuMsg) copyText(mobileMenuMsg.text);
+          if (mobileMenuMsg) {
+            const t = copyableText(mobileMenuMsg);
+            if (t) copyText(t);
+          }
         }}
         onReply={() => {
           if (mobileMenuMsg) {
@@ -1919,6 +2217,166 @@ export function ChatView({
           </div>
         </div>
       ) : null}
+
+      {/* End-to-end encryption info dialog */}
+      {showEncryptionInfo ? (
+        <EncryptionInfoDialog
+          ready={e2eeState.ready}
+          checking={e2eeState.checking}
+          fingerprint={e2eeState.fingerprint}
+          peersMissing={e2eeState.peersMissingKeys}
+          conversationName={otherName}
+          onClose={() => setShowEncryptionInfo(false)}
+        />
+      ) : null}
+      </div>
+    </E2EEMediaProvider>
+  );
+}
+
+/** Explains encryption status to the user; shows the verification fingerprint. */
+function EncryptionInfoDialog({
+  ready,
+  checking,
+  fingerprint,
+  peersMissing,
+  conversationName,
+  onClose,
+}: {
+  ready: boolean;
+  checking: boolean;
+  fingerprint: string | null;
+  peersMissing: number;
+  conversationName: string;
+  onClose: () => void;
+}) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <div
+      className="fixed inset-0 z-[90] flex items-center justify-center bg-black/50 p-4"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className="card-glass w-full max-w-md overflow-hidden rounded-3xl animate-fade-up">
+        <div className="flex items-center gap-3 border-b border-[var(--border)] px-5 py-4">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--accent)_15%,transparent)]">
+            {ready ? (
+              <Lock className="h-5 w-5 text-[var(--accent-fg)]" />
+            ) : (
+              <ShieldCheck className="h-5 w-5 text-[var(--muted)]" />
+            )}
+          </span>
+          <div className="min-w-0 flex-1">
+            <h3 className="text-base font-bold">End-to-end encryption</h3>
+            <p className="text-xs text-[var(--muted)]">{conversationName}</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="flex h-9 w-9 items-center justify-center rounded-full text-[var(--muted)] hover:bg-[var(--surface-2)]"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="max-h-[70vh] overflow-y-auto px-5 py-4">
+          {checking ? (
+            <div className="flex items-center gap-2 py-6 text-sm text-[var(--muted)]">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Checking encryption keys…
+            </div>
+          ) : ready ? (
+            <>
+              <div className="flex items-center gap-2 rounded-xl border border-[color-mix(in_srgb,var(--accent)_25%,transparent)] bg-[color-mix(in_srgb,var(--accent)_7%,transparent)] px-3.5 py-2.5">
+                <Lock className="h-4 w-4 shrink-0 text-[var(--accent-fg)]" />
+                <p className="text-xs leading-relaxed">
+                  Messages in this chat are <b>end-to-end encrypted</b>. Maddy
+                  Chats and its servers cannot read them — only the devices in
+                  this conversation hold the keys.
+                </p>
+              </div>
+
+              {fingerprint ? (
+                <div className="mt-4">
+                  <p className="text-[0.65rem] font-bold uppercase tracking-wider text-[var(--muted)]">
+                    Verify the other person&apos;s device
+                  </p>
+                  <p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">
+                    Compare this code with {conversationName}&apos;s device in
+                    person or over another secure channel. If they match, your
+                    chat is secure against interception.
+                  </p>
+                  <div className="mt-2 flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3">
+                    <code className="min-w-0 flex-1 select-all text-center font-mono text-sm font-semibold tracking-wider">
+                      {fingerprint}
+                    </code>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void navigator.clipboard
+                          ?.writeText(fingerprint)
+                          .then(() => {
+                            setCopied(true);
+                            setTimeout(() => setCopied(false), 1500);
+                          });
+                      }}
+                      className="flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-[0.65rem] font-semibold text-[var(--accent-fg)] hover:bg-[var(--accent-soft)]"
+                    >
+                      {copied ? (
+                        <Check className="h-3 w-3" />
+                      ) : (
+                        <Copy className="h-3 w-3" />
+                      )}
+                      {copied ? "Copied" : "Copy"}
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+
+              <ul className="mt-4 space-y-2">
+                <li className="flex items-start gap-2 text-xs text-[var(--muted)]">
+                  <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--accent-fg)]" />
+                  Text, voice and media are encrypted before they leave your device.
+                </li>
+                <li className="flex items-start gap-2 text-xs text-[var(--muted)]">
+                  <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--accent-fg)]" />
+                  No one in between — not even Maddy Chats — can read the contents.
+                </li>
+                <li className="flex items-start gap-2 text-xs text-[var(--muted)]">
+                  <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--accent-fg)]" />
+                  Each conversation uses a unique key. Old keys are never reused.
+                </li>
+              </ul>
+            </>
+          ) : (
+            <div className="space-y-3">
+              <p className="text-xs leading-relaxed text-[var(--muted)]">
+                End-to-end encryption needs every participant&apos;s device to
+                generate a secure key. {peersMissing > 0
+                  ? `We're still waiting for ${peersMissing} participant${peersMissing > 1 ? "s" : ""} to open Maddy Chats once so their key can be created.`
+                  : "Encryption keys are still being prepared."}
+              </p>
+              <p className="text-xs leading-relaxed text-[var(--muted)]">
+                As soon as everyone&apos;s key is ready, all new messages in
+                this chat are automatically end-to-end encrypted — you&apos;ll see
+                the lock appear on every message.
+              </p>
+            </div>
+          )}
+        </div>
+
+        <div className="flex justify-end border-t border-[var(--border)] px-5 py-3">
+          <button
+            type="button"
+            onClick={onClose}
+            className="btn btn-primary rounded-xl px-4 py-2 text-sm"
+          >
+            Got it
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

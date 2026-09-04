@@ -51,6 +51,8 @@ export interface ReplyPreview {
   senderId: string;
   senderName: string;
   deleted: boolean;
+  /** True when the preview text is E2EE ciphertext awaiting client decryption. */
+  encrypted: boolean;
 }
 
 export interface ReadReceipt {
@@ -66,6 +68,10 @@ export interface AttachmentDTO {
   kind: "image" | "video" | "file" | "audio";
   /** Authenticated media endpoint — never a raw filesystem path. */
   url: string;
+  /** True when stored bytes are E2EE ciphertext; decrypt before rendering. */
+  encrypted: boolean;
+  /** Per-file AES key wrapped with the conversation key (base64), null when plaintext. */
+  encKey: string | null;
 }
 
 export interface SearchHit {
@@ -106,6 +112,8 @@ export interface MessageDTO {
   pinned: boolean;
   /** Whether this message was forwarded from another conversation. */
   forwarded: boolean;
+  /** True when text holds E2EE ciphertext — decrypt client-side with the conversation key. */
+  encrypted: boolean;
 }
 
 export interface ConversationSummary {
@@ -139,6 +147,7 @@ export interface ConversationSummary {
     senderId: string;
     createdAt: string;
     deletedAt: string | null;
+    encrypted: boolean;
   } | null;
 }
 

@@ -74,7 +74,9 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const caption = String(form.get("text") ?? "").trim().slice(0, 2000);
+  const isEncrypted = form.get("encrypted") === "true";
+  // When encrypting, the caption (if any) is E2EE ciphertext produced client-side.
+  const caption = String(form.get("text") ?? "").trim().slice(0, 4000);
   const replyRaw = String(form.get("replyToMessageId") ?? "");
   const replyToMessageId = isUuid(replyRaw) ? replyRaw : null;
 
@@ -88,22 +90,56 @@ export async function POST(req: NextRequest) {
     return jsonError(422, "You can attach up to 5 files at a time.");
   }
 
+  // Per-file wrapped media keys and original mime types (aligned with files).
+  const wrappedKeys = form
+    .getAll("keys")
+    .map((v) => (typeof v === "string" && v.length > 0 ? v : null));
+  const origTypes = form
+    .getAll("origTypes")
+    .map((v) => (typeof v === "string" ? v : "application/octet-stream"));
+
   // Validate everything BEFORE writing anything to disk.
   const prepared: {
     file: File;
     storedName: string;
     kind: "image" | "video" | "file" | "audio";
     safeName: string;
+    originalMime: string;
+    wrappedKey: string | null;
   }[] = [];
-  for (const file of entries) {
-    const check = validateUpload(file.name, file.type, file.size, "message");
-    if (!check.ok) return jsonError(422, check.error, { file: check.error });
-    prepared.push({
-      file,
-      storedName: generateStoredName(check.extension),
-      kind: check.kind,
-      safeName: check.safeName,
-    });
+  for (let i = 0; i < entries.length; i++) {
+    const file = entries[i];
+    if (isEncrypted) {
+      // Encrypted payloads arrive as opaque bytes — the server must never
+      // inspect or validate content it cannot read.
+      const originalMime =
+        origTypes[i]?.trim().toLowerCase().split(";")[0] ??
+        "application/octet-stream";
+      let kind: "image" | "video" | "file" | "audio" = "file";
+      if (originalMime.startsWith("audio/")) kind = "audio";
+      else if (originalMime.startsWith("image/")) kind = "image";
+      else if (originalMime.startsWith("video/")) kind = "video";
+      const safeName = file.name.replace(/[\r\n\u0000]/g, "").slice(0, 200);
+      prepared.push({
+        file,
+        storedName: generateStoredName(""),
+        kind,
+        safeName: safeName || "encrypted-media.bin",
+        originalMime,
+        wrappedKey: wrappedKeys[i] ?? null,
+      });
+    } else {
+      const check = validateUpload(file.name, file.type, file.size, "message");
+      if (!check.ok) return jsonError(422, check.error, { file: check.error });
+      prepared.push({
+        file,
+        storedName: generateStoredName(check.extension),
+        kind: check.kind,
+        safeName: check.safeName,
+        originalMime: file.type,
+        wrappedKey: null,
+      });
+    }
   }
 
   // Reply target must live in this conversation.
@@ -139,13 +175,14 @@ export async function POST(req: NextRequest) {
           text: caption,
           type: messageType,
           replyToMessageId: validReplyId,
+          encrypted: isEncrypted,
         })
         .returning();
       const message = rows[0];
 
       for (const item of prepared) {
         const buffer = Buffer.from(await item.file.arrayBuffer());
-        const limit = item.kind === "image" ? LIMITS.image : LIMITS.file;
+        const limit = LIMITS.file;
         if (buffer.byteLength > limit) throw new Error("too_large");
 
         const bucket = item.kind === "image" ? "images" : "files";
@@ -157,10 +194,12 @@ export async function POST(req: NextRequest) {
           messageId: message.id,
           originalName: item.safeName,
           storedName: item.storedName,
-          mimeType: item.file.type,
+          mimeType: item.originalMime,
           size: buffer.byteLength,
           path: relative,
           kind: attachmentKind,
+          encrypted: isEncrypted,
+          encKey: item.wrappedKey,
         });
       }
 
@@ -192,7 +231,11 @@ export async function POST(req: NextRequest) {
       messageId: created.id,
       actorId: me.id,
       actorName: me.displayName,
-      preview: caption || `Sent ${prepared.length} attachment(s)`,
+      preview: isEncrypted
+        ? caption
+          ? "\u{1F512} Encrypted message"
+          : `\u{1F512} ${prepared.length === 1 ? "Encrypted" : "Encrypted"} attachment${prepared.length !== 1 ? "s" : ""}`
+        : caption || `Sent ${prepared.length} attachment(s)`,
     });
 
     return NextResponse.json({ message: dto }, { status: 201 });
