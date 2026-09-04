@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { CircleDashed, MessagesSquare, Shield, Users } from "lucide-react";
+import { CircleDashed, Globe, MessagesSquare, Shield, Users } from "lucide-react";
 import type { SafeUser } from "@/lib/types";
 import { LogoMark, LogoWordmark } from "@/components/brand/logo";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -27,7 +27,8 @@ export function AppShell({
   const pathname = usePathname();
   const onPeople = pathname.startsWith("/app/people") || pathname.startsWith("/app/users");
   const onStatus = pathname.startsWith("/app/status");
-  const onChats = !onPeople && !onStatus && !pathname.startsWith("/app/profile") && !pathname.startsWith("/app/starred");
+  const onCommunities = pathname.startsWith("/app/communities");
+  const onChats = !onPeople && !onStatus && !onCommunities && !pathname.startsWith("/app/profile") && !pathname.startsWith("/app/starred");
   const inChat = pathname.startsWith("/app/chats/");
 
   return (
@@ -70,6 +71,19 @@ export function AppShell({
           >
             <Users className="h-4 w-4" />
             <span className="hidden sm:inline">People</span>
+          </Link>
+          <Link
+            href="/app/communities"
+            aria-current={onCommunities ? "page" : undefined}
+            className={cn(
+              "flex h-9 w-9 items-center justify-center rounded-full text-sm font-medium transition-colors sm:w-auto sm:gap-1.5 sm:px-3 sm:py-1.5",
+              onCommunities
+                ? "bg-[var(--surface-2)] text-[var(--text)]"
+                : "text-[var(--muted)] hover:text-[var(--text)]",
+            )}
+          >
+            <Globe className="h-4 w-4" />
+            <span className="hidden sm:inline">Communities</span>
           </Link>
           <Link
             href="/app/status"
