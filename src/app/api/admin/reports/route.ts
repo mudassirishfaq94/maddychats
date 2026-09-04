@@ -12,7 +12,8 @@ export async function GET(req: NextRequest) {
   try {
     const admin = await requireAdmin();
     const url = new URL(req.url);
-    const status = url.searchParams.get("status") || undefined;
+    const requestedStatus = url.searchParams.get("status");
+    const status = requestedStatus && requestedStatus !== "all" ? requestedStatus : undefined;
     const reports = await getReports(status);
     return NextResponse.json(reports);
   } catch (e) {

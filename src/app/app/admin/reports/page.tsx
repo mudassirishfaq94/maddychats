@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Flag, Loader2, CheckCircle, XCircle, Clock, ExternalLink } from "lucide-react";
+import { Flag, Loader2, CheckCircle, XCircle, AlertTriangle } from "lucide-react";
 
 interface Report {
   id: string;
@@ -26,29 +26,46 @@ export default function AdminReportsPage() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("pending");
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   function loadReports(status: string) {
     setLoading(true);
     setFilter(status);
+    setError(null);
     fetch(`/api/admin/reports?status=${status}`)
-      .then((r) => r.json())
-      .then((data) => setReports(data))
-      .catch(() => {})
+      .then(async (response) => {
+        const data = await response.json().catch(() => null);
+        if (!response.ok || !Array.isArray(data)) {
+          throw new Error(data?.error ?? "Reports could not be loaded.");
+        }
+        setReports(data);
+      })
+      .catch((cause: unknown) => {
+        setReports([]);
+        setError((cause as Error).message);
+      })
       .finally(() => setLoading(false));
   }
 
-  useEffect(() => { loadReports("pending"); }, []);
+  useEffect(() => {
+    const timer = window.setTimeout(() => loadReports("pending"), 0);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   async function updateStatus(reportId: string, status: string) {
     setBusyId(reportId);
     try {
-      await fetch("/api/admin/reports", {
+      const response = await fetch("/api/admin/reports", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ reportId, status }),
       });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(data?.error ?? "Report could not be updated.");
       setReports((prev) => prev.filter((r) => r.id !== reportId));
-    } catch {}
+    } catch (cause) {
+      setError((cause as Error).message);
+    }
     setBusyId(null);
   }
 
@@ -76,7 +93,11 @@ export default function AdminReportsPage() {
         ))}
       </div>
 
-      {loading ? (
+      {error ? (
+        <div role="alert" className="flex items-center gap-2 rounded-xl border border-[color-mix(in_srgb,var(--danger)_30%,transparent)] bg-[color-mix(in_srgb,var(--danger)_8%,transparent)] p-3 text-sm text-[var(--danger)]">
+          <AlertTriangle className="h-4 w-4 shrink-0" /> {error}
+        </div>
+      ) : loading ? (
         <div className="flex justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-[var(--muted)]" /></div>
       ) : reports.length === 0 ? (
         <p className="py-10 text-center text-sm text-[var(--muted)]">No reports in this category.</p>

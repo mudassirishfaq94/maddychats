@@ -1,4 +1,5 @@
 import { and, desc, eq, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { db } from "@/db";
 import {
   reports,
@@ -34,7 +35,11 @@ export async function createReport(input: {
 }
 
 export async function getReports(status?: string, limit = 50) {
-  const where = status ? eq(reports.status, status as any) : undefined;
+  const targetUsers = alias(users, "target_users");
+  const validStatuses = new Set(["pending", "reviewed", "resolved", "dismissed"]);
+  const where = status && validStatuses.has(status)
+    ? eq(reports.status, status as "pending" | "reviewed" | "resolved" | "dismissed")
+    : undefined;
   return db
     .select({
       id: reports.id,
@@ -49,14 +54,14 @@ export async function getReports(status?: string, limit = 50) {
         username: users.username,
       },
       targetUser: {
-        id: sql<string>`tu.id`,
-        displayName: sql<string>`tu.display_name`,
-        username: sql<string>`tu.username`,
+        id: targetUsers.id,
+        displayName: targetUsers.displayName,
+        username: targetUsers.username,
       },
     })
     .from(reports)
     .innerJoin(users, eq(reports.reporterId, users.id))
-    .leftJoin(users, sql`tu.id = ${reports.targetUserId}`)
+    .leftJoin(targetUsers, eq(reports.targetUserId, targetUsers.id))
     .where(where)
     .orderBy(desc(reports.createdAt))
     .limit(limit);
