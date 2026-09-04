@@ -140,6 +140,26 @@ export async function joinCommunity(
     role: "member",
   });
 
+  // Also add user to all existing channel conversations
+  const communityChannels = await db
+    .select({ conversationId: channels.conversationId })
+    .from(channels)
+    .where(eq(channels.communityId, communityId));
+
+  for (const ch of communityChannels) {
+    if (ch.conversationId) {
+      await db
+        .insert(conversationMembers)
+        .values({
+          conversationId: ch.conversationId,
+          userId,
+          role: "member",
+          acceptedAt: new Date(),
+        })
+        .onConflictDoNothing();
+    }
+  }
+
   return { success: true };
 }
 
@@ -157,6 +177,27 @@ export async function leaveCommunity(
       ),
     )
     .returning();
+
+  if (deleted.length > 0) {
+    // Also remove from all channel conversations
+    const communityChannels = await db
+      .select({ conversationId: channels.conversationId })
+      .from(channels)
+      .where(eq(channels.communityId, communityId));
+
+    for (const ch of communityChannels) {
+      if (ch.conversationId) {
+        await db
+          .delete(conversationMembers)
+          .where(
+            and(
+              eq(conversationMembers.conversationId, ch.conversationId),
+              eq(conversationMembers.userId, userId),
+            ),
+          );
+      }
+    }
+  }
 
   return deleted.length > 0;
 }
