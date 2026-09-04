@@ -2,7 +2,7 @@
 
 import { useCallback, useRef, useState } from "react";
 
-export type RecorderState = "idle" | "recording" | "recorded";
+export type RecorderState = "idle" | "recording" | "paused" | "recorded";
 
 interface UseVoiceRecorderReturn {
   state: RecorderState;
@@ -12,6 +12,8 @@ interface UseVoiceRecorderReturn {
   error: string | null;
   startRecording: () => Promise<void>;
   stopRecording: () => void;
+  pauseRecording: () => void;
+  resumeRecording: () => void;
   cancelRecording: () => void;
   clearRecording: () => void;
 }
@@ -27,6 +29,15 @@ export function useVoiceRecorder(): UseVoiceRecorderReturn {
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const segmentStartedAtRef = useRef(0);
+  const elapsedMsRef = useRef(0);
+
+  const updateDuration = useCallback(() => {
+    const activeMs = mediaRecorderRef.current?.state === "recording"
+      ? Date.now() - segmentStartedAtRef.current
+      : 0;
+    setDuration(Math.floor((elapsedMsRef.current + activeMs) / 1000));
+  }, []);
 
   const cleanup = useCallback(() => {
     if (timerRef.current) {
@@ -46,6 +57,7 @@ export function useVoiceRecorder(): UseVoiceRecorderReturn {
     setAudioBlob(null);
     setAudioUrl(null);
     setDuration(0);
+    elapsedMsRef.current = 0;
 
     // Microphone requires a secure context (HTTPS or localhost).
     if (typeof window !== "undefined" && !window.isSecureContext) {
@@ -111,9 +123,9 @@ export function useVoiceRecorder(): UseVoiceRecorderReturn {
       setState("recording");
 
       // Start timer
-      const startTime = Date.now();
+      segmentStartedAtRef.current = Date.now();
       timerRef.current = setInterval(() => {
-        setDuration(Math.floor((Date.now() - startTime) / 1000));
+        updateDuration();
       }, 200);
     } catch (err) {
       const name = (err as DOMException).name || "";
@@ -142,7 +154,7 @@ export function useVoiceRecorder(): UseVoiceRecorderReturn {
           "Try these steps:\n" +
           "1. Type chrome://settings/content/microphone in your address bar\n" +
           "2. Make sure 'Sites can ask to use your microphone' is selected\n" +
-          "3. Remove maddychats.vercel.app from any block list if present\n" +
+          "3. Remove ziptalks.vercel.app from any block list if present\n" +
           "4. Reload this page (Ctrl+Shift+R) and click 'Try again'\n\n" +
           "If it still fails, try opening this page in an incognito window (Ctrl+Shift+N)."
         );
@@ -155,19 +167,45 @@ export function useVoiceRecorder(): UseVoiceRecorderReturn {
       }
       setState("idle");
     }
-  }, [cleanup]);
+  }, [cleanup, updateDuration]);
+
+  const pauseRecording = useCallback(() => {
+    const recorder = mediaRecorderRef.current;
+    if (!recorder || recorder.state !== "recording") return;
+    elapsedMsRef.current += Date.now() - segmentStartedAtRef.current;
+    recorder.pause();
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    updateDuration();
+    setState("paused");
+  }, [updateDuration]);
+
+  const resumeRecording = useCallback(() => {
+    const recorder = mediaRecorderRef.current;
+    if (!recorder || recorder.state !== "paused") return;
+    segmentStartedAtRef.current = Date.now();
+    recorder.resume();
+    timerRef.current = setInterval(updateDuration, 200);
+    setState("recording");
+  }, [updateDuration]);
 
   const stopRecording = useCallback(() => {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+    if (mediaRecorderRef.current && (mediaRecorderRef.current.state === "recording" || mediaRecorderRef.current.state === "paused")) {
+      if (mediaRecorderRef.current.state === "recording") {
+        elapsedMsRef.current += Date.now() - segmentStartedAtRef.current;
+        updateDuration();
+      }
       mediaRecorderRef.current.stop();
     }
-  }, []);
+  }, [updateDuration]);
 
   const cancelRecording = useCallback(() => {
     if (mediaRecorderRef.current) {
       mediaRecorderRef.current.ondataavailable = null;
       mediaRecorderRef.current.onstop = null;
-      if (mediaRecorderRef.current.state === "recording") {
+      if (mediaRecorderRef.current.state === "recording" || mediaRecorderRef.current.state === "paused") {
         mediaRecorderRef.current.stop();
       }
     }
@@ -194,6 +232,8 @@ export function useVoiceRecorder(): UseVoiceRecorderReturn {
     error,
     startRecording,
     stopRecording,
+    pauseRecording,
+    resumeRecording,
     cancelRecording,
     clearRecording,
   };

@@ -38,6 +38,8 @@ export function AudioMessage({
     error,
     togglePlay,
     seek,
+    playbackRate,
+    cyclePlaybackRate,
   } = useVoicePlayback(voiceId, src);
 
   const totalDuration = duration || finiteTime(initialDuration ?? 0);
@@ -118,6 +120,18 @@ export function AudioMessage({
           />
 
           <div className="mt-1 flex items-center justify-between">
+            <button
+              type="button"
+              onClick={cyclePlaybackRate}
+              className={cn(
+                "rounded-full px-1.5 py-0.5 text-[0.6rem] font-bold tabular-nums transition-colors",
+                own ? "bg-white/15 text-white/80 hover:bg-white/25" : "bg-[var(--accent-soft)] text-[var(--accent-fg)]",
+              )}
+              aria-label={`Playback speed ${playbackRate} times. Change speed`}
+              title="Change playback speed"
+            >
+              {playbackRate}×
+            </button>
             <span
               className={cn(
                 "text-[0.65rem] tabular-nums",

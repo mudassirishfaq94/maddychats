@@ -22,6 +22,7 @@ import {
   ChevronLeft,
   Info,
   Loader2,
+  Lock,
   Mic,
   Pin,
   Reply as ReplyIcon,
@@ -1573,12 +1574,15 @@ export function ChatView({
         {/* Voice recording UI */}
         {recorder.state !== "idle" ? (
           <div className="mb-2 flex items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--card-2)] px-4 py-3">
-            {recorder.state === "recording" ? (
+            {recorder.state === "recording" || recorder.state === "paused" ? (
               <>
-                <span className="flex h-3 w-3 animate-pulse rounded-full bg-red-500" />
-                <RecordingWaveform active height={24} className="min-w-0 flex-1" />
+                <span className={cn("flex h-3 w-3 rounded-full bg-red-500", recorder.state === "recording" && "animate-pulse")} />
+                <RecordingWaveform active={recorder.state === "recording"} height={24} className="min-w-0 flex-1" />
                 <span className="shrink-0 text-sm font-medium tabular-nums">
                   {formatDuration(recorder.duration)}
+                </span>
+                <span className="hidden items-center gap-1 text-[0.65rem] font-medium text-[var(--muted)] sm:flex" title="Recording continues hands-free">
+                  <Lock className="h-3 w-3" /> Hands-free
                 </span>
                 <button
                   type="button"
@@ -1587,6 +1591,14 @@ export function ChatView({
                   aria-label="Cancel recording"
                 >
                   <Trash2 className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => recorder.state === "recording" ? recorder.pauseRecording() : recorder.resumeRecording()}
+                  className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full border border-[var(--border)] text-[var(--text)] hover:bg-[var(--surface-2)]"
+                  aria-label={recorder.state === "recording" ? "Pause recording" : "Resume recording"}
+                >
+                  {recorder.state === "recording" ? <Pause className="h-4 w-4 fill-current" /> : <Play className="h-4 w-4 fill-current" />}
                 </button>
                 <button
                   type="button"

@@ -69,6 +69,7 @@ export function useVoicePlayback(voiceId: string, src: string) {
   const [duration, setDuration] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [playbackRate, setPlaybackRate] = useState(1);
 
   // Create audio element once
   useEffect(() => {
@@ -170,6 +171,14 @@ export function useVoicePlayback(voiceId: string, src: string) {
     [duration],
   );
 
+  const cyclePlaybackRate = useCallback(() => {
+    setPlaybackRate((current) => {
+      const next = current === 1 ? 1.5 : current === 1.5 ? 2 : 1;
+      if (audioRef.current) audioRef.current.playbackRate = next;
+      return next;
+    });
+  }, []);
+
   return {
     audioRef,
     playing,
@@ -177,6 +186,8 @@ export function useVoicePlayback(voiceId: string, src: string) {
     duration,
     loading,
     error,
+    playbackRate,
+    cyclePlaybackRate,
     togglePlay,
     seek,
   };
