@@ -1,9 +1,12 @@
 import { and, eq, lte, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { scheduledMessages, messages, users } from "@/db/schema";
+import { conversations, scheduledMessages, messages, users } from "@/db/schema";
 import { publishToConversation } from "@/server/realtime";
 import { notifyNewMessage } from "@/server/notifications";
 import { getMessageDTO } from "@/server/chat";
+import { pool } from "@/db";
+
+const SCHEDULED_PROCESSOR_LOCK = 847_221_903;
 
 /** Schedule a message for later delivery */
 export async function scheduleMessage(input: {
@@ -74,6 +77,17 @@ export async function processScheduledMessages(): Promise<{
   processed: number;
   failed: number;
 }> {
+  const lockClient = await pool.connect();
+  const lock = await lockClient.query<{ locked: boolean }>(
+    "select pg_try_advisory_lock($1) as locked",
+    [SCHEDULED_PROCESSOR_LOCK],
+  );
+  if (!lock.rows[0]?.locked) {
+    lockClient.release();
+    return { processed: 0, failed: 0 };
+  }
+
+  try {
   const now = new Date();
 
   const dueMessages = await db
@@ -93,21 +107,21 @@ export async function processScheduledMessages(): Promise<{
   for (const scheduled of dueMessages) {
     try {
       // 1. Create the actual message
-      const [message] = await db
-        .insert(messages)
-        .values({
+      const message = await db.transaction(async (tx) => {
+        const [created] = await tx.insert(messages).values({
           conversationId: scheduled.conversationId,
           senderId: scheduled.senderId,
           text: scheduled.text,
           replyToMessageId: scheduled.replyToMessageId ?? null,
-        })
-        .returning();
-
-      // 2. Mark scheduled entry as sent
-      await db
-        .update(scheduledMessages)
-        .set({ sent: true, sentMessageId: message.id })
-        .where(eq(scheduledMessages.id, scheduled.id));
+        }).returning();
+        await tx.update(scheduledMessages)
+          .set({ sent: true, sentMessageId: created.id })
+          .where(and(eq(scheduledMessages.id, scheduled.id), eq(scheduledMessages.sent, false)));
+        await tx.update(conversations)
+          .set({ lastMessageAt: now, updatedAt: now })
+          .where(eq(conversations.id, scheduled.conversationId));
+        return created;
+      });
 
       // 3. Build full message DTO for real-time delivery
       const messageDto = await getMessageDTO(message.id, scheduled.senderId);
@@ -147,4 +161,8 @@ export async function processScheduledMessages(): Promise<{
   }
 
   return { processed, failed };
+  } finally {
+    await lockClient.query("select pg_advisory_unlock($1)", [SCHEDULED_PROCESSOR_LOCK]).catch(() => undefined);
+    lockClient.release();
+  }
 }
