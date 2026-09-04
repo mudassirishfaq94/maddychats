@@ -12,6 +12,7 @@ import {
   Loader2,
   ChevronDown,
 } from "lucide-react";
+import { Toggle } from "@/components/ui/toggle";
 
 interface PrivacySettings {
   profileVisibility: string;
@@ -83,20 +84,7 @@ function ToggleField({
         <Icon className="h-4 w-4 shrink-0 text-[var(--muted)]" />
         <span className="text-sm">{label}</span>
       </div>
-      <button
-        type="button"
-        onClick={() => onChange(!checked)}
-        className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${
-          checked ? "bg-[var(--accent)]" : "bg-[var(--surface-2)]"
-        }`}
-        aria-label={`Toggle ${label}`}
-      >
-        <span
-          className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
-            checked ? "translate-x-[22px]" : "translate-x-0.5"
-          }`}
-        />
-      </button>
+      <Toggle checked={checked} onChange={onChange} label={`Toggle ${label}`} />
     </div>
   );
 }

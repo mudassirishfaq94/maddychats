@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Bell, BellRing, Loader2, Smartphone, Volume2, Users } from "lucide-react";
+import { Toggle } from "@/components/ui/toggle";
 
 interface Preferences {
   messageNotifications: boolean;
@@ -153,9 +154,7 @@ export function NotificationPreferences() {
             <div key={key} className="flex items-center gap-3 py-4">
               <Icon className="h-4 w-4 shrink-0 text-[var(--accent-fg)]" />
               <span className="min-w-0 flex-1"><b className="block text-sm">{label}</b><small className="text-[var(--muted)]">{hint}</small></span>
-              <button type="button" role="switch" aria-checked={preferences[key]} aria-label={label} disabled={saving !== null} onClick={() => void toggle(key)} className={`relative h-6 w-11 shrink-0 rounded-full transition-colors disabled:opacity-60 ${preferences[key] ? "bg-[var(--accent)]" : "bg-[var(--border-strong)]"}`}>
-                <span className={`absolute left-1 top-1 h-4 w-4 rounded-full bg-white shadow transition-transform ${preferences[key] ? "translate-x-5" : "translate-x-0"}`} />
-              </button>
+              <Toggle checked={preferences[key]} onChange={() => void toggle(key)} disabled={saving !== null} label={label} />
             </div>
           ))}
         </div>

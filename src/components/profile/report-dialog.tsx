@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Ban, X, Flag, Loader2, CheckCircle, AlertTriangle } from "lucide-react";
+import { Toggle } from "@/components/ui/toggle";
 
 const REASONS = [
   { value: "spam", label: "Spam" },
@@ -152,28 +153,14 @@ export function ReportDialog({
             </div>
 
             {targetUserId && (
-              <label className="mt-3 flex items-center gap-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2.5 cursor-pointer">
+              <div className="mt-3 flex items-center gap-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2.5">
                 <Ban className="h-4 w-4 shrink-0 text-[var(--danger)]" />
                 <span className="flex-1 text-xs">
                   <span className="font-medium">Block this user</span>
                   <span className="ml-1 text-[var(--muted)]">after submitting</span>
                 </span>
-                <button
-                  type="button"
-                  role="checkbox"
-                  aria-checked={blockAfter}
-                  onClick={() => setBlockAfter(!blockAfter)}
-                  className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${
-                    blockAfter ? "bg-[var(--danger)]" : "bg-[var(--surface)]"
-                  }`}
-                >
-                  <span
-                    className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${
-                      blockAfter ? "translate-x-[18px]" : "translate-x-0.5"
-                    }`}
-                  />
-                </button>
-              </label>
+                <Toggle checked={blockAfter} onChange={setBlockAfter} label="Block this user" size="small" activeColor="bg-[var(--danger)]" />
+              </div>
             )}
 
             {error && (

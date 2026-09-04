@@ -30,6 +30,7 @@ import { Avatar } from "@/components/avatar";
 import { InlineMedia, Lightbox, humanSize } from "./attachments";
 import { useRealtime } from "@/components/providers/realtime-provider";
 import { cn } from "@/lib/utils";
+import { Toggle } from "@/components/ui/toggle";
 
 type Tab = "media" | "files" | "pinned" | "starred";
 
@@ -881,23 +882,19 @@ function GroupSettingsPanel({
       {showSettings ? (
         <div className="mt-2 space-y-4 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-3">
           {/* Admin-only messaging */}
-          <label className="flex items-center justify-between">
+          <div className="flex items-center justify-between">
             <span className="text-xs font-medium">Admin-only messaging</span>
-            <button
-              type="button"
-              role="checkbox"
-              aria-checked={adminOnly}
-              onClick={() => {
-                const next = !adminOnly;
+            <Toggle
+              checked={adminOnly}
+              onChange={(next) => {
                 setAdminOnly(next);
                 void saveSetting({ adminOnlyMessaging: next });
               }}
               disabled={busy}
-              className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${adminOnly ? "bg-[var(--accent)]" : "bg-[var(--surface)]"}`}
-            >
-              <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${adminOnly ? "translate-x-[18px]" : "translate-x-0.5"}`} />
-            </button>
-          </label>
+              label="Admin-only messaging"
+              size="small"
+            />
+          </div>
 
           {/* Slow mode */}
           <div>
