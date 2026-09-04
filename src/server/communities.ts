@@ -1,6 +1,6 @@
 import { eq, and, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { communities, communityMembers, channels, users } from "@/db/schema";
+import { communities, communityMembers, channels, users, conversations, conversationMembers } from "@/db/schema";
 
 /** Create a new community */
 export async function createCommunity(input: {
@@ -161,7 +161,7 @@ export async function leaveCommunity(
   return deleted.length > 0;
 }
 
-/** Create a channel in a community */
+/** Create a channel in a community — also creates a conversation for chat */
 export async function createChannel(input: {
   communityId: string;
   name: string;
@@ -169,14 +169,46 @@ export async function createChannel(input: {
   type?: string;
   createdBy: string;
 }) {
+  const channelName = input.name.toLowerCase().replace(/\s+/g, "-");
+
+  // 1. Create a conversation for this channel
+  const [conversation] = await db
+    .insert(conversations)
+    .values({
+      type: "group",
+      name: `${input.name}`,
+      description: input.description ?? null,
+      createdById: input.createdBy,
+    })
+    .returning();
+
+  // 2. Get all community members and add them to the conversation
+  const members = await db
+    .select({ userId: communityMembers.userId, role: communityMembers.role })
+    .from(communityMembers)
+    .where(eq(communityMembers.communityId, input.communityId));
+
+  if (members.length > 0) {
+    await db.insert(conversationMembers).values(
+      members.map((m) => ({
+        conversationId: conversation.id,
+        userId: m.userId,
+        role: m.role === "owner" ? "admin" : m.role === "admin" ? "admin" : "member",
+        acceptedAt: new Date(),
+      })),
+    );
+  }
+
+  // 3. Create the channel linked to the conversation
   const [channel] = await db
     .insert(channels)
     .values({
       communityId: input.communityId,
-      name: input.name.toLowerCase().replace(/\s+/g, "-"),
+      name: channelName,
       description: input.description ?? null,
       type: input.type ?? "text",
       createdBy: input.createdBy,
+      conversationId: conversation.id,
     })
     .returning();
 
@@ -186,7 +218,16 @@ export async function createChannel(input: {
 /** List channels in a community */
 export async function listChannels(communityId: string) {
   return db
-    .select()
+    .select({
+      id: channels.id,
+      communityId: channels.communityId,
+      name: channels.name,
+      description: channels.description,
+      type: channels.type,
+      createdBy: channels.createdBy,
+      conversationId: channels.conversationId,
+      createdAt: channels.createdAt,
+    })
     .from(channels)
     .where(eq(channels.communityId, communityId))
     .orderBy(sql`${channels.createdAt} ASC`);

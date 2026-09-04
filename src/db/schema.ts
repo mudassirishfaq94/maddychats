@@ -1105,6 +1105,8 @@ export const channels = pgTable(
     description: text("description"),
     type: text("type").default("text").notNull(),
     createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    /** Linked conversation for the channel chat */
+    conversationId: uuid("conversation_id").references(() => conversations.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
   },
   (table) => [

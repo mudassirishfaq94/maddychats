@@ -41,6 +41,7 @@ interface Channel {
   description: string | null;
   type: string;
   createdBy: string | null;
+  conversationId: string | null;
   createdAt: string;
 }
 
@@ -155,7 +156,7 @@ export default function CommunityDetailPage() {
             {channels.map((channel) => (
               <Link
                 key={channel.id}
-                href={`/app/chats/${channel.id}`}
+                href={channel.conversationId ? `/app/chats/${channel.conversationId}` : '#'}
                 className="flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--card)] p-3 transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--surface-2)]"
               >
                 <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--accent-soft)]">
