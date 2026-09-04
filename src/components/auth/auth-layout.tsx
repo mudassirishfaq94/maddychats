@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import type * as React from "react";
+import { Lock } from "lucide-react";
 import { LogoWordmark, LogoMark } from "@/components/brand/logo";
 import { ThemeToggle } from "@/components/theme-toggle";
 
@@ -72,8 +73,14 @@ export function AuthLayout({
         </div>
 
         <p className="text-xs text-[var(--muted)]">
-          Real-time · Private · Simple
+          Real-time · End-to-end encrypted · Simple
         </p>
+        <div className="mt-2 flex items-center gap-2 rounded-xl border border-[color-mix(in_srgb,var(--accent)_20%,transparent)] bg-[color-mix(in_srgb,var(--accent)_5%,transparent)] px-3 py-2">
+          <Lock className="h-3.5 w-3.5 shrink-0 text-[var(--accent-fg)]" />
+          <span className="text-[0.7rem] leading-relaxed text-[var(--muted)]">
+            Every message is encrypted before it leaves your device. Maddy Chats and its servers cannot read your data.
+          </span>
+        </div>
       </section>
 
       {/* ------- form panel ------- */}
@@ -113,7 +120,7 @@ export function AuthLayout({
         </div>
 
         <p className="text-center text-xs text-[var(--muted)] opacity-70">
-          App by Mudassir Ishfaq · Protected sign-in
+          App by Mudassir Ishfaq · <span className="inline-flex items-center gap-1"><Lock className="h-2.5 w-2.5" />End-to-end encrypted</span>
         </p>
       </section>
     </main>

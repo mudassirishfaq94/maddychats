@@ -1421,6 +1421,12 @@ export function ChatView({
             <p className="mt-1.5 max-w-[15rem] text-sm leading-relaxed text-[var(--muted)]">
               Say hello to {otherName.split(" ")[0]}.
             </p>
+            <div className="mt-6 flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3.5 py-2.5">
+              <Lock className="h-3.5 w-3.5 shrink-0 text-[var(--accent-fg)]" />
+              <span className="max-w-[18rem] text-[0.7rem] leading-relaxed text-[var(--muted)]">
+                Messages in this chat are <b>end-to-end encrypted</b>. Only you and {otherName.split(" ")[0]} can read them.
+              </span>
+            </div>
           </div>
         ) : (
           <div className="relative z-10 pb-4">

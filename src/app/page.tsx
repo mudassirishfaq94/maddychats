@@ -20,8 +20,8 @@ const BENEFITS = [
   },
   {
     icon: Lock,
-    title: "Private",
-    text: "Your conversations stay yours. Protected sign-in, no clutter, no noise.",
+    title: "End-to-end encrypted",
+    text: "Every message, voice note, and file is encrypted on your device before it is sent. Maddy Chats cannot read your data — only you and the people you chat with hold the keys.",
   },
   {
     icon: Clock3,
@@ -95,8 +95,8 @@ export default async function LandingPage() {
               </span>
               <span className="text-sm font-semibold">ZipTalk</span>
               <span className="flex items-center gap-1.5 text-xs text-[var(--accent-fg)]">
-                <span className="h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />
-                Online
+                <Lock className="h-3 w-3" />
+                End-to-end encrypted
               </span>
             </div>
             <div className="space-y-2 bg-[var(--bg)] px-4 py-5">
@@ -155,6 +155,10 @@ export default async function LandingPage() {
       <footer className="mt-auto border-t border-[var(--border)] py-5 text-center text-xs text-[var(--muted)]">
         ZipTalk — simple chat, real connections.
         <span className="ml-2 opacity-70">App by Mudassir Ishfaq</span>
+        <div className="mt-2 flex items-center justify-center gap-1.5 text-[0.65rem] opacity-60">
+          <Lock className="h-2.5 w-2.5" />
+          End-to-end encrypted with AES-256 + RSA-2048
+        </div>
       </footer>
     </main>
   );

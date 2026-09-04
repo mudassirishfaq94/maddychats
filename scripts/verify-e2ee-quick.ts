@@ -17,7 +17,7 @@ function assert(cond: boolean, label: string) {
 }
 
 // Step 0: Register two accounts and extract session cookies
-async function register(name: string) {
+async function register(name: string): Promise<{ id: string; cookie: string; name: string }> {
   const ts = Date.now();
   const res = await fetch(`${BASE}/api/auth/register`, {
     method: "POST",
@@ -49,7 +49,7 @@ async function register(name: string) {
 
   // Step 1: Both register device keys
   console.log("\nStep 1: Register device keys");
-  async function regKey(user: { cookie: string; id: string }) {
+  async function regKey(user: { cookie: string; id: string; name: string }) {
     const pair = await generateKeyPair();
     const deviceId = crypto.randomUUID();
     const publicKey = await exportPublicKey(pair.publicKey);

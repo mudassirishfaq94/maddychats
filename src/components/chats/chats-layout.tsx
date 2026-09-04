@@ -207,6 +207,16 @@ export function ChatsLayout({
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto py-1">
+          {/* WhatsApp-style persistent E2EE trust banner */}
+          <div className="flex items-center gap-2.5 border-b border-[var(--border)] bg-[color-mix(in_srgb,var(--accent)_5%,var(--surface))] px-4 py-2.5">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--accent)_12%,transparent)]">
+              <Lock className="h-4 w-4 text-[var(--accent-fg)]" />
+            </span>
+            <p className="min-w-0 flex-1 text-[0.7rem] leading-relaxed text-[var(--muted)]">
+              Messages are <b className="font-semibold text-[var(--text)]">end-to-end encrypted</b>. No one outside of this chat — not even Maddy Chats — can read or listen to them.
+            </p>
+          </div>
+
           {conversations.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center px-6 text-center">
               <LogoMark size={30} className="text-[var(--muted)]" />
@@ -214,6 +224,12 @@ export function ChatsLayout({
               <p className="mt-1.5 text-xs leading-relaxed text-[var(--muted)]">
                 Start one from the button above or from someone&apos;s profile.
               </p>
+              <div className="mt-4 flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2">
+                <Lock className="h-3.5 w-3.5 shrink-0 text-[var(--accent-fg)]" />
+                <span className="text-[0.7rem] text-[var(--muted)]">
+                  Your chats will be end-to-end encrypted automatically
+                </span>
+              </div>
             </div>
           ) : filtered.length === 0 ? (
             <p className="px-4 py-8 text-center text-xs text-[var(--muted)]">
