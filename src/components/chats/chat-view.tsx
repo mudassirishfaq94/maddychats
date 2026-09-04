@@ -172,7 +172,9 @@ export function ChatView({
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const nearBottomRef = useRef(true);
   const [showScrollDown, setShowScrollDown] = useState(false);
+  const [initialUnread, setInitialUnread] = useState<{ ids: Set<string>; count: number } | null>(null);
   const initialScrollDone = useRef(false);
+  const unreadSnapshotTaken = useRef(false);
   const nodeRefs = useRef(new Map<string, HTMLDivElement | null>());
   const typingActiveRef = useRef(false);
   const typingStopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -191,9 +193,18 @@ export function ChatView({
     try {
       // The endpoint emits message:read when rows change; ChatsLayout then
       // performs one debounced refresh. Do not duplicate that request here.
-      await fetch(`/api/conversations/${conversationId}/read`, {
+      const response = await fetch(`/api/conversations/${conversationId}/read`, {
         method: "POST",
       });
+      if (response.ok && !unreadSnapshotTaken.current) {
+        const data = await response.json() as { readCount?: number; messageIds?: string[]; requestPending?: boolean };
+        if (data.requestPending) return;
+        unreadSnapshotTaken.current = true;
+        const ids = Array.isArray(data.messageIds) ? data.messageIds : [];
+        if (ids.length > 0) {
+          setInitialUnread({ ids: new Set(ids), count: data.readCount ?? ids.length });
+        }
+      }
     } catch {
       // best-effort
     }
@@ -216,7 +227,8 @@ export function ChatView({
   }
 
   useEffect(() => {
-    void markRead();
+    const timer = window.setTimeout(() => void markRead(), 0);
+    return () => window.clearTimeout(timer);
   }, [markRead]);
 
   /* ---------------------------- typing state ----------------------------- */
@@ -833,6 +845,18 @@ export function ChatView({
     [visibleItems],
   );
 
+  const firstVisibleUnreadId = useMemo(
+    () => visibleItems.find((message) => initialUnread?.ids.has(message.id))?.id ?? null,
+    [initialUnread, visibleItems],
+  );
+
+  useEffect(() => {
+    if (!firstVisibleUnreadId) return;
+    const node = nodeRefs.current.get(firstVisibleUnreadId);
+    if (!node) return;
+    node.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [firstVisibleUnreadId]);
+
   const firstPinned = useMemo(
     () => visibleItems.find((m) => m.pinned),
     [visibleItems],
@@ -1054,6 +1078,15 @@ export function ChatView({
                     nodeRefs.current.set(msg.id, node);
                   }}
                 >
+                  {msg.id === firstVisibleUnreadId ? (
+                    <div className="my-4 flex items-center gap-3" role="separator" aria-label={`${initialUnread?.count ?? 0} unread messages`}>
+                      <span className="h-px flex-1 bg-[color-mix(in_srgb,var(--accent)_45%,transparent)]" />
+                      <span className="rounded-full bg-[var(--accent-soft)] px-3 py-1 text-[0.68rem] font-semibold text-[var(--accent-fg)] shadow-sm">
+                        {initialUnread?.count ?? 0} unread {initialUnread?.count === 1 ? "message" : "messages"}
+                      </span>
+                      <span className="h-px flex-1 bg-[color-mix(in_srgb,var(--accent)_45%,transparent)]" />
+                    </div>
+                  ) : null}
                   {showDate ? (
                     <div className="my-4 flex justify-center">
                       <span className="rounded-full bg-[color-mix(in_srgb,var(--muted)_12%,transparent)] px-3 py-1 text-[0.66rem] font-medium text-[var(--muted)]">
@@ -1451,7 +1484,7 @@ export function ChatView({
               className="flex h-9 items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-[var(--muted)] shadow-md transition-colors hover:bg-[var(--surface-2)] hover:text-[var(--text)]"
             >
               <ArrowDown className="h-3.5 w-3.5" />
-              New messages
+              Latest messages
             </button>
           </div>
         )}
