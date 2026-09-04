@@ -46,6 +46,15 @@ export async function GET(
   const membership = await getMembership(id, me.id);
   if (!membership) return jsonError(404, "Conversation not found.");
 
+  // Lazy-process any due scheduled messages for this conversation
+  // This ensures messages appear even if the cron hasn't run yet
+  try {
+    const { processScheduledMessages } = await import("@/server/scheduled-messages");
+    void processScheduledMessages(); // fire-and-forget, don't block the response
+  } catch {
+    // best-effort
+  }
+
   const limitParam = Number(req.nextUrl.searchParams.get("limit"));
   const limit =
     Number.isFinite(limitParam) && limitParam > 0
