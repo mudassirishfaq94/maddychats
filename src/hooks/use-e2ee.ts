@@ -147,11 +147,21 @@ export function useE2EE(userId: string | undefined) {
     [getConversationKey],
   );
 
-  /** Decrypt a received message */
+  /** Decrypt a received message. Re-fetches the key from the server if the
+   *  cached key fails (handles the race where the shared key arrived after
+   *  the local key was generated). */
   const decrypt = useCallback(
     async (ciphertext: string, conversationId: string): Promise<string> => {
+      const tryDecrypt = async (key: CryptoKey) => decryptMessage(ciphertext, key);
       const key = await getConversationKey(conversationId);
-      return decryptMessage(ciphertext, key);
+      try {
+        return await tryDecrypt(key);
+      } catch {
+        // Cached key might be stale — drop it and re-fetch from server.
+        conversationKeysRef.current.delete(conversationId);
+        const freshKey = await getConversationKey(conversationId);
+        return tryDecrypt(freshKey);
+      }
     },
     [getConversationKey],
   );

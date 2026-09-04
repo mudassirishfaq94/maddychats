@@ -22,7 +22,16 @@ export async function GET(req: NextRequest) {
   const membership = await getMembership(conversationId, user.id);
   if (!membership) return jsonError(404, "Conversation not found.");
 
-  const keys = await db
+  // Only return keys shared BY OTHER USERS. The deviceId column stores the
+  // sender's device — so we exclude rows where deviceId matches one of the
+  // requesting user's own devices (self-stored keys from an earlier bug).
+  const ownDeviceIds = await db
+    .select({ deviceId: e2eeKeys.deviceId })
+    .from(e2eeKeys)
+    .where(eq(e2eeKeys.userId, user.id));
+  const ownDeviceSet = new Set(ownDeviceIds.map((r) => r.deviceId));
+
+  const allKeys = await db
     .select()
     .from(e2eeConversationKeys)
     .where(
@@ -31,6 +40,9 @@ export async function GET(req: NextRequest) {
         eq(e2eeConversationKeys.userId, user.id),
       ),
     );
+
+  // Filter: only keep keys whose deviceId is NOT one of our own devices.
+  const keys = allKeys.filter((k) => !ownDeviceSet.has(k.deviceId));
 
   return NextResponse.json({ keys });
 }
@@ -58,6 +70,11 @@ export async function POST(req: NextRequest) {
   // Verify sender is a member
   const membership = await getMembership(conversationId, user.id);
   if (!membership) return jsonError(404, "Conversation not found.");
+
+  // Reject self-key storage — you cannot share a key with yourself.
+  if (targetUserId === user.id) {
+    return jsonError(422, "Cannot share a key with yourself.");
+  }
 
   // Verify target has registered at least one device key.
   const [targetKey] = await db
