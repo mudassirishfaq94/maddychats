@@ -179,12 +179,34 @@ export function ChatView({
   const typingActiveRef = useRef(false);
   const typingStopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const remoteTypingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const draftStorageReady = useRef(false);
+  const draftStorageKey = `ziptalk:draft:${me.id}:${conversationId}`;
 
   const isGroup = conversation.type === "group";
   const otherName = isGroup ? conversation.name ?? "Group" : other?.displayName ?? "Unknown member";
   const otherPresence = other ? presence[other.id] : undefined;
   const otherOnline = Boolean(otherPresence?.online);
   const otherLastSeen = otherPresence?.lastSeenAt ?? other?.lastSeenAt ?? null;
+
+  /* --------------------------- persistent drafts -------------------------- */
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const saved = window.localStorage.getItem(draftStorageKey);
+      if (saved) setDraft(saved.slice(0, 2000));
+      draftStorageReady.current = true;
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [draftStorageKey]);
+
+  useEffect(() => {
+    if (!draftStorageReady.current) return;
+    const timer = window.setTimeout(() => {
+      if (draft) window.localStorage.setItem(draftStorageKey, draft.slice(0, 2000));
+      else window.localStorage.removeItem(draftStorageKey);
+    }, 180);
+    return () => window.clearTimeout(timer);
+  }, [draft, draftStorageKey]);
 
   /* ------------------------------ read receipts ----------------------------- */
 
