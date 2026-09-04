@@ -4,6 +4,7 @@ import Script from "next/script";
 import { Inter, Space_Grotesk } from "next/font/google";
 import { AuthProvider } from "@/components/providers/auth-provider";
 import { RealtimeProvider } from "@/components/providers/realtime-provider";
+import { PwaUpdatePrompt } from "@/components/pwa-update-prompt";
 import "./globals.css";
 
 const inter = Inter({
@@ -56,6 +57,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <Script src="/theme-init.js" strategy="beforeInteractive" />
         <AuthProvider>
           <RealtimeProvider>{children}</RealtimeProvider>
+          <PwaUpdatePrompt />
         </AuthProvider>
       </body>
     </html>

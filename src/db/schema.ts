@@ -889,6 +889,43 @@ export const adminAuditLog = pgTable(
   ],
 );
 
+export const groupInviteLinks = pgTable(
+  "group_invite_links",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    conversationId: uuid("conversation_id")
+      .references(() => conversations.id, { onDelete: "cascade" })
+      .notNull(),
+    code: text("code").notNull().unique(),
+    createdByUserId: uuid("created_by_user_id")
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true, mode: "date" }),
+    maxUses: integer("max_uses"),
+    useCount: integer("use_count").default(0).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("group_invite_links_code_idx").on(table.code),
+    index("group_invite_links_conv_idx").on(table.conversationId),
+  ],
+);
+
+export type GroupInviteLinkRow = typeof groupInviteLinks.$inferSelect;
+
+export const groupInviteLinksRelations = relations(groupInviteLinks, ({ one }) => ({
+  conversation: one(conversations, {
+    fields: [groupInviteLinks.conversationId],
+    references: [conversations.id],
+  }),
+  creator: one(users, {
+    fields: [groupInviteLinks.createdByUserId],
+    references: [users.id],
+  }),
+}));
+
 export type StatusRow = typeof statuses.$inferSelect;
 export type RealtimeEventRow = typeof realtimeEvents.$inferSelect;
 export const reportsRelations = relations(reports, ({ one }) => ({

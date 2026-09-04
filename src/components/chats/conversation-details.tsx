@@ -70,6 +70,9 @@ export function ConversationDetails({
   const [memberResults, setMemberResults] = useState<PublicUser[]>([]);
   const [muted, setMuted] = useState(conversation.muted);
   const [blocked, setBlocked] = useState(conversation.blocked);
+  const [inviteLinks, setInviteLinks] = useState<Array<{ id: string; code: string; url?: string; useCount: number; maxUses: number | null; expiresAt: Date | null }>>([]);
+  const [showInviteLinks, setShowInviteLinks] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
   const router = useRouter();
   const { subscribe } = useRealtime();
 
@@ -234,6 +237,73 @@ export function ConversationDetails({
               <div className="relative"><Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--muted)]" /><input value={memberQuery} onChange={(e) => { setMemberQuery(e.target.value); if (e.target.value.trim().length < 2) setMemberResults([]); }} className="field-input field-input--icon py-2! text-xs!" placeholder="Add members…" /></div>
               {memberResults.length ? <div className="mt-1 max-h-28 overflow-y-auto rounded-xl border border-[var(--border)] bg-[var(--card)] p-1">{memberResults.map((member) => <button type="button" key={member.id} onClick={() => void groupAction(`/api/groups/${conversationId}/members`, "POST", { userId: member.id }).then(() => { setMemberQuery(""); setMemberResults([]); })} className="flex w-full items-center gap-2 rounded-lg p-2 text-left text-xs hover:bg-[var(--surface-2)]"><Avatar user={member} size={26} /><span className="min-w-0 flex-1 truncate">{member.displayName}</span><UserPlus className="h-3.5 w-3.5" /></button>)}</div> : null}
             </div> : null}
+            {(group.myRole === "owner" || group.myRole === "admin") ? (
+              <div className="mt-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowInviteLinks(!showInviteLinks);
+                    if (!showInviteLinks && inviteLinks.length === 0) {
+                      fetch(`/api/groups/${conversationId}/invites`)
+                        .then((r) => r.json())
+                        .then((data) => setInviteLinks(data.links ?? []))
+                        .catch(() => {});
+                    }
+                  }}
+                  className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium text-[var(--accent-fg)] hover:bg-[var(--accent-soft)]"
+                >
+                  <span className="text-lg">🔗</span>
+                  {showInviteLinks ? "Hide" : "Invite links"}
+                </button>
+                {showInviteLinks ? (
+                  <div className="mt-2 space-y-2">
+                    <button
+                      type="button"
+                      disabled={groupBusy !== null}
+                      onClick={async () => {
+                        setGroupBusy("invite");
+                        try {
+                          const res = await fetch(`/api/groups/${conversationId}/invites`, { method: "POST" });
+                          const data = await res.json();
+                          if (data.link) {
+                            setInviteLinks((prev) => [data.link, ...prev]);
+                          }
+                        } catch {}
+                        setGroupBusy(null);
+                      }}
+                      className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-[var(--accent)] py-2 text-[0.68rem] font-medium text-[var(--accent-fg)] hover:bg-[var(--accent-soft)]"
+                    >
+                      + Create invite link
+                    </button>
+                    {inviteLinks.map((link) => (
+                      <div key={link.id} className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] p-2.5">
+                        <div className="flex items-center justify-between">
+                          <span className="truncate text-[0.65rem] font-mono text-[var(--muted)]">
+                            {`${typeof window !== 'undefined' ? window.location.origin : ''}/invite/${link.code}`}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const url = `${typeof window !== 'undefined' ? window.location.origin : ''}/invite/${link.code}`;
+                              navigator.clipboard?.writeText(url);
+                              setCopiedLink(true);
+                              setTimeout(() => setCopiedLink(false), 1500);
+                            }}
+                            className="shrink-0 rounded px-2 py-0.5 text-[0.6rem] font-medium text-[var(--accent)]"
+                          >
+                            {copiedLink ? "✓" : "Copy"}
+                          </button>
+                        </div>
+                        <div className="mt-1 flex items-center gap-2 text-[0.6rem] text-[var(--muted)]">
+                          <span>Used {link.useCount}{link.maxUses ? `/${link.maxUses}` : ''} times</span>
+                          {link.expiresAt ? <span>· Expires {new Date(link.expiresAt).toLocaleDateString()}</span> : null}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
             <button type="button" disabled={groupBusy !== null} onClick={() => void groupAction(`/api/groups/${conversationId}/leave`, "POST")} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold text-[var(--danger)] hover:bg-[color-mix(in_srgb,var(--danger)_8%,transparent)]"><LogOut className="h-4 w-4" />Leave group</button>
           </div>
         ) : other ? (

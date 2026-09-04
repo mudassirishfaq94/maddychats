@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { X, Flag, Loader2, CheckCircle, AlertTriangle } from "lucide-react";
+import { Ban, X, Flag, Loader2, CheckCircle, AlertTriangle } from "lucide-react";
 
 const REASONS = [
   { value: "spam", label: "Spam" },
@@ -32,6 +32,7 @@ export function ReportDialog({
 }: ReportDialogProps) {
   const [reason, setReason] = useState("");
   const [description, setDescription] = useState("");
+  const [blockAfter, setBlockAfter] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState("");
@@ -60,6 +61,16 @@ export function ReportDialog({
         throw new Error(data.error || "Failed to submit report.");
       }
       setSubmitted(true);
+
+      // Block the user after reporting if requested
+      if (blockAfter && targetUserId) {
+        try {
+          await fetch(`/api/users/${targetUserId}/block`, { method: "POST" });
+        } catch {
+          // Block failed but report succeeded — don't worry user about it
+        }
+      }
+
       setTimeout(onClose, 2000);
     } catch (e) {
       setError((e as Error).message);
@@ -139,6 +150,31 @@ export function ReportDialog({
                 className="w-full resize-none rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2.5 text-sm text-[var(--text)] placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:outline-none"
               />
             </div>
+
+            {targetUserId && (
+              <label className="mt-3 flex items-center gap-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2.5 cursor-pointer">
+                <Ban className="h-4 w-4 shrink-0 text-[var(--danger)]" />
+                <span className="flex-1 text-xs">
+                  <span className="font-medium">Block this user</span>
+                  <span className="ml-1 text-[var(--muted)]">after submitting</span>
+                </span>
+                <button
+                  type="button"
+                  role="checkbox"
+                  aria-checked={blockAfter}
+                  onClick={() => setBlockAfter(!blockAfter)}
+                  className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${
+                    blockAfter ? "bg-[var(--danger)]" : "bg-[var(--surface)]"
+                  }`}
+                >
+                  <span
+                    className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${
+                      blockAfter ? "translate-x-[18px]" : "translate-x-0.5"
+                    }`}
+                  />
+                </button>
+              </label>
+            )}
 
             {error && (
               <div className="mt-3 flex items-center gap-2 rounded-xl bg-[color-mix(in_srgb,var(--danger)_10%,transparent)] p-3 text-xs text-[var(--danger)]">

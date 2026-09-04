@@ -64,6 +64,7 @@ export function ChatsLayout({
     : null;
   const [filter, setFilter] = useState("");
   const [showArchived, setShowArchived] = useState(false);
+  const [chatFilter, setChatFilter] = useState<"all" | "unread" | "groups" | "dms">("all");
 
   // Live activity → debounced server refresh keeps previews ordered & fresh.
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -98,6 +99,26 @@ export function ChatsLayout({
     [conversations],
   );
 
+  const unreadCount = useMemo(
+    () => conversations.filter((c) => !c.archived && (c.unreadCount > 0 || c.markedUnread)).length,
+    [conversations],
+  );
+  const groupCount = useMemo(
+    () => conversations.filter((c) => !c.archived && c.type === "group").length,
+    [conversations],
+  );
+  const dmCount = useMemo(
+    () => conversations.filter((c) => !c.archived && c.type === "dm").length,
+    [conversations],
+  );
+
+  const filterChips: { key: typeof chatFilter; label: string; count: number; color?: string }[] = [
+    { key: "all", label: "All", count: conversations.filter((c) => !c.archived).length },
+    { key: "unread", label: "Unread", count: unreadCount, color: "var(--accent)" },
+    { key: "groups", label: "Groups", count: groupCount },
+    { key: "dms", label: "DMs", count: dmCount },
+  ];
+
   const filtered = useMemo(() => {
     const q = filter.trim().toLowerCase();
     return conversations
@@ -109,8 +130,14 @@ export function ChatsLayout({
         return (
           name.toLowerCase().includes(q) || username.toLowerCase().includes(q)
         );
+      })
+      .filter((c) => {
+        if (chatFilter === "unread") return c.unreadCount > 0 || c.markedUnread;
+        if (chatFilter === "groups") return c.type === "group";
+        if (chatFilter === "dms") return c.type === "dm";
+        return true;
       });
-  }, [conversations, filter, showArchived]);
+  }, [conversations, filter, showArchived, chatFilter]);
 
   return (
     <div className="flex h-full w-full min-w-0 overflow-hidden overflow-x-hidden bg-[var(--bg)]">
@@ -140,6 +167,26 @@ export function ChatsLayout({
               aria-label="Search conversations"
               className="field-input field-input--icon rounded-full! py-2! text-sm!"
             />
+          </div>
+          <div className="mt-2 flex gap-1.5 overflow-x-auto pb-1">
+            {filterChips.map((chip) => (
+              <button
+                key={chip.key}
+                type="button"
+                onClick={() => setChatFilter(chip.key)}
+                className={cn(
+                  "shrink-0 rounded-full px-3 py-1 text-[0.7rem] font-semibold transition-all",
+                  chatFilter === chip.key
+                    ? "bg-[var(--accent)] text-white shadow-sm"
+                    : "bg-[color-mix(in_srgb,var(--muted)_8%,transparent)] text-[var(--muted)] hover:bg-[color-mix(in_srgb,var(--muted)_14%,transparent)]",
+                )}
+              >
+                {chip.label}
+                {chip.count > 0 && chip.key !== "all" ? (
+                  <span className="ml-1 text-[0.6rem] opacity-70">{chip.count}</span>
+                ) : null}
+              </button>
+            ))}
           </div>
           {archivedCount > 0 || showArchived ? (
             <button
