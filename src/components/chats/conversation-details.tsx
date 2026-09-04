@@ -215,6 +215,8 @@ export function ConversationDetails({
           <span className="text-sm font-semibold">{group.type === "group" ? "Group info" : "Chat info"}</span>
         </div>
 
+        {/* Scrollable body */}
+        <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
         {/* Profile summary */}
         {group.type === "group" ? (
           <div className="border-b border-[var(--border)] px-4 py-5">
@@ -365,7 +367,7 @@ export function ConversationDetails({
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-3">
+        <div className="p-3">
           {loading ? (
             <div className="flex justify-center py-10">
               <Loader2 className="h-5 w-5 animate-spin text-[var(--muted)]" />
@@ -425,13 +427,13 @@ export function ConversationDetails({
             <button type="button" disabled={groupBusy !== null} onClick={() => void toggleNotifications()} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm hover:bg-[var(--surface-2)]">
               {muted ? <Bell className="h-4 w-4" /> : <BellOff className="h-4 w-4" />}<span className="flex-1">Notifications</span><small className="text-[var(--muted)]">{muted ? "Muted" : "On"}</small>
             </button>
-            {other ? <button type="button" disabled={groupBusy !== null} onClick={() => void toggleBlock()} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm text-[var(--danger)] hover:bg-[color-mix(in_srgb,var(--danger)_8%,transparent)]"><Ban className="h-4 w-4" />{blocked ? `Unblock ${other.displayName.split(" ")[0]}` : `Block ${other.displayName.split(" ")[0]}`}</button> : null}
-          </div>
-        </div>
-      </div>
-    </>
-  );
-}
+            {other ? <button type="button" disabled={groupBusy !== null} onClick={() => void toggleBlock()} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm text-[var(--danger)] hover:bg-[color-mix(in_srgb,var(--danger)_8%,transparent)]"><Ban className="h-4 w-4" />{blocked ? `Unblock ${other.displayName.split(" ")[0]}` : `Block ${other.displayName.split(" ")[0]}`}</button> : null}           </div>
+         </div>
+        </div>{/* end scrollable body */}
+       </div>
+     </>
+   );
+ }
 
 function SavedMessagesList({ items, icon }: { items: SavedMessageItem[]; icon: "pinned" | "starred" }) {
   const Icon = icon === "pinned" ? Pin : Star;
