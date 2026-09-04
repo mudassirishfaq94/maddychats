@@ -231,6 +231,10 @@ export function ChatView({
 
   // Decrypt any encrypted message text (initial history, older pages, and
   // realtime arrivals all flow through `items`).
+  // Failed decryptions are retried after a short delay — the peer's key
+  // may still be in flight when the message first arrives.
+  const failedDecryptionRef = useRef<Set<string>>(new Set());
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (!e2ee.initialized) return;
     const encItems = items.filter((m) => m.encrypted);
@@ -239,12 +243,20 @@ export function ChatView({
     (async () => {
       const nextTexts = new Map(decryptedTexts);
       const nextReplies = new Map(decryptedReplies);
+      let hadFailure = false;
       for (const m of encItems) {
         if (!nextTexts.has(m.id) && m.text) {
           try {
             nextTexts.set(m.id, await e2ee.decrypt(m.text, conversationId));
+            failedDecryptionRef.current.delete(m.id);
           } catch {
-            nextTexts.set(m.id, "\u{1F512} This message could not be decrypted on this device.");
+            // If this message previously failed, give up permanently.
+            if (failedDecryptionRef.current.has(m.id)) {
+              nextTexts.set(m.id, "\u{1F512} This message could not be decrypted on this device.");
+            } else {
+              failedDecryptionRef.current.add(m.id);
+              hadFailure = true;
+            }
           }
         }
         if (
@@ -265,6 +277,14 @@ export function ChatView({
       }
       if (nextReplies.size !== decryptedReplies.size) {
         setDecryptedReplies(nextReplies);
+      }
+      // Retry failed decryptions after 2 seconds (peer's key may still arrive).
+      if (hadFailure && alive) {
+        if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+        retryTimerRef.current = setTimeout(() => {
+          // Force re-run by bumping items via a no-op state update.
+          setItems((prev) => [...prev]);
+        }, 2000);
       }
     })();
     return () => {
@@ -298,7 +318,7 @@ export function ChatView({
   /** Encrypt a pending file into a ciphertext blob + conversation-wrapped key. */
   const encryptPendingFile = useCallback(
     async (file: File) => {
-      const conversationKey = await e2ee.getConversationKey(conversationId);
+      const { key: conversationKey } = await e2ee.getConversationKey(conversationId);
       const mediaKey = await generateConversationKey();
       const mediaKeyB64 = await exportSymmetricKey(mediaKey);
       const cipherB64 = await encryptBytes(await file.arrayBuffer(), mediaKey);
