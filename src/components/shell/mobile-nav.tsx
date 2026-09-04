@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   CircleDashed,
+  Globe,
   MessagesSquare,
   Settings,
   Users,
@@ -12,6 +13,7 @@ import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
   { href: "/app", icon: MessagesSquare, label: "Chats", match: "/app" },
+  { href: "/app/communities", icon: Globe, label: "Communities", match: "/app/communities" },
   { href: "/app/people", icon: Users, label: "People", match: "/app/people" },
   { href: "/app/status", icon: CircleDashed, label: "Status", match: "/app/status" },
   { href: "/app/settings", icon: Settings, label: "Settings", match: "/app/settings" },

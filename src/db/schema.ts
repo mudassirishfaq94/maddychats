@@ -332,6 +332,8 @@ export const messageAttachments = pgTable(
     path: text("path").notNull(),
     /** image | file */
     kind: text("kind").default("file").notNull(),
+    /** Voice transcription text */
+    transcript: text("transcript"),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" })
       .defaultNow()
       .notNull(),
@@ -1061,3 +1063,90 @@ export type LoginHistoryRow = typeof loginHistory.$inferSelect;
 export type User2faRow = typeof user2fa.$inferSelect;
 export type PrivacySettingsRow = typeof privacySettings.$inferSelect;
 export type AdminAuditLogRow = typeof adminAuditLog.$inferSelect;
+
+/* ================================ communities ================================ */
+
+export const communities = pgTable(
+  "communities",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    name: text("name").notNull(),
+    description: text("description"),
+    avatarUrl: text("avatar_url"),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    isPublic: boolean("is_public").default(true).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+  },
+  (table) => [index("communities_created_by_idx").on(table.createdBy)],
+);
+
+export const communityMembers = pgTable(
+  "community_members",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    communityId: uuid("community_id").references(() => communities.id, { onDelete: "cascade" }).notNull(),
+    userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+    role: text("role").default("member").notNull(),
+    joinedAt: timestamp("joined_at", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+  },
+  (table) => [
+    unique("community_members_unique").on(table.communityId, table.userId),
+    index("community_members_user_idx").on(table.userId),
+  ],
+);
+
+export const channels = pgTable(
+  "channels",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    communityId: uuid("community_id").references(() => communities.id, { onDelete: "cascade" }).notNull(),
+    name: text("name").notNull(),
+    description: text("description"),
+    type: text("type").default("text").notNull(),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+  },
+  (table) => [
+    unique("channels_community_name_unique").on(table.communityId, table.name),
+    index("channels_community_idx").on(table.communityId),
+  ],
+);
+
+/* ================================ e2ee ================================ */
+
+export const e2eeKeys = pgTable(
+  "e2ee_keys",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+    deviceId: text("device_id").notNull(),
+    publicKey: text("public_key").notNull(),
+    encryptedPrivateKey: text("encrypted_private_key").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true, mode: "date" }),
+  },
+  (table) => [
+    unique("e2ee_keys_user_device_unique").on(table.userId, table.deviceId),
+    index("e2ee_keys_user_idx").on(table.userId),
+  ],
+);
+
+export const e2eeConversationKeys = pgTable(
+  "e2ee_conversation_keys",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    conversationId: uuid("conversation_id").references(() => conversations.id, { onDelete: "cascade" }).notNull(),
+    userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+    encryptedKey: text("encrypted_key").notNull(),
+    deviceId: text("device_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+  },
+  (table) => [
+    unique("e2ee_conv_keys_unique").on(table.conversationId, table.userId, table.deviceId),
+    index("e2ee_conv_keys_conv_idx").on(table.conversationId),
+  ],
+);
+
+export type CommunityRow = typeof communities.$inferSelect;
+export type ChannelRow = typeof channels.$inferSelect;

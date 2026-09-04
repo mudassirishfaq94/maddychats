@@ -1,6 +1,7 @@
 "use client";
 
-import { Mic2, Pause, Play } from "lucide-react";
+import { Mic2, Pause, Play, Captions, Loader2 } from "lucide-react";
+import { useState } from "react";
 import type { PublicUser } from "@/lib/types";
 import { Avatar } from "@/components/avatar";
 import { Waveform } from "./waveform";
@@ -23,11 +24,15 @@ export function AudioMessage({
   own,
   duration: initialDuration,
   sender,
+  transcript: initialTranscript,
+  attachmentId,
 }: {
   src: string;
   own: boolean;
   duration?: number;
   sender?: PublicUser;
+  transcript?: string | null;
+  attachmentId?: string;
 }) {
   const voiceId = `voice-${src}`;
   const {
@@ -44,6 +49,8 @@ export function AudioMessage({
 
   const totalDuration = duration || finiteTime(initialDuration ?? 0);
   const progress = totalDuration ? (currentTime / totalDuration) * 100 : 0;
+  const [transcript, setTranscript] = useState(initialTranscript ?? null);
+  const [transcribing, setTranscribing] = useState(false);
 
   if (error) {
     return (
@@ -152,6 +159,43 @@ export function AudioMessage({
               Voice
             </span>
           </div>
+
+          {/* Transcript */}
+          {transcript ? (
+            <p className={cn(
+              "mt-2 border-t pt-2 text-[0.75rem] leading-relaxed",
+              own ? "border-white/15 text-white/70" : "border-[var(--border)] text-[var(--muted)]",
+            )}>
+              {transcript}
+            </p>
+          ) : attachmentId ? (
+            <button
+              type="button"
+              onClick={async () => {
+                setTranscribing(true);
+                try {
+                  const res = await fetch(`/api/messages/transcribe`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ attachmentId, audioUrl: src }),
+                  });
+                  if (res.ok) {
+                    const data = await res.json();
+                    setTranscript(data.transcript);
+                  }
+                } catch {}
+                setTranscribing(false);
+              }}
+              disabled={transcribing}
+              className={cn(
+                "mt-2 flex items-center gap-1.5 border-t pt-2 text-[0.65rem] font-medium transition-colors",
+                own ? "border-white/15 text-white/50 hover:text-white/70" : "border-[var(--border)] text-[var(--muted)] hover:text-[var(--text)]",
+              )}
+            >
+              {transcribing ? <Loader2 className="h-3 w-3 animate-spin" /> : <Captions className="h-3 w-3" />}
+              {transcribing ? "Transcribing..." : "Show transcript"}
+            </button>
+          ) : null}
         </div>
       </div>
     </div>
