@@ -113,6 +113,13 @@
       "when": 1788640000000,
       "tag": "0009_message_forwarded",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1788700000000,
+      "tag": "0010_privacy_safety",
+      "breakpoints": true
     }
   ]
 }

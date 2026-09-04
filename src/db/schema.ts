@@ -706,6 +706,8 @@ export const messageDeletionsRelations = relations(messageDeletions, ({ one }) =
   }),
 }));
 
+
+
 /* ================================== types ================================ */
 
 export type UserRow = typeof users.$inferSelect;
@@ -723,5 +725,234 @@ export type MessageStarRow = typeof messageStars.$inferSelect;
 export type PinnedMessageRow = typeof pinnedMessages.$inferSelect;
 export type MessageDeletionRow = typeof messageDeletions.$inferSelect;
 export type MessageMentionRow = typeof messageMentions.$inferSelect;
+/* ============================= privacy & safety ========================== */
+
+export const reportTypeEnum = pgEnum("report_type", [
+  "user",
+  "message",
+]);
+
+export const reportReasonEnum = pgEnum("report_reason", [
+  "spam",
+  "harassment",
+  "hate_speech",
+  "violence",
+  "nudity",
+  "misinformation",
+  "impersonation",
+  "scam",
+  "other",
+]);
+
+export const reportStatusEnum = pgEnum("report_status", [
+  "pending",
+  "reviewed",
+  "resolved",
+  "dismissed",
+]);
+
+/** User-submitted reports for users or messages. */
+export const reports = pgTable(
+  "reports",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    reporterId: uuid("reporter_id")
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    type: reportTypeEnum("type").notNull(),
+    reason: reportReasonEnum("reason").notNull(),
+    description: text("description"),
+    /** Target user (for type=user or type=message). */
+    targetUserId: uuid("target_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    /** Target message (for type=message). */
+    targetMessageId: uuid("target_message_id").references(() => messages.id, {
+      onDelete: "set null",
+    }),
+    status: reportStatusEnum("status").default("pending").notNull(),
+    reviewedById: uuid("reviewed_by_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    reviewNote: text("review_note"),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" })
+      .defaultNow()
+      .notNull(),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true, mode: "date" }),
+  },
+  (table) => [
+    index("reports_status_idx").on(table.status),
+    index("reports_target_user_idx").on(table.targetUserId),
+    index("reports_reporter_idx").on(table.reporterId),
+  ],
+);
+
+/** Login attempt history — tracks successes and failures. */
+export const loginHistory = pgTable(
+  "login_history",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id").references(() => users.id, {
+      onDelete: "cascade",
+    }),
+    identifier: text("identifier").notNull(),
+    success: boolean("success").notNull(),
+    ipAddress: text("ip_address"),
+    userAgent: text("user_agent"),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("login_history_user_idx").on(table.userId),
+    index("login_history_created_idx").on(table.createdAt),
+  ],
+);
+
+/** Two-factor authentication (TOTP) — one row per user if enabled. */
+export const user2fa = pgTable(
+  "user_2fa",
+  {
+    userId: uuid("user_id")
+      .primaryKey()
+      .references(() => users.id, { onDelete: "cascade" }),
+    secret: text("secret").notNull(),
+    enabled: boolean("enabled").default(false).notNull(),
+    enabledAt: timestamp("enabled_at", { withTimezone: true, mode: "date" }),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" })
+      .defaultNow()
+      .notNull(),
+  },
+);
+
+/** Per-user privacy settings. */
+export const privacySettings = pgTable(
+  "privacy_settings",
+  {
+    userId: uuid("user_id")
+      .primaryKey()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** Who can see the user's profile: everyone | contacts | nobody */
+    profileVisibility: text("profile_visibility")
+      .default("everyone")
+      .notNull(),
+    /** Who can see last seen: everyone | contacts | nobody */
+    lastSeenVisibility: text("last_seen_visibility")
+      .default("everyone")
+      .notNull(),
+    /** Who can see the user's status: everyone | contacts | nobody */
+    statusVisibility: text("status_visibility")
+      .default("everyone")
+      .notNull(),
+    /** Who can send messages: everyone | contacts | nobody */
+    whoCanMessage: text("who_can_message")
+      .default("everyone")
+      .notNull(),
+    /** Login alerts via email */
+    loginAlerts: boolean("login_alerts").default(true).notNull(),
+    /** Read receipts */
+    readReceipts: boolean("read_receipts").default(true).notNull(),
+    /** Typing indicators */
+    typingIndicators: boolean("typing_indicators").default(true).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" })
+      .defaultNow()
+      .notNull(),
+  },
+);
+
+/** Admin/moderation audit log — every action taken by an admin is recorded. */
+export const adminAuditLog = pgTable(
+  "admin_audit_log",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    adminId: uuid("admin_id")
+      .references(() => users.id, { onDelete: "set null" })
+      .notNull(),
+    action: text("action").notNull(),
+    targetUserId: uuid("target_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    targetMessageId: uuid("target_message_id").references(() => messages.id, {
+      onDelete: "set null",
+    }),
+    details: jsonb("details"),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("admin_audit_log_admin_idx").on(table.adminId),
+    index("admin_audit_log_created_idx").on(table.createdAt),
+  ],
+);
+
 export type StatusRow = typeof statuses.$inferSelect;
 export type RealtimeEventRow = typeof realtimeEvents.$inferSelect;
+export const reportsRelations = relations(reports, ({ one }) => ({
+  reporter: one(users, {
+    fields: [reports.reporterId],
+    references: [users.id],
+    relationName: "reporter",
+  }),
+  targetUser: one(users, {
+    fields: [reports.targetUserId],
+    references: [users.id],
+    relationName: "reportTarget",
+  }),
+  targetMessage: one(messages, {
+    fields: [reports.targetMessageId],
+    references: [messages.id],
+  }),
+  reviewedBy: one(users, {
+    fields: [reports.reviewedById],
+    references: [users.id],
+    relationName: "reviewer",
+  }),
+}));
+
+export const loginHistoryRelations = relations(loginHistory, ({ one }) => ({
+  user: one(users, {
+    fields: [loginHistory.userId],
+    references: [users.id],
+  }),
+}));
+
+export const user2faRelations = relations(user2fa, ({ one }) => ({
+  user: one(users, {
+    fields: [user2fa.userId],
+    references: [users.id],
+  }),
+}));
+
+export const privacySettingsRelations = relations(privacySettings, ({ one }) => ({
+  user: one(users, {
+    fields: [privacySettings.userId],
+    references: [users.id],
+  }),
+}));
+
+export const adminAuditLogRelations = relations(adminAuditLog, ({ one }) => ({
+  admin: one(users, {
+    fields: [adminAuditLog.adminId],
+    references: [users.id],
+    relationName: "auditAdmin",
+  }),
+  targetUser: one(users, {
+    fields: [adminAuditLog.targetUserId],
+    references: [users.id],
+    relationName: "auditTarget",
+  }),
+  targetMessage: one(messages, {
+    fields: [adminAuditLog.targetMessageId],
+    references: [messages.id],
+  }),
+}));
+
+export type ReportRow = typeof reports.$inferSelect;
+export type LoginHistoryRow = typeof loginHistory.$inferSelect;
+export type User2faRow = typeof user2fa.$inferSelect;
+export type PrivacySettingsRow = typeof privacySettings.$inferSelect;
+export type AdminAuditLogRow = typeof adminAuditLog.$inferSelect;

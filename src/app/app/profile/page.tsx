@@ -16,6 +16,10 @@ import { AppShell } from "@/components/shell/app-shell";
 import { ProfileEditor } from "@/components/profile/profile-editor";
 import { NotificationPreferences } from "@/components/profile/notification-preferences";
 import { AuthenticationMethods } from "@/components/profile/authentication-methods";
+import { PrivacySettings } from "@/components/profile/privacy-settings";
+import { LoginHistory } from "@/components/profile/login-history";
+import { AccountDataSection } from "@/components/profile/account-data";
+import { TwoFactorAuth } from "@/components/profile/two-factor-auth";
 import { db } from "@/db";
 import { oauthAccounts } from "@/db/schema";
 import { Avatar } from "@/components/avatar";
@@ -100,7 +104,11 @@ export default async function ProfilePage({
         <div className="min-w-0 space-y-5">
           <ProfileEditor user={user} />
           <AuthenticationMethods initialMethods={initialMethods} notice={notice} />
+          <TwoFactorAuth />
           <NotificationPreferences />
+          <PrivacySettings />
+          <LoginHistory />
+          <AccountDataSection />
         </div>
 
         <div className="min-w-0 space-y-4">

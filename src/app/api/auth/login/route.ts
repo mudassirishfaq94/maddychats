@@ -12,6 +12,7 @@ import {
 } from "@/server/http";
 import { SESSION_COOKIE } from "@/server/config";
 import { createSessionToken, sessionCookieOptions } from "@/server/session";
+import { recordLoginAttempt } from "@/server/privacy";
 
 export const dynamic = "force-dynamic";
 
@@ -41,14 +42,33 @@ export async function POST(req: NextRequest) {
   }
 
   const { identifier, password } = parsed.data;
+  const ip = clientIp(req);
+  const ua = req.headers.get("user-agent") || undefined;
 
   // Generic error message on both unknown user and wrong password,
   // so the endpoint cannot be used to enumerate accounts.
   const user = await findUserByIdentifier(identifier);
   const valid = user ? await verifyPassword(password, user.passwordHash) : false;
   if (!user || !valid) {
+    // Record failed attempt
+    await recordLoginAttempt({
+      userId: user?.id,
+      identifier,
+      success: false,
+      ipAddress: ip,
+      userAgent: ua,
+    });
     return jsonError(401, "Incorrect email, username, or password.");
   }
+
+  // Record successful login
+  await recordLoginAttempt({
+    userId: user.id,
+    identifier,
+    success: true,
+    ipAddress: ip,
+    userAgent: ua,
+  });
 
   await touchLastSeen(user.id);
 

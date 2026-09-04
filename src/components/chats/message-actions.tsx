@@ -6,6 +6,7 @@ import {
   Copy,
   Forward,
   MoreHorizontal,
+  Flag,
   Pencil,
   Pin,
   PinOff,
@@ -37,6 +38,7 @@ export function MessageActions({
   onUnstar,
   onPin,
   onUnpin,
+  onReport,
   onDeleteForMe,
   onDeleteForEveryone,
 }: {
@@ -54,6 +56,7 @@ export function MessageActions({
   onUnstar: () => void;
   onPin: () => void;
   onUnpin: () => void;
+  onReport?: () => void;
   onDeleteForMe: () => void;
   onDeleteForEveryone: () => void;
 }) {
@@ -218,6 +221,20 @@ export function MessageActions({
               <Copy className="h-3.5 w-3.5" />
               Copy text
             </button>
+
+            {!own && onReport ? (
+              <button
+                type="button"
+                onClick={() => {
+                  onReport();
+                  setMenuOpen(false);
+                }}
+                className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-xs text-[var(--danger)] transition-colors hover:bg-[color-mix(in_srgb,var(--danger)_10%,transparent)]"
+              >
+                <Flag className="h-3.5 w-3.5" />
+                Report message
+              </button>
+            ) : null}
 
             <div className="my-1 border-t border-[var(--border)]" />
 

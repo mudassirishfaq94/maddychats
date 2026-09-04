@@ -62,6 +62,7 @@ import { useVoiceRecorder } from "@/hooks/use-voice-recorder";
 import { LongPressTouchable } from "./long-press-touchable";
 import { MobileMessageMenu } from "./mobile-message-menu";
 import { ForwardDialog } from "./forward-dialog";
+import { ReportDialog } from "@/components/profile/report-dialog";
 
 function formatDuration(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -167,6 +168,7 @@ export function ChatView({
   const [showEmoji, setShowEmoji] = useState(false);
   const [mobileMenuMsg, setMobileMenuMsg] = useState<MessageDTO | null>(null);
   const [forwardMsg, setForwardMsg] = useState<MessageDTO | null>(null);
+  const [reportMsg, setReportMsg] = useState<MessageDTO | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const topSentinelRef = useRef<HTMLDivElement>(null);
@@ -1473,6 +1475,7 @@ export function ChatView({
                               onReact={(emoji) => void toggleReaction(msg, emoji)}
                               onCopy={() => copyText(msg.text)}
                               onForward={() => setForwardMsg(msg)}
+                              onReport={() => setReportMsg(msg)}
                               onEdit={() => {
                                 setEditingId(msg.id);
                                 setEditDraft(msg.text);
@@ -1770,6 +1773,11 @@ export function ChatView({
         onReact={(emoji) => {
           if (mobileMenuMsg) void toggleReaction(mobileMenuMsg, emoji);
         }}
+        onReport={() => {
+          if (mobileMenuMsg) {
+            setReportMsg(mobileMenuMsg);
+          }
+        }}
         onDeleteForMe={() => {
           if (mobileMenuMsg) void executeDelete(mobileMenuMsg.id, "for_me");
         }}
@@ -1785,6 +1793,17 @@ export function ChatView({
         onClose={() => setForwardMsg(null)}
         onForward={forwardMessage}
       />
+
+      {/* Report dialog */}
+      {reportMsg ? (
+        <ReportDialog
+          type="message"
+          targetMessageId={reportMsg.id}
+          targetUserId={reportMsg.senderId}
+          targetName={reportMsg.sender.displayName}
+          onClose={() => setReportMsg(null)}
+        />
+      ) : null}
     </div>
   );
 }

@@ -25,6 +25,7 @@ import {
   MESSAGE_PAGE_SIZE,
 } from "@/server/chat";
 import { notifyNewMessage, notifyUser } from "@/server/notifications";
+import { isSpammingMessages, isDuplicateMessage } from "@/server/spam-detection";
 
 export const dynamic = "force-dynamic";
 
@@ -92,6 +93,20 @@ export async function POST(
       "Please fix the highlighted fields.",
       fieldErrors(parsed.error),
     );
+  }
+
+  // Spam detection
+  const spamCheck = await isSpammingMessages(me.id);
+  if (!spamCheck.allowed) {
+    return jsonError(429, spamCheck.reason ?? "Too many messages.");
+  }
+
+  // Duplicate detection
+  if (parsed.data.text) {
+    const isDupe = await isDuplicateMessage(me.id, parsed.data.text, id);
+    if (isDupe) {
+      return jsonError(429, "Duplicate message detected. Please wait before sending the same message again.");
+    }
   }
 
   // Blocking is enforced here on the server — never in the UI alone.

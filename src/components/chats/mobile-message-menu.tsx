@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   Copy,
+  Flag,
   Forward,
   Reply,
   SmilePlus,
@@ -24,6 +25,7 @@ interface MobileMessageMenuProps {
   onReply: () => void;
   onForward: () => void;
   onReact: (emoji: string) => void;
+  onReport: () => void;
   onDeleteForMe: () => void;
   onDeleteForEveryone: () => void;
 }
@@ -41,6 +43,7 @@ export function MobileMessageMenu({
   onReply,
   onForward,
   onReact,
+  onReport,
   onDeleteForMe,
   onDeleteForEveryone,
 }: MobileMessageMenuProps) {
@@ -175,7 +178,7 @@ export function MobileMessageMenu({
           /* Main action menu */
           <div className="px-3 pb-4">
             {/* Action buttons */}
-            <div className="grid grid-cols-5 gap-2">
+            <div className="grid grid-cols-3 gap-2">
               {/* Copy */}
               <button
                 type="button"
@@ -239,6 +242,23 @@ export function MobileMessageMenu({
                 </span>
                 <span className="text-[0.65rem] font-medium text-[var(--muted)]">
                   React
+                </span>
+              </button>
+
+              {/* Report */}
+              <button
+                type="button"
+                onClick={() => {
+                  onReport();
+                  onClose();
+                }}
+                className="flex flex-col items-center gap-1.5 rounded-2xl py-3 transition-colors hover:bg-[color-mix(in_srgb,var(--danger)_8%,transparent)]"
+              >
+                <span className="flex h-12 w-12 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--danger)_10%,transparent)]">
+                  <Flag className="h-5 w-5 text-[var(--danger)]" />
+                </span>
+                <span className="text-[0.65rem] font-medium text-[var(--danger)]">
+                  Report
                 </span>
               </button>
 
