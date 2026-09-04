@@ -7,7 +7,7 @@ import {
   deleteGroup,
   getConversationForUser,
 } from "@/server/chat";
-import { jsonError } from "@/server/http";
+import { guardSameOrigin, jsonError } from "@/server/http";
 
 export const dynamic = "force-dynamic";
 
@@ -30,9 +30,12 @@ export async function GET(
 
 /** Delete a conversation (member only). Messages are removed with it. */
 export async function DELETE(
-  _req: NextRequest,
+  req: NextRequest,
   ctx: { params: Promise<{ id: string }> },
 ) {
+  const blocked = guardSameOrigin(req);
+  if (blocked) return blocked;
+
   const me = await getSessionUser();
   if (!me) return jsonError(401, "Not authenticated.");
 

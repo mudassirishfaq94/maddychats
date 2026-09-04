@@ -73,8 +73,28 @@ export async function visibleRecipientIds(row: StatusRow) {
 export async function listVisibleStatuses(viewerId: string) {
   const rows = await db.select({ status: statuses, owner: users }).from(statuses)
     .innerJoin(users, eq(statuses.userId, users.id)).where(gt(statuses.expiresAt, new Date())).orderBy(desc(statuses.createdAt));
-  const visible: typeof rows = [];
-  for (const row of rows) if (await canViewStatus(row.status, viewerId)) visible.push(row);
+  if (!rows.length) return [];
+
+  // Resolve privacy and blocking in bulk. The previous implementation ran one
+  // or two queries per status, which made latency grow linearly with the feed.
+  const [blockRows, recipientRows] = await Promise.all([
+    db.select({ blockerId: blocks.blockerId, blockedId: blocks.blockedId }).from(blocks)
+      .where(or(eq(blocks.blockerId, viewerId), eq(blocks.blockedId, viewerId))),
+    db.select({ statusId: statusRecipients.statusId }).from(statusRecipients)
+      .where(and(
+        eq(statusRecipients.userId, viewerId),
+        inArray(statusRecipients.statusId, rows.map((row) => row.status.id)),
+      )),
+  ]);
+  const blockedUsers = new Set(blockRows.map((row) =>
+    row.blockerId === viewerId ? row.blockedId : row.blockerId,
+  ));
+  const selectedForViewer = new Set(recipientRows.map((row) => row.statusId));
+  const visible = rows.filter(({ status }) =>
+    status.userId === viewerId ||
+    (!blockedUsers.has(status.userId) &&
+      (status.privacy === "all" || selectedForViewer.has(status.id))),
+  );
   if (!visible.length) return [];
   const ids = visible.map((r) => r.status.id);
   const [views, counts, reactionRows] = await Promise.all([

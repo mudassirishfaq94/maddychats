@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { analyzeAudioUrl } from "@/lib/audio-analysis";
 
 /**
  * Global singleton that tracks the currently playing audio element.
@@ -58,27 +59,6 @@ export function useGlobalAudioPlayer() {
  * common "seek very far" workaround, which can produce bogus multi-minute
  * durations for recordings that are only a few seconds long.
  */
-async function decodeAudioDuration(src: string, signal: AbortSignal): Promise<number> {
-  const response = await fetch(src, { signal });
-  if (!response.ok) throw new Error("Audio could not be loaded");
-  const data = await response.arrayBuffer();
-  if (signal.aborted) throw new DOMException("Aborted", "AbortError");
-
-  const AudioContextClass = window.AudioContext ??
-    (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-  if (!AudioContextClass) return 0;
-
-  const context = new AudioContextClass();
-  try {
-    const decoded = await context.decodeAudioData(data);
-    return Number.isFinite(decoded.duration) && decoded.duration > 0
-      ? decoded.duration
-      : 0;
-  } finally {
-    await context.close();
-  }
-}
-
 /**
  * Hook for an individual voice message to manage its playback.
  */
@@ -138,9 +118,9 @@ export function useVoicePlayback(voiceId: string, src: string) {
     audio.addEventListener("error", onError);
 
     // This also repairs duration for existing malformed WebM voice notes.
-    void decodeAudioDuration(src, controller.signal)
-      .then((decodedDuration) => {
-        if (decodedDuration) {
+    void analyzeAudioUrl(src)
+      .then(({ duration: decodedDuration }) => {
+        if (!controller.signal.aborted && decodedDuration) {
           decodedDurationResolved = true;
           setDuration(decodedDuration);
         }

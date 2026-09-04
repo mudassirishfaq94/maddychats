@@ -110,18 +110,11 @@ export async function POST(req: NextRequest) {
   let validReplyId: string | null = null;
   if (replyToMessageId) {
     const parent = await db
-      .select({ id: messages.id })
+      .select({ conversationId: messages.conversationId })
       .from(messages)
       .where(eq(messages.id, replyToMessageId))
       .limit(1);
-    const parentConv = parent[0]
-      ? await db
-          .select({ conversationId: messages.conversationId })
-          .from(messages)
-          .where(eq(messages.id, replyToMessageId))
-          .limit(1)
-      : [];
-    if (parentConv[0]?.conversationId === conversationId) {
+    if (parent[0]?.conversationId === conversationId) {
       validReplyId = replyToMessageId;
     }
   }

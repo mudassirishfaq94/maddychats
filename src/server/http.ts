@@ -137,6 +137,11 @@ export function requestIsSecure(req: NextRequest): boolean {
  * Origin header are unaffected; cross-origin browser calls are rejected.
  */
 export function guardSameOrigin(req: NextRequest): NextResponse | null {
+  // Fetch Metadata is supplied by modern browsers even in cases where Origin
+  // is omitted. Reject known cross-site navigations before considering host.
+  if (req.headers.get("sec-fetch-site") === "cross-site") {
+    return jsonError(403, "Cross-origin requests are not allowed.");
+  }
   const origin = req.headers.get("origin");
   if (!origin) return null;
   try {

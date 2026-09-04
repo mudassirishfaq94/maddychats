@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
+import { analyzeAudioBlob, analyzeAudioUrl } from "@/lib/audio-analysis";
 
 const BAR_COUNT = 32;
 const BAR_GAP = 2;
@@ -12,28 +13,7 @@ const BAR_GAP = 2;
  */
 async function generateWaveformFromBlob(blob: Blob): Promise<number[]> {
   try {
-    const ctx = new AudioContext();
-    const arrayBuffer = await blob.arrayBuffer();
-    const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
-    const channelData = audioBuffer.getChannelData(0);
-    const blockSize = Math.floor(channelData.length / BAR_COUNT);
-    const bars: number[] = [];
-
-    for (let i = 0; i < BAR_COUNT; i++) {
-      let sum = 0;
-      const start = i * blockSize;
-      for (let j = start; j < start + blockSize && j < channelData.length; j++) {
-        sum += Math.abs(channelData[j]);
-      }
-      bars.push(sum / blockSize);
-    }
-
-    // Normalize to 0-1
-    const max = Math.max(...bars, 0.01);
-    const normalized = bars.map((b) => b / max);
-
-    ctx.close();
-    return normalized;
+    return (await analyzeAudioBlob(blob)).waveform;
   } catch {
     // Fallback: generate a pseudo-random waveform
     return Array.from({ length: BAR_COUNT }, (_, i) => {
@@ -48,9 +28,7 @@ async function generateWaveformFromBlob(blob: Blob): Promise<number[]> {
  */
 async function generateWaveformFromUrl(url: string): Promise<number[]> {
   try {
-    const response = await fetch(url);
-    const blob = await response.blob();
-    return generateWaveformFromBlob(blob);
+    return (await analyzeAudioUrl(url)).waveform;
   } catch {
     // Improved fallback: generate a more realistic-looking waveform
     // using multiple sine waves at different frequencies

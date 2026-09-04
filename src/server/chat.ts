@@ -349,7 +349,10 @@ export async function listConversationsFor(
   const hasPinned = new Set(pinnedConvs.map((r) => r.conversationId));
 
   // Blocking state for every counterpart in one query.
-  const blockRows = await db.select().from(blocks);
+  const blockRows = await db
+    .select({ blockerId: blocks.blockerId, blockedId: blocks.blockedId })
+    .from(blocks)
+    .where(or(eq(blocks.blockerId, userId), eq(blocks.blockedId, userId)));
   const isBlocked = (otherId: string) =>
     blockRows.some(
       (b) =>
@@ -358,12 +361,16 @@ export async function listConversationsFor(
     );
 
   const myMembership = new Map(memberships.map((m) => [m.conversationId, m]));
+  const membersByConversation = new Map<string, typeof allMembers>();
+  for (const member of allMembers) {
+    const group = membersByConversation.get(member.member.conversationId) ?? [];
+    group.push(member);
+    membersByConversation.set(member.member.conversationId, group);
+  }
 
   return convs
     .map((conv) => {
-      const others = allMembers.filter(
-        (am) => am.member.conversationId === conv.id,
-      );
+      const others = membersByConversation.get(conv.id) ?? [];
       const other = others.find((am) => am.user.id !== userId)?.user ?? null;
       const last = lastByConv.get(conv.id);
       const mine = myMembership.get(conv.id);

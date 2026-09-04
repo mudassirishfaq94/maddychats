@@ -20,19 +20,16 @@ export interface SessionCookieOptions {
 /**
  * Cookie attributes for the session cookie.
  *
- * When the request arrives over HTTPS we emit `SameSite=None; Secure` so the
- * session also survives cross-origin embedding (e.g. hosted preview iframes),
- * where browsers drop Lax cookies. Plain-http local development keeps
- * `SameSite=Lax` without the Secure flag, since Secure cookies are rejected
- * on http://localhost. CSRF on mutating routes is independently enforced by
- * the Origin allow-list guard (see src/server/http.ts).
+ * SameSite=Lax prevents cross-site form submissions from carrying the session
+ * cookie while preserving normal top-level navigation and OAuth callbacks.
+ * Secure remains conditional so local http://localhost development works.
  */
 export function sessionCookieOptions(
   secureTransport: boolean = cookieSecure(),
 ): SessionCookieOptions {
   return {
     httpOnly: true,
-    sameSite: secureTransport ? "none" : "lax",
+    sameSite: "lax",
     secure: secureTransport,
     path: "/",
     maxAge: SESSION_TTL_SECONDS,

@@ -30,6 +30,13 @@ export function rateLimit(
     for (const [k, b] of buckets) {
       if (b.resetAt <= now) buckets.delete(k);
     }
+    // An attacker can otherwise keep every bucket active and grow the Map
+    // without bound. Map iteration is insertion ordered, so evict the oldest.
+    while (buckets.size > 10_000) {
+      const oldest = buckets.keys().next().value as string | undefined;
+      if (!oldest) break;
+      buckets.delete(oldest);
+    }
   }
 
   const bucket = buckets.get(key);
