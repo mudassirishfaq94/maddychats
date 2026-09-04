@@ -48,6 +48,8 @@ function authErrorMessage(error: unknown): string {
     case "auth/too-many-requests":
     case "auth/quota-exceeded":
       return "Too many SMS attempts. Please wait before trying again.";
+    case "auth/billing-not-enabled":
+      return "Phone verification SMS is unavailable because billing is not enabled for this Firebase project. An administrator must upgrade the project to the Blaze plan, or use a configured Firebase test phone number.";
     case "auth/captcha-check-failed":
     case "auth/missing-app-credential":
     case "auth/invalid-app-credential":
