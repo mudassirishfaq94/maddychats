@@ -176,6 +176,7 @@ export async function POST(req: NextRequest) {
           type: messageType,
           replyToMessageId: validReplyId,
           encrypted: isEncrypted,
+          forwarded: form.get("forwarded") === "true",
         })
         .returning();
       const message = rows[0];

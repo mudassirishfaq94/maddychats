@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import {
@@ -36,7 +36,6 @@ export function ConversationMenu({
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
-  const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -57,15 +56,51 @@ export function ConversationMenu({
     }
   }, [open]);
 
-  // Position the dropdown relative to the viewport when opening
-  useEffect(() => {
-    if (open && triggerRef.current) {
-      const rect = triggerRef.current.getBoundingClientRect();
-      setMenuPos({
-        top: rect.bottom + 6,
-        right: window.innerWidth - rect.right,
-      });
+  // Measure the portaled menu before paint and keep it inside the visible viewport.
+  useLayoutEffect(() => {
+    if (!open) return;
+    const trigger = triggerRef.current;
+    const menu = menuRef.current;
+    if (!trigger || !menu) return;
+
+    const viewport = window.visualViewport;
+    function positionMenu() {
+      if (!trigger || !menu) return;
+      const margin = 12;
+      const gap = 6;
+      const leftEdge = (viewport?.offsetLeft ?? 0) + margin;
+      const topEdge = (viewport?.offsetTop ?? 0) + margin;
+      const rightEdge = leftEdge + (viewport?.width ?? window.innerWidth) - margin * 2;
+      const bottomEdge = topEdge + (viewport?.height ?? window.innerHeight) - margin * 2;
+      menu.style.maxHeight = `${Math.max(0, bottomEdge - topEdge)}px`;
+      menu.style.maxWidth = `${Math.max(0, rightEdge - leftEdge)}px`;
+      const rect = trigger.getBoundingClientRect();
+      const height = menu.offsetHeight;
+      const width = menu.offsetWidth;
+      const below = bottomEdge - rect.bottom - gap;
+      const above = rect.top - gap - topEdge;
+      const preferredTop = height > below && above > below
+        ? rect.top - gap - height
+        : rect.bottom + gap;
+      menu.style.top = `${Math.max(topEdge, Math.min(preferredTop, bottomEdge - height))}px`;
+      menu.style.left = `${Math.max(leftEdge, Math.min(rect.right - width, rightEdge - width))}px`;
+      menu.style.visibility = "visible";
     }
+
+    positionMenu();
+    const observer = new ResizeObserver(positionMenu);
+    observer.observe(menu);
+    window.addEventListener("resize", positionMenu);
+    window.addEventListener("scroll", positionMenu, true);
+    viewport?.addEventListener("resize", positionMenu);
+    viewport?.addEventListener("scroll", positionMenu);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", positionMenu);
+      window.removeEventListener("scroll", positionMenu, true);
+      viewport?.removeEventListener("resize", positionMenu);
+      viewport?.removeEventListener("scroll", positionMenu);
+    };
   }, [open]);
 
   async function run(action: Action) {
@@ -100,6 +135,7 @@ export function ConversationMenu({
           setOpen((v) => !v);
         }}
         aria-label="Conversation options"
+        aria-expanded={open}
         className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full text-[var(--muted)] transition-colors hover:bg-[color-mix(in_srgb,var(--muted)_12%,transparent)] hover:text-[var(--text)]"
       >
         {busy ? (
@@ -109,12 +145,12 @@ export function ConversationMenu({
         )}
       </button>
 
-      {open && menuPos
+      {open
         ? createPortal(
             <div
               ref={menuRef}
-              className="card-glass fixed z-[100] w-52 max-w-[calc(100vw-1.5rem)] rounded-2xl p-1.5 animate-fade-up"
-              style={{ top: menuPos.top, right: menuPos.right }}
+              className="card-glass fixed z-[100] w-52 max-w-[calc(100vw-1.5rem)] rounded-2xl p-1.5 overflow-y-auto overscroll-contain"
+              style={{ visibility: "hidden" }}
               onClick={(e) => e.stopPropagation()}
             >
               <button

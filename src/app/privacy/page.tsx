@@ -3,8 +3,8 @@ import Link from "next/link";
 import { ArrowLeft, Shield } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "Privacy Policy — Maddy Chats",
-  description: "Maddy Chats privacy policy. Learn how we collect, use, and protect your data.",
+  title: "Privacy Policy — ZipTalk",
+  description: "ZipTalk privacy policy. Learn how we collect, use, and protect your data.",
 };
 
 export default function PrivacyPage() {
@@ -31,7 +31,7 @@ export default function PrivacyPage() {
           <section>
             <h2 className="text-base font-bold text-[var(--text)]">1. Information We Collect</h2>
             <p className="mt-2">
-              When you use Maddy Chats, we collect information you provide directly and information
+              When you use ZipTalk, we collect information you provide directly and information
               generated through your use of the service.
             </p>
             <ul className="mt-2 list-disc pl-5 space-y-1">
@@ -45,7 +45,7 @@ export default function PrivacyPage() {
           <section>
             <h2 className="text-base font-bold text-[var(--text)]">2. How We Use Your Information</h2>
             <ul className="mt-2 list-disc pl-5 space-y-1">
-              <li>To provide, maintain, and improve the Maddy Chats service</li>
+              <li>To provide, maintain, and improve the ZipTalk service</li>
               <li>To authenticate your account and ensure security</li>
               <li>To deliver messages, notifications, and media between users</li>
               <li>To detect and prevent spam, abuse, and security threats</li>
@@ -78,7 +78,7 @@ export default function PrivacyPage() {
           <section>
             <h2 className="text-base font-bold text-[var(--text)]">5. Your Privacy Controls</h2>
             <p className="mt-2">
-              Maddy Chats provides built-in privacy settings that you control:
+              ZipTalk provides built-in privacy settings that you control:
             </p>
             <ul className="mt-2 list-disc pl-5 space-y-1">
               <li><strong className="text-[var(--text)]">Profile Visibility:</strong> Choose who can see your profile (everyone, contacts, or nobody).</li>
@@ -112,7 +112,7 @@ export default function PrivacyPage() {
           <section>
             <h2 className="text-base font-bold text-[var(--text)]">8. Children&apos;s Privacy</h2>
             <p className="mt-2">
-              Maddy Chats is not intended for users under the age of 13. We do not knowingly collect
+              ZipTalk is not intended for users under the age of 13. We do not knowingly collect
               personal information from children under 13.
             </p>
           </section>
@@ -130,7 +130,7 @@ export default function PrivacyPage() {
             <h2 className="text-base font-bold text-[var(--text)]">10. Contact</h2>
             <p className="mt-2">
               If you have questions about this privacy policy or our data practices, please contact
-              us through the Maddy Chats application.
+              us through the ZipTalk application.
             </p>
           </section>
         </div>

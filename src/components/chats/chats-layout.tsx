@@ -213,7 +213,7 @@ export function ChatsLayout({
               <Lock className="h-4 w-4 text-[var(--accent-fg)]" />
             </span>
             <p className="min-w-0 flex-1 text-[0.7rem] leading-relaxed text-[var(--muted)]">
-              Messages are <b className="font-semibold text-[var(--text)]">end-to-end encrypted</b>. No one outside of this chat — not even Maddy Chats — can read or listen to them.
+              Messages are <b className="font-semibold text-[var(--text)]">end-to-end encrypted</b>. No one outside of this chat — not even ZipTalk — can read or listen to them.
             </p>
           </div>
 

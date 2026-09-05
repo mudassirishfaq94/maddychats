@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { ArrowLeft, Loader2, Search, X } from "lucide-react";
 import type { ConversationSummary, MessageDTO } from "@/lib/types";
 import { Avatar } from "@/components/avatar";
@@ -9,6 +10,7 @@ import { cn } from "@/lib/utils";
 interface ForwardDialogProps {
   open: boolean;
   message: MessageDTO | null;
+  preview: string;
   onClose: () => void;
   onForward: (conversationId: string) => Promise<void>;
 }
@@ -19,9 +21,11 @@ interface ForwardDialogProps {
 export function ForwardDialog({
   open,
   message,
+  preview,
   onClose,
   onForward,
 }: ForwardDialogProps) {
+  const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
@@ -30,28 +34,34 @@ export function ForwardDialog({
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (open) {
-      setQuery("");
-      setSending(false);
-      setSent(false);
+    if (!open) return;
+    const controller = new AbortController();
+    const oldOverflow = document.body.style.overflow;
+    const previousFocus = document.activeElement as HTMLElement | null;
+    document.body.style.overflow = "hidden";
+    let focusTimer: ReturnType<typeof setTimeout>;
+    void (async () => {
+      await Promise.resolve();
+      if (controller.signal.aborted) return;
+      setQuery(""); setSending(false); setSent(false); setError(null);
       setLoadingConvs(true);
-      fetch("/api/conversations", { cache: "no-store" })
-        .then((r) => r.json())
-        .then((data) => setConversations(data.conversations ?? []))
-        .catch(() => setConversations([]))
-        .finally(() => setLoadingConvs(false));
-      setTimeout(() => inputRef.current?.focus(), 100);
-    }
-  }, [open]);
-
-  useEffect(() => {
-    if (open) {
-      document.body.style.overflow = "hidden";
-    } else {
-      document.body.style.overflow = "";
-    }
+      focusTimer = setTimeout(() => inputRef.current?.focus(), 0);
+      try {
+        const response = await fetch("/api/conversations", { cache: "no-store", signal: controller.signal });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error ?? "Could not load conversations.");
+        if (!controller.signal.aborted) setConversations(data.conversations ?? []);
+      } catch (err) {
+        if (!controller.signal.aborted) setError(err instanceof Error ? err.message : "Could not load conversations.");
+      } finally {
+        if (!controller.signal.aborted) setLoadingConvs(false);
+      }
+    })();
     return () => {
-      document.body.style.overflow = "";
+      controller.abort();
+      clearTimeout(focusTimer);
+      document.body.style.overflow = oldOverflow;
+      previousFocus?.focus();
     };
   }, [open]);
 
@@ -67,22 +77,35 @@ export function ForwardDialog({
   async function handleForward(conversationId: string) {
     if (sending) return;
     setSending(true);
+    setError(null);
     try {
       await onForward(conversationId);
       setSent(true);
       setTimeout(() => onClose(), 600);
-    } catch {
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Forwarding failed. Please try again.");
       setSending(false);
     }
   }
 
-  return (
-    <div className="fixed inset-0 z-[200] flex flex-col bg-[var(--bg)] sm:hidden">
+  return createPortal(
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 sm:p-6">
+    <div role="dialog" aria-modal="true" aria-label="Forward message" className="flex h-full w-full flex-col overflow-hidden bg-[var(--bg)] sm:h-[min(640px,85dvh)] sm:max-w-md sm:rounded-2xl sm:border sm:border-[var(--border)]" onKeyDown={(e) => {
+      if (e.key === "Escape" && !sending) onClose();
+      if (e.key === "Tab") {
+        const controls = Array.from(e.currentTarget.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled)'));
+        const first = controls[0], last = controls[controls.length - 1];
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last?.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first?.focus(); }
+      }
+    }}>
       {/* Header */}
       <div className="flex h-14 items-center gap-3 border-b border-[var(--border)] bg-[var(--surface)] px-3">
         <button
           type="button"
           onClick={onClose}
+          disabled={sending}
+          aria-label="Close forward dialog"
           className="flex h-9 w-9 items-center justify-center rounded-full text-[var(--muted)]"
         >
           <ArrowLeft className="h-5 w-5" />
@@ -118,10 +141,11 @@ export function ForwardDialog({
       <div className="border-b border-[var(--border)] bg-[var(--surface-2)] px-4 py-3">
         <p className="text-xs text-[var(--muted)]">Forwarding:</p>
         <p className="mt-0.5 line-clamp-2 text-sm">
-          {message.text || "Attachment"}
+          {preview || "Attachment"}
         </p>
       </div>
 
+      {error ? <p role="alert" className="px-4 py-3 text-sm text-[var(--danger)]">{error}</p> : null}
       {/* Conversation list */}
       <div className="min-h-0 flex-1 overflow-y-auto">
         {loadingConvs ? (
@@ -184,6 +208,8 @@ export function ForwardDialog({
         )}
       </div>
     </div>
+    </div>,
+    document.body,
   );
 }
 
