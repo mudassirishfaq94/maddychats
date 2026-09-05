@@ -25,6 +25,7 @@ import {
   Star,
   X,
   AlertTriangle,
+  Dices,
 } from "lucide-react";
 import type { AttachmentDTO, ConversationDetail, PublicUser } from "@/lib/types";
 import { Avatar } from "@/components/avatar";
@@ -600,6 +601,7 @@ import {
   CHAT_PATTERNS,
   DOODLE_SETS,
   DOODLE_PRESETS,
+  randomDoodleStyle,
   isPatternId,
   parseDoodleStyle,
   encodeDoodleStyleString,
@@ -1012,11 +1014,30 @@ function DoodleCustomizer({
     setSaved(true);
   }
 
+  async function applyShuffled() {
+    const next = randomDoodleStyle();
+    setStyle(next);
+    await onChangeBoth(encodeDoodleStyleString(next), 100);
+    setSaved(true);
+  }
+
   return (
     <div className="space-y-2.5">
       {/* Curated one-tap themes */}
       <div>
-        <p className="mb-1 text-[0.65rem] font-medium text-[var(--muted)]">Themes</p>
+        <div className="mb-1 flex items-center justify-between">
+          <p className="text-[0.65rem] font-medium text-[var(--muted)]">Themes</p>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void applyShuffled()}
+            className="flex items-center gap-1 rounded-full bg-[var(--surface-2)] px-2 py-0.5 text-[0.65rem] font-medium text-[var(--muted)] transition-colors hover:text-[var(--text)] disabled:opacity-50"
+            title="Generate a random tasteful doodle style"
+          >
+            <Dices className="h-3 w-3" />
+            Shuffle
+          </button>
+        </div>
         <div className="grid grid-cols-4 gap-1.5">
           {DOODLE_PRESETS.map((preset) => (
             <button

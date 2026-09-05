@@ -162,6 +162,76 @@ export function encodeDoodleStyleString(style: DoodleStyle): string {
   });
 }
 
+/* ---------- tasteful random shuffle ---------- */
+
+/** Deep, desaturated base colors that read well behind chat bubbles. */
+const SHUFFLE_BASE_COLORS = [
+  "#1b2a38", "#101828", "#3b0764", "#134e4a",
+  "#431407", "#4c1d95", "#0c334b", "#463625",
+  "#0f172a", "#0e3b20", "#581c87", "#7c2d12",
+];
+
+/** Ink hues that keep contrast on a dark base; lightness/saturation vary subtly. */
+const SHUFFLE_INK_HUES = [0, 30, 55, 90, 150, 175, 200, 225, 260, 290, 320, 345];
+
+function pick<T>(arr: readonly T[]): T {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+/** Relative luminance (WCAG) of a #rrggbb color. */
+function hexLuminance(hex: string): number {
+  const v = [1, 3, 5]
+    .map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
+    .map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
+  return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2];
+}
+
+function hslToHex(h: number, s: number, l: number): string {
+  const a = (s / 100) * Math.min(l / 100, 1 - l / 100);
+  const f = (n: number) => {
+    const k = (n + h / 30) % 12;
+    const c = l / 100 - a * Math.max(-1, Math.min(k - 3, Math.min(9 - k, 1)));
+    return Math.round(255 * c)
+      .toString(16)
+      .padStart(2, "0");
+  };
+  return `#${f(0)}${f(8)}${f(4)}`;
+}
+
+/**
+ * Generate a random but tasteful doodle style: a deep base from the curated
+ * list, a harmonious ink color derived from an accent hue, a coherent set
+ * selection, and a comfortable size. Never pure white-on-light or clashing.
+ */
+export function randomDoodleStyle(): DoodleStyle {
+  const baseColor = pick(SHUFFLE_BASE_COLORS);
+  const hue = pick(SHUFFLE_INK_HUES);
+  const sat = 62 + Math.round(Math.random() * 26); // 62–88%: vivid but not neon
+  // Blues/purples carry little luminance per lightness point, so start them
+  // brighter; then enforce the contrast floor exactly instead of by band.
+  const baseLight = hue >= 200 && hue <= 290 ? 74 : 68;
+  let light = baseLight + Math.round(Math.random() * 12);
+  let inkColor = hslToHex(hue, sat, light);
+  while (hexLuminance(inkColor) < 0.32 && light < 92) {
+    light += 2;
+    inkColor = hslToHex(hue, sat, light);
+  }
+
+  // Pick a coherent subset: all, a single set, or two adjacent-ish sets.
+  const roll = Math.random();
+  let setIds: string[];
+  if (roll < 0.3) setIds = ["all"];
+  else if (roll < 0.65) setIds = [pick(DOODLE_ALL_SETS)];
+  else {
+    const first = pick(DOODLE_ALL_SETS);
+    const rest = DOODLE_ALL_SETS.filter((id) => id !== first);
+    setIds = [first, pick(rest)];
+  }
+
+  const size = Math.round((0.7 + Math.random() * 0.9) * 10) / 10; // 0.7–1.6
+  return { setIds, inkColor, baseColor, size };
+}
+
 const DOODLE_TILE_BASE = 170;
 
 function hexToUrlColor(hex: string): string {
