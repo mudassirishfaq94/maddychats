@@ -31,6 +31,7 @@ import { Avatar } from "@/components/avatar";
 import { InlineMedia, Lightbox, humanSize } from "./attachments";
 import { useEncryptedAttachmentUrl } from "./e2ee-context";
 import { useRealtime } from "@/components/providers/realtime-provider";
+import { CHAT_BACKGROUNDS } from "@/lib/chat-backgrounds";
 import { cn } from "@/lib/utils";
 import { Toggle } from "@/components/ui/toggle";
 
@@ -118,25 +119,31 @@ export function ConversationDetails({
     setGroupBusy(null);
   }
 
-  async function changeBackground(backgroundStyle: string | null, backgroundOpacity?: number) {
+  async function changeBackground(backgroundStyle: string | null | File | undefined, backgroundOpacity?: number) {
     setGroupBusy("background");
+    setError(null);
     try {
-      const payload: Record<string, unknown> = { backgroundStyle };
+      const payload: Record<string, unknown> = {};
+      if (backgroundStyle !== undefined) payload.backgroundStyle = backgroundStyle;
       if (backgroundOpacity !== undefined) payload.backgroundOpacity = backgroundOpacity;
+      const form = backgroundStyle instanceof File ? new FormData() : null;
+      if (form && backgroundStyle instanceof File) form.append("file", backgroundStyle);
       const response = await fetch(`/api/conversations/${conversationId}/background`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        headers: form ? undefined : { "Content-Type": "application/json" },
+        body: form ?? JSON.stringify(payload),
+        signal: AbortSignal.timeout(30000),
       });
+      const result = await response.json().catch(() => null);
       if (response.ok) {
         setGroup((prev) => ({
           ...prev,
-          backgroundStyle,
-          ...(backgroundOpacity !== undefined ? { backgroundOpacity } : {}),
+          ...(backgroundStyle !== undefined ? { backgroundStyle: result.backgroundStyle } : {}),
+          ...(result.backgroundOpacity !== null ? { backgroundOpacity: result.backgroundOpacity } : {}),
         }));
         router.refresh();
       } else {
-        setError("Background could not be changed.");
+        setError(result?.error ?? "Background could not be changed.");
       }
     } catch {
       setError("Network error while changing background.");
@@ -389,16 +396,7 @@ export function ConversationDetails({
         <div className="border-t border-[var(--border)] p-3">
           <p className="mb-2 text-xs font-medium text-[var(--muted)]">Chat Background</p>
           <div className="grid grid-cols-4 gap-2">
-            {[
-              { key: "default", label: "Default", color: "var(--surface)" },
-              { key: "ocean", label: "Ocean", color: "linear-gradient(135deg, #0891b2, #1d4ed8)" },
-              { key: "forest", label: "Forest", color: "linear-gradient(135deg, #15803d, #064e3b)" },
-              { key: "midnight", label: "Midnight", color: "linear-gradient(135deg, #111827, #312e81)" },
-              { key: "sunset", label: "Sunset", color: "linear-gradient(135deg, #ff6b6b, #7c3aed)" },
-              { key: "rose", label: "Rose", color: "linear-gradient(135deg, #e11d48, #9333ea)" },
-              { key: "lavender", label: "Lavender", color: "linear-gradient(135deg, #a78bfa, #818cf8)" },
-              { key: "mint", label: "Mint", color: "linear-gradient(135deg, #34d399, #06b6d4)" },
-            ].map((bg) => (
+            {CHAT_BACKGROUNDS.map((bg) => (
               <button
                 key={bg.key}
                 type="button"
@@ -410,7 +408,7 @@ export function ConversationDetails({
                     ? "ring-2 ring-[var(--accent)] ring-offset-1"
                     : "",
                 )}
-                style={{ background: bg.color }}
+                style={{ background: bg.color, color: bg.ink }}
                 title={bg.label}
               >
                 {bg.label}
@@ -422,8 +420,8 @@ export function ConversationDetails({
             currentOpacity={group.backgroundOpacity ?? 100}
             busy={groupBusy !== null}
             onChange={changeBackground}
-            onOpacityChange={(opacity) => void changeBackground(group.backgroundStyle, opacity)}
-            onChangeBoth={(bg, opacity) => void changeBackground(bg, opacity)}
+            onOpacityChange={(opacity) => changeBackground(undefined, opacity)}
+            onChangeBoth={(bg, opacity) => changeBackground(bg, opacity)}
           />
           <div className="mt-4 border-t border-[var(--border)] pt-3">
             <button type="button" disabled={groupBusy !== null} onClick={() => void toggleNotifications()} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm hover:bg-[var(--surface-2)]">
@@ -532,12 +530,18 @@ function DetailsFileChip({
   item: AttachmentDTO & { createdAt: string };
 }) {
   const { url, failed } = useEncryptedAttachmentUrl(item);
-  const Icon = iconFor(item.mimeType);
+  const fileIcon = (() => {
+    const props = { className: "h-4.5 w-4.5 text-[var(--accent-fg)]" };
+    if (item.mimeType.includes("pdf") || item.mimeType.startsWith("text/")) return <FileText {...props} />;
+    if (item.mimeType.includes("zip")) return <FileArchive {...props} />;
+    if (item.mimeType.includes("spreadsheet") || item.mimeType.includes("excel")) return <FileSpreadsheet {...props} />;
+    return <FileIcon {...props} />;
+  })();
   const unavailable = Boolean(item.encrypted && (failed || !url));
   return (
     <span className="flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2.5">
       <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[color-mix(in_srgb,var(--accent)_16%,transparent)]">
-        <Icon className="h-4.5 w-4.5 text-[var(--accent-fg)]" />
+        {fileIcon}
       </span>
       <span className="min-w-0 flex-1">
         <span className="block truncate text-xs font-semibold">
@@ -583,6 +587,18 @@ function formatDate(iso: string): string {
 import { CHAT_PATTERNS, isPatternId } from "@/lib/chat-patterns";
 
 const PRESET_COLORS = [
+  { color: "#e7f0df", label: "Sage" },
+  { color: "#ffedd5", label: "Peach" },
+  { color: "#e0f2fe", label: "Sky" },
+  { color: "#f3e8ff", label: "Lilac" },
+  { color: "#faf3e0", label: "Sand" },
+  { color: "#fecdd3", label: "Blush" },
+  { color: "#d1fae5", label: "Seafoam" },
+  { color: "#fef3c7", label: "Butter" },
+  { color: "#cbd5e1", label: "Silver" },
+  { color: "#115e59", label: "Teal" },
+  { color: "#831843", label: "Berry" },
+  { color: "#573b2e", label: "Espresso" },
   { color: "#1a1a2e", label: "Dark Blue" },
   { color: "#16213e", label: "Navy" },
   { color: "#0f3460", label: "Royal Blue" },
@@ -608,9 +624,9 @@ function CustomBackgroundInput({
   currentBg: string | null;
   currentOpacity: number;
   busy: boolean;
-  onChange: (bg: string | null) => void;
-  onOpacityChange: (opacity: number) => void;
-  onChangeBoth: (bg: string | null, opacity: number) => void;
+  onChange: (bg: string | null) => Promise<void>;
+  onOpacityChange: (opacity: number) => Promise<void>;
+  onChangeBoth: (bg: string | null | File, opacity: number) => Promise<void>;
 }) {
   const [mode, setMode] = useState<"image" | "color" | "gradient" | "pattern">("image");
   const [urlInput, setUrlInput] = useState("");
@@ -618,14 +634,33 @@ function CustomBackgroundInput({
   const [gradientStart, setGradientStart] = useState("#667eea");
   const [gradientEnd, setGradientEnd] = useState("#764ba2");
   const [uploading, setUploading] = useState(false);
+  const [imageError, setImageError] = useState<string | null>(null);
+  const [intensity, setIntensity] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const PRESETS = ["default","ocean","forest","midnight","sunset","rose","lavender","mint"];
+  const PRESETS = CHAT_BACKGROUNDS.map((p) => p.key);
   const isCustom = currentBg && !PRESETS.includes(currentBg);
   const showOpacity = currentBg && currentBg !== "default";
 
-  function applyUrl() {
-    if (urlInput.trim()) onChange(urlInput.trim());
+  async function applyUrl() {
+    if (busy || uploading) return;
+    setImageError(null);
+    setUploading(true);
+    try {
+      const url = new URL(urlInput.trim());
+      if (url.protocol !== "https:") throw new Error("Use a direct HTTPS image link.");
+      await new Promise<void>((resolve, reject) => {
+        const img = new window.Image();
+        const timer = setTimeout(() => { img.src = ""; reject(new Error("The image took too long to load. Try another link or upload it.")); }, 15000);
+        img.onload = () => { clearTimeout(timer); resolve(); };
+        img.onerror = () => { clearTimeout(timer); reject(new Error("This link does not load an image. Use a direct image link or upload from your device.")); };
+        img.referrerPolicy = "no-referrer";
+        img.src = url.href;
+      });
+      await onChangeBoth(url.href, 100);
+    } catch (err) {
+      setImageError(err instanceof Error ? err.message : "Could not load that image.");
+    } finally { setUploading(false); }
   }
 
   function applyColor() {
@@ -638,17 +673,32 @@ function CustomBackgroundInput({
 
   async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
-    if (!file) return;
+    e.target.value = "";
+    if (!file || busy || uploading) return;
     setUploading(true);
+    setImageError(null);
+    let objectUrl: string | undefined;
     try {
-      const reader = new FileReader();
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
-      onChangeBoth(dataUrl, 80);
+      if (!file.type.startsWith("image/")) throw new Error("Choose an image file.");
+      if (file.size > 20 * 1024 * 1024) throw new Error("Choose an image smaller than 20 MB.");
+      objectUrl = URL.createObjectURL(file);
+      const image = new window.Image();
+      image.src = objectUrl;
+      await image.decode();
+      const scale = Math.min(1, 1600 / Math.max(image.naturalWidth, image.naturalHeight));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+      canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+      const context = canvas.getContext("2d");
+      if (!context) throw new Error("Image resizing is unavailable in this browser.");
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob((result) => result ? resolve(result) : reject(new Error("Could not prepare this image.")), "image/webp", 0.82));
+      if (blob.size > 2 * 1024 * 1024) throw new Error("This image is too detailed. Try a smaller image.");
+      await onChangeBoth(new File([blob], blob.type === "image/png" ? "background.png" : "background.webp", { type: blob.type }), 100);
+    } catch (err) {
+      setImageError(err instanceof Error ? err.message : "Could not open this image. Try JPG, PNG, or WebP.");
     } finally {
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
       setUploading(false);
     }
   }
@@ -709,7 +759,7 @@ function CustomBackgroundInput({
             />
             <button
               type="button"
-              disabled={busy || !urlInput.trim()}
+              disabled={busy || uploading || !urlInput.trim()}
               onClick={applyUrl}
               className="btn btn-primary px-2.5! py-1.5! text-xs!"
             >
@@ -728,7 +778,7 @@ function CustomBackgroundInput({
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/*"
+            accept="image/jpeg,image/png,image/webp,image/gif,image/avif"
             className="hidden"
             onChange={handleFileUpload}
           />
@@ -812,19 +862,24 @@ function CustomBackgroundInput({
         </div>
       )}
 
+      {imageError ? <p role="alert" className="mt-2 text-xs text-[var(--danger)]">{imageError}</p> : null}
       {/* Opacity slider */}
       {showOpacity ? (
         <div className="mt-3 border-t border-[var(--border)] pt-3">
           <div className="mb-1.5 flex items-center justify-between">
             <span className="text-[0.65rem] font-medium text-[var(--muted)]">Background Intensity</span>
-            <span className="text-[0.65rem] tabular-nums text-[var(--accent-fg)]">{currentOpacity}%</span>
+            <span className="text-[0.65rem] tabular-nums text-[var(--accent-fg)]">{intensity ?? currentOpacity}%</span>
           </div>
           <input
             type="range"
             min={0}
             max={100}
-            value={currentOpacity}
-            onChange={(e) => onOpacityChange(Number(e.target.value))}
+            value={intensity ?? currentOpacity}
+            disabled={busy || uploading}
+            aria-label="Background intensity"
+            onChange={(e) => setIntensity(Number(e.target.value))}
+            onPointerUp={(e) => { void onOpacityChange(Number(e.currentTarget.value)).finally(() => setIntensity(null)); }}
+            onKeyUp={(e) => { if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "PageUp", "PageDown"].includes(e.key)) void onOpacityChange(Number(e.currentTarget.value)).finally(() => setIntensity(null)); }}
             className="w-full accent-[var(--accent)]"
           />
           <div className="mt-1 flex justify-between text-[0.55rem] text-[var(--muted)]">
@@ -838,7 +893,7 @@ function CustomBackgroundInput({
         <button
           type="button"
           disabled={busy}
-          onClick={() => { onChange(null); onOpacityChange(100); }}
+          onClick={() => { void onChangeBoth(null, 100); }}
           className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg py-1.5 text-[0.65rem] text-[var(--danger)] transition-colors hover:bg-[color-mix(in_srgb,var(--danger)_8%,transparent)]"
         >
           <X className="h-3 w-3" />
