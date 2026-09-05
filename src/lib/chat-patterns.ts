@@ -83,6 +83,21 @@ export const DOODLE_SETS: Array<{ id: string; label: string; stamps: DoodleStamp
 
 export const DOODLE_ALL_SETS = DOODLE_SETS.map((s) => s.id);
 
+/**
+ * Curated one-tap doodle themes. Each encodes to a full doodle style string
+ * (validated by the same parse/encode pipeline as custom styles).
+ */
+export const DOODLE_PRESETS: Array<{ id: string; label: string; style: DoodleStyle }> = [
+  { id: "midnight", label: "Midnight Sky", style: { setIds: ["all"], inkColor: "#a78bfa", baseColor: "#101828", size: 1 } },
+  { id: "cherry", label: "Cherry Blossom", style: { setIds: ["classic", "nature"], inkColor: "#f472b6", baseColor: "#4c1d95", size: 0.9 } },
+  { id: "ocean", label: "Ocean", style: { setIds: ["creatures", "nature"], inkColor: "#22d3ee", baseColor: "#0c334b", size: 1.1 } },
+  { id: "forest", label: "Forest", style: { setIds: ["nature", "creatures"], inkColor: "#34d399", baseColor: "#134e4a", size: 1 } },
+  { id: "sunset", label: "Sunset", style: { setIds: ["all"], inkColor: "#fbbf24", baseColor: "#431407", size: 1.2 } },
+  { id: "candy", label: "Candy", style: { setIds: ["classic", "playful"], inkColor: "#f87171", baseColor: "#3b0764", size: 0.8 } },
+  { id: "mono", label: "Mono", style: { setIds: ["all"], inkColor: "#94a3b8", baseColor: "#1b2a38", size: 1 } },
+  { id: "playground", label: "Playground", style: { setIds: ["playful"], inkColor: "#ffffff", baseColor: "#1b2a38", size: 1.3 } },
+];
+
 /** Get a stamp by "setId:stampId" or bare stamp id (searches all sets). */
 export function getStampsForSets(setIds: string[]): DoodleStamp[] {
   const wanted = setIds.filter((id) => id !== "all");

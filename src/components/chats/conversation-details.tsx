@@ -599,6 +599,7 @@ function formatDate(iso: string): string {
 import {
   CHAT_PATTERNS,
   DOODLE_SETS,
+  DOODLE_PRESETS,
   isPatternId,
   parseDoodleStyle,
   encodeDoodleStyleString,
@@ -1005,8 +1006,50 @@ function DoodleCustomizer({
 
   const previewBg = buildDoodleBackground(style, 0.85);
 
+  async function applyPreset(preset: (typeof DOODLE_PRESETS)[number]) {
+    setStyle(preset.style);
+    await onChangeBoth(encodeDoodleStyleString(preset.style), 100);
+    setSaved(true);
+  }
+
   return (
     <div className="space-y-2.5">
+      {/* Curated one-tap themes */}
+      <div>
+        <p className="mb-1 text-[0.65rem] font-medium text-[var(--muted)]">Themes</p>
+        <div className="grid grid-cols-4 gap-1.5">
+          {DOODLE_PRESETS.map((preset) => (
+            <button
+              key={preset.id}
+              type="button"
+              disabled={busy}
+              onClick={() => void applyPreset(preset)}
+              title={preset.label}
+              className={cn(
+                "group flex flex-col items-center gap-1 rounded-lg border p-1 transition-colors",
+                encodeDoodleStyleString(preset.style) === (parsed ? encodeDoodleStyleString(parsed) : null)
+                  ? "border-[var(--accent)]"
+                  : "border-[var(--border)] hover:border-[var(--border-strong)]",
+              )}
+            >
+              <span
+                aria-hidden="true"
+                className="h-6 w-full rounded"
+                style={{
+                  backgroundColor: preset.style.baseColor,
+                  backgroundImage: buildDoodleBackground(preset.style, 0.9),
+                  backgroundRepeat: "repeat",
+                  backgroundSize: "auto",
+                }}
+              />
+              <span className="w-full truncate text-center text-[0.55rem] leading-tight text-[var(--muted)] group-hover:text-[var(--text)]">
+                {preset.label}
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* Live preview */}
       <div
         aria-hidden="true"
