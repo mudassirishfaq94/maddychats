@@ -40,6 +40,7 @@ interface E2EEState {
   deviceId: string;
   publicKey: string | null;
   loading: boolean;
+  error: string | null;
 }
 
 /**
@@ -51,6 +52,7 @@ export function useE2EE(userId: string | undefined) {
     deviceId: "",
     publicKey: null,
     loading: true,
+    error: null,
   });
 
   const keyPairRef = useRef<CryptoKeyPair | null>(null);
@@ -65,15 +67,18 @@ export function useE2EE(userId: string | undefined) {
       const stored = localStorage.getItem(`e2ee_keypair_${userId}`);
 
       let keyPair: CryptoKeyPair;
+      let publicKeyStr: string;
 
       if (stored) {
         const parsed = JSON.parse(stored);
         const privateKey = await importPrivateKey(parsed.privateKey);
         const publicKey = await importPublicKey(parsed.publicKey);
         keyPair = { privateKey, publicKey };
+        publicKeyStr = parsed.publicKey;
       } else {
         keyPair = await generateKeyPair();
         const publicKey = await exportPublicKey(keyPair.publicKey);
+        publicKeyStr = publicKey;
         const privateKey = await exportPrivateKey(keyPair.privateKey);
 
         // Store locally
@@ -86,25 +91,30 @@ export function useE2EE(userId: string | undefined) {
         const passphrase = deviceId; // Use deviceId as passphrase for simplicity
         const encryptedPrivateKey = await encryptPrivateKeyForStorage(privateKey, passphrase);
 
-        await fetch("/api/e2ee/keys", {
+        const response = await fetch("/api/e2ee/keys", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ deviceId, publicKey, encryptedPrivateKey }),
+          signal: AbortSignal.timeout(15000),
         });
+        if (!response.ok) throw new Error("Device key registration failed");
       }
 
       keyPairRef.current = keyPair;
-      const publicKeyStr = await exportPublicKey(keyPair.publicKey);
 
       setState({
         initialized: true,
         deviceId,
         publicKey: publicKeyStr,
         loading: false,
+        error: null,
       });
     }
 
-    init().catch(() => setState((prev) => ({ ...prev, loading: false })));
+    init().catch(() => setState((prev) => ({
+      ...prev, initialized: false, loading: false,
+      error: "Encryption could not be initialized on this device. Reload to try again.",
+    })));
   }, [userId]);
 
   const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));

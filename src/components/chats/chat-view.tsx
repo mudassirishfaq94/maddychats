@@ -194,17 +194,20 @@ export function ChatView({
   const [showEncryptionInfo, setShowEncryptionInfo] = useState(false);
   const [decryptedTexts, setDecryptedTexts] = useState<Map<string, string>>(new Map());
   const [decryptedReplies, setDecryptedReplies] = useState<Map<string, string>>(new Map());
-  const preparedRef = useRef(false);
+  const { prepareConversation, decrypt } = e2ee;
 
   // On open: fetch-or-create the conversation key, share it with every peer
   // device, and learn whether this chat can actually be E2EE right now.
   useEffect(() => {
-    if (!e2ee.initialized || preparedRef.current) return;
-    preparedRef.current = true;
+    if (!e2ee.initialized) {
+      setE2eeState((prev) => ({ ...prev, ready: false, checking: e2ee.loading }));
+      return;
+    }
+    setE2eeState((prev) => ({ ...prev, ready: false, checking: true }));
     let alive = true;
     (async () => {
       try {
-        const { ready, fingerprint } = await e2ee.prepareConversation(conversationId);
+        const { ready, fingerprint } = await prepareConversation(conversationId);
         if (!alive) return;
         let missing = 0;
         try {
@@ -216,6 +219,7 @@ export function ChatView({
         } catch {
           missing = 0;
         }
+        if (!alive) return;
         setE2eeState({ ready, fingerprint, checking: false, peersMissingKeys: missing });
       } catch {
         if (alive) {
@@ -227,7 +231,7 @@ export function ChatView({
       alive = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [e2ee.initialized, conversationId]);
+  }, [e2ee.initialized, e2ee.loading, conversationId, prepareConversation]);
 
   // Decrypt any encrypted message text (initial history, older pages, and
   // realtime arrivals all flow through `items`).
@@ -247,7 +251,7 @@ export function ChatView({
       for (const m of encItems) {
         if (!nextTexts.has(m.id) && m.text) {
           try {
-            nextTexts.set(m.id, await e2ee.decrypt(m.text, conversationId));
+            nextTexts.set(m.id, await decrypt(m.text, conversationId));
             failedDecryptionRef.current.delete(m.id);
           } catch {
             // If this message previously failed, give up permanently.
@@ -265,7 +269,7 @@ export function ChatView({
           !nextReplies.has(m.replyTo.id)
         ) {
           try {
-            nextReplies.set(m.replyTo.id, await e2ee.decrypt(m.replyTo.text, conversationId));
+            nextReplies.set(m.replyTo.id, await decrypt(m.replyTo.text, conversationId));
           } catch {
             nextReplies.set(m.replyTo.id, "\u{1F512} Undecryptable");
           }
@@ -291,7 +295,7 @@ export function ChatView({
       alive = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items, e2ee.initialized, conversationId, e2ee]);
+  }, [items, e2ee.initialized, conversationId, decrypt]);
 
   /** Plaintext for a message: decrypted locally, or raw when not encrypted. */
   const textOf = useCallback((m: { encrypted: boolean; text: string; id: string }) => {
@@ -1689,7 +1693,7 @@ export function ChatView({
                                 {msg.encrypted && isPendingDecrypt(msg) ? (
                                   <span className="flex items-center gap-1.5 text-[0.8rem] opacity-80">
                                     <Lock className="h-3 w-3" />
-                                    Decrypting securely…
+                                    {e2ee.error ? "Unable to decrypt on this device. Reload to try again." : "Decrypting securely…"}
                                   </span>
                                 ) : textOf(msg) ? (
                                   (() => {
@@ -2249,6 +2253,7 @@ export function ChatView({
         <EncryptionInfoDialog
           ready={e2eeState.ready}
           checking={e2eeState.checking}
+          error={e2ee.error}
           fingerprint={e2eeState.fingerprint}
           peersMissing={e2eeState.peersMissingKeys}
           conversationName={otherName}
@@ -2265,6 +2270,7 @@ function EncryptionInfoDialog({
   ready,
   checking,
   fingerprint,
+  error,
   peersMissing,
   conversationName,
   onClose,
@@ -2272,6 +2278,7 @@ function EncryptionInfoDialog({
   ready: boolean;
   checking: boolean;
   fingerprint: string | null;
+  error: string | null;
   peersMissing: number;
   conversationName: string;
   onClose: () => void;
@@ -2313,6 +2320,8 @@ function EncryptionInfoDialog({
               <Loader2 className="h-4 w-4 animate-spin" />
               Checking encryption keys…
             </div>
+          ) : error ? (
+            <p role="alert" className="py-6 text-sm text-[var(--muted)]">{error}</p>
           ) : ready ? (
             <>
               <div className="flex items-center gap-2 rounded-xl border border-[color-mix(in_srgb,var(--accent)_25%,transparent)] bg-[color-mix(in_srgb,var(--accent)_7%,transparent)] px-3.5 py-2.5">
