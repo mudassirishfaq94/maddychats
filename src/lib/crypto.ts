@@ -300,3 +300,53 @@ function base64ToBuffer(base64: string): ArrayBuffer {
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
   return bytes.buffer;
 }
+
+/* ──────── Key Rotation Constants ──────── */
+
+/** Rotate key every 7 days (milliseconds) */
+export const KEY_ROTATION_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** Rotate key every 100 messages */
+export const KEY_ROTATION_MESSAGE_THRESHOLD = 100;
+
+/** Maximum number of old keys to keep for decryption */
+export const MAX_KEY_HISTORY = 10;
+
+/** Check if a key should be rotated based on time */
+export function shouldRotateKey(rotatedAt: Date, messageCount?: number): {
+  shouldRotate: boolean;
+  reason: string | null;
+} {
+  const now = new Date();
+  const timeSinceRotation = now.getTime() - rotatedAt.getTime();
+  
+  if (timeSinceRotation >= KEY_ROTATION_INTERVAL_MS) {
+    return {
+      shouldRotate: true,
+      reason: `Key is ${Math.floor(timeSinceRotation / (24 * 60 * 60 * 1000))} days old (threshold: 7 days)`,
+    };
+  }
+  
+  if (messageCount !== undefined && messageCount >= KEY_ROTATION_MESSAGE_THRESHOLD) {
+    return {
+      shouldRotate: true,
+      reason: `Key has been used for ${messageCount} messages (threshold: ${KEY_ROTATION_MESSAGE_THRESHOLD})`,
+    };
+  }
+  
+  return { shouldRotate: false, reason: null };
+}
+
+/** Generate a key fingerprint for verification */
+export async function generateKeyFingerprint(key: CryptoKey): Promise<string> {
+  const raw = await crypto.subtle.exportKey("raw", key);
+  const hash = await crypto.subtle.digest("SHA-256", raw);
+  const hashArray = new Uint8Array(hash);
+  
+  // Take first 20 bytes and format as 4 groups of 5 hex digits
+  const hex = Array.from(hashArray.slice(0, 20))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
+  
+  return hex.match(/.{1,5}/g)?.join(' ') ?? hex;
+}

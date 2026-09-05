@@ -20,6 +20,8 @@ import {
   conversationFingerprint,
   encryptPrivateKeyForStorage,
   decryptPrivateKeyFromStorage,
+  shouldRotateKey,
+  KEY_ROTATION_INTERVAL_MS,
 } from "@/lib/crypto";
 
 interface PeerDevice {
@@ -198,9 +200,48 @@ export function useE2EE(userId: string | undefined) {
     [getConversationKey],
   );
 
+  /** Try to decrypt with historical keys if current key fails */
+  const decryptWithHistory = useCallback(
+    async (ciphertext: string, conversationId: string): Promise<string> => {
+      // First try current key
+      try {
+        const { key } = await getConversationKey(conversationId);
+        return await decryptMessage(ciphertext, key);
+      } catch {
+        // Current key failed, try historical keys
+      }
+      
+      // Fetch historical keys from server
+      try {
+        const res = await fetch(`/api/e2ee/key-rotation/history?conversationId=${conversationId}`);
+        if (res.ok) {
+          const data = await res.json();
+          const history = data.history ?? [];
+          
+          for (const histKey of history) {
+            try {
+              const key = await decryptKeyFromSender(
+                histKey.encryptedKey,
+                keyPairRef.current!.privateKey,
+              );
+              const result = await decryptMessage(ciphertext, key);
+              return result;
+            } catch {
+              // This historical key didn't work, try next
+            }
+          }
+        }
+      } catch {}
+      
+      throw new Error('Could not decrypt with any available key');
+    },
+    [getConversationKey],
+  );
+
   /** Decrypt a received message. Re-fetches the key from the server if the
    *  cached key fails (handles the race where the shared key arrived after
-   *  the local key was generated). */
+   *  the local key was generated). Also tries historical keys for messages
+   *  encrypted with older keys before rotation. */
   const decrypt = useCallback(
     async (ciphertext: string, conversationId: string): Promise<string> => {
       const tryDecrypt = async (key: CryptoKey) => decryptMessage(ciphertext, key);
@@ -208,14 +249,24 @@ export function useE2EE(userId: string | undefined) {
       try {
         return await tryDecrypt(key);
       } catch {
-        // Cached key might be stale — drop it and re-fetch from server.
-        conversationKeysRef.current.delete(conversationId);
-        await sleep(1000);
-        const { key: freshKey } = await getConversationKey(conversationId);
-        return tryDecrypt(freshKey);
+        // Current key failed — try historical keys from rotation.
+        try {
+          return await decryptWithHistory(ciphertext, conversationId);
+        } catch {
+          // Historical keys didn't work either — cached key might be stale.
+          conversationKeysRef.current.delete(conversationId);
+          await sleep(1000);
+          const { key: freshKey } = await getConversationKey(conversationId);
+          try {
+            return await tryDecrypt(freshKey);
+          } catch {
+            // Final attempt: try history with fresh key
+            return await decryptWithHistory(ciphertext, conversationId);
+          }
+        }
       }
     },
-    [getConversationKey],
+    [getConversationKey, decryptWithHistory],
   );
 
   /** Share conversation key with another user's device */
@@ -238,6 +289,66 @@ export function useE2EE(userId: string | undefined) {
       return res.ok;
     },
     [getConversationKey, state.deviceId],
+  );
+
+  /* ----------------------- Key Rotation Functions ----------------------- */
+  
+  /** Check if a conversation key needs rotation */
+  const checkRotationNeeded = useCallback(
+    async (conversationId: string): Promise<{ needed: boolean; reason: string | null }> => {
+      try {
+        const res = await fetch(`/api/e2ee/key-rotation/status?conversationId=${conversationId}`);
+        if (res.ok) {
+          const data = await res.json();
+          return {
+            needed: data.needsRotation ?? false,
+            reason: data.reason ?? null,
+          };
+        }
+      } catch {}
+      return { needed: false, reason: null };
+    },
+    [],
+  );
+
+  /** Rotate the conversation key and share with all peers */
+  const rotateConversationKey = useCallback(
+    async (conversationId: string): Promise<boolean> => {
+      try {
+        // Generate new key
+        const newKey = await generateConversationKey();
+        conversationKeysRef.current.set(conversationId, newKey);
+        
+        // Share with all peers
+        const peersRes = await fetch(`/api/e2ee/peers?conversationId=${conversationId}`);
+        if (peersRes.ok) {
+          const peersData = await peersRes.json();
+          const peers = peersData.peers ?? [];
+          
+          for (const peer of peers) {
+            for (const device of peer.devices) {
+              try {
+                await shareKey(conversationId, peer.userId, device.deviceId, device.publicKey);
+              } catch {
+                // best-effort per device
+              }
+            }
+          }
+        }
+        
+        // Mark rotation complete on server
+        await fetch('/api/e2ee/key-rotation/rotate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ conversationId }),
+        });
+        
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    [shareKey],
   );
 
   /**
@@ -340,5 +451,8 @@ export function useE2EE(userId: string | undefined) {
     encryptBytesForConversation,
     decryptBytesForConversation,
     decryptMedia,
+    // Key rotation
+    checkRotationNeeded,
+    rotateConversationKey,
   };
 }

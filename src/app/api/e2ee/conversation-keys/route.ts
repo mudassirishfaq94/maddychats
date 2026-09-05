@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { eq, and } from "drizzle-orm";
+import { eq, and, desc } from "drizzle-orm";
 import { db } from "@/db";
 import { e2eeConversationKeys, e2eeKeys } from "@/db/schema";
 import { getSessionUser } from "@/server/session";
@@ -85,9 +85,9 @@ export async function POST(req: NextRequest) {
 
   if (!targetKey) return jsonError(404, "Target user has no registered device key.");
 
-  // Upsert the encrypted key
-  const [existing] = await db
-    .select({ id: e2eeConversationKeys.id })
+  // Determine the new key version
+  const [latestKey] = await db
+    .select({ keyVersion: e2eeConversationKeys.keyVersion })
     .from(e2eeConversationKeys)
     .where(
       and(
@@ -96,12 +96,41 @@ export async function POST(req: NextRequest) {
         eq(e2eeConversationKeys.deviceId, deviceId),
       ),
     )
+    .orderBy(desc(e2eeConversationKeys.keyVersion))
+    .limit(1);
+
+  const newVersion = latestKey ? latestKey.keyVersion + 1 : 1;
+
+  // Mark all previous keys for this device as inactive (rotation)
+  await db
+    .update(e2eeConversationKeys)
+    .set({ isActive: false })
+    .where(
+      and(
+        eq(e2eeConversationKeys.conversationId, conversationId),
+        eq(e2eeConversationKeys.userId, targetUserId),
+        eq(e2eeConversationKeys.deviceId, deviceId),
+      ),
+    );
+
+  // Upsert the new active key
+  const [existing] = await db
+    .select({ id: e2eeConversationKeys.id })
+    .from(e2eeConversationKeys)
+    .where(
+      and(
+        eq(e2eeConversationKeys.conversationId, conversationId),
+        eq(e2eeConversationKeys.userId, targetUserId),
+        eq(e2eeConversationKeys.deviceId, deviceId),
+        eq(e2eeConversationKeys.keyVersion, newVersion),
+      ),
+    )
     .limit(1);
 
   if (existing) {
     await db
       .update(e2eeConversationKeys)
-      .set({ encryptedKey })
+      .set({ encryptedKey, isActive: true, rotatedAt: new Date() })
       .where(eq(e2eeConversationKeys.id, existing.id));
   } else {
     await db.insert(e2eeConversationKeys).values({
@@ -109,8 +138,10 @@ export async function POST(req: NextRequest) {
       userId: targetUserId,
       encryptedKey,
       deviceId,
+      keyVersion: newVersion,
+      isActive: true,
     });
   }
 
-  return NextResponse.json({ success: true });
+  return NextResponse.json({ success: true, keyVersion: newVersion });
 }
