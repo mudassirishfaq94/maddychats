@@ -596,7 +596,16 @@ function formatDate(iso: string): string {
 
 /* =================== Custom Background Input =================== */
 
-import { CHAT_PATTERNS, isPatternId } from "@/lib/chat-patterns";
+import {
+  CHAT_PATTERNS,
+  DOODLE_SETS,
+  isPatternId,
+  parseDoodleStyle,
+  encodeDoodleStyleString,
+  buildDoodleBackground,
+  DEFAULT_DOODLE_STYLE_STRING,
+  type DoodleStyle,
+} from "@/lib/chat-patterns";
 
 const PRESET_COLORS = [
   { color: "#e7f0df", label: "Sage" },
@@ -644,7 +653,7 @@ function CustomBackgroundInput({
   onChangeBoth: (bg: string | null | File, opacity: number) => Promise<void>;
   onPositionChange: (x: number, y: number) => Promise<void>;
 }) {
-  const [mode, setMode] = useState<"image" | "color" | "gradient" | "pattern">("image");
+  const [mode, setMode] = useState<"image" | "color" | "gradient" | "pattern" | "doodles">("image");
   const [urlInput, setUrlInput] = useState("");
   const [colorInput, setColorInput] = useState("#1a1a2e");
   const [gradientStart, setGradientStart] = useState("#667eea");
@@ -725,7 +734,7 @@ function CustomBackgroundInput({
   return (
     <div className="mt-3 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-3">
       <div className="mb-2.5 flex gap-1">
-        {(["pattern", "image", "color", "gradient"] as const).map((m) => (
+        {(["doodles", "pattern", "image", "color", "gradient"] as const).map((m) => (
           <button
             key={m}
             type="button"
@@ -738,10 +747,18 @@ function CustomBackgroundInput({
                 : "text-[var(--muted)] hover:bg-[var(--surface)]",
             )}
           >
-            {m === "image" ? "Image" : m === "color" ? "Color" : m === "gradient" ? "Gradient" : "Pattern"}
+            {m === "image" ? "Image" : m === "color" ? "Color" : m === "gradient" ? "Gradient" : m === "doodles" ? "Doodles" : "Pattern"}
           </button>
         ))}
       </div>
+
+      {mode === "doodles" ? (
+        <DoodleCustomizer
+          currentBg={currentBg}
+          busy={busy}
+          onChangeBoth={onChangeBoth}
+        />
+      ) : null}
 
       {mode === "pattern" ? (
         <div className="space-y-2">
@@ -931,6 +948,212 @@ function CustomBackgroundInput({
           Remove custom background
         </button>
       ) : null}
+    </div>
+  );
+}
+
+/* ================= Doodle Customizer ================= */
+
+const DOODLE_INK_PRESETS = ["#ffffff", "#22d3ee", "#34d399", "#fbbf24", "#f472b6", "#a78bfa", "#f87171", "#94a3b8"];
+const DOODLE_BASE_PRESETS = [
+  { color: "#1b2a38", label: "Deep sea" },
+  { color: "#101828", label: "Ink" },
+  { color: "#3b0764", label: "Grape" },
+  { color: "#134e4a", label: "Pine" },
+  { color: "#431407", label: "Cocoa" },
+  { color: "#4c1d95", label: "Violet" },
+  { color: "#0c334b", label: "Lake" },
+  { color: "#463625", label: "Sandstone" },
+];
+
+function DoodleCustomizer({
+  currentBg,
+  busy,
+  onChangeBoth,
+}: {
+  currentBg: string | null;
+  busy: boolean;
+  onChangeBoth: (bg: string | null | File, opacity: number) => Promise<void>;
+}) {
+  const parsed = parseDoodleStyle(currentBg);
+  const [style, setStyle] = useState<DoodleStyle>(
+    parsed ?? { setIds: ["all"], inkColor: "#ffffff", baseColor: "#1b2a38", size: 1 },
+  );
+  const [saved, setSaved] = useState(false);
+  const dirty = encodeDoodleStyleString(style) !== (parsed ? encodeDoodleStyleString(parsed) : DEFAULT_DOODLE_STYLE_STRING);
+
+  function update(patch: Partial<DoodleStyle>) {
+    setStyle((prev) => ({ ...prev, ...patch }));
+    setSaved(false);
+  }
+
+  function toggleSet(setId: string) {
+    const isActive = style.setIds.includes("all") || style.setIds.includes(setId);
+    let next: string[];
+    if (style.setIds.includes("all")) {
+      // Deselecting from "all" starts with all other sets selected.
+      next = DOODLE_SETS.map((s) => s.id).filter((id) => id !== setId);
+    } else if (isActive) {
+      next = style.setIds.filter((id) => id !== setId);
+      if (next.length === 0) next = ["all"];
+    } else {
+      next = [...style.setIds, setId];
+      if (next.length === DOODLE_SETS.length) next = ["all"];
+    }
+    update({ setIds: next });
+  }
+
+  const previewBg = buildDoodleBackground(style, 0.85);
+
+  return (
+    <div className="space-y-2.5">
+      {/* Live preview */}
+      <div
+        aria-hidden="true"
+        className="relative h-20 w-full overflow-hidden rounded-xl border border-[var(--border)]"
+        style={{ backgroundColor: style.baseColor }}
+      >
+        <div className="absolute inset-0" style={{ backgroundImage: previewBg, backgroundRepeat: "repeat", backgroundSize: "auto" }} />
+        <div aria-hidden="true" className="absolute inset-x-2 bottom-2 space-y-1">
+          <div className="h-3 w-2/5 rounded-full bg-black/25" />
+          <div className="ml-auto h-3 w-1/2 rounded-full bg-white/45" />
+        </div>
+      </div>
+
+      {/* Doodle sets */}
+      <div>
+        <p className="mb-1 text-[0.65rem] font-medium text-[var(--muted)]">Which doodles</p>
+        <div className="flex flex-wrap gap-1.5">
+          {DOODLE_SETS.map((set) => {
+            const active = style.setIds.includes("all") || style.setIds.includes(set.id);
+            return (
+              <button
+                key={set.id}
+                type="button"
+                disabled={busy}
+                onClick={() => toggleSet(set.id)}
+                className={cn(
+                  "rounded-full px-2.5 py-1 text-[0.65rem] font-medium transition-colors",
+                  active
+                    ? "bg-[var(--accent)] text-white"
+                    : "bg-[var(--surface)] text-[var(--muted)] hover:text-[var(--text)]",
+                )}
+              >
+                {set.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Doodle (ink) color */}
+      <div>
+        <p className="mb-1 text-[0.65rem] font-medium text-[var(--muted)]">Doodle color</p>
+        <div className="flex flex-wrap items-center gap-1.5">
+          {DOODLE_INK_PRESETS.map((c) => (
+            <button
+              key={c}
+              type="button"
+              disabled={busy}
+              onClick={() => update({ inkColor: c })}
+              className={cn(
+                "h-6 w-6 rounded-full border-2 transition-transform hover:scale-110",
+                style.inkColor.toLowerCase() === c.toLowerCase() ? "border-[var(--accent)]" : "border-transparent",
+              )}
+              style={{ background: c }}
+              title={c}
+            />
+          ))}
+          <input
+            type="color"
+            value={style.inkColor}
+            disabled={busy}
+            onChange={(e) => update({ inkColor: e.target.value })}
+            aria-label="Custom doodle color"
+            className="h-6 w-8 cursor-pointer rounded border border-[var(--border)]"
+          />
+        </div>
+      </div>
+
+      {/* Base color */}
+      <div>
+        <p className="mb-1 text-[0.65rem] font-medium text-[var(--muted)]">Background color</p>
+        <div className="flex flex-wrap items-center gap-1.5">
+          {DOODLE_BASE_PRESETS.map((c) => (
+            <button
+              key={c.color}
+              type="button"
+              disabled={busy}
+              onClick={() => update({ baseColor: c.color })}
+              className={cn(
+                "h-6 w-6 rounded-full border-2 transition-transform hover:scale-110",
+                style.baseColor.toLowerCase() === c.color.toLowerCase() ? "border-[var(--accent)]" : "border-transparent",
+              )}
+              style={{ background: c.color }}
+              title={c.label}
+            />
+          ))}
+          <input
+            type="color"
+            value={style.baseColor}
+            disabled={busy}
+            onChange={(e) => update({ baseColor: e.target.value })}
+            aria-label="Custom background color"
+            className="h-6 w-8 cursor-pointer rounded border border-[var(--border)]"
+          />
+        </div>
+      </div>
+
+      {/* Doodle size */}
+      <div>
+        <div className="mb-1 flex items-center justify-between">
+          <span className="text-[0.65rem] font-medium text-[var(--muted)]">Doodle size</span>
+          <span className="text-[0.65rem] tabular-nums text-[var(--accent-fg)]">{style.size.toFixed(1)}×</span>
+        </div>
+        <input
+          type="range"
+          min={0.5}
+          max={2.5}
+          step={0.1}
+          value={style.size}
+          disabled={busy}
+          aria-label="Doodle size"
+          onChange={(e) => update({ size: Number(e.target.value) })}
+          className="w-full accent-[var(--accent)]"
+        />
+        <div className="mt-0.5 flex justify-between text-[0.55rem] text-[var(--muted)]">
+          <span>Small</span>
+          <span>Large</span>
+        </div>
+      </div>
+
+      {/* Apply / Reset */}
+      <div className="flex gap-1.5">
+        <button
+          type="button"
+          disabled={busy || !dirty}
+          onClick={async () => {
+            await onChangeBoth(encodeDoodleStyleString(style), 100);
+            setSaved(true);
+          }}
+          className="btn btn-primary flex-1 py-1.5! text-xs!"
+        >
+          Apply doodles
+        </button>
+        <button
+          type="button"
+          disabled={busy || !parsed}
+          onClick={() => {
+            setStyle({ setIds: ["all"], inkColor: "#ffffff", baseColor: "#1b2a38", size: 1 });
+            setSaved(false);
+            void onChangeBoth("doodles", 20);
+          }}
+          className="btn py-1.5! text-xs!"
+        >
+          Reset
+          </button>
+      </div>
+      {saved ? <p className="text-center text-[0.65rem] text-[var(--accent-fg)]">Doodle background applied</p> : null}
     </div>
   );
 }

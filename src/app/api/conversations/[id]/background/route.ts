@@ -22,6 +22,20 @@ const VALID_PATTERNS = [
   "leaves",
 ];
 
+// Custom doodle styles ("doodle:<sets>:<ink>:<base>:<size>") — validated server-side.
+const DOODLE_SET_IDS = new Set(["classic", "creatures", "nature", "playful", "all"]);
+function isValidDoodleStyle(value: string): boolean {
+  if (!value.startsWith("doodle:")) return false;
+  const parts = value.split(":");
+  if (parts.length !== 5) return false;
+  const [, sets, ink, base, size] = parts;
+  const setList = sets === "all" ? ["all"] : sets.split(",");
+  if (setList.length === 0 || !setList.every((s) => DOODLE_SET_IDS.has(s))) return false;
+  if (!/^#[0-9a-fA-F]{6}$/.test(ink) || !/^#[0-9a-fA-F]{6}$/.test(base)) return false;
+  const n = Number(size);
+  return Number.isFinite(n) && n >= 0.5 && n <= 2.5;
+}
+
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -76,7 +90,7 @@ export async function PATCH(
   // Validate background style
   if (backgroundStyle !== null) {
     const isPreset = VALID_PRESETS.includes(backgroundStyle);
-    const isPattern = VALID_PATTERNS.includes(backgroundStyle);
+    const isPattern = VALID_PATTERNS.includes(backgroundStyle) || isValidDoodleStyle(backgroundStyle);
     const isHexColor = /^#[0-9a-fA-F]{3,8}$/.test(backgroundStyle);
     const isRgbOrHsl = /^(rgb|hsl)\(/.test(backgroundStyle);
     const isImageUrl = /^https:\/\//i.test(backgroundStyle) || /^data:image\/(jpeg|png|webp|gif|avif);base64,/i.test(backgroundStyle);
