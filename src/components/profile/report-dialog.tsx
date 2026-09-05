@@ -88,7 +88,7 @@ export function ReportDialog({
             <CheckCircle className="h-12 w-12 text-[var(--success)]" />
             <h3 className="mt-4 text-lg font-bold">Report Submitted</h3>
             <p className="mt-2 text-sm text-[var(--muted)]">
-              Thank you for helping keep Maddy Chats safe. We&apos;ll review your
+              Thank you for helping keep ZipTalk safe. We&apos;ll review your
               report.
             </p>
           </div>

@@ -1288,7 +1288,7 @@ export function ChatView({
         >
           <ShieldCheck className="h-3 w-3 shrink-0 text-amber-500" />
           <span className="min-w-0 flex-1 truncate text-[0.7rem] text-[var(--muted)]">
-            Encryption is being set up — ask the other person to open Maddy Chats once.
+            Encryption is being set up — ask the other person to open ZipTalk once.
           </span>
           <span className="shrink-0 text-[0.62rem] font-bold uppercase tracking-wide text-amber-600">
             Details
@@ -2329,8 +2329,7 @@ function EncryptionInfoDialog({
               <div className="flex items-center gap-2 rounded-xl border border-[color-mix(in_srgb,var(--accent)_25%,transparent)] bg-[color-mix(in_srgb,var(--accent)_7%,transparent)] px-3.5 py-2.5">
                 <Lock className="h-4 w-4 shrink-0 text-[var(--accent-fg)]" />
                 <p className="text-xs leading-relaxed">
-                  Messages in this chat are <b>end-to-end encrypted</b>. Maddy
-                  Chats and its servers cannot read them — only the devices in
+                  Messages in this chat are <b>end-to-end encrypted</b>. ZipTalk and its servers cannot read them — only the devices in
                   this conversation hold the keys.
                 </p>
               </div>
@@ -2379,7 +2378,7 @@ function EncryptionInfoDialog({
                 </li>
                 <li className="flex items-start gap-2 text-xs text-[var(--muted)]">
                   <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--accent-fg)]" />
-                  No one in between — not even Maddy Chats — can read the contents.
+                  No one in between — not even ZipTalk — can read the contents.
                 </li>
                 <li className="flex items-start gap-2 text-xs text-[var(--muted)]">
                   <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--accent-fg)]" />
@@ -2392,7 +2391,7 @@ function EncryptionInfoDialog({
               <p className="text-xs leading-relaxed text-[var(--muted)]">
                 End-to-end encryption needs every participant&apos;s device to
                 generate a secure key. {peersMissing > 0
-                  ? `We're still waiting for ${peersMissing} participant${peersMissing > 1 ? "s" : ""} to open Maddy Chats once so their key can be created.`
+                  ? `We're still waiting for ${peersMissing} participant${peersMissing > 1 ? "s" : ""} to open ZipTalk once so their key can be created.`
                   : "Encryption keys are still being prepared."}
               </p>
               <p className="text-xs leading-relaxed text-[var(--muted)]">

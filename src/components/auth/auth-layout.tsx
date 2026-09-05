@@ -78,7 +78,7 @@ export function AuthLayout({
         <div className="mt-2 flex items-center gap-2 rounded-xl border border-[color-mix(in_srgb,var(--accent)_20%,transparent)] bg-[color-mix(in_srgb,var(--accent)_5%,transparent)] px-3 py-2">
           <Lock className="h-3.5 w-3.5 shrink-0 text-[var(--accent-fg)]" />
           <span className="text-[0.7rem] leading-relaxed text-[var(--muted)]">
-            Every message is encrypted before it leaves your device. Maddy Chats and its servers cannot read your data.
+            Every message is encrypted before it leaves your device. ZipTalk and its servers cannot read your data.
           </span>
         </div>
       </section>

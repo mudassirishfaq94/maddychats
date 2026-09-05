@@ -21,7 +21,7 @@ const BENEFITS = [
   {
     icon: Lock,
     title: "End-to-end encrypted",
-    text: "Every message, voice note, and file is encrypted on your device before it is sent. Maddy Chats cannot read your data — only you and the people you chat with hold the keys.",
+    text: "Every message, voice note, and file is encrypted on your device before it is sent. ZipTalk cannot read your data — only you and the people you chat with hold the keys.",
   },
   {
     icon: Clock3,

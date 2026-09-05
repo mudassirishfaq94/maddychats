@@ -63,7 +63,7 @@ export function E2EEStatus({ userId }: { userId: string }) {
           </h3>
           <p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">
             Your chats, voice messages and media are encrypted on your device
-            before they are sent. Maddy Chats cannot read your messages — only
+            before they are sent. ZipTalk cannot read your messages — only
             you and the people you chat with hold the keys.
           </p>
         </div>
@@ -109,7 +109,7 @@ export function E2EEStatus({ userId }: { userId: string }) {
 
       <p className="mt-3 text-[0.68rem] leading-relaxed text-[var(--muted)] opacity-80">
         Encryption requires a secure connection. In conversations where the
-        other participant hasn&apos;t set up keys yet, Maddy Chats clearly shows
+        other participant hasn&apos;t set up keys yet, ZipTalk clearly shows
         encryption status on every chat until encryption becomes active.
       </p>
     </div>

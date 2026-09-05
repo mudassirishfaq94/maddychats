@@ -3,8 +3,8 @@ import Link from "next/link";
 import { ArrowLeft, FileText } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "Terms of Service — Maddy Chats",
-  description: "Maddy Chats terms of service and community guidelines.",
+  title: "Terms of Service — ZipTalk",
+  description: "ZipTalk terms of service and community guidelines.",
 };
 
 export default function TermsPage() {
@@ -31,7 +31,7 @@ export default function TermsPage() {
           <section>
             <h2 className="text-base font-bold text-[var(--text)]">1. Acceptance of Terms</h2>
             <p className="mt-2">
-              By accessing or using Maddy Chats, you agree to be bound by these Terms of Service.
+              By accessing or using ZipTalk, you agree to be bound by these Terms of Service.
               If you do not agree to these terms, do not use the service.
             </p>
           </section>
@@ -39,7 +39,7 @@ export default function TermsPage() {
           <section>
             <h2 className="text-base font-bold text-[var(--text)]">2. Description of Service</h2>
             <p className="mt-2">
-              Maddy Chats is a real-time messaging application that allows users to communicate
+              ZipTalk is a real-time messaging application that allows users to communicate
               through text messages, voice messages, images, files, and status updates. The service
               includes features such as group conversations, message reactions, read receipts, and
               privacy controls.
@@ -77,8 +77,8 @@ export default function TermsPage() {
           <section>
             <h2 className="text-base font-bold text-[var(--text)]">5. Intellectual Property</h2>
             <p className="mt-2">
-              You retain ownership of the content you create and share on Maddy Chats. By sending
-              messages, you grant Maddy Chats a limited license to process and deliver your content
+              You retain ownership of the content you create and share on ZipTalk. By sending
+              messages, you grant ZipTalk a limited license to process and deliver your content
               to other participants in the conversation. We do not claim ownership of your content.
             </p>
           </section>
@@ -86,7 +86,7 @@ export default function TermsPage() {
           <section>
             <h2 className="text-base font-bold text-[var(--text)]">6. Privacy</h2>
             <p className="mt-2">
-              Your use of Maddy Chats is also governed by our{" "}
+              Your use of ZipTalk is also governed by our{" "}
               <Link href="/privacy" className="text-[var(--accent)] underline hover:text-[var(--text)]">
                 Privacy Policy
               </Link>
@@ -130,7 +130,7 @@ export default function TermsPage() {
           <section>
             <h2 className="text-base font-bold text-[var(--text)]">10. Limitation of Liability</h2>
             <p className="mt-2">
-              Maddy Chats is provided &ldquo;as is&rdquo; without warranties of any kind. We are
+              ZipTalk is provided &ldquo;as is&rdquo; without warranties of any kind. We are
               not liable for any damages arising from your use of the service, including but not
               limited to direct, indirect, incidental, or consequential damages.
             </p>
