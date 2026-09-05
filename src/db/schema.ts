@@ -139,6 +139,9 @@ export const conversations = pgTable(
     backgroundStyle: text("background_style"),
     /** Background opacity 0.0–1.0 (controls intensity of patterns/images). */
     backgroundOpacity: integer("background_opacity").default(100),
+    /** Focal point for image backgrounds (0–100 %, drag-to-position support). */
+    backgroundPositionX: integer("background_position_x").default(50),
+    backgroundPositionY: integer("background_position_y").default(50),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" })
       .defaultNow()
       .notNull(),
@@ -1150,11 +1153,39 @@ export const e2eeConversationKeys = pgTable(
     userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
     encryptedKey: text("encrypted_key").notNull(),
     deviceId: text("device_id").notNull(),
+    /** Key version for rotation: incremented on each rotation */
+    keyVersion: integer("key_version").default(1).notNull(),
+    /** When this key was last rotated */
+    rotatedAt: timestamp("rotated_at", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+    /** Whether this is the current active key for encryption */
+    isActive: boolean("is_active").default(true).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
   },
   (table) => [
     unique("e2ee_conv_keys_unique").on(table.conversationId, table.userId, table.deviceId),
     index("e2ee_conv_keys_conv_idx").on(table.conversationId),
+    index("e2ee_conv_keys_active_idx").on(table.conversationId, table.userId, table.isActive),
+  ],
+);
+
+/** Historical keys for decryption after rotation. Old keys are kept for
+ * decrypting past messages but never used for new encryption. */
+export const e2eeKeyHistory = pgTable(
+  "e2ee_key_history",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    conversationId: uuid("conversation_id").references(() => conversations.id, { onDelete: "cascade" }).notNull(),
+    userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+    deviceId: text("device_id").notNull(),
+    encryptedKey: text("encrypted_key").notNull(),
+    keyVersion: integer("key_version").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true, mode: "date" }),
+  },
+  (table) => [
+    unique("e2ee_key_history_unique").on(table.conversationId, table.userId, table.deviceId, table.keyVersion),
+    index("e2ee_key_history_conv_idx").on(table.conversationId, table.userId),
+    index("e2ee_key_history_version_idx").on(table.conversationId, table.keyVersion),
   ],
 );
 

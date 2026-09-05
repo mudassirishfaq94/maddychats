@@ -168,6 +168,9 @@ export interface ConversationDetail {
   lastMessageAt: string | null;
   backgroundStyle: string | null;
   backgroundOpacity: number;
+  /** Image background focal point (0-100 %) for drag-to-position. */
+  backgroundPositionX: number;
+  backgroundPositionY: number;
   /** Group settings */
   adminOnlyMessaging: boolean;
   rules: string | null;

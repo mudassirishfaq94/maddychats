@@ -500,6 +500,8 @@ export async function getConversationForUser(
     lastMessageAt: conv.lastMessageAt ? conv.lastMessageAt.toISOString() : null,
     backgroundStyle: conv.backgroundStyle ?? null,
     backgroundOpacity: conv.backgroundOpacity ?? 100,
+    backgroundPositionX: conv.backgroundPositionX ?? 50,
+    backgroundPositionY: conv.backgroundPositionY ?? 50,
     adminOnlyMessaging: Boolean(conv.adminOnlyMessaging),
     rules: conv.rules ?? null,
     announcements: conv.announcements ?? null,

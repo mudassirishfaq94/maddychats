@@ -56,6 +56,7 @@ import {
   useAttachmentUpload,
 } from "./attachment-composer";
 import { cn, formatDate, timeAgo, initials, avatarHue } from "@/lib/utils";
+import { CHAT_BACKGROUNDS, chatBubbleTheme, isBackgroundImage } from "@/lib/chat-backgrounds";
 import { getPattern } from "@/lib/chat-patterns";
 import { EmojiPicker } from "./emoji-picker";
 import { AudioMessage } from "./audio-message";
@@ -190,21 +191,29 @@ export function ChatView({
     fingerprint: string | null;
     checking: boolean;
     peersMissingKeys: number;
-  }>({ ready: false, fingerprint: null, checking: true, peersMissingKeys: 0 });
+    keyVersion: number;
+    needsRotation: boolean;
+  }>({ ready: false, fingerprint: null, checking: true, peersMissingKeys: 0, keyVersion: 1, needsRotation: false });
   const [showEncryptionInfo, setShowEncryptionInfo] = useState(false);
   const [decryptedTexts, setDecryptedTexts] = useState<Map<string, string>>(new Map());
   const [decryptedReplies, setDecryptedReplies] = useState<Map<string, string>>(new Map());
-  const preparedRef = useRef(false);
+  const { prepareConversation, rotateConversationKey, decrypt } = e2ee;
 
   // On open: fetch-or-create the conversation key, share it with every peer
   // device, and learn whether this chat can actually be E2EE right now.
   useEffect(() => {
-    if (!e2ee.initialized || preparedRef.current) return;
-    preparedRef.current = true;
     let alive = true;
     (async () => {
+      // Let cleanup cancel stale initialization before updating the status.
+      await Promise.resolve();
+      if (!alive) return;
+      if (!e2ee.initialized) {
+        setE2eeState((prev) => ({ ...prev, ready: false, checking: e2ee.loading }));
+        return;
+      }
+      setE2eeState((prev) => ({ ...prev, ready: false, checking: true }));
       try {
-        const { ready, fingerprint } = await e2ee.prepareConversation(conversationId);
+        const { ready, fingerprint } = await prepareConversation(conversationId);
         if (!alive) return;
         let missing = 0;
         try {
@@ -216,18 +225,39 @@ export function ChatView({
         } catch {
           missing = 0;
         }
-        setE2eeState({ ready, fingerprint, checking: false, peersMissingKeys: missing });
+        // Check if key rotation is needed
+        let needsRotation = false;
+        let keyVersion = 1;
+        try {
+          const rotRes = await fetch(`/api/e2ee/key-rotation/status?conversationId=${conversationId}`);
+          if (rotRes.ok) {
+            const rotData = await rotRes.json();
+            needsRotation = rotData.needsRotation ?? false;
+            keyVersion = rotData.keyVersion ?? 1;
+            
+            // Auto-rotate if needed
+            if (needsRotation && rotateConversationKey) {
+              await rotateConversationKey(conversationId);
+              needsRotation = false;
+              keyVersion++;
+            }
+          }
+        } catch {
+          // Rotation check is best-effort
+        }
+        
+        if (!alive) return;
+        setE2eeState({ ready, fingerprint, checking: false, peersMissingKeys: missing, keyVersion, needsRotation });
       } catch {
         if (alive) {
-          setE2eeState({ ready: false, fingerprint: null, checking: false, peersMissingKeys: 0 });
+          setE2eeState({ ready: false, fingerprint: null, checking: false, peersMissingKeys: 0, keyVersion: 1, needsRotation: false });
         }
       }
     })();
     return () => {
       alive = false;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [e2ee.initialized, conversationId]);
+  }, [e2ee.initialized, e2ee.loading, conversationId, prepareConversation, rotateConversationKey]);
 
   // Decrypt any encrypted message text (initial history, older pages, and
   // realtime arrivals all flow through `items`).
@@ -247,7 +277,7 @@ export function ChatView({
       for (const m of encItems) {
         if (!nextTexts.has(m.id) && m.text) {
           try {
-            nextTexts.set(m.id, await e2ee.decrypt(m.text, conversationId));
+            nextTexts.set(m.id, await decrypt(m.text, conversationId));
             failedDecryptionRef.current.delete(m.id);
           } catch {
             // If this message previously failed, give up permanently.
@@ -265,7 +295,7 @@ export function ChatView({
           !nextReplies.has(m.replyTo.id)
         ) {
           try {
-            nextReplies.set(m.replyTo.id, await e2ee.decrypt(m.replyTo.text, conversationId));
+            nextReplies.set(m.replyTo.id, await decrypt(m.replyTo.text, conversationId));
           } catch {
             nextReplies.set(m.replyTo.id, "\u{1F512} Undecryptable");
           }
@@ -291,7 +321,7 @@ export function ChatView({
       alive = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items, e2ee.initialized, conversationId, e2ee]);
+  }, [items, e2ee.initialized, conversationId, decrypt]);
 
   /** Plaintext for a message: decrypted locally, or raw when not encrypted. */
   const textOf = useCallback((m: { encrypted: boolean; text: string; id: string }) => {
@@ -790,25 +820,58 @@ export function ChatView({
 
   async function forwardMessage(targetConversationId: string) {
     if (!forwardMsg) return;
-    // Decrypt the source locally, then re-encrypt for the target conversation
-    // (keys are per-conversation, so ciphertext is never reused across chats).
-    const plain = copyableText(forwardMsg);
+    const source = forwardMsg;
+    const plain = source.encrypted && source.text
+      ? await e2ee.decrypt(source.text, conversationId)
+      : source.text;
     const prep = await e2ee.prepareConversation(targetConversationId);
-    const willEncrypt = e2ee.initialized && prep.ready && plain.length > 0;
-    const text = willEncrypt
-      ? await e2ee.encrypt(plain, targetConversationId)
-      : plain;
-    const res = await fetch(`/api/conversations/${targetConversationId}/messages`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        text: text || forwardMsg.text || "",
-        replyToMessageId: null,
-        forwarded: true,
-        encrypted: willEncrypt,
-      }),
-    });
-    if (!res.ok) throw new Error("Forward failed");
+    const willEncrypt = e2ee.initialized && prep.ready;
+    if ((source.encrypted || source.attachments.some((a) => a.encrypted)) && !willEncrypt) {
+      throw new Error("Encryption is not ready in the destination chat. Open that chat and try again.");
+    }
+    const text = willEncrypt && plain ? await e2ee.encrypt(plain, targetConversationId) : plain;
+    let res: Response;
+    if (source.attachments.length) {
+      const form = new FormData();
+      form.append("conversationId", targetConversationId);
+      form.append("forwarded", "true");
+      form.append("encrypted", String(willEncrypt));
+      form.append("text", text);
+      let totalBytes = 0;
+      for (const attachment of source.attachments) {
+        const download = await fetch(attachment.url, { signal: AbortSignal.timeout(30000) });
+        if (!download.ok) throw new Error("Could not download the attachment to forward.");
+        let bytes = await download.arrayBuffer();
+        if (attachment.encrypted) {
+          if (!attachment.encKey) throw new Error("This attachment's encryption key is unavailable.");
+          let binary = "";
+          for (const byte of new Uint8Array(bytes)) binary += String.fromCharCode(byte);
+          bytes = await e2ee.decryptMedia(btoa(binary), attachment.encKey, conversationId);
+        }
+        if (willEncrypt) {
+          const { key } = await e2ee.getConversationKey(targetConversationId);
+          const mediaKey = await generateConversationKey();
+          const wrapped = await encryptBytes(new TextEncoder().encode(await exportSymmetricKey(mediaKey)), key);
+          bytes = b64ToBytes(await encryptBytes(bytes, mediaKey)).slice().buffer as ArrayBuffer;
+          form.append("keys", wrapped);
+          form.append("origTypes", attachment.mimeType);
+        }
+        totalBytes += bytes.byteLength;
+        if (totalBytes > 3 * 1024 * 1024) throw new Error("These attachments are too large to forward together (3 MB maximum).");
+        form.append("files", new Blob([bytes], { type: willEncrypt ? "application/octet-stream" : attachment.mimeType }), attachment.originalName);
+      }
+      res = await fetch("/api/upload/message", { method: "POST", body: form, signal: AbortSignal.timeout(60000) });
+    } else {
+      if (!plain.trim()) throw new Error("This message has no text to forward.");
+      res = await fetch(`/api/conversations/${targetConversationId}/messages`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, replyToMessageId: null, forwarded: true, encrypted: willEncrypt }),
+        signal: AbortSignal.timeout(30000),
+      });
+    }
+    const result = await res.json().catch(() => null);
+    if (!res.ok) throw new Error(result?.error ?? "Forwarding failed. Please try again.");
+    router.refresh();
   }
 
   async function scheduleSendMessage() {
@@ -1024,56 +1087,28 @@ export function ChatView({
     return <MessageSquare className={cn(size, "text-[var(--accent-fg)]")} />;
   }
 
-  /** Chat background styles. */
-  /** Chat background styles. */
-  const chatBackgrounds: Record<string, string> = {
-    ocean: "linear-gradient(135deg, #0891b2, #1d4ed8)",
-    forest: "linear-gradient(135deg, #15803d, #064e3b)",
-    midnight: "linear-gradient(135deg, #111827, #312e81)",
-    sunset: "linear-gradient(135deg, #ff6b6b, #7c3aed)",
-    rose: "linear-gradient(135deg, #e11d48, #9333ea)",
-    lavender: "linear-gradient(135deg, #a78bfa, #818cf8)",
-    mint: "linear-gradient(135deg, #34d399, #06b6d4)",
-  };
-
   const bgValue = conversation.backgroundStyle ?? null;
   const bgOpacity = (conversation.backgroundOpacity ?? 100) / 100;
-  const isImageBg = bgValue && (
-    bgValue.startsWith("http") ||
-    bgValue.startsWith("data:image") ||
-    /\.(jpg|jpeg|png|gif|webp|avif)/i.test(bgValue)
-  );
-  const isPatternBg = bgValue && !isImageBg && !chatBackgrounds[bgValue] &&
-    bgValue !== "default" && !bgValue.startsWith("linear-gradient") && !bgValue.startsWith("radial-gradient") &&
-    !bgValue.startsWith("#") && !bgValue.startsWith("rgb") && !bgValue.startsWith("hsl");
-
+  const bubbleTheme = chatBubbleTheme(bgValue);
   let bgStyle: React.CSSProperties | undefined;
   if (bgValue && bgValue !== "default") {
-    if (isImageBg) {
-      // For images, use backgroundImage so it doesn't conflict with backgroundColor
+    const preset = CHAT_BACKGROUNDS.find((p) => p.key === bgValue);
+    const pattern = getPattern(bgValue);
+    if (isBackgroundImage(bgValue)) {
       bgStyle = {
-        backgroundImage: `url(${bgValue})`,
+        backgroundImage: `url(${JSON.stringify(bgValue)})`,
         backgroundSize: "cover",
-        backgroundPosition: "center",
+        backgroundPosition: `${conversation.backgroundPositionX ?? 50}% ${conversation.backgroundPositionY ?? 50}%`,
         backgroundRepeat: "no-repeat",
+        opacity: bgOpacity,
       };
-    } else if (isPatternBg) {
-      // Pattern: use backgroundImage + backgroundColor (never shorthand `background`)
-      const pat = getPattern(bgValue);
-      if (pat) {
-        bgStyle = {
-          backgroundImage: `${pat.background(bgOpacity)} repeat`,
-          backgroundColor: pat.baseColor,
-        };
-      }
+    } else if (pattern) {
+      bgStyle = { backgroundImage: pattern.background(1), backgroundColor: pattern.baseColor, backgroundRepeat: "repeat", backgroundSize: "auto", opacity: bgOpacity };
     } else {
-      // Gradient, color, or preset — gradients go in backgroundImage, solids in backgroundColor
-      const resolved = chatBackgrounds[bgValue] ?? bgValue;
-      if (resolved.startsWith("linear-gradient") || resolved.startsWith("radial-gradient")) {
-        bgStyle = { backgroundImage: resolved, opacity: bgOpacity };
-      } else {
-        bgStyle = { backgroundColor: resolved, opacity: bgOpacity };
-      }
+      const resolved = preset?.color ?? bgValue;
+      bgStyle = resolved.includes("gradient(")
+        ? { backgroundImage: resolved, backgroundSize: "cover", backgroundRepeat: "no-repeat", opacity: bgOpacity }
+        : { backgroundImage: "none", backgroundColor: resolved, opacity: bgOpacity };
     }
   }
 
@@ -1239,7 +1274,7 @@ export function ChatView({
             <ShieldCheck className="h-4 w-4" />
           )}
           <span className="hidden text-[0.62rem] font-bold uppercase tracking-wide md:inline">
-            {e2eeState.ready ? "E2E" : "Sec"}
+            {e2eeState.ready ? (e2eeState.needsRotation ? "E2E 🔄" : "E2E") : "Sec"}
           </span>
         </button>
 
@@ -1282,7 +1317,7 @@ export function ChatView({
         >
           <ShieldCheck className="h-3 w-3 shrink-0 text-amber-500" />
           <span className="min-w-0 flex-1 truncate text-[0.7rem] text-[var(--muted)]">
-            Encryption is being set up — ask the other person to open Maddy Chats once.
+            Encryption is being set up — ask the other person to open ZipTalk once.
           </span>
           <span className="shrink-0 text-[0.62rem] font-bold uppercase tracking-wide text-amber-600">
             Details
@@ -1375,6 +1410,8 @@ export function ChatView({
       ) : null}
 
       {/* --------------------------- message list ---------------------------- */}
+      <div className="relative isolate flex min-h-0 flex-1 flex-col overflow-hidden" style={bubbleTheme}>
+      <div aria-hidden="true" className="chat-message-area pointer-events-none absolute inset-0 -z-10" style={bgStyle} />
       <div
         ref={scrollRef}
         onScroll={onScroll}
@@ -1393,19 +1430,10 @@ export function ChatView({
           }
         }}
         className={cn(
-          "chat-message-area relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 py-4 sm:px-6",
+          "relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 py-4 sm:px-6",
           dragging && "outline-2 outline-dashed outline-offset-[-10px] outline-[var(--accent)]",
         )}
-        style={bgStyle}
       >
-        {isImageBg ? (
-          <div
-            className="pointer-events-none absolute inset-0 z-0"
-            style={{
-              background: `linear-gradient(to bottom, rgba(0,0,0,${0.3 * bgOpacity}), rgba(0,0,0,${0.5 * bgOpacity}))`,
-            }}
-          />
-        ) : null}
         {dragging ? (
           <div className="pointer-events-none sticky top-2 z-30 mx-auto w-fit rounded-full bg-[var(--action)] px-4 py-1.5 text-xs font-semibold text-[var(--action-fg)]">
             Drop files to attach
@@ -1555,7 +1583,7 @@ export function ChatView({
                             )}
                             style={
                               own
-                                ? { background: "var(--bubble-own-bg)" }
+                                ? { background: "var(--bubble-own-bg)", ...(bubbleTheme ? { "--muted": "var(--bubble-own-sub)", "--accent-fg": "#ffffff" } : {}) } as React.CSSProperties
                                 : undefined
                             }
                           >
@@ -1689,7 +1717,7 @@ export function ChatView({
                                 {msg.encrypted && isPendingDecrypt(msg) ? (
                                   <span className="flex items-center gap-1.5 text-[0.8rem] opacity-80">
                                     <Lock className="h-3 w-3" />
-                                    Decrypting securely…
+                                    {e2ee.error ? "Unable to decrypt on this device. Reload to try again." : "Decrypting securely…"}
                                   </span>
                                 ) : textOf(msg) ? (
                                   (() => {
@@ -1906,6 +1934,8 @@ export function ChatView({
             </div>
           ) : null}
         </div>
+      </div>
+
       </div>
 
       {/* ------------------------------ composer ------------------------------ */}
@@ -2187,6 +2217,7 @@ export function ChatView({
       <ForwardDialog
         open={forwardMsg !== null}
         message={forwardMsg}
+        preview={forwardMsg ? (forwardMsg.encrypted ? "Encrypted message" : forwardMsg.text) : ""}
         onClose={() => setForwardMsg(null)}
         onForward={forwardMessage}
       />
@@ -2249,6 +2280,7 @@ export function ChatView({
         <EncryptionInfoDialog
           ready={e2eeState.ready}
           checking={e2eeState.checking}
+          error={e2ee.error}
           fingerprint={e2eeState.fingerprint}
           peersMissing={e2eeState.peersMissingKeys}
           conversationName={otherName}
@@ -2265,6 +2297,7 @@ function EncryptionInfoDialog({
   ready,
   checking,
   fingerprint,
+  error,
   peersMissing,
   conversationName,
   onClose,
@@ -2272,6 +2305,7 @@ function EncryptionInfoDialog({
   ready: boolean;
   checking: boolean;
   fingerprint: string | null;
+  error: string | null;
   peersMissing: number;
   conversationName: string;
   onClose: () => void;
@@ -2313,13 +2347,14 @@ function EncryptionInfoDialog({
               <Loader2 className="h-4 w-4 animate-spin" />
               Checking encryption keys…
             </div>
+          ) : error ? (
+            <p role="alert" className="py-6 text-sm text-[var(--muted)]">{error}</p>
           ) : ready ? (
             <>
               <div className="flex items-center gap-2 rounded-xl border border-[color-mix(in_srgb,var(--accent)_25%,transparent)] bg-[color-mix(in_srgb,var(--accent)_7%,transparent)] px-3.5 py-2.5">
                 <Lock className="h-4 w-4 shrink-0 text-[var(--accent-fg)]" />
                 <p className="text-xs leading-relaxed">
-                  Messages in this chat are <b>end-to-end encrypted</b>. Maddy
-                  Chats and its servers cannot read them — only the devices in
+                  Messages in this chat are <b>end-to-end encrypted</b>. ZipTalk and its servers cannot read them — only the devices in
                   this conversation hold the keys.
                 </p>
               </div>
@@ -2368,11 +2403,15 @@ function EncryptionInfoDialog({
                 </li>
                 <li className="flex items-start gap-2 text-xs text-[var(--muted)]">
                   <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--accent-fg)]" />
-                  No one in between — not even Maddy Chats — can read the contents.
+                  No one in between — not even ZipTalk — can read the contents.
                 </li>
                 <li className="flex items-start gap-2 text-xs text-[var(--muted)]">
                   <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--accent-fg)]" />
                   Each conversation uses a unique key. Old keys are never reused.
+                </li>
+                <li className="flex items-start gap-2 text-xs text-[var(--muted)]">
+                  <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--accent-fg)]" />
+                  Keys rotate automatically every 7 days or 100 messages for forward secrecy.
                 </li>
               </ul>
             </>
@@ -2381,7 +2420,7 @@ function EncryptionInfoDialog({
               <p className="text-xs leading-relaxed text-[var(--muted)]">
                 End-to-end encryption needs every participant&apos;s device to
                 generate a secure key. {peersMissing > 0
-                  ? `We're still waiting for ${peersMissing} participant${peersMissing > 1 ? "s" : ""} to open Maddy Chats once so their key can be created.`
+                  ? `We're still waiting for ${peersMissing} participant${peersMissing > 1 ? "s" : ""} to open ZipTalk once so their key can be created.`
                   : "Encryption keys are still being prepared."}
               </p>
               <p className="text-xs leading-relaxed text-[var(--muted)]">
