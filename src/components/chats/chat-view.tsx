@@ -1457,7 +1457,7 @@ export function ChatView({
             </button>
           </div>
         ) : items.length > 0 ? (
-          <p className="py-3 text-center text-[0.64rem] font-medium uppercase tracking-widest text-[var(--muted)] opacity-70">
+          <p className="mx-auto w-fit rounded-full bg-black/50 px-3.5 py-1.5 text-[0.64rem] font-medium uppercase tracking-widest text-white/90 shadow-sm backdrop-blur-[2px]">
             Beginning of conversation
           </p>
         ) : null}
@@ -1499,7 +1499,7 @@ export function ChatView({
                   ) : null}
                   {showDate ? (
                     <div className="my-4 flex justify-center">
-                      <span className="rounded-full bg-[color-mix(in_srgb,var(--muted)_12%,transparent)] px-3 py-1 text-[0.66rem] font-medium text-[var(--muted)]">
+                      <span className="rounded-full bg-black/50 px-3.5 py-1.5 text-[0.66rem] font-medium text-white/90 shadow-sm backdrop-blur-[2px]">
                         {dayLabel(msg.createdAt)}
                       </span>
                     </div>
