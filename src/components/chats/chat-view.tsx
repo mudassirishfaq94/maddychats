@@ -234,7 +234,7 @@ export function ChatView({
             const rotData = await rotRes.json();
             needsRotation = rotData.needsRotation ?? false;
             keyVersion = rotData.keyVersion ?? 1;
-            
+
             // Auto-rotate if needed
             if (needsRotation && rotateConversationKey) {
               await rotateConversationKey(conversationId);
@@ -245,7 +245,7 @@ export function ChatView({
         } catch {
           // Rotation check is best-effort
         }
-        
+
         if (!alive) return;
         setE2eeState({ ready, fingerprint, checking: false, peersMissingKeys: missing, keyVersion, needsRotation });
       } catch {
