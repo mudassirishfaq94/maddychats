@@ -2,7 +2,7 @@
  * Single-file end-to-end E2EE verification.
  * Registers both accounts, creates a DM, and exchanges encrypted messages.
  */
-const BASE = "http://localhost:49696";
+const BASE = process.env.QA_BASE ?? "http://localhost:64395";
 
 // ---- Crypto imports ----
 import {
