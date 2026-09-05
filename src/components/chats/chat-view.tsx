@@ -199,13 +199,16 @@ export function ChatView({
   // On open: fetch-or-create the conversation key, share it with every peer
   // device, and learn whether this chat can actually be E2EE right now.
   useEffect(() => {
-    if (!e2ee.initialized) {
-      setE2eeState((prev) => ({ ...prev, ready: false, checking: e2ee.loading }));
-      return;
-    }
-    setE2eeState((prev) => ({ ...prev, ready: false, checking: true }));
     let alive = true;
     (async () => {
+      // Let cleanup cancel stale initialization before updating the status.
+      await Promise.resolve();
+      if (!alive) return;
+      if (!e2ee.initialized) {
+        setE2eeState((prev) => ({ ...prev, ready: false, checking: e2ee.loading }));
+        return;
+      }
+      setE2eeState((prev) => ({ ...prev, ready: false, checking: true }));
       try {
         const { ready, fingerprint } = await prepareConversation(conversationId);
         if (!alive) return;
@@ -230,7 +233,6 @@ export function ChatView({
     return () => {
       alive = false;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [e2ee.initialized, e2ee.loading, conversationId, prepareConversation]);
 
   // Decrypt any encrypted message text (initial history, older pages, and
