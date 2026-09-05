@@ -1,47 +1,50 @@
-import { readFileSync } from 'fs';
-import { resolve } from 'path';
-import { config } from 'dotenv';
+import { readFileSync } from "fs";
+import { config } from "dotenv";
 
-// Load .env BEFORE importing db module
-config({ path: resolve(__dirname, '../.env') });
+config({ path: ".env" });
 
-// Dynamically import db after env is loaded
-async function main() {
-  const { db } = await import('../src/db/index.js');
-  
-  const sql = readFileSync('./drizzle/0017_e2ee_key_rotation.sql', 'utf8');
-  
-  // Remove comments
-  const cleaned = sql.replace(/--.*$/gm, '');
-  
-  // Split by semicolons, handling multi-line statements
-  const statements = cleaned
-    .split(/;\s*\n/)
-    .map(s => s.trim())
-    .filter(s => s.length > 0);
-  
-  console.log(`Executing ${statements.length} statements...`);
-  
-  for (let i = 0; i < statements.length; i++) {
-    const stmt = statements[i];
-    // Remove trailing semicolons
-    const cleanStmt = stmt.replace(/;+$/, '').trim();
-    if (!cleanStmt) continue;
-    
-    try {
-      await db.execute(cleanStmt);
-      console.log(`[${i + 1}/${statements.length}] OK: ${cleanStmt.substring(0, 80)}...`);
-    } catch (e: any) {
-      console.error(`[${i + 1}/${statements.length}] Failed: ${cleanStmt.substring(0, 80)}...`);
-      console.error('Error:', e.message);
-    }
-  }
-  
-  console.log('Migration complete');
-  process.exit(0);
+/** Split SQL on semicolons, honoring the migration's simple statement-per-;-shape. */
+function splitStatements(sql: string): string[] {
+  return sql
+    .replace(/--.*$/gm, "")
+    .split(";")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
 }
 
-main().catch(e => {
-  console.error('Fatal error:', e);
+async function main() {
+  const { Client } = await import("pg");
+  const client = new Client({ connectionString: process.env.DATABASE_URL });
+  await client.connect();
+
+  const sql = readFileSync("./drizzle/0017_e2ee_key_rotation.sql", "utf8");
+  const statements = splitStatements(sql);
+  console.log(`Executing ${statements.length} statements (idempotent mode)...`);
+
+  let applied = 0;
+  let skipped = 0;
+  for (const stmt of statements) {
+    try {
+      await client.query(stmt);
+      applied++;
+      console.log(`OK: ${stmt.slice(0, 70).replace(/\s+/g, " ")}...`);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      // "already exists" / "duplicate" means a prior run got it — that's fine.
+      if (/already exists|duplicate/i.test(msg)) {
+        skipped++;
+        console.log(`SKIP (exists): ${stmt.slice(0, 60).replace(/\s+/g, " ")}...`);
+      } else {
+        console.error(`FAIL: ${stmt.slice(0, 70).replace(/\s+/g, " ")}...`);
+        console.error(`  -> ${msg}`);
+      }
+    }
+  }
+  console.log(`Done: ${applied} applied, ${skipped} skipped, ${statements.length - applied - skipped} failed`);
+  await client.end();
+}
+
+main().catch((e) => {
+  console.error("Fatal:", e.message);
   process.exit(1);
 });
