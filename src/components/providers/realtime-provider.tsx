@@ -69,11 +69,28 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
 
   // Browsers allow sound only after a gesture. Prime audio on the first
   // interaction so later messages can chime while the window is hidden.
+  // Register service worker and Capacitor push on mount
   useEffect(() => {
     if ("serviceWorker" in navigator) {
       void navigator.serviceWorker.register("/sw.js", { scope: "/" });
     }
   }, []);
+
+  // Capacitor (Android): register for FCM push notifications
+  useEffect(() => {
+    if (status !== "authenticated") return;
+    void (async () => {
+      try {
+        const { isCapacitor, registerCapacitorPush, sendTokenToServer, setupNotificationTapListener } = await import("@/lib/capacitor-push");
+        if (!isCapacitor()) return;
+        const token = await registerCapacitorPush();
+        if (token) await sendTokenToServer(token);
+        setupNotificationTapListener();
+      } catch {
+        // Capacitor plugins not available in browser — expected
+      }
+    })();
+  }, [status]);
 
   useEffect(() => {
     const unlock = () => {

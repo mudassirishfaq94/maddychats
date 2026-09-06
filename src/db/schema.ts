@@ -514,6 +514,27 @@ export const pushSubscriptions = pgTable(
   (table) => [index("push_subscriptions_user_idx").on(table.userId)],
 );
 
+/* ======================== FCM device tokens (Android native push) ======================== */
+
+export const fcmTokens = pgTable(
+  "fcm_tokens",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    token: text("token").notNull().unique(),
+    platform: text("platform").notNull().default("android"),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [index("fcm_tokens_user_idx").on(table.userId)],
+);
+
 /* ======================== temporary status updates ======================== */
 
 export const statusTypeEnum = pgEnum("status_type", ["text", "image", "video"]);
