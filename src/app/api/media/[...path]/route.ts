@@ -116,6 +116,9 @@ export async function GET(
       inline =
         found.attachment.kind === "image" || found.attachment.kind === "video";
     }
+
+    // Log storage path for debugging
+    console.log(`[media] Fetching attachment ${found.attachment.id}, path: ${relativePath}, encrypted: ${found.attachment.encrypted}`);
   } else {
     return jsonError(404, "Not found.");
   }

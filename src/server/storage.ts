@@ -312,9 +312,16 @@ export async function readStored(relativePath: string): Promise<{
   size: number | null;
 } | null> {
   if (isVercelBlobConfigured()) {
-    const result = await get(relativePath, { access: "private" });
-    if (!result || result.statusCode !== 200 || !result.stream) return null;
-    return { body: result.stream, size: result.blob.size };
+    console.log(`[storage] Reading from blob: ${relativePath}`);
+    try {
+      const result = await get(relativePath, { access: "private" });
+      console.log(`[storage] Blob result:`, result ? `found (${result.blob?.size} bytes)` : 'null');
+      if (!result || result.statusCode !== 200 || !result.stream) return null;
+      return { body: result.stream, size: result.blob.size };
+    } catch (err) {
+      console.error(`[storage] Blob error for ${relativePath}:`, err);
+      return null;
+    }
   }
   const info = await statStored(relativePath);
   if (!info?.isFile()) return null;
