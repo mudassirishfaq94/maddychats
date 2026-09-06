@@ -63,3 +63,17 @@ public/downloads/
 
 # local preview tooling and logs
 .freebuff/
+
+# Android build outputs and local signing material
+/android/build/
+/android/app/build/
+/android/.gradle/
+/android/local.properties
+/android/*.apk
+/android/*.aab
+/android/capacitor-cordova-android-plugins/build/
+/android/signing/
+/android/app/src/main/assets/capacitor.plugins.json
+/android/app/src/main/assets/capacitor.config.json
+/out/
+/ios/

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ZipTalk splash: centered logo on brand-dark background -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Background fill -->
+    <item android:drawable="@color/splash_background" />
+
+    <!-- Center the app icon -->
+    <item
+        android:gravity="center"
+        android:width="128dp"
+        android:height="128dp">
+        <bitmap
+            android:gravity="fill"
+            android:src="@mipmap/ic_launcher" />
+    </item>
+</layer-list>
