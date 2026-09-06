@@ -128,12 +128,21 @@ export function useE2EE(userId: string | undefined) {
         const res = await fetch(`/api/e2ee/conversation-keys?conversationId=${conversationId}`);
         if (res.ok) {
           const data = await res.json();
-          const keyData = data.keys?.[0];
-          if (keyData && keyPairRef.current?.privateKey) {
-            return decryptKeyFromSender(
-              keyData.encryptedKey,
-              keyPairRef.current.privateKey,
-            );
+          // Pick the highest keyVersion shared to us: with rotation there can
+          // be several rows (active + history), and array order is unspecified.
+          const candidates = (data.keys ?? [])
+            .filter((k: { encryptedKey?: string }) => k.encryptedKey)
+            .sort((a: { keyVersion?: number }, b: { keyVersion?: number }) => (b.keyVersion ?? 0) - (a.keyVersion ?? 0));
+          for (const keyData of candidates) {
+            if (!keyPairRef.current?.privateKey) break;
+            try {
+              return await decryptKeyFromSender(
+                keyData.encryptedKey,
+                keyPairRef.current.privateKey,
+              );
+            } catch {
+              // Row encrypted for a different device/keypair — try the next one.
+            }
           }
         }
       } catch {}
@@ -429,14 +438,48 @@ export function useE2EE(userId: string | undefined) {
     [getConversationKey],
   );
 
-  /** Unwrap a per-file media key (wrapped by the conversation key) and decrypt. */
+  /** Unwrap a per-file media key (wrapped by the conversation key) and decrypt.
+   *  Mirrors `decrypt`'s recovery: if the cached conversation key fails to
+   *  unwrap, drop the cache, re-fetch the peer-shared key, and retry — plus
+   *  historical keys from rotation. Without this a stale local key leaves
+   *  images/voice stuck on "Decrypting…" forever. */
   const decryptMedia = useCallback(
     async (encryptedBytesB64: string, wrappedKeyB64: string, conversationId: string): Promise<ArrayBuffer> => {
+      const unwrapMediaKey = async (conversationKey: CryptoKey): Promise<CryptoKey> => {
+        const wrappedKey = await decryptBytes(wrappedKeyB64, conversationKey);
+        const mediaKeyB64 = new TextDecoder().decode(wrappedKey);
+        return importSymmetricKey(mediaKeyB64);
+      };
+      const decryptWith = async (mediaKey: CryptoKey): Promise<ArrayBuffer> =>
+        decryptBytes(encryptedBytesB64, mediaKey);
+
       const { key: conversationKey } = await getConversationKey(conversationId);
-      const wrappedKey = await decryptBytes(wrappedKeyB64, conversationKey);
-      const mediaKeyB64 = new TextDecoder().decode(wrappedKey);
-      const mediaKey = await importSymmetricKey(mediaKeyB64);
-      return decryptBytes(encryptedBytesB64, mediaKey);
+      try {
+        return await decryptWith(await unwrapMediaKey(conversationKey));
+      } catch {
+        // Historical keys from rotation.
+        try {
+          const res = await fetch(`/api/e2ee/key-rotation/history?conversationId=${conversationId}`);
+          if (res.ok) {
+            const data = await res.json();
+            for (const histKey of data.history ?? []) {
+              try {
+                if (!keyPairRef.current?.privateKey) break;
+                const histConvKey = await decryptKeyFromSender(histKey.encryptedKey, keyPairRef.current.privateKey);
+                return await decryptWith(await unwrapMediaKey(histConvKey));
+              } catch {
+                // Try the next historical key.
+              }
+            }
+          }
+        } catch {}
+        // Cached key is stale — drop it, wait briefly for the peer's share
+        // to land, and retry with a fresh key.
+        conversationKeysRef.current.delete(conversationId);
+        await sleep(1000);
+        const { key: freshKey } = await getConversationKey(conversationId);
+        return decryptWith(await unwrapMediaKey(freshKey));
+      }
     },
     [getConversationKey],
   );
