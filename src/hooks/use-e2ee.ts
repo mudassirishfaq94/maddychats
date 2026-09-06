@@ -438,11 +438,8 @@ export function useE2EE(userId: string | undefined) {
     [getConversationKey],
   );
 
-  /** Unwrap a per-file media key (wrapped by the conversation key) and decrypt.
-   *  Mirrors `decrypt`'s recovery: if the cached conversation key fails to
-   *  unwrap, drop the cache, re-fetch the peer-shared key, and retry — plus
-   *  historical keys from rotation. Without this a stale local key leaves
-   *  images/voice stuck on "Decrypting…" forever. */
+  /** Unwrap a per-file media key using cached, shared, or historical keys.
+   * Receiving never replaces or generates the conversation's sending key. */
   const decryptMedia = useCallback(
     async (encryptedBytesB64: string, wrappedKeyB64: string, conversationId: string): Promise<ArrayBuffer> => {
       const unwrapMediaKey = async (conversationKey: CryptoKey): Promise<CryptoKey> => {
@@ -453,35 +450,31 @@ export function useE2EE(userId: string | undefined) {
       const decryptWith = async (mediaKey: CryptoKey): Promise<ArrayBuffer> =>
         decryptBytes(encryptedBytesB64, mediaKey);
 
-      const { key: conversationKey } = await getConversationKey(conversationId);
-      try {
-        return await decryptWith(await unwrapMediaKey(conversationKey));
-      } catch {
-        // Historical keys from rotation.
+      // Receiving media must never generate or replace the sending key.
+      if (!keyPairRef.current) throw new Error("Device keys are not ready");
+      const cached = conversationKeysRef.current.get(conversationId);
+      if (cached) {
         try {
-          const res = await fetch(`/api/e2ee/key-rotation/history?conversationId=${conversationId}`);
-          if (res.ok) {
-            const data = await res.json();
-            for (const histKey of data.history ?? []) {
-              try {
-                if (!keyPairRef.current?.privateKey) break;
-                const histConvKey = await decryptKeyFromSender(histKey.encryptedKey, keyPairRef.current.privateKey);
-                return await decryptWith(await unwrapMediaKey(histConvKey));
-              } catch {
-                // Try the next historical key.
-              }
-            }
-          }
-        } catch {}
-        // Cached key is stale — drop it, wait briefly for the peer's share
-        // to land, and retry with a fresh key.
-        conversationKeysRef.current.delete(conversationId);
-        await sleep(1000);
-        const { key: freshKey } = await getConversationKey(conversationId);
-        return decryptWith(await unwrapMediaKey(freshKey));
+          return await decryptWith(await unwrapMediaKey(cached));
+        } catch { /* Try every shared key, including other senders/devices. */ }
       }
+      for (const endpoint of ["conversation-keys", "key-rotation/history"]) {
+        const res = await fetch(`/api/e2ee/${endpoint}?conversationId=${encodeURIComponent(conversationId)}`, {
+          signal: AbortSignal.timeout(10000),
+          cache: "no-store",
+        });
+        if (!res.ok) continue;
+        const data = await res.json();
+        for (const row of data.keys ?? data.history ?? []) {
+          try {
+            const key = await decryptKeyFromSender(row.encryptedKey, keyPairRef.current.privateKey);
+            return await decryptWith(await unwrapMediaKey(key));
+          } catch { /* A key for another device or message; keep looking. */ }
+        }
+      }
+      throw new Error("No available key could decrypt this attachment");
     },
-    [getConversationKey],
+    [],
   );
 
   return {

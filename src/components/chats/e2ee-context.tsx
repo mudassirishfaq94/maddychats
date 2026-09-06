@@ -14,7 +14,7 @@ import {
   createContext,
   useContext,
   useEffect,
-  useRef,
+  useMemo,
   useState,
   type ReactNode,
 } from "react";
@@ -29,6 +29,8 @@ type DecryptFn = (
 interface E2EEMediaContextValue {
   conversationId: string;
   decryptMedia: DecryptFn;
+  initialized: boolean;
+  initializationError: string | null;
 }
 
 const E2EEMediaContext = createContext<E2EEMediaContextValue | null>(null);
@@ -36,18 +38,22 @@ const E2EEMediaContext = createContext<E2EEMediaContextValue | null>(null);
 export function E2EEMediaProvider({
   conversationId,
   decryptMedia,
+  initialized,
+  initializationError,
   children,
 }: {
   conversationId: string;
   decryptMedia: DecryptFn;
+  initialized: boolean;
+  initializationError: string | null;
   children: ReactNode;
 }) {
-  const value = useRef<E2EEMediaContextValue | null>(null);
-  if (!value.current || value.current.conversationId !== conversationId) {
-    value.current = { conversationId, decryptMedia };
-  }
+  const value = useMemo(
+    () => ({ conversationId, decryptMedia, initialized, initializationError }),
+    [conversationId, decryptMedia, initialized, initializationError],
+  );
   return (
-    <E2EEMediaContext.Provider value={value.current}>
+    <E2EEMediaContext.Provider value={value}>
       {children}
     </E2EEMediaContext.Provider>
   );
@@ -77,60 +83,69 @@ export function useEncryptedAttachmentUrl(
   attachment?: AttachmentDTO | null,
 ): { url: string | null; failed: boolean } {
   const ctx = useE2EEMediaContext();
-  const [state, setState] = useState<{ url: string | null; failed: boolean }>({
-    url: null,
-    failed: false,
-  });
+  const { id, url, encrypted, encKey, mimeType } = attachment ?? {};
+  const request = useMemo(
+    () => ({ id, url, encrypted, encKey, mimeType, ctx }),
+    [id, url, encrypted, encKey, mimeType, ctx],
+  );
+  const [state, setState] = useState<{
+    request: typeof request | null; url: string | null; failed: boolean;
+  }>({ request: null, url: null, failed: false });
 
   useEffect(() => {
-    if (!attachment) {
-      setState({ url: null, failed: false });
-      return;
-    }
-    if (!attachment.encrypted || !attachment.encKey) {
-      setState({ url: attachment.url, failed: false });
-      return;
-    }
-    if (!ctx) {
-      setState({ url: null, failed: true });
-      return;
-    }
-
-    const cached = objectUrlCache.get(attachment.id);
-    if (cached) {
-      setState({ url: cached, failed: false });
-      return;
-    }
-
+    const { id, url, encrypted, encKey, mimeType, ctx } = request;
+    if (!id || !url || !encrypted || !encKey || !ctx?.initialized || ctx.initializationError) return;
+    if (objectUrlCache.has(id)) return;
+    const attachment = { id, url, encKey, mimeType };
     let cancelled = false;
+    const controller = new AbortController();
 
     (async () => {
       try {
-        const res = await fetch(attachment.url, { cache: "no-store" });
-        if (!res.ok) throw new Error("fetch_failed");
-        const ciphertext = await res.arrayBuffer();
-        const plain = await ctx.decryptMedia(
-          bufferToBase64(ciphertext),
-          attachment.encKey!,
-          ctx.conversationId,
-        );
+        let plain: ArrayBuffer | undefined;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            const res = await fetch(attachment.url, {
+              cache: "no-store",
+              signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15000)]),
+            });
+            if (!res.ok) throw new Error("fetch_failed");
+            const ciphertext = await res.arrayBuffer();
+            plain = await ctx.decryptMedia(
+              bufferToBase64(ciphertext), attachment.encKey!, ctx.conversationId,
+            );
+            break;
+          } catch (error) {
+            if (cancelled || attempt === 2) throw error;
+            await new Promise((resolve) => setTimeout(resolve, 1500));
+            if (cancelled) return;
+          }
+        }
+        if (!plain) throw new Error("decrypt_failed");
         if (cancelled) return;
         const objectUrl = URL.createObjectURL(
           new Blob([plain], { type: attachment.mimeType || "application/octet-stream" }),
         );
         objectUrlCache.set(attachment.id, objectUrl);
-        setState({ url: objectUrl, failed: false });
+        setState({ request, url: objectUrl, failed: false });
       } catch {
-        if (!cancelled) setState({ url: null, failed: true });
+        if (!cancelled) setState({ request, url: null, failed: true });
       }
     })();
 
     return () => {
       cancelled = true;
+      controller.abort();
     };
-  }, [attachment, ctx]);
+  }, [request]);
 
-  return state;
+  if (!id) return { url: null, failed: false };
+  if (!encrypted) return { url: url ?? null, failed: false };
+  if (!ctx || !encKey || ctx.initializationError) return { url: null, failed: true };
+  if (!ctx.initialized) return { url: null, failed: false };
+  const cached = objectUrlCache.get(id);
+  if (cached) return { url: cached, failed: false };
+  return state.request === request ? state : { url: null, failed: false };
 }
 
 /** Picks a context-provided decrypt function from any provider above. */

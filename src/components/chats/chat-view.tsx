@@ -337,8 +337,8 @@ export function ChatView({
 
   /** Pending = encrypted but not yet decrypted locally. */
   const isPendingDecrypt = useCallback(
-    (m: { encrypted: boolean; id: string }) =>
-      m.encrypted && decryptedTexts.get(m.id) === undefined,
+    (m: { encrypted: boolean; text: string; id: string }) =>
+      m.encrypted && Boolean(m.text) && decryptedTexts.get(m.id) === undefined,
     [decryptedTexts],
   );
 
@@ -1180,7 +1180,7 @@ export function ChatView({
   }
 
   return (
-    <E2EEMediaProvider conversationId={conversationId} decryptMedia={e2ee.decryptMedia}>
+    <E2EEMediaProvider conversationId={conversationId} decryptMedia={e2ee.decryptMedia} initialized={e2ee.initialized} initializationError={e2ee.error}>
     <div className="flex h-full w-full min-w-0 overflow-hidden overflow-x-hidden">
       <div className="flex min-w-0 flex-1 flex-col">
       {/* ------------------------------ header ------------------------------ */}
