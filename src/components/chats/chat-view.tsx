@@ -120,26 +120,28 @@ function sameDay(a: string, b: string): boolean {
   );
 }
 
-/** Sent → Delivered → Read, tinted with the own-bubble secondary color. */
+/** Sent → Delivered → Read, with a WhatsApp-style tick and status label. */
 function ReceiptIcon({ message }: { message: MessageDTO }) {
   if (message.readBy.length > 0) {
     return (
-      <span title="Read" className="inline-flex items-center gap-0.5 font-semibold text-[var(--accent-fg)]">
+      <span title="Read" aria-label="Read" className="inline-flex flex-col items-center leading-none text-sky-400">
         <CheckCheck className="h-3.5 w-3.5 text-sky-400" />
-        <span className="text-[0.62rem]">Read</span>
+        <span className="mt-px text-[0.5rem] font-semibold">Read</span>
       </span>
     );
   }
   if (message.deliveredAt) {
     return (
-      <span title="Delivered" className="inline-flex items-center">
+      <span title="Delivered" aria-label="Delivered" className="inline-flex flex-col items-center leading-none text-[var(--bubble-own-sub)]">
         <CheckCheck className="h-3.5 w-3.5 text-[var(--bubble-own-sub)]" />
+        <span className="mt-px text-[0.5rem] font-semibold">Delivered</span>
       </span>
     );
   }
   return (
-    <span title="Sent" className="inline-flex items-center">
+    <span title="Sent" aria-label="Sent" className="inline-flex flex-col items-center leading-none text-[var(--bubble-own-sub)]">
       <Check className="h-3.5 w-3.5 text-[var(--bubble-own-sub)]" />
+      <span className="mt-px text-[0.5rem] font-semibold">Sent</span>
     </span>
   );
 }
