@@ -1,5 +1,4 @@
 import type { CSSProperties } from "react";
-import { parseDoodleStyle } from "@/lib/chat-patterns";
 
 export const CHAT_BACKGROUNDS = [
   { key: "default", label: "Default", color: "var(--surface)", ink: "var(--text)" },
@@ -32,13 +31,7 @@ export function isBackgroundImage(value: string): boolean {
 export function chatBubbleTheme(background: string | null): CSSProperties | undefined {
   if (!background || background === "default") return undefined;
   const resolved = CHAT_BACKGROUNDS.find((p) => p.key === background)?.color ?? background;
-  // Custom doodle styles carry their own base color — coordinate bubbles with it.
-  const doodle = parseDoodleStyle(background);
-  const hex = doodle
-    ? doodle.baseColor.replace("#", "")
-    : !isBackgroundImage(resolved)
-      ? resolved.match(/#([a-f0-9]{6}|[a-f0-9]{3})(?![a-f0-9])/i)?.[1]
-      : undefined;
+  const hex = !isBackgroundImage(resolved) ? resolved.match(/#([a-f0-9]{6}|[a-f0-9]{3})(?![a-f0-9])/i)?.[1] : undefined;
   let hue = 215;
   if (hex) {
     const full = hex.length === 3 ? hex.split("").map((c) => c + c).join("") : hex;
