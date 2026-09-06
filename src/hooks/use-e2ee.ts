@@ -457,11 +457,12 @@ export function useE2EE(userId: string | undefined) {
       }
 
       const cached = conversationKeysRef.current.get(conversationId);
+      console.log(`[E2EE] decryptMedia: cached key exists: ${!!cached}, wrappedKeyB64 length: ${wrappedKeyB64?.length}`);
       if (cached) {
         try {
           return await decryptWith(await unwrapMediaKey(cached));
         } catch (e) {
-          console.warn("[E2EE] decryptMedia: Cached key decryption failed, trying shared keys");
+          console.warn("[E2EE] decryptMedia: Cached key decryption failed, trying shared keys:", e);
         }
       }
 
@@ -489,17 +490,26 @@ export function useE2EE(userId: string | undefined) {
             continue;
           }
 
+          console.log(`[E2EE] decryptMedia: Fetched ${keys.length} keys from ${endpoint}`);
+
           for (const row of keys) {
             if (!row.encryptedKey) {
               console.warn("[E2EE] decryptMedia: Skipping row with no encryptedKey");
               continue;
             }
 
+            console.log(`[E2EE] decryptMedia: Trying key row: userId=${row.userId?.slice(0,8)}, deviceId=${row.deviceId?.slice(0,8)}, keyVersion=${row.keyVersion}, encryptedKey len=${row.encryptedKey?.length}`);
+
             try {
               const key = await decryptKeyFromSender(row.encryptedKey, keyPairRef.current.privateKey);
-              return await decryptWith(await unwrapMediaKey(key));
+              console.log("[E2EE] decryptMedia: Successfully decrypted conversation key from row, attempting to unwrap media key");
+              try {
+                return await decryptWith(await unwrapMediaKey(key));
+              } catch (unwrapErr) {
+                console.warn("[E2EE] decryptMedia: Conversation key decrypted but failed to unwrap media key:", unwrapErr);
+              }
             } catch (e) {
-              console.warn("[E2EE] decryptMedia: Key decryption failed for one key, trying next");
+              console.warn("[E2EE] decryptMedia: Failed to decrypt conversation key from row:", e);
             }
           }
         } catch (e) {
