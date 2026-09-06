@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import type * as React from "react";
 import { Archive, BellOff, Lock, Pin, Search } from "lucide-react";
 import type { ConversationSummary } from "@/lib/types";
+import { useSharedE2EE } from "@/components/providers/e2ee-provider";
 import { Avatar } from "@/components/avatar";
 import { LogoMark } from "@/components/brand/logo";
 import { NewChatDialog } from "./new-chat-dialog";
@@ -13,15 +14,15 @@ import { ConversationMenu } from "./conversation-menu";
 import { useRealtime } from "@/components/providers/realtime-provider";
 import { cn, timeAgo } from "@/lib/utils";
 
-function previewText(conv: ConversationSummary): string {
+function previewText(conv: ConversationSummary, previews: Map<string, string>): string {
   const last = conv.lastMessage;
   if (!last) return "No messages yet";
   if (last.deletedAt) return "Message deleted";
   if (last.encrypted) {
     // Ciphertext must never be shown as a preview.
-    return last.text ? "Encrypted message" : "Attachment";
+    if (last.text) return previews.get(`${last.id}:${last.text}`) ?? "…";
   }
-  return last.text || "Attachment";
+  return last.text || ({ audio: "Voice message", image: "Photo", video: "Video", file: "File" }[last.type] ?? "Message");
 }
 
 function stampTime(iso: string | null): string {
@@ -65,6 +66,29 @@ export function ChatsLayout({
   } | null>(null);
   const conversations = liveList?.source === initialConversations
     ? liveList.items : initialConversations;
+  const { initialized, decrypt } = useSharedE2EE();
+  const [previews, setPreviews] = useState<Map<string, string>>(new Map());
+  useEffect(() => {
+    if (!initialized) return;
+    let cancelled = false;
+    const pending = conversations.filter(c => c.lastMessage?.encrypted && c.lastMessage.text && !c.lastMessage.deletedAt);
+    void Promise.all(pending.map(async c => {
+      const message = c.lastMessage!;
+      const key = `${message.id}:${message.text}`;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          const text = await decrypt(message.text, c.id);
+          if (!cancelled) setPreviews(previous => new Map(previous).set(key, text));
+          return;
+        } catch {
+          if (cancelled) return;
+          if (attempt < 2) await new Promise(resolve => setTimeout(resolve, 1500));
+        }
+      }
+      if (!cancelled) setPreviews(previous => new Map(previous).set(key, "Message unavailable"));
+    }));
+    return () => { cancelled = true; };
+  }, [conversations, initialized, decrypt]);
   const pathname = usePathname();
   const router = useRouter();
   const { subscribe, presence } = useRealtime();
@@ -333,10 +357,10 @@ export function ChatsLayout({
                             {conv.lastMessage?.encrypted ? (
                               <>
                                 <Lock className="mr-0.5 inline h-3 w-3 -translate-y-px text-[var(--accent-fg)]" aria-label="End-to-end encrypted" />
-                                {previewText(conv)}
+                                {previewText(conv, previews)}
                               </>
                             ) : (
-                              previewText(conv)
+                              previewText(conv, previews)
                             )}
                           </span>
                           </span>

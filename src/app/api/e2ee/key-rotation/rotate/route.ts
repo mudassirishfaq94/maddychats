@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { eq, and, desc } from "drizzle-orm";
 import { db } from "@/db";
-import { e2eeConversationKeys, e2eeKeyHistory } from "@/db/schema";
+import { e2eeConversationKeys } from "@/db/schema";
 import { getSessionUser } from "@/server/session";
 import { getMembership } from "@/server/chat";
 import { guardSameOrigin, jsonError, readJson } from "@/server/http";
-import { MAX_KEY_HISTORY } from "@/lib/crypto";
 
 export const dynamic = "force-dynamic";
 
@@ -48,44 +47,9 @@ export async function POST(req: NextRequest) {
     return jsonError(404, "No active key found to rotate.");
   }
 
-  // Move old key to history
-  try {
-    await db.insert(e2eeKeyHistory).values({
-      conversationId,
-      userId: user.id,
-      deviceId: activeKey.deviceId,
-      encryptedKey: activeKey.encryptedKey,
-      keyVersion: activeKey.keyVersion,
-    });
-  } catch (e) {
-    // Might already exist in history, that's okay
-    console.error("Failed to store key history:", e);
-  }
-
-  // Mark old key as inactive
-  await db
-    .update(e2eeConversationKeys)
-    .set({ isActive: false })
-    .where(eq(e2eeConversationKeys.id, activeKey.id));
-
-  // Clean up old history entries (keep only MAX_KEY_HISTORY per user per conversation)
-  const oldHistory = await db
-    .select({ id: e2eeKeyHistory.id })
-    .from(e2eeKeyHistory)
-    .where(
-      and(
-        eq(e2eeKeyHistory.conversationId, conversationId),
-        eq(e2eeKeyHistory.userId, user.id),
-      )
-    )
-    .orderBy(desc(e2eeKeyHistory.keyVersion));
-
-  if (oldHistory.length > MAX_KEY_HISTORY) {
-    const idsToDelete = oldHistory.slice(MAX_KEY_HISTORY).map((h) => h.id);
-    for (const id of idsToDelete) {
-      await db.delete(e2eeKeyHistory).where(eq(e2eeKeyHistory.id, id));
-    }
-  }
+  // Sharing replaces the active key and archives its predecessor atomically.
+  // Do not deactivate the newly shared key or delete history here: existing
+  // messages and media still need those older keys after an app restart.
 
   return NextResponse.json({ success: true, previousKeyVersion: activeKey.keyVersion });
 }

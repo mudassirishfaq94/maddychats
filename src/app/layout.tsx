@@ -3,7 +3,9 @@ import type { ReactNode } from "react";
 import Script from "next/script";
 import { Inter, Space_Grotesk } from "next/font/google";
 import { AuthProvider } from "@/components/providers/auth-provider";
+import { E2EEProvider } from "@/components/providers/e2ee-provider";
 import { RealtimeProvider } from "@/components/providers/realtime-provider";
+import { HostedAppUpdates } from "@/components/hosted-app-updates";
 import { PwaUpdatePrompt } from "@/components/pwa-update-prompt";
 import "./globals.css";
 
@@ -56,8 +58,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <body>
         <Script src="/theme-init.js" strategy="beforeInteractive" />
         <AuthProvider>
-          <RealtimeProvider>{children}</RealtimeProvider>
+          <E2EEProvider><RealtimeProvider>{children}</RealtimeProvider></E2EEProvider>
           <PwaUpdatePrompt />
+          <HostedAppUpdates />
         </AuthProvider>
       </body>
     </html>

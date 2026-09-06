@@ -38,6 +38,8 @@ export function AudioMessage({
   /** When given (E2EE voice), bytes are fetched + decrypted client-side. */
   attachment?: AttachmentDTO;
 }) {
+  const [transcript, setTranscript] = useState(initialTranscript ?? null);
+  const [transcribing, setTranscribing] = useState(false);
   const resolved = useEncryptedAttachmentUrl(attachment);
   // Encrypted voice resolves to a decrypted object URL; local previews pass src.
   const effectiveSrc = attachment?.encrypted ? (resolved.url ?? "") : src;
@@ -68,17 +70,15 @@ export function AudioMessage({
         style={own ? { background: "var(--bubble-own-bg)" } : undefined}
       >
         <Loader2 className="h-4 w-4 animate-spin opacity-70" />
-        <span className="text-xs opacity-80">Decrypting securely…</span>
+        <span className="text-xs opacity-80">Loading voice message…</span>
       </div>
     );
   }
 
   const totalDuration = duration || finiteTime(initialDuration ?? 0);
   const progress = totalDuration ? (currentTime / totalDuration) * 100 : 0;
-  const [transcript, setTranscript] = useState(initialTranscript ?? null);
-  const [transcribing, setTranscribing] = useState(false);
 
-  if (error) {
+  if (error || resolved.failed) {
     return (
       <div
         className={cn(
@@ -206,7 +206,7 @@ export function AudioMessage({
             )}>
               {transcript}
             </p>
-          ) : attachmentId ? (
+          ) : attachmentId && !attachment?.encrypted ? (
             <button
               type="button"
               onClick={async () => {

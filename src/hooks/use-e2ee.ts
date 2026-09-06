@@ -60,6 +60,8 @@ export function useE2EE(userId: string | undefined) {
   const keyPairRef = useRef<CryptoKeyPair | null>(null);
   const conversationKeysRef = useRef<Map<string, CryptoKey>>(new Map());
 
+  const decryptionKeysRef = useRef<Map<string, CryptoKey[]>>(new Map());
+
   // Initialize on mount
   useEffect(() => {
     if (!userId) return;
@@ -70,6 +72,7 @@ export function useE2EE(userId: string | undefined) {
 
       let keyPair: CryptoKeyPair;
       let publicKeyStr: string;
+      let privateKeyStr: string;
 
       if (stored) {
         const parsed = JSON.parse(stored);
@@ -77,30 +80,31 @@ export function useE2EE(userId: string | undefined) {
         const publicKey = await importPublicKey(parsed.publicKey);
         keyPair = { privateKey, publicKey };
         publicKeyStr = parsed.publicKey;
+        privateKeyStr = parsed.privateKey;
       } else {
         keyPair = await generateKeyPair();
         const publicKey = await exportPublicKey(keyPair.publicKey);
         publicKeyStr = publicKey;
         const privateKey = await exportPrivateKey(keyPair.privateKey);
+        privateKeyStr = privateKey;
 
         // Store locally
         localStorage.setItem(
           `e2ee_keypair_${userId}`,
           JSON.stringify({ publicKey, privateKey }),
         );
-
-        // Register with server
-        const passphrase = deviceId; // Use deviceId as passphrase for simplicity
-        const encryptedPrivateKey = await encryptPrivateKeyForStorage(privateKey, passphrase);
-
-        const response = await fetch("/api/e2ee/keys", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ deviceId, publicKey, encryptedPrivateKey }),
-          signal: AbortSignal.timeout(15000),
-        });
-        if (!response.ok) throw new Error("Device key registration failed");
       }
+
+      // Register on every startup. This makes a restored session recover when
+      // the server-side device record was removed or an earlier request failed.
+      const encryptedPrivateKey = await encryptPrivateKeyForStorage(privateKeyStr, deviceId);
+      const response = await fetch("/api/e2ee/keys", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ deviceId, publicKey: publicKeyStr, encryptedPrivateKey }),
+        signal: AbortSignal.timeout(15000),
+      });
+      if (!response.ok) throw new Error("Device key registration failed");
 
       keyPairRef.current = keyPair;
 
@@ -151,6 +155,18 @@ export function useE2EE(userId: string | undefined) {
     [],
   );
 
+  // Preserve our own sending keys across app/browser restarts. These backups
+  // are wrapped to this device's RSA key; localStorage never receives raw keys.
+  const rememberSendingKey = useCallback(async (conversationId: string, key: CryptoKey) => {
+    if (!userId || !keyPairRef.current) throw new Error("Device keys are not ready");
+    const storageKey = `e2ee_sentkeys_${userId}_${conversationId}`;
+    const saved = JSON.parse(localStorage.getItem(storageKey) ?? "[]") as Array<{ fingerprint: string; wrapped: string }>;
+    const fingerprint = await conversationFingerprint(key);
+    if (saved.some(entry => entry.fingerprint === fingerprint)) return;
+    const wrapped = await encryptKeyForUser(key, keyPairRef.current.publicKey);
+    localStorage.setItem(storageKey, JSON.stringify([...saved, { fingerprint, wrapped }]));
+  }, [userId]);
+
   /**
    * Get or create a symmetric key for a conversation.
    *
@@ -174,6 +190,7 @@ export function useE2EE(userId: string | undefined) {
       // Try to load a shared key from the server
       let sharedKey = await fetchSharedKey(conversationId);
       if (sharedKey) {
+        await rememberSendingKey(conversationId, sharedKey);
         conversationKeysRef.current.set(conversationId, sharedKey);
         return { key: sharedKey, shared: true };
       }
@@ -185,6 +202,7 @@ export function useE2EE(userId: string | undefined) {
           await sleep(1500);
           sharedKey = await fetchSharedKey(conversationId);
           if (sharedKey) {
+            await rememberSendingKey(conversationId, sharedKey);
             conversationKeysRef.current.set(conversationId, sharedKey);
             return { key: sharedKey, shared: true };
           }
@@ -194,10 +212,11 @@ export function useE2EE(userId: string | undefined) {
       // No peer key found — generate a new local key.
       // The caller (prepareConversation) will share it with peers.
       const key = await generateConversationKey();
+      await rememberSendingKey(conversationId, key);
       conversationKeysRef.current.set(conversationId, key);
       return { key, shared: false };
     },
-    [fetchSharedKey],
+    [fetchSharedKey, rememberSendingKey],
   );
 
   /** Encrypt a message before sending */
@@ -209,79 +228,55 @@ export function useE2EE(userId: string | undefined) {
     [getConversationKey],
   );
 
-  /** Try to decrypt with historical keys if current key fails */
-  const decryptWithHistory = useCallback(
-    async (ciphertext: string, conversationId: string): Promise<string> => {
-      // First try current key
+  /** Receiving never generates or replaces a sending key. Try cached keys,
+   * then all current/device/history shares, retaining keys that work locally. */
+  const decrypt = useCallback(async (ciphertext: string, conversationId: string): Promise<string> => {
+    if (!keyPairRef.current) throw new Error("Device keys are not ready");
+    const local = decryptionKeysRef.current.get(conversationId) ?? [];
+    const sending = conversationKeysRef.current.get(conversationId);
+    for (const key of sending ? [sending, ...local] : local) {
+      try { return await decryptMessage(ciphertext, key); } catch { /* Try the next key. */ }
+    }
+    if (userId && typeof localStorage !== "undefined") {
       try {
-        const { key } = await getConversationKey(conversationId);
-        return await decryptMessage(ciphertext, key);
-      } catch {
-        // Current key failed, try historical keys
-      }
-      
-      // Fetch historical keys from server
-      try {
-        const res = await fetch(`/api/e2ee/key-rotation/history?conversationId=${conversationId}`);
-        if (res.ok) {
-          const data = await res.json();
-          const history = data.history ?? [];
-          
-          for (const histKey of history) {
-            try {
-              const key = await decryptKeyFromSender(
-                histKey.encryptedKey,
-                keyPairRef.current!.privateKey,
-              );
-              const result = await decryptMessage(ciphertext, key);
-              return result;
-            } catch {
-              // This historical key didn't work, try next
-            }
-          }
-        }
-      } catch {}
-      
-      throw new Error('Could not decrypt with any available key');
-    },
-    [getConversationKey],
-  );
-
-  /** Decrypt a received message. Re-fetches the key from the server if the
-   *  cached key fails (handles the race where the shared key arrived after
-   *  the local key was generated). Also tries historical keys for messages
-   *  encrypted with older keys before rotation. */
-  const decrypt = useCallback(
-    async (ciphertext: string, conversationId: string): Promise<string> => {
-      const tryDecrypt = async (key: CryptoKey) => decryptMessage(ciphertext, key);
-      const { key } = await getConversationKey(conversationId);
-      try {
-        return await tryDecrypt(key);
-      } catch {
-        // Current key failed — try historical keys from rotation.
-        try {
-          return await decryptWithHistory(ciphertext, conversationId);
-        } catch {
-          // Historical keys didn't work either — cached key might be stale.
-          conversationKeysRef.current.delete(conversationId);
-          await sleep(1000);
-          const { key: freshKey } = await getConversationKey(conversationId);
+        const saved = JSON.parse(localStorage.getItem(`e2ee_sentkeys_${userId}_${conversationId}`) ?? "[]") as Array<{ wrapped: string }>;
+        for (const entry of saved) {
           try {
-            return await tryDecrypt(freshKey);
-          } catch {
-            // Final attempt: try history with fresh key
-            return await decryptWithHistory(ciphertext, conversationId);
-          }
+            const key = await decryptKeyFromSender(entry.wrapped, keyPairRef.current.privateKey);
+            const plain = await decryptMessage(ciphertext, key);
+            decryptionKeysRef.current.set(conversationId, [key, ...local].slice(0, 20));
+            return plain;
+          } catch { /* Another historical sending key. */ }
         }
-      }
-    },
-    [getConversationKey, decryptWithHistory],
-  );
+      } catch { /* Server shares can still recover a malformed local backup. */ }
+    }
+    for (const endpoint of ["conversation-keys", "key-rotation/history"]) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10000);
+      try {
+        const response = await fetch(`/api/e2ee/${endpoint}?conversationId=${encodeURIComponent(conversationId)}`, {
+          cache: "no-store", signal: controller.signal,
+        });
+        if (!response.ok) continue;
+        const data = await response.json();
+        for (const row of data.keys ?? data.history ?? []) {
+          try {
+            const key = await decryptKeyFromSender(row.encryptedKey, keyPairRef.current.privateKey);
+            const plain = await decryptMessage(ciphertext, key);
+            decryptionKeysRef.current.set(conversationId, [key, ...local].slice(0, 20));
+            return plain;
+          } catch { /* This share belongs to another device or message. */ }
+        }
+      } catch { /* Try the history endpoint too. */ }
+      finally { clearTimeout(timeout); }
+    }
+    throw new Error("This message's key is not available on this device");
+  }, [userId]);
 
   /** Share conversation key with another user's device */
   const shareKey = useCallback(
-    async (conversationId: string, targetUserId: string, targetDeviceId: string, targetPublicKeyBase64: string) => {
-      const { key } = await getConversationKey(conversationId);
+    async (conversationId: string, targetUserId: string, targetDeviceId: string, targetPublicKeyBase64: string, keyOverride?: CryptoKey) => {
+      const key = keyOverride ?? (await getConversationKey(conversationId)).key;
       const targetPublicKey = await importPublicKey(targetPublicKeyBase64);
       const encryptedKey = await encryptKeyForUser(key, targetPublicKey);
 
@@ -320,45 +315,24 @@ export function useE2EE(userId: string | undefined) {
     [],
   );
 
-  /** Rotate the conversation key and share with all peers */
-  const rotateConversationKey = useCallback(
-    async (conversationId: string): Promise<boolean> => {
-      try {
-        // Generate new key
-        const newKey = await generateConversationKey();
-        conversationKeysRef.current.set(conversationId, newKey);
-        
-        // Share with all peers
-        const peersRes = await fetch(`/api/e2ee/peers?conversationId=${conversationId}`);
-        if (peersRes.ok) {
-          const peersData = await peersRes.json();
-          const peers = peersData.peers ?? [];
-          
-          for (const peer of peers) {
-            for (const device of peer.devices) {
-              try {
-                await shareKey(conversationId, peer.userId, device.deviceId, device.publicKey);
-              } catch {
-                // best-effort per device
-              }
-            }
-          }
-        }
-        
-        // Mark rotation complete on server
-        await fetch('/api/e2ee/key-rotation/rotate', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ conversationId }),
-        });
-        
-        return true;
-      } catch {
-        return false;
+  /** Publish a new sending key only after every recipient share succeeds. */
+  const rotateConversationKey = useCallback(async (conversationId: string): Promise<boolean> => {
+    try {
+      const response = await fetch(`/api/e2ee/peers?conversationId=${conversationId}`);
+      if (!response.ok) return false;
+      const { peers } = await response.json() as { peers: Peer[] };
+      if (peers.some(peer => peer.devices.length === 0)) return false;
+      const key = await generateConversationKey();
+      for (const peer of peers) for (const device of peer.devices) {
+        if (!await shareKey(conversationId, peer.userId, device.deviceId, device.publicKey, key)) return false;
       }
-    },
-    [shareKey],
-  );
+      const old = conversationKeysRef.current.get(conversationId);
+      if (old) decryptionKeysRef.current.set(conversationId, [old, ...(decryptionKeysRef.current.get(conversationId) ?? [])]);
+      await rememberSendingKey(conversationId, key);
+      conversationKeysRef.current.set(conversationId, key);
+      return true;
+    } catch { return false; }
+  }, [shareKey, rememberSendingKey]);
 
   /**
    * Prepare a conversation for E2EE: fetch-or-create its symmetric key, share
@@ -371,27 +345,28 @@ export function useE2EE(userId: string | undefined) {
   const prepareConversation = useCallback(
     async (conversationId: string): Promise<{ ready: boolean; fingerprint: string | null }> => {
       // waitForPeer=true so we retry if the other side is mid-share
-      const { key, shared } = await getConversationKey(conversationId, { waitForPeer: true });
+      const { key } = await getConversationKey(conversationId, { waitForPeer: true });
       let peers: Peer[] = [];
       try {
         const res = await fetch(`/api/e2ee/peers?conversationId=${encodeURIComponent(conversationId)}`);
+        if (!res.ok) return { ready: false, fingerprint: null };
         if (res.ok) {
           const data = (await res.json()) as { peers?: Peer[] };
           peers = data.peers ?? [];
         }
       } catch {
-        peers = [];
+        return { ready: false, fingerprint: null };
       }
 
       // No peers (self chat, fresh group with only you) → encryption works.
-      const ready = peers.every((p) => p.devices.length > 0);
+      let ready = peers.every((p) => p.devices.length > 0);
       if (ready) {
         for (const peer of peers) {
           for (const device of peer.devices) {
             try {
-              await shareKey(conversationId, peer.userId, device.deviceId, device.publicKey);
+              if (!await shareKey(conversationId, peer.userId, device.deviceId, device.publicKey, key)) ready = false;
             } catch {
-              // best-effort per device
+              ready = false;
             }
           }
         }
@@ -403,11 +378,7 @@ export function useE2EE(userId: string | undefined) {
       } catch {
         fingerprint = null;
       }
-      // ready is true only if (a) all peers have device keys AND (b) we
-      // actually received a shared key from a peer (not just generated one
-      // locally).  When only one side has opened the chat, they'll generate
-      // a key and share it — the next open on the other side will pick it up.
-      return { ready: ready && shared, fingerprint };
+      return { ready, fingerprint };
     },
     [getConversationKey, shareKey],
   );
@@ -438,91 +409,14 @@ export function useE2EE(userId: string | undefined) {
     [getConversationKey],
   );
 
-  /** Unwrap a per-file media key using cached, shared, or historical keys.
-   * Receiving never replaces or generates the conversation's sending key. */
-  const decryptMedia = useCallback(
-    async (encryptedBytesB64: string, wrappedKeyB64: string, conversationId: string): Promise<ArrayBuffer> => {
-      const unwrapMediaKey = async (conversationKey: CryptoKey): Promise<CryptoKey> => {
-        const wrappedKey = await decryptBytes(wrappedKeyB64, conversationKey);
-        const mediaKeyB64 = new TextDecoder().decode(wrappedKey);
-        return importSymmetricKey(mediaKeyB64);
-      };
-      const decryptWith = async (mediaKey: CryptoKey): Promise<ArrayBuffer> =>
-        decryptBytes(encryptedBytesB64, mediaKey);
-
-      // Receiving media must never generate or replace the sending key.
-      if (!keyPairRef.current) {
-        console.error("[E2EE] decryptMedia: Device keys not ready (keyPairRef is null)");
-        throw new Error("Device keys are not ready");
-      }
-
-      const cached = conversationKeysRef.current.get(conversationId);
-      console.log(`[E2EE] decryptMedia: cached key exists: ${!!cached}, wrappedKeyB64 length: ${wrappedKeyB64?.length}`);
-      if (cached) {
-        try {
-          return await decryptWith(await unwrapMediaKey(cached));
-        } catch (e) {
-          console.warn("[E2EE] decryptMedia: Cached key decryption failed, trying shared keys:", e);
-        }
-      }
-
-      for (const endpoint of ["conversation-keys", "key-rotation/history"]) {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 10000);
-
-        try {
-          const res = await fetch(`/api/e2ee/${endpoint}?conversationId=${encodeURIComponent(conversationId)}`, {
-            signal: controller.signal,
-            cache: "no-store",
-          });
-          clearTimeout(timeoutId);
-
-          if (!res.ok) {
-            console.warn(`[E2EE] decryptMedia: ${endpoint} returned ${res.status}`);
-            continue;
-          }
-
-          const data = await res.json();
-          const keys = data.keys ?? data.history ?? [];
-
-          if (keys.length === 0) {
-            console.warn(`[E2EE] decryptMedia: No keys found at ${endpoint}`);
-            continue;
-          }
-
-          console.log(`[E2EE] decryptMedia: Fetched ${keys.length} keys from ${endpoint}`);
-
-          for (const row of keys) {
-            if (!row.encryptedKey) {
-              console.warn("[E2EE] decryptMedia: Skipping row with no encryptedKey");
-              continue;
-            }
-
-            console.log(`[E2EE] decryptMedia: Trying key row: userId=${row.userId?.slice(0,8)}, deviceId=${row.deviceId?.slice(0,8)}, keyVersion=${row.keyVersion}, encryptedKey len=${row.encryptedKey?.length}`);
-
-            try {
-              const key = await decryptKeyFromSender(row.encryptedKey, keyPairRef.current.privateKey);
-              console.log("[E2EE] decryptMedia: Successfully decrypted conversation key from row, attempting to unwrap media key");
-              try {
-                return await decryptWith(await unwrapMediaKey(key));
-              } catch (unwrapErr) {
-                console.warn("[E2EE] decryptMedia: Conversation key decrypted but failed to unwrap media key:", unwrapErr);
-              }
-            } catch (e) {
-              console.warn("[E2EE] decryptMedia: Failed to decrypt conversation key from row:", e);
-            }
-          }
-        } catch (e) {
-          clearTimeout(timeoutId);
-          console.error(`[E2EE] decryptMedia: Fetch error for ${endpoint}:`, e);
-        }
-      }
-
-      console.error("[E2EE] decryptMedia: No available key could decrypt this attachment");
-      throw new Error("No available key could decrypt this attachment");
-    },
-    [],
-  );
+  /** The wrapped file key uses the same recovery path as text messages. */
+  const decryptMedia = useCallback(async (
+    encryptedBytesB64: string, wrappedKeyB64: string, conversationId: string,
+  ): Promise<ArrayBuffer> => {
+    if (atob(encryptedBytesB64).length < 28) throw new Error("media_download_incomplete");
+    const mediaKey = await importSymmetricKey(await decrypt(wrappedKeyB64, conversationId));
+    return decryptBytes(encryptedBytesB64, mediaKey);
+  }, [decrypt]);
 
   return {
     ...state,

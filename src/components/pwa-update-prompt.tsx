@@ -14,7 +14,9 @@ export function PwaUpdatePrompt() {
   useEffect(() => {
     if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
 
+    let hadController = Boolean(navigator.serviceWorker.controller);
     function onControllerChange() {
+      if (!hadController) { hadController = true; return; }
       // A new SW took control — prompt reload
       if (document.visibilityState === "visible") {
         setWaiting(true);

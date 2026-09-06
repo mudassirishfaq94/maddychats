@@ -18,7 +18,8 @@ function load(file, dependencies) {
   const ciphertext = await crypto.encryptBytes(bytes, mediaKey);
   const wrapped = await crypto.encryptMessage(await crypto.exportSymmetricKey(mediaKey), senderKey);
   const keys = new Map([['chat', staleKey]]);
-  const refs = [{ current: pair }, { current: keys }];
+  const receiveKeys = new Map();
+  const refs = [{ current: pair }, { current: keys }, {current: receiveKeys}];
   const react = { useCallback: (fn) => fn, useEffect: () => {}, useRef: () => refs.shift(), useState: (value) => [value, () => {}] };
   const hook = load('src/hooks/use-e2ee.ts', { react, '@/lib/crypto': crypto }).useE2EE('receiver');
   const wrong = await crypto.encryptKeyForUser(staleKey, pair.publicKey);
@@ -26,10 +27,12 @@ function load(file, dependencies) {
   globalThis.fetch = async () => ({ ok: true, json: async () => ({ keys: [{ encryptedKey: wrong }, { encryptedKey: correct }] }) });
   assert.equal(new TextDecoder().decode(await hook.decryptMedia(ciphertext, wrapped, 'chat')), 'image bytes regression');
   assert.equal(keys.get('chat'), staleKey, 'receiving must preserve the sending key');
+  receiveKeys.clear();
   globalThis.fetch = async (url) => ({ ok: true, json: async () => url.includes('history') ? { history: [{ encryptedKey: correct }] } : { keys: [] } });
   assert.equal(new TextDecoder().decode(await hook.decryptMedia(ciphertext, wrapped, 'chat')), 'image bytes regression');
+  receiveKeys.clear();
   globalThis.fetch = async () => ({ ok: true, json: async () => ({ keys: [] }) });
-  await assert.rejects(hook.decryptMedia(ciphertext, wrapped, 'chat'), /No available key/);
+  await assert.rejects(hook.decryptMedia(ciphertext, wrapped, 'chat'), /key is not available/);
   assert.equal(keys.get('chat'), staleKey);
   // Exercise the actual attachment hook without a DOM renderer.
   let context;

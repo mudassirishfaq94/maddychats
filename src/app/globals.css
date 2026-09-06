@@ -447,3 +447,6 @@ html.light .chat-message-area {
 .typing-dot {
   animation: typingBounce 1.2s ease-in-out infinite;
 }
+
+/* Composer uses its existing surface; no extra focus rectangle. */
+.chat-composer:focus, .chat-composer:focus-visible { outline: none; box-shadow: none; border: 0; }

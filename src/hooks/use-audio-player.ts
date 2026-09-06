@@ -73,6 +73,7 @@ export function useVoicePlayback(voiceId: string, src: string) {
 
   // Create audio element once
   useEffect(() => {
+    if (!src) return;
     const controller = new AbortController();
     let decodedDurationResolved = false;
     const audio = new Audio();
@@ -103,7 +104,7 @@ export function useVoicePlayback(voiceId: string, src: string) {
       audio.currentTime = 0;
       clearCurrentAudio(audio);
     };
-    const onLoadedData = () => setLoading(false);
+    const onLoadedData = () => { setError(false); setLoading(false); };
     const onError = () => {
       setError(true);
       setLoading(false);

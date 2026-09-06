@@ -56,6 +56,7 @@ import {
   AttachmentPreviews,
   useAttachmentUpload,
 } from "./attachment-composer";
+import { emojiOnlyCount } from "@/lib/emoji";
 import { cn, formatDate, timeAgo, initials, avatarHue } from "@/lib/utils";
 import { CHAT_BACKGROUNDS, chatBubbleTheme, isBackgroundImage } from "@/lib/chat-backgrounds";
 import { getPattern } from "@/lib/chat-patterns";
@@ -68,7 +69,7 @@ import { MobileMessageMenu } from "./mobile-message-menu";
 import { ForwardDialog } from "./forward-dialog";
 const ReportDialog = dynamic(() => import("@/components/profile/report-dialog").then((module) => module.ReportDialog));
 import { E2EEMediaProvider } from "./e2ee-context";
-import { useE2EE } from "@/hooks/use-e2ee";
+import { useSharedE2EE } from "@/components/providers/e2ee-provider";
 import {
   encryptBytes,
   exportSymmetricKey,
@@ -186,7 +187,7 @@ export function ChatView({
 
   /* --------------------------- end-to-end encryption ---------------------- */
 
-  const e2ee = useE2EE(me.id);
+  const e2ee = useSharedE2EE();
   const [e2eeState, setE2eeState] = useState<{
     ready: boolean;
     fingerprint: string | null;
@@ -198,7 +199,7 @@ export function ChatView({
   const [showEncryptionInfo, setShowEncryptionInfo] = useState(false);
   const [decryptedTexts, setDecryptedTexts] = useState<Map<string, string>>(new Map());
   const [decryptedReplies, setDecryptedReplies] = useState<Map<string, string>>(new Map());
-  const { prepareConversation, rotateConversationKey, decrypt } = e2ee;
+  const { prepareConversation, decrypt } = e2ee;
 
   // On open: fetch-or-create the conversation key, share it with every peer
   // device, and learn whether this chat can actually be E2EE right now.
@@ -236,12 +237,6 @@ export function ChatView({
             needsRotation = rotData.needsRotation ?? false;
             keyVersion = rotData.keyVersion ?? 1;
 
-            // Auto-rotate if needed
-            if (needsRotation && rotateConversationKey) {
-              await rotateConversationKey(conversationId);
-              needsRotation = false;
-              keyVersion++;
-            }
           }
         } catch {
           // Rotation check is best-effort
@@ -258,7 +253,7 @@ export function ChatView({
     return () => {
       alive = false;
     };
-  }, [e2ee.initialized, e2ee.loading, conversationId, prepareConversation, rotateConversationKey]);
+  }, [e2ee.initialized, e2ee.loading, conversationId, prepareConversation]);
 
   // Decrypt any encrypted message text (initial history, older pages, and
   // realtime arrivals all flow through `items`).
@@ -574,6 +569,10 @@ export function ChatView({
           void markRead();
         }
       } else {
+        if (event.type === "message:update") {
+          setDecryptedTexts(previous => { const next = new Map(previous); next.delete(msg.id); return next; });
+          failedDecryptionRef.current.delete(msg.id);
+        }
         setItems((prev) => prev.map((m) => (m.id === msg.id ? msg : m)));
       }
     });
@@ -948,13 +947,15 @@ export function ChatView({
   async function saveEdit(id: string) {
     const text = editDraft.trim();
     if (!text) return;
+    const willEncrypt = canEncrypt || Boolean(items.find(message => message.id === id)?.encrypted);
+    if (willEncrypt && !e2ee.initialized) { setError("Please wait for messages to finish loading."); return; }
     setBusyId(id);
     setError(null);
     try {
       const res = await fetch(`/api/messages/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ text: willEncrypt ? await e2ee.encrypt(text, conversationId) : text, encrypted: willEncrypt }),
       });
       const data = (await res.json().catch(() => null)) as {
         message?: MessageDTO;
@@ -965,6 +966,7 @@ export function ChatView({
         return;
       }
       const updated = data.message;
+      if (updated.encrypted) setDecryptedTexts(prev => new Map(prev).set(id, text));
       setItems((prev) => prev.map((m) => (m.id === id ? updated : m)));
       setEditingId(null);
     } catch {
@@ -1672,7 +1674,7 @@ export function ChatView({
                                         ) : msg.replyTo.encrypted && decryptedReplies.get(msg.replyTo.id) === undefined ? (
                                           <span className="flex items-center gap-1 opacity-70">
                                             <Lock className="inline h-3 w-3" />
-                                            Decrypting…
+                                            …
                                           </span>
                                         ) : (
                                           <>
@@ -1716,10 +1718,7 @@ export function ChatView({
                                   </div>
                                 ) : null}
                                 {msg.encrypted && isPendingDecrypt(msg) ? (
-                                  <span className="flex items-center gap-1.5 text-[0.8rem] opacity-80">
-                                    <Lock className="h-3 w-3" />
-                                    {e2ee.error ? "Unable to decrypt on this device. Reload to try again." : "Decrypting securely…"}
-                                  </span>
+                                  <span role="status" aria-label="Loading message" className="block h-4 w-24 animate-pulse rounded bg-current opacity-15" />
                                 ) : textOf(msg) ? (
                                   (() => {
                                     const parsed = parseStatusReply(textOf(msg));
@@ -1774,7 +1773,7 @@ export function ChatView({
                                       );
                                     }
                                     return (
-                                      <p className="whitespace-pre-wrap break-words text-[0.9rem] leading-relaxed">
+                                      <p className={cn("whitespace-pre-wrap break-words", emojiOnlyCount(textOf(msg)) === 1 ? "text-[3.5rem] leading-tight py-1" : emojiOnlyCount(textOf(msg)) ? "text-[2.5rem] leading-tight py-1" : "text-[0.9rem] leading-relaxed")}>
                                         {textOf(msg)}
                                       </p>
                                     );
@@ -2106,7 +2105,7 @@ export function ChatView({
                 aria-label="Message text"
                 rows={1}
                 maxLength={2000}
-                className="w-full resize-none bg-transparent py-2.5 text-[0.93rem] outline-none placeholder:text-[color-mix(in_srgb,var(--muted)_60%,transparent)]"
+                className="chat-composer w-full resize-none border-0 bg-transparent py-2.5 text-[0.93rem] outline-none placeholder:text-[color-mix(in_srgb,var(--muted)_60%,transparent)]"
               />
             </div>
             {draft.trim() || attachments.pending.length > 0 ? (
@@ -2218,7 +2217,7 @@ export function ChatView({
       <ForwardDialog
         open={forwardMsg !== null}
         message={forwardMsg}
-        preview={forwardMsg ? (forwardMsg.encrypted ? "Encrypted message" : forwardMsg.text) : ""}
+        preview={forwardMsg ? copyableText(forwardMsg) : ""}
         onClose={() => setForwardMsg(null)}
         onForward={forwardMessage}
       />

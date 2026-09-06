@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Check, Loader2, Lock, ShieldCheck, Smartphone } from "lucide-react";
-import { useE2EE } from "@/hooks/use-e2ee";
+import { useSharedE2EE } from "@/components/providers/e2ee-provider";
 
 interface DeviceKey {
   id: string;
@@ -17,7 +17,7 @@ interface DeviceKey {
  * sure THIS device has registered its encryption key.
  */
 export function E2EEStatus({ userId }: { userId: string }) {
-  const e2ee = useE2EE(userId);
+  const e2ee = useSharedE2EE();
   const [devices, setDevices] = useState<DeviceKey[] | null>(null);
 
   useEffect(() => {

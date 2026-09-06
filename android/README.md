@@ -19,7 +19,7 @@ The app is a **Capacitor WebView** that loads `https://ziptalks.vercel.app` — 
 | **App lifecycle** | `@capacitor/app` |
 | **Deep links** | `ziptalks://` and `https://ziptalks.vercel.app` intent filters |
 
-All chat logic, E2EE, Socket.IO, database, and authentication remain on the server — this is a thin native shell.
+The native shell loads the hosted application. Encryption and decryption run locally in the WebView; the server stores ciphertext and handles authentication, message persistence and realtime delivery.
 
 ## Prerequisites
 
@@ -178,3 +178,10 @@ android/
 ├── build-debug.bat           # Build script (Windows)
 └── README.md                 # This file
 ```
+
+
+## Updates without reinstalling
+
+The existing APK loads `https://ziptalks.vercel.app` from `capacitor.config.ts`. Deployed web UI and server fixes appear on the next app launch/reload without reinstalling. The hosted app checks `/api/app-version` every minute and when returning to the foreground, then reloads when idle. Drafts, dialogs, recording, pending sends and voice playback defer automatic reloads. It never clears local storage or encryption keys.
+
+A change to the native shell, Android manifest, native plugins, Firebase configuration or signing still requires an APK update (installed over the existing app with the same package and signing key, not uninstall/reinstall). An already-running old web version needs one reopen/reload to pick up the new version checker.

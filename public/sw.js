@@ -1,11 +1,31 @@
-const CACHE_NAME = "maddychats-v1";
+const CACHE_NAME = "ziptalk-offline-v1";
+const OFFLINE_URL = "/offline.html";
 
 self.addEventListener("install", (event) => {
+  event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.add(OFFLINE_URL)));
   self.skipWaiting();
 });
 
 self.addEventListener("activate", (event) => {
-  event.waitUntil(clients.claim());
+  event.waitUntil(Promise.all([
+    clients.claim(),
+    caches.keys().then(keys => Promise.all(keys
+      .filter(key => key.startsWith("ziptalk-offline-") && key !== CACHE_NAME)
+      .map(key => caches.delete(key)))),
+  ]));
+});
+
+// Cache only the public offline screen. Chats, API responses, decrypted
+// media, and authenticated HTML must never enter the service-worker cache.
+self.addEventListener("fetch", (event) => {
+  if (event.request.mode !== "navigate" || event.request.method !== "GET") return;
+  if (new URL(event.request.url).origin !== self.location.origin) return;
+  event.respondWith(fetch(event.request).catch(async () => {
+    const fallback = await caches.match(OFFLINE_URL);
+    return fallback || new Response("You are offline. Reconnect and reload ZipTalk.", {
+      status: 503, headers: { "Content-Type": "text/plain; charset=utf-8" },
+    });
+  }));
 });
 
 self.addEventListener("message", (event) => {

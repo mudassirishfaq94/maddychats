@@ -70,10 +70,11 @@ export async function GET(req: NextRequest) {
 
   // Combine and deduplicate
   const allKeys = [...historicalKeys, ...historyKeys];
-  const uniqueKeys = new Map<number, typeof allKeys[0]>();
+  const uniqueKeys = new Map<string, typeof allKeys[0]>();
   for (const key of allKeys) {
-    if (!uniqueKeys.has(key.keyVersion)) {
-      uniqueKeys.set(key.keyVersion, key);
+    const identity = `${key.deviceId}:${key.keyVersion}:${key.encryptedKey}`;
+    if (!uniqueKeys.has(identity)) {
+      uniqueKeys.set(identity, key);
     }
   }
 

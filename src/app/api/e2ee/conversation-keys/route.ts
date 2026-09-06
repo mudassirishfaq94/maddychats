@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { e2eeConversationKeys, e2eeKeys } from "@/db/schema";
+import { e2eeConversationKeys, e2eeKeyHistory, e2eeKeys } from "@/db/schema";
 import { getSessionUser } from "@/server/session";
 import { getMembership } from "@/server/chat";
 import { guardSameOrigin, jsonError, readJson } from "@/server/http";
@@ -85,63 +85,36 @@ export async function POST(req: NextRequest) {
 
   if (!targetKey) return jsonError(404, "Target user has no registered device key.");
 
-  // Determine the new key version
-  const [latestKey] = await db
-    .select({ keyVersion: e2eeConversationKeys.keyVersion })
-    .from(e2eeConversationKeys)
-    .where(
-      and(
-        eq(e2eeConversationKeys.conversationId, conversationId),
-        eq(e2eeConversationKeys.userId, targetUserId),
-        eq(e2eeConversationKeys.deviceId, deviceId),
-      ),
-    )
-    .orderBy(desc(e2eeConversationKeys.keyVersion))
-    .limit(1);
+  const targetMembership = await getMembership(conversationId, targetUserId);
+  if (!targetMembership) return jsonError(404, "Target is not in this conversation.");
 
-  const newVersion = latestKey ? latestKey.keyVersion + 1 : 1;
-
-  // Mark all previous keys for this device as inactive (rotation)
-  await db
-    .update(e2eeConversationKeys)
-    .set({ isActive: false })
-    .where(
-      and(
-        eq(e2eeConversationKeys.conversationId, conversationId),
-        eq(e2eeConversationKeys.userId, targetUserId),
-        eq(e2eeConversationKeys.deviceId, deviceId),
-      ),
-    );
-
-  // Upsert the new active key
-  const [existing] = await db
-    .select({ id: e2eeConversationKeys.id })
-    .from(e2eeConversationKeys)
-    .where(
-      and(
-        eq(e2eeConversationKeys.conversationId, conversationId),
-        eq(e2eeConversationKeys.userId, targetUserId),
-        eq(e2eeConversationKeys.deviceId, deviceId),
-        eq(e2eeConversationKeys.keyVersion, newVersion),
-      ),
-    )
-    .limit(1);
-
-  if (existing) {
-    await db
-      .update(e2eeConversationKeys)
-      .set({ encryptedKey, isActive: true, rotatedAt: new Date() })
-      .where(eq(e2eeConversationKeys.id, existing.id));
-  } else {
-    await db.insert(e2eeConversationKeys).values({
-      conversationId,
-      userId: targetUserId,
-      encryptedKey,
-      deviceId,
-      keyVersion: newVersion,
-      isActive: true,
-    });
-  }
+  // The schema permits one active row per sender device and recipient user.
+  // Serialize replacement and preserve the old share before updating it.
+  const newVersion = await db.transaction(async tx => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${conversationId}:${targetUserId}:${deviceId}`}, 0))`);
+    const [existing] = await tx.select().from(e2eeConversationKeys).where(and(
+      eq(e2eeConversationKeys.conversationId, conversationId),
+      eq(e2eeConversationKeys.userId, targetUserId),
+      eq(e2eeConversationKeys.deviceId, deviceId),
+    )).limit(1);
+    if (existing?.encryptedKey === encryptedKey) return existing.keyVersion;
+    const version = (existing?.keyVersion ?? 0) + 1;
+    if (existing) {
+      await tx.insert(e2eeKeyHistory).values({
+        conversationId, userId: targetUserId, deviceId,
+        encryptedKey: existing.encryptedKey, keyVersion: existing.keyVersion,
+      }).onConflictDoNothing();
+      await tx.update(e2eeConversationKeys).set({
+        encryptedKey, keyVersion: version, isActive: true, rotatedAt: new Date(),
+      }).where(eq(e2eeConversationKeys.id, existing.id));
+    } else {
+      await tx.insert(e2eeConversationKeys).values({
+        conversationId, userId: targetUserId, deviceId,
+        encryptedKey, keyVersion: version, isActive: true,
+      });
+    }
+    return version;
+  });
 
   return NextResponse.json({ success: true, keyVersion: newVersion });
 }

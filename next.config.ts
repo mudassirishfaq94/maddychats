@@ -16,6 +16,7 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  env: { NEXT_PUBLIC_APP_VERSION: process.env.VERCEL_GIT_COMMIT_SHA ?? process.env.APP_VERSION ?? "development" },
   // Keep Turbopack scoped to this repository when a parent directory also
   // contains a lockfile (common in local preview workspaces).
   turbopack: {
