@@ -451,27 +451,64 @@ export function useE2EE(userId: string | undefined) {
         decryptBytes(encryptedBytesB64, mediaKey);
 
       // Receiving media must never generate or replace the sending key.
-      if (!keyPairRef.current) throw new Error("Device keys are not ready");
+      if (!keyPairRef.current) {
+        console.error("[E2EE] decryptMedia: Device keys not ready (keyPairRef is null)");
+        throw new Error("Device keys are not ready");
+      }
+
       const cached = conversationKeysRef.current.get(conversationId);
       if (cached) {
         try {
           return await decryptWith(await unwrapMediaKey(cached));
-        } catch { /* Try every shared key, including other senders/devices. */ }
-      }
-      for (const endpoint of ["conversation-keys", "key-rotation/history"]) {
-        const res = await fetch(`/api/e2ee/${endpoint}?conversationId=${encodeURIComponent(conversationId)}`, {
-          signal: AbortSignal.timeout(10000),
-          cache: "no-store",
-        });
-        if (!res.ok) continue;
-        const data = await res.json();
-        for (const row of data.keys ?? data.history ?? []) {
-          try {
-            const key = await decryptKeyFromSender(row.encryptedKey, keyPairRef.current.privateKey);
-            return await decryptWith(await unwrapMediaKey(key));
-          } catch { /* A key for another device or message; keep looking. */ }
+        } catch (e) {
+          console.warn("[E2EE] decryptMedia: Cached key decryption failed, trying shared keys");
         }
       }
+
+      for (const endpoint of ["conversation-keys", "key-rotation/history"]) {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+        try {
+          const res = await fetch(`/api/e2ee/${endpoint}?conversationId=${encodeURIComponent(conversationId)}`, {
+            signal: controller.signal,
+            cache: "no-store",
+          });
+          clearTimeout(timeoutId);
+
+          if (!res.ok) {
+            console.warn(`[E2EE] decryptMedia: ${endpoint} returned ${res.status}`);
+            continue;
+          }
+
+          const data = await res.json();
+          const keys = data.keys ?? data.history ?? [];
+
+          if (keys.length === 0) {
+            console.warn(`[E2EE] decryptMedia: No keys found at ${endpoint}`);
+            continue;
+          }
+
+          for (const row of keys) {
+            if (!row.encryptedKey) {
+              console.warn("[E2EE] decryptMedia: Skipping row with no encryptedKey");
+              continue;
+            }
+
+            try {
+              const key = await decryptKeyFromSender(row.encryptedKey, keyPairRef.current.privateKey);
+              return await decryptWith(await unwrapMediaKey(key));
+            } catch (e) {
+              console.warn("[E2EE] decryptMedia: Key decryption failed for one key, trying next");
+            }
+          }
+        } catch (e) {
+          clearTimeout(timeoutId);
+          console.error(`[E2EE] decryptMedia: Fetch error for ${endpoint}:`, e);
+        }
+      }
+
+      console.error("[E2EE] decryptMedia: No available key could decrypt this attachment");
       throw new Error("No available key could decrypt this attachment");
     },
     [],

@@ -94,58 +94,107 @@ export function useEncryptedAttachmentUrl(
 
   useEffect(() => {
     const { id, url, encrypted, encKey, mimeType, ctx } = request;
-    if (!id || !url || !encrypted || !encKey || !ctx?.initialized || ctx.initializationError) return;
-    if (objectUrlCache.has(id)) return;
+
+    if (!id || !url || !encrypted || !encKey) {
+      return;
+    }
+
+    if (!ctx) {
+      console.error("[E2EE] No E2EE context - E2EE provider may not be mounted");
+      setState({ request, url: null, failed: true });
+      return;
+    }
+
+    if (ctx.initializationError) {
+      console.error("[E2EE] Context initialization error:", ctx.initializationError);
+      setState({ request, url: null, failed: true });
+      return;
+    }
+
+    if (!ctx.initialized) {
+      return;
+    }
+
+    if (objectUrlCache.has(id)) {
+      return;
+    }
+
     const attachment = { id, url, encKey, mimeType };
     let cancelled = false;
     const controller = new AbortController();
 
+    const timeoutId = typeof window !== "undefined"
+      ? window.setTimeout(() => controller.abort(), 15000)
+      : null;
+
     (async () => {
       try {
         let plain: ArrayBuffer | undefined;
+        let lastError: Error | undefined;
+
         for (let attempt = 0; attempt < 3; attempt++) {
+          if (cancelled) return;
+
           try {
             const res = await fetch(attachment.url, {
               cache: "no-store",
-              signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15000)]),
+              signal: controller.signal,
             });
-            if (!res.ok) throw new Error("fetch_failed");
+
+            if (!res.ok) {
+              throw new Error(`fetch_failed: ${res.status} ${res.statusText}`);
+            }
+
             const ciphertext = await res.arrayBuffer();
             plain = await ctx.decryptMedia(
               bufferToBase64(ciphertext), attachment.encKey!, ctx.conversationId,
             );
             break;
           } catch (error) {
-            if (cancelled || attempt === 2) throw error;
-            await new Promise((resolve) => setTimeout(resolve, 1500));
+            lastError = error as Error;
             if (cancelled) return;
+
+            if (attempt < 2) {
+              await new Promise((resolve) => setTimeout(resolve, 1500));
+            }
           }
         }
-        if (!plain) throw new Error("decrypt_failed");
+
         if (cancelled) return;
+
+        if (!plain) {
+          console.error("[E2EE] Decryption failed: no plaintext result after retries", lastError);
+          setState({ request, url: null, failed: true });
+          return;
+        }
+
         const objectUrl = URL.createObjectURL(
           new Blob([plain], { type: attachment.mimeType || "application/octet-stream" }),
         );
         objectUrlCache.set(attachment.id, objectUrl);
         setState({ request, url: objectUrl, failed: false });
-      } catch {
+      } catch (error) {
+        console.error("[E2EE] Decryption error:", error);
         if (!cancelled) setState({ request, url: null, failed: true });
+      } finally {
+        if (timeoutId) window.clearTimeout(timeoutId);
       }
     })();
 
     return () => {
       cancelled = true;
       controller.abort();
+      if (timeoutId) window.clearTimeout(timeoutId);
     };
   }, [request]);
 
   if (!id) return { url: null, failed: false };
   if (!encrypted) return { url: url ?? null, failed: false };
   if (!ctx || !encKey || ctx.initializationError) return { url: null, failed: true };
-  if (!ctx.initialized) return { url: null, failed: false };
+  if (!ctx.initialized) return { url: null, failed: true };
   const cached = objectUrlCache.get(id);
   if (cached) return { url: cached, failed: false };
-  return state.request === request ? state : { url: null, failed: false };
+  return state.request === request ? state : { url: null, failed: true };
 }
 
 /** Picks a context-provided decrypt function from any provider above. */
