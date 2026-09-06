@@ -11,9 +11,20 @@ import { formatDate } from "@/lib/utils";
  * Message search across every conversation the user belongs to.
  * Selecting a hit opens that conversation and locates the message.
  */
-export function MessageSearch() {
+export function MessageSearch({
+  open: controlledOpen,
+  onOpenChange,
+}: {
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+} = {}) {
   const router = useRouter();
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = controlledOpen ?? internalOpen;
+  const setOpen = (value: boolean) => {
+    if (controlledOpen === undefined) setInternalOpen(value);
+    onOpenChange?.(value);
+  };
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchHit[]>([]);
   const [loading, setLoading] = useState(false);
@@ -86,15 +97,17 @@ export function MessageSearch() {
 
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        aria-label="Search messages"
-        title="Search messages"
-        className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full border border-[var(--border)] text-[var(--muted)] transition-all hover:border-[var(--border-strong)] hover:text-[var(--text)]"
-      >
-        <Search className="h-4 w-4" />
-      </button>
+      {controlledOpen === undefined ? (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          aria-label="Search messages"
+          title="Search messages"
+          className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full border border-[var(--border)] text-[var(--muted)] transition-all hover:border-[var(--border-strong)] hover:text-[var(--text)]"
+        >
+          <Search className="h-4 w-4" />
+        </button>
+      ) : null}
 
       {open ? (
         <div

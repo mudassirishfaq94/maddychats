@@ -21,7 +21,6 @@ import {
   Check,
   CheckCheck,
   ChevronLeft,
-  Info,
   Loader2,
   Lock,
   Mic,
@@ -49,6 +48,7 @@ import { Avatar } from "@/components/avatar";
 import { useRealtime } from "@/components/providers/realtime-provider";
 import { MessageActions } from "./message-actions";
 import { MessageSearch } from "./message-search";
+import { ChatActionsMenu } from "./chat-actions-menu";
 import { AttachmentList } from "./attachments";
 const ConversationDetails = dynamic(() => import("./conversation-details").then((module) => module.ConversationDetails));
 import {
@@ -178,6 +178,8 @@ export function ChatView({
   const [pinnedCount, setPinnedCount] = useState(0);
   const [dragging, setDragging] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
+  const [showHeaderSearch, setShowHeaderSearch] = useState(false);
+  const [reportChat, setReportChat] = useState(false);
   const [galleryRevision, setGalleryRevision] = useState(0);
   const [otherTyping, setOtherTyping] = useState(false);
   const [requestAccepted, setRequestAccepted] = useState(!conversation.requestPending);
@@ -1249,7 +1251,7 @@ export function ChatView({
           </div>
         )}
 
-        <MessageSearch />
+        <MessageSearch open={showHeaderSearch} onOpenChange={setShowHeaderSearch} />
 
         <button
           type="button"
@@ -1287,19 +1289,14 @@ export function ChatView({
           </span>
         </button>
 
-        <button
-          type="button"
-          onClick={() => setShowDetails((v) => !v)}
-          aria-label="Chat details"
-          className={cn(
-            "flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full transition-colors",
-            showDetails
-              ? "bg-[var(--accent-soft)] text-[var(--accent-fg)]"
-              : "text-[var(--muted)] hover:bg-[color-mix(in_srgb,var(--muted)_12%,transparent)] hover:text-[var(--text)]",
-          )}
-        >
-          <Info className="h-5 w-5" />
-        </button>
+        <ChatActionsMenu
+          conversationId={conversationId}
+          conversation={conversation}
+          other={other}
+          onOpenInfo={() => setShowDetails(true)}
+          onOpenSearch={() => setShowHeaderSearch(true)}
+          onReport={() => setReportChat(true)}
+        />
 
       </header>
 
@@ -2236,6 +2233,15 @@ export function ChatView({
           targetUserId={reportMsg.senderId}
           targetName={reportMsg.sender.displayName}
           onClose={() => setReportMsg(null)}
+        />
+      ) : null}
+
+      {reportChat && other ? (
+        <ReportDialog
+          type="user"
+          targetUserId={other.id}
+          targetName={other.displayName}
+          onClose={() => setReportChat(false)}
         />
       ) : null}
 
