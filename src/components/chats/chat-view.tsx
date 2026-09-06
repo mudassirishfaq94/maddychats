@@ -348,7 +348,7 @@ export function ChatView({
   /** Encrypt a pending file into a ciphertext blob + conversation-wrapped key. */
   const encryptPendingFile = useCallback(
     async (file: File) => {
-      const { key: conversationKey } = await e2ee.getConversationKey(conversationId);
+      const { key: conversationKey } = await e2ee.getConversationKey(conversationId, { waitForPeer: true });
       const mediaKey = await generateConversationKey();
       const mediaKeyB64 = await exportSymmetricKey(mediaKey);
       const cipherB64 = await encryptBytes(await file.arrayBuffer(), mediaKey);
