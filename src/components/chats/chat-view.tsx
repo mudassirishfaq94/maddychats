@@ -10,6 +10,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { useRouter, useSearchParams } from "next/navigation";
 import type * as React from "react";
 import {
@@ -49,7 +50,7 @@ import { useRealtime } from "@/components/providers/realtime-provider";
 import { MessageActions } from "./message-actions";
 import { MessageSearch } from "./message-search";
 import { AttachmentList } from "./attachments";
-import { ConversationDetails } from "./conversation-details";
+const ConversationDetails = dynamic(() => import("./conversation-details").then((module) => module.ConversationDetails));
 import {
   AttachButton,
   AttachmentPreviews,
@@ -58,14 +59,14 @@ import {
 import { cn, formatDate, timeAgo, initials, avatarHue } from "@/lib/utils";
 import { CHAT_BACKGROUNDS, chatBubbleTheme, isBackgroundImage } from "@/lib/chat-backgrounds";
 import { getPattern } from "@/lib/chat-patterns";
-import { EmojiPicker } from "./emoji-picker";
+const EmojiPicker = dynamic(() => import("./emoji-picker").then((module) => module.EmojiPicker));
 import { AudioMessage } from "./audio-message";
 import { RecordingWaveform } from "./waveform";
 import { useVoiceRecorder } from "@/hooks/use-voice-recorder";
 import { LongPressTouchable } from "./long-press-touchable";
 import { MobileMessageMenu } from "./mobile-message-menu";
 import { ForwardDialog } from "./forward-dialog";
-import { ReportDialog } from "@/components/profile/report-dialog";
+const ReportDialog = dynamic(() => import("@/components/profile/report-dialog").then((module) => module.ReportDialog));
 import { E2EEMediaProvider } from "./e2ee-context";
 import { useE2EE } from "@/hooks/use-e2ee";
 import {
@@ -718,7 +719,6 @@ export function ChatView({
       setReplyTo(null);
       nearBottomRef.current = true;
       scrollToBottom(true);
-      router.refresh();
       return;
     }
 
@@ -749,6 +749,7 @@ export function ChatView({
         return;
       }
       const created = data.message;
+      if (willEncrypt) setDecryptedTexts((prev) => new Map(prev).set(created.id, text));
       setItems((prev) =>
         prev.some((m) => m.id === created.id) ? prev : [...prev, created],
       );

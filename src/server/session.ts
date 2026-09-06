@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { cookies } from "next/headers";
 import {
   SESSION_COOKIE,
@@ -48,7 +49,9 @@ export async function createSessionToken(
  * Returns null when unauthenticated or when the token no longer maps to a
  * user (e.g. account deleted).
  */
-export async function getSessionUser(): Promise<SafeUser | null> {
+// Request-scoped only: layouts and pages share one lookup, with no session
+// or revocation state cached across requests or users.
+export const getSessionUser = cache(async (): Promise<SafeUser | null> => {
   const store = await cookies();
   const token = store.get(SESSION_COOKIE)?.value;
   if (!token) return null;
@@ -66,7 +69,7 @@ export async function getSessionUser(): Promise<SafeUser | null> {
     return null;
   }
   return toSafeUser(user);
-}
+});
 
 /**
  * Like getSessionUser but also refreshes `lastSeenAt` when it is stale

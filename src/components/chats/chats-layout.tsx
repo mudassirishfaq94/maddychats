@@ -54,12 +54,17 @@ function stampTime(iso: string | null): string {
  * Full height underneath the app header — no cards, no dashboard chrome.
  */
 export function ChatsLayout({
-  conversations,
+  conversations: initialConversations,
   children,
 }: {
   conversations: ConversationSummary[];
   children: ReactNode;
 }) {
+  const [liveList, setLiveList] = useState<{
+    source: ConversationSummary[]; items: ConversationSummary[];
+  } | null>(null);
+  const conversations = liveList?.source === initialConversations
+    ? liveList.items : initialConversations;
   const pathname = usePathname();
   const router = useRouter();
   const { subscribe, presence } = useRealtime();
@@ -73,7 +78,9 @@ export function ChatsLayout({
   // Live activity → debounced server refresh keeps previews ordered & fresh.
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
-    return subscribe((event) => {
+    let controller: AbortController | null = null;
+    let needsPageRefresh = false;
+    const unsubscribe = subscribe((event) => {
       // Presence and typing already update through client state; refreshing
       // server components for those high-frequency events caused avoidable
       // network traffic and renders. Revalidate only persisted sidebar data.
@@ -87,10 +94,31 @@ export function ChatsLayout({
       ) {
         return;
       }
+      needsPageRefresh ||= event.type === "conversation:new" || event.type === "conversation:delete";
       if (refreshTimer.current) clearTimeout(refreshTimer.current);
-      refreshTimer.current = setTimeout(() => router.refresh(), 350);
+      refreshTimer.current = setTimeout(() => {
+        if (needsPageRefresh) {
+          needsPageRefresh = false;
+          router.refresh();
+          return;
+        }
+        controller?.abort();
+        controller = new AbortController();
+        const signal = controller.signal;
+        void fetch("/api/conversations", { cache: "no-store", signal })
+          .then((response) => response.ok ? response.json() : null)
+          .then((data: { conversations?: ConversationSummary[] } | null) => {
+            if (!signal.aborted && data?.conversations) setLiveList({ source: initialConversations, items: data.conversations });
+          })
+          .catch(() => undefined);
+      }, 350);
     });
-  }, [subscribe, router]);
+    return () => {
+      unsubscribe();
+      controller?.abort();
+      if (refreshTimer.current) clearTimeout(refreshTimer.current);
+    };
+  }, [subscribe, router, initialConversations]);
 
   useEffect(() => {
     return () => {

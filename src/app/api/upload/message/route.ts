@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { after, NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { conversations, messageAttachments, messages } from "@/db/schema";
 import { AUTH_RATE_LIMIT, rateLimit } from "@/server/rate-limit";
@@ -10,7 +10,7 @@ import {
 } from "@/server/http";
 import { getSessionUser } from "@/server/session";
 import { isUuid } from "@/server/users";
-import { publishToConversation } from "@/server/realtime";
+import { publishToUsers } from "@/server/realtime";
 import { onlineMembersOf } from "@/server/presence";
 import {
   getMembership,
@@ -222,21 +222,23 @@ export async function POST(req: NextRequest) {
     if (online.length > 0) await markMessageDelivered(created.id);
 
     const dto = (await getMessageDTO(created.id, me.id))!;
-    await publishToConversation(conversationId, {
+    await publishToUsers(members, {
       type: "message:new",
       conversationId,
       message: dto,
     });
-    await notifyNewMessage({
-      conversationId,
-      messageId: created.id,
-      actorId: me.id,
-      actorName: me.displayName,
-      preview: isEncrypted
-        ? caption
-          ? "\u{1F512} Encrypted message"
-          : `\u{1F512} ${prepared.length === 1 ? "Encrypted" : "Encrypted"} attachment${prepared.length !== 1 ? "s" : ""}`
-        : caption || `Sent ${prepared.length} attachment(s)`,
+    after(async () => {
+      await notifyNewMessage({
+        conversationId,
+        messageId: created.id,
+        actorId: me.id,
+        actorName: me.displayName,
+        preview: isEncrypted
+          ? caption
+            ? "\u{1F512} Encrypted message"
+            : `\u{1F512} ${prepared.length === 1 ? "Encrypted" : "Encrypted"} attachment${prepared.length !== 1 ? "s" : ""}`
+          : caption || `Sent ${prepared.length} attachment(s)`,
+      });
     });
 
     return NextResponse.json({ message: dto }, { status: 201 });
