@@ -235,8 +235,8 @@ export async function POST(req: NextRequest) {
         actorName: me.displayName,
         preview: isEncrypted
           ? caption
-            ? "\u{1F512} Encrypted message"
-            : `\u{1F512} ${prepared.length === 1 ? "Encrypted" : "Encrypted"} attachment${prepared.length !== 1 ? "s" : ""}`
+            ? "New attachment"
+            : `${prepared.length === 1 ? "Attachment" : "Attachments"}`
           : caption || `Sent ${prepared.length} attachment(s)`,
       });
     });

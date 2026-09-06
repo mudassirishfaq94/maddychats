@@ -181,7 +181,7 @@ export async function POST(
       actorId: me.id,
       actorName: me.displayName,
       preview: isEncrypted
-        ? "\u{1F512} Encrypted message"
+        ? "New message"
         : parsed.data.text,
     });
     if (!isEncrypted) {

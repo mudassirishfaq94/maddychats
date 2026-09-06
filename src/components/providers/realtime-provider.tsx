@@ -31,6 +31,15 @@ interface RealtimeContextValue {
 
 const RealtimeContext = createContext<RealtimeContextValue | null>(null);
 
+function isOpenConversation(conversationId: string): boolean {
+  return Boolean(
+    conversationId &&
+    document.visibilityState === "visible" &&
+    document.hasFocus() &&
+    window.location.pathname === `/app/chats/${conversationId}`,
+  );
+}
+
 /**
  * Opens the Server-Sent Events stream whenever the user is authenticated and
  * fans events out to subscribers. Browser-native auto-reconnect covers
@@ -182,7 +191,14 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
         const actor = String(data?.actorName ?? "Someone");
         const preview = String(data?.preview ?? "New message");
         const conversationId = String(data?.conversationId ?? "");
-        const messageId = String(data?.messageId ?? "");
+        const activeConversation = isOpenConversation(conversationId);
+
+        // The user is already reading this exact chat. Do not add an alert,
+        // play a sound, or leave a notification unread in that situation.
+        if (activeConversation) {
+          void fetch(`/api/notifications/${event.notification.id}/read`, { method: "PATCH" });
+          return;
+        }
 
         if (preferences?.notificationSound) playNotificationSound();
         if (
@@ -192,11 +208,11 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
           Notification.permission === "granted" &&
           (document.visibilityState === "hidden" || !document.hasFocus())
         ) {
-          const title = `${actor} sent a message`;
-          const url = `/app/chats/${conversationId}${messageId ? `?message=${messageId}` : ""}`;
+          const title = actor;
+          const url = `/app/chats/${conversationId}?latest=1`;
           const options: NotificationOptions = {
             body: preview,
-            tag: `maddy-message-${messageId || event.notification.id}`,
+            tag: `maddy-message-${event.notification.id}`,
             icon: "/icons/ziptalk-192.png",
             badge: "/icons/ziptalk-192.png",
             data: { url },

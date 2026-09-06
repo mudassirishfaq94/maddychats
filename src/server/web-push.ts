@@ -125,9 +125,9 @@ export async function sendMessagePush(
   },
 ): Promise<void> {
   const notificationPayload = {
-    title: `${payload.actorName} sent a message`,
+    title: payload.actorName,
     body: payload.preview,
-    url: `/app/chats/${payload.conversationId}`,
+    url: `/app/chats/${payload.conversationId}?latest=1`,
     tag: `message-${payload.messageId}`,
   };
 

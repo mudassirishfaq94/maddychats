@@ -50,23 +50,23 @@ self.addEventListener("push", (event) => {
     data = { body: event.data ? event.data.text() : "" };
   }
 
-  const title = data.title || "New message";
-  const options = {
-    body: data.body || "",
-    tag: data.tag || "message",
-    // Reuse the app icon; badge is the monochrome Android status-bar glyph.
-    icon: data.icon || "/icons/ziptalk-192.png",
-    badge: "/icons/ziptalk-192.png",
-    data: { url: data.url || "/app" },
-    // Android: replace rather than stack per message; keep it after tap.
-    renotify: Boolean(data.tag),
-    requireInteraction: false,
-    vibrate: [100, 50, 100],
-  };
-
-  event.waitUntil(
-    self.registration.showNotification(title, options),
-  );
+  event.waitUntil((async () => {
+    const url = data.url || "/app";
+    const target = new URL(url, self.location.origin);
+    const clients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+    // A visible app already open to the same chat is the notification.
+    if (clients.some((client) => client.visibilityState === "visible" && new URL(client.url).pathname === target.pathname)) return;
+    await self.registration.showNotification(data.title || "New message", {
+      body: data.body || "New message",
+      tag: data.tag || "message",
+      icon: data.icon || "/icons/ziptalk-192.png",
+      badge: "/icons/ziptalk-192.png",
+      data: { url },
+      renotify: Boolean(data.tag),
+      requireInteraction: false,
+      vibrate: [100, 50, 100],
+    });
+  })());
 });
 
 /** Tapping the notification focuses an existing window or opens a new one. */

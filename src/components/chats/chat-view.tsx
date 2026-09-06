@@ -593,6 +593,12 @@ export function ChatView({
     }
   }, [scrollToBottom]);
 
+  // System-notification taps always arrive at the current end of the chat.
+  useEffect(() => {
+    if (searchParams.get("latest") !== "1") return;
+    requestAnimationFrame(() => scrollToBottom(false));
+  }, [items, scrollToBottom, searchParams]);
+
   const lastIdRef = useRef<string | null>(null);
   useEffect(() => {
     const last = items[items.length - 1];

@@ -163,7 +163,7 @@ export function NotificationBell() {
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-xs font-semibold">
-                        {n.type === "message" ? `${actor} sent a message` : "System"}
+                        {n.type === "message" ? actor : "ZipTalk"}
                       </span>
                       <span className="block truncate text-xs text-[var(--muted)]">
                         {preview}

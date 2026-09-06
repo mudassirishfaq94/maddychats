@@ -449,4 +449,4 @@ html.light .chat-message-area {
 }
 
 /* Composer uses its existing surface; no extra focus rectangle. */
-.chat-composer:focus, .chat-composer:focus-visible { outline: none; box-shadow: none; border: 0; }
+.chat-composer:focus, .chat-composer:focus-visible { outline: none !important; box-shadow: none !important; border: 0 !important; }
