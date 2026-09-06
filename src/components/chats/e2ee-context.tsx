@@ -99,25 +99,7 @@ export function useEncryptedAttachmentUrl(
       return;
     }
 
-    if (!ctx) {
-      console.error("[E2EE] No E2EE context - E2EE provider may not be mounted");
-      setState({ request, url: null, failed: true });
-      return;
-    }
-
-    if (ctx.initializationError) {
-      console.error("[E2EE] Context initialization error:", ctx.initializationError);
-      setState({ request, url: null, failed: true });
-      return;
-    }
-
-    if (!ctx.initialized) {
-      return;
-    }
-
-    if (objectUrlCache.has(id)) {
-      return;
-    }
+    if (!ctx?.initialized || ctx.initializationError || objectUrlCache.has(id)) return;
 
     const attachment = { id, url, encKey, mimeType };
     let cancelled = false;
@@ -146,6 +128,9 @@ export function useEncryptedAttachmentUrl(
             }
 
             const ciphertext = await res.arrayBuffer();
+            if (ciphertext.byteLength < 28) {
+              throw new Error(`media_download_incomplete: received ${ciphertext.byteLength} bytes`);
+            }
             plain = await ctx.decryptMedia(
               bufferToBase64(ciphertext), attachment.encKey!, ctx.conversationId,
             );
@@ -191,10 +176,10 @@ export function useEncryptedAttachmentUrl(
   if (!id) return { url: null, failed: false };
   if (!encrypted) return { url: url ?? null, failed: false };
   if (!ctx || !encKey || ctx.initializationError) return { url: null, failed: true };
-  if (!ctx.initialized) return { url: null, failed: true };
+  if (!ctx.initialized) return { url: null, failed: false };
   const cached = objectUrlCache.get(id);
   if (cached) return { url: cached, failed: false };
-  return state.request === request ? state : { url: null, failed: true };
+  return state.request === request ? state : { url: null, failed: false };
 }
 
 /** Picks a context-provided decrypt function from any provider above. */

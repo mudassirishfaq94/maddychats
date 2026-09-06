@@ -317,7 +317,11 @@ export async function readStored(relativePath: string): Promise<{
       const result = await get(relativePath, { access: "private" });
       console.log(`[storage] Blob result:`, result ? `found (${result.blob?.size} bytes)` : 'null');
       if (!result || result.statusCode !== 200 || !result.stream) return null;
-      return { body: result.stream, size: result.blob.size };
+      // The SDK reports size=0 when an upstream streamed response omits
+      // Content-Length. Forwarding that zero discards a non-empty body.
+      const length = result.headers.get("content-length");
+      const size = length !== null && /^\d+$/.test(length) ? Number(length) : null;
+      return { body: result.stream, size: size !== null && Number.isSafeInteger(size) ? size : null };
     } catch (err) {
       console.error(`[storage] Blob error for ${relativePath}:`, err);
       return null;

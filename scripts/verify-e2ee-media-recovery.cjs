@@ -5,7 +5,7 @@ const ts = require('typescript');
 function load(file, dependencies) {
   const exports = {};
   const code = ts.transpileModule(fs.readFileSync(file, 'utf8'), { fileName: file, compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
-  vm.runInNewContext(code, { exports, require: (name) => dependencies[name], crypto: globalThis.crypto, TextEncoder, TextDecoder, Uint8Array, ArrayBuffer, btoa, atob, AbortSignal, AbortController, Blob, URL, fetch: (...args) => globalThis.fetch(...args), setTimeout });
+  vm.runInNewContext(code, { exports, require: (name) => dependencies[name], crypto: globalThis.crypto, TextEncoder, TextDecoder, Uint8Array, ArrayBuffer, btoa, atob, AbortSignal, AbortController, Blob, URL, console, clearTimeout, fetch: (...args) => globalThis.fetch(...args), setTimeout });
   return exports;
 }
 (async () => {
@@ -43,7 +43,7 @@ function load(file, dependencies) {
   const ui = load('src/components/chats/e2ee-context.tsx', { react: uiReact, 'react/jsx-runtime': {} });
   const attachment = { id: 'test-media', url: '/media/test', encrypted: true, encKey: wrapped, mimeType: 'image/png' };
   let fetchCount = 0;
-  globalThis.fetch = async () => { fetchCount++; return { ok: true, arrayBuffer: async () => bytes.buffer }; };
+  globalThis.fetch = async () => { fetchCount++; return { ok: true, arrayBuffer: async () => new Uint8Array(64).buffer }; };
   context = { initialized: false, initializationError: null, conversationId: 'chat', decryptMedia: async () => bytes.buffer };
   assert.equal(ui.useEncryptedAttachmentUrl(attachment).failed, false);
   effect();
