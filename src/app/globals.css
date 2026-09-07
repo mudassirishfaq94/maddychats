@@ -6,31 +6,31 @@
    ========================================================================== */
 
 :root {
-  --bg: #f7f7f7;
+  --bg: #edf4fa;
   --surface: #ffffff;
-  --surface-2: #f2f2f2;
-  --text: #111111;
-  --muted: #6b6b6b;
-  --border: #e5e5e5;
-  --border-strong: #d0d0d0;
-  --input-bg: #f2f2f2;
-  --action: #111111;
+  --surface-2: #f1f6fa;
+  --text: #182533;
+  --muted: #708499;
+  --border: #dce7ef;
+  --border-strong: #c4d3df;
+  --input-bg: #f1f6fa;
+  --action: #3390ec;
   --action-fg: #ffffff;
-  --accent: #0c8c7e;
-  --accent-soft: rgba(12, 140, 126, 0.12);
-  --accent-fg: #0c8c7e;
-  --ring: rgba(12, 140, 126, 0.22);
-  --success: #0c8c7e;
+  --accent: #3390ec;
+  --accent-soft: rgba(51, 144, 236, 0.13);
+  --accent-fg: #2582dc;
+  --ring: rgba(51, 144, 236, 0.24);
+  --success: #29a56c;
   --danger: #d73535;
   --warning: #c9862b;
   --shadow-lg: 0 16px 40px -22px rgba(0, 0, 0, 0.28);
 
   /* Message bubbles */
   --bubble-other-bg: #ffffff;
-  --bubble-own-bg: #d8f1ec;
-  --bubble-own-fg: #111111;
-  --bubble-own-sub: #45625c;
-  --grad-send: #111111;
+  --bubble-own-bg: #e2f2ff;
+  --bubble-own-fg: #182533;
+  --bubble-own-sub: #66839a;
+  --grad-send: #3390ec;
   color-scheme: light;
 }
 
@@ -123,7 +123,8 @@ body {
 
 /* Original Maddy Chats doodles, scoped to the conversation canvas only. */
 .chat-message-area {
-  background-image: url("/patterns/maddy-doodles-dark.svg");
+  background-color: #e7f0f7;
+  background-image: url("/patterns/maddy-doodles-light.svg");
   background-repeat: repeat;
   background-position: center top;
   background-size: clamp(290px, 34vw, 360px) auto;
@@ -133,6 +134,11 @@ body {
 
 html.light .chat-message-area {
   background-image: url("/patterns/maddy-doodles-light.svg");
+}
+
+html:not(.light) .chat-message-area {
+  background-color: transparent;
+  background-image: url("/patterns/maddy-doodles-dark.svg");
 }
 
 ::selection {

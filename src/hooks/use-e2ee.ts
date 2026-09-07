@@ -273,7 +273,7 @@ export function useE2EE(userId: string | undefined) {
     throw new Error("This message's key is not available on this device");
   }, [userId]);
 
-  /** Share conversation key with another user's device */
+  /** Share a conversation key with one specific recipient device. */
   const shareKey = useCallback(
     async (conversationId: string, targetUserId: string, targetDeviceId: string, targetPublicKeyBase64: string, keyOverride?: CryptoKey) => {
       const key = keyOverride ?? (await getConversationKey(conversationId)).key;
@@ -287,12 +287,15 @@ export function useE2EE(userId: string | undefined) {
           conversationId,
           targetUserId,
           encryptedKey,
-          deviceId: state.deviceId,
+          // This identifies the recipient device the ciphertext is wrapped
+          // for. Using the sender's browser-wide id here made keys disappear
+          // when one browser was used with Google and password sign-in.
+          deviceId: targetDeviceId,
         }),
       });
       return res.ok;
     },
-    [getConversationKey, state.deviceId],
+    [getConversationKey],
   );
 
   /* ----------------------- Key Rotation Functions ----------------------- */

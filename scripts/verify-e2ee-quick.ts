@@ -103,7 +103,7 @@ async function register(name: string): Promise<{ id: string; cookie: string; nam
       conversationId: cid,
       targetUserId: bob.id,
       encryptedKey: wrapped,
-      deviceId: aliceKey.deviceId,
+      deviceId: bobKey.deviceId,
     }),
   });
   console.log("  share status:", shareRes.status, await shareRes.text());

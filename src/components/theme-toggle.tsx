@@ -29,11 +29,11 @@ export function ThemeToggle({ className }: { className?: string }) {
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
-    const stored = (localStorage.getItem("maddy-theme") as Theme) || "system";
+    const stored = (localStorage.getItem("maddy-theme") as Theme) || "light";
     const timer = window.setTimeout(() => setTheme(stored), 0);
     const mq = window.matchMedia("(prefers-color-scheme: light)");
     const onChange = (e: MediaQueryListEvent) => {
-      const current = (localStorage.getItem("maddy-theme") as Theme) || "system";
+      const current = (localStorage.getItem("maddy-theme") as Theme) || "light";
       if (current === "system") applyTheme(e.matches ? "light" : "dark");
     };
     mq.addEventListener("change", onChange);

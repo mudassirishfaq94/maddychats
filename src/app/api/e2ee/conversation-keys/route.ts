@@ -22,16 +22,11 @@ export async function GET(req: NextRequest) {
   const membership = await getMembership(conversationId, user.id);
   if (!membership) return jsonError(404, "Conversation not found.");
 
-  // Only return keys shared BY OTHER USERS. The deviceId column stores the
-  // sender's device — so we exclude rows where deviceId matches one of the
-  // requesting user's own devices (self-stored keys from an earlier bug).
-  const ownDeviceIds = await db
-    .select({ deviceId: e2eeKeys.deviceId })
-    .from(e2eeKeys)
-    .where(eq(e2eeKeys.userId, user.id));
-  const ownDeviceSet = new Set(ownDeviceIds.map((r) => r.deviceId));
-
-  const allKeys = await db
+  // Rows belong to the recipient (userId) and may be addressed to a device
+  // with an id shared by another account in this browser. Do not filter by
+  // device id: the private-key unwrap is the authoritative ownership check.
+  // This also recovers legacy rows written before deviceId meant recipient.
+  const keys = await db
     .select()
     .from(e2eeConversationKeys)
     .where(
@@ -40,9 +35,6 @@ export async function GET(req: NextRequest) {
         eq(e2eeConversationKeys.userId, user.id),
       ),
     );
-
-  // Filter: only keep keys whose deviceId is NOT one of our own devices.
-  const keys = allKeys.filter((k) => !ownDeviceSet.has(k.deviceId));
 
   return NextResponse.json({ keys });
 }
@@ -88,7 +80,17 @@ export async function POST(req: NextRequest) {
   const targetMembership = await getMembership(conversationId, targetUserId);
   if (!targetMembership) return jsonError(404, "Target is not in this conversation.");
 
-  // The schema permits one active row per sender device and recipient user.
+  // A share must be addressed to one of the target user's registered devices.
+  // Besides preventing mislabeled rows, this keeps per-device key rotation
+  // and recovery reliable.
+  const [targetDevice] = await db
+    .select({ id: e2eeKeys.id })
+    .from(e2eeKeys)
+    .where(and(eq(e2eeKeys.userId, targetUserId), eq(e2eeKeys.deviceId, deviceId)))
+    .limit(1);
+  if (!targetDevice) return jsonError(422, "Target device is not registered.");
+
+  // The schema permits one active row per recipient device and recipient user.
   // Serialize replacement and preserve the old share before updating it.
   const newVersion = await db.transaction(async tx => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${conversationId}:${targetUserId}:${deviceId}`}, 0))`);
