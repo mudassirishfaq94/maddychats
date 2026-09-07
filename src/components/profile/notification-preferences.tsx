@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Bell, BellRing, Loader2, Smartphone, Volume2, Users } from "lucide-react";
 import { Toggle } from "@/components/ui/toggle";
+import { isNativeApp } from "@/lib/native-platform";
 
 interface Preferences {
   messageNotifications: boolean;
@@ -43,7 +44,7 @@ export function NotificationPreferences() {
   }, []);
 
   useEffect(() => {
-    if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
+    if (isNativeApp() || !("serviceWorker" in navigator) || !("PushManager" in window)) return;
     void navigator.serviceWorker.ready
       .then((registration) => registration.pushManager.getSubscription())
       .then((subscription) => setPushSubscribed(Boolean(subscription)));
@@ -58,6 +59,9 @@ export function NotificationPreferences() {
   }
 
   async function subscribeForPush(): Promise<boolean> {
+    // The Capacitor FCM registration runs after sign-in. There is no browser
+    // service-worker subscription in the installed app.
+    if (isNativeApp()) return true;
     if (!("Notification" in window) || !("serviceWorker" in navigator) || !("PushManager" in window)) {
       setMessage("Push notifications are not supported on this device or browser.");
       return false;
@@ -137,7 +141,7 @@ export function NotificationPreferences() {
         <div className="flex justify-center py-10">{message ? <p className="text-sm text-[var(--danger)]">{message}</p> : <Loader2 className="h-5 w-5 animate-spin text-[var(--muted)]" />}</div>
       ) : (
         <>
-        {preferences.pushNotifications && !pushSubscribed && browserPermission !== "unsupported" ? (
+        {preferences.pushNotifications && !isNativeApp() && !pushSubscribed && browserPermission !== "unsupported" ? (
           <div className="mt-5 flex items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--card-2)] p-4">
             <BellRing className="h-5 w-5 shrink-0 text-[var(--accent-fg)]" />
             <div className="min-w-0 flex-1">

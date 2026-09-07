@@ -1,22 +1,20 @@
 # ZipTalk Android App
 
-Native Android wrapper for ZipTalk using [Capacitor](https://capacitorjs.com).
+Native Android client for ZipTalk, built with Kotlin and Jetpack Compose.
 
 ## Architecture
 
-The app is a **Capacitor WebView** that loads `https://ziptalks.vercel.app` — the same hosted Next.js backend that powers the web app. The native shell provides:
+The app renders native Android screens; it does not contain a WebView, a PWA,
+or a Trusted Web Activity. It connects over HTTPS to the existing Next.js API
+at `https://ziptalks.vercel.app` and stores the server session cookie in the
+app's private storage.
 
 | Native capability | How it works |
 |---|---|
-| **Push notifications** | `@capacitor/push-notifications` + FCM |
-| **Camera / photo picker** | `@capacitor/camera` |
-| **File attachments** | `@capacitor/filesystem` + native file picker |
-| **Voice recording** | Web Audio API in the WebView |
-| **Status bar theming** | `@capacitor/status-bar` |
-| **Splash screen** | `@capacitor/splash-screen` |
-| **Keyboard management** | `@capacitor/keyboard` |
-| **Haptic feedback** | `@capacitor/haptics` |
-| **App lifecycle** | `@capacitor/app` |
+| **UI** | Kotlin + Jetpack Compose |
+| **Network/session** | OkHttp + persisted HTTPS cookie session |
+| **Chat** | Native conversation list, history and message composer |
+| **Status bar / keyboard** | Native Android window and Compose layout |
 | **Deep links** | `ziptalks://` and `https://ziptalks.vercel.app` intent filters |
 
 The native shell loads the hosted application. Encryption and decryption run locally in the WebView; the server stores ciphertext and handles authentication, message persistence and realtime delivery.
@@ -180,8 +178,12 @@ android/
 ```
 
 
-## Updates without reinstalling
+## Updating the app
 
-The existing APK loads `https://ziptalks.vercel.app` from `capacitor.config.ts`. Deployed web UI and server fixes appear on the next app launch/reload without reinstalling. The hosted app checks `/api/app-version` every minute and when returning to the foreground, then reloads when idle. Drafts, dialogs, recording, pending sends and voice playback defer automatic reloads. It never clears local storage or encryption keys.
+The installed app loads its authenticated UI in its own Capacitor WebView from
+`https://ziptalks.vercel.app`, so server and web UI fixes are available the
+next time the app is opened. The native build deliberately does not register
+the browser PWA service worker or run the browser's auto-reload updater;
+Android notifications are delivered by FCM instead.
 
 A change to the native shell, Android manifest, native plugins, Firebase configuration or signing still requires an APK update (installed over the existing app with the same package and signing key, not uninstall/reinstall). An already-running old web version needs one reopen/reload to pick up the new version checker.

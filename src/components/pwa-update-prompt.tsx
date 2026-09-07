@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { RefreshCw, X } from "lucide-react";
+import { isNativeApp } from "@/lib/native-platform";
 
 /**
  * PWA Update Prompt — detects when a new service worker is waiting
@@ -12,7 +13,7 @@ export function PwaUpdatePrompt() {
   const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
-    if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
+    if (typeof window === "undefined" || isNativeApp() || !("serviceWorker" in navigator)) return;
 
     let hadController = Boolean(navigator.serviceWorker.controller);
     function onControllerChange() {

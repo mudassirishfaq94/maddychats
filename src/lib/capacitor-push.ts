@@ -1,3 +1,5 @@
+import { isNativeApp } from "@/lib/native-platform";
+
 /**
  * Capacitor Push Notifications — Android native push via FCM.
  *
@@ -12,15 +14,7 @@
 
 /** Detect Capacitor runtime. */
 export function isCapacitor(): boolean {
-  try {
-    return (
-      typeof window !== "undefined" &&
-      // @ts-expect-error — injected by Capacitor at runtime
-      typeof window.Capacitor !== "undefined"
-    );
-  } catch {
-    return false;
-  }
+  return isNativeApp();
 }
 
 /**

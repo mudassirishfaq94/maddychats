@@ -12,6 +12,7 @@ import {
 } from "react";
 import { useAuth } from "./auth-provider";
 import type { PresenceState, RealtimeEvent } from "@/lib/types";
+import { isNativeApp } from "@/lib/native-platform";
 
 type Listener = (event: RealtimeEvent) => void;
 
@@ -80,7 +81,10 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
   // interaction so later messages can chime while the window is hidden.
   // Register service worker and Capacitor push on mount
   useEffect(() => {
-    if ("serviceWorker" in navigator) {
+    // The installed Android app uses FCM through Capacitor. Registering the
+    // web PWA worker inside its WebView creates a second, competing push and
+    // update mechanism, so keep it exclusive to browser installs.
+    if (!isNativeApp() && "serviceWorker" in navigator) {
       void navigator.serviceWorker.register("/sw.js", { scope: "/" });
     }
   }, []);

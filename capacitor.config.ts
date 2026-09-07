@@ -1,13 +1,13 @@
 import type { CapacitorConfig } from "@capacitor/cli";
+import { KeyboardResize, KeyboardStyle } from "@capacitor/keyboard";
 
 /**
  * ZipTalk Android — Capacitor wrapper.
  *
- * The WebView loads the hosted Vercel deployment directly.  All server-side
- * logic (API routes, Socket.IO, Neon DB, E2EE key exchange) stays on the
- * server.  The native shell adds platform capabilities: push notifications,
- * camera/microphone access, file system, haptics, status bar control, and
- * Play Store distribution.
+ * The Android launcher owns the application window and native capabilities.
+ * The hosted origin remains the backend and UI delivery origin because this
+ * Next.js app has server-rendered authenticated routes and API handlers; it
+ * is not a static site that can be exported into `webDir`.
  *
  * For local development, uncomment the `url` line and point it at your
  * dev server (e.g. http://10.0.2.2:3000 for Android emulator).
@@ -17,15 +17,19 @@ const config: CapacitorConfig = {
   appName: "ZipTalk",
   webDir: "out",
   server: {
-    // Production: load the hosted app directly.
+    // This is intentionally an in-app Capacitor WebView, not a browser/TWA.
+    // Keep navigation constrained to our first-party origin.
     url: "https://ziptalks.vercel.app",
+    allowNavigation: ["ziptalks.vercel.app"],
     // Cleartext for local dev (emulator / device on same network):
     // url: "http://10.0.2.2:3000",
     // allowNavigation: ["*"],
     androidScheme: "https",
   },
   android: {
-    allowMixedContent: true,
+    // Production is HTTPS-only. Do not allow an attachment or redirect to
+    // downgrade the app window to HTTP.
+    allowMixedContent: false,
     buildOptions: {
       keystorePath: undefined,
       keystoreAlias: undefined,
@@ -49,8 +53,8 @@ const config: CapacitorConfig = {
       presentationOptions: ["badge", "sound", "alert"],
     },
     Keyboard: {
-      resize: "body",
-      style: "DARK",
+      resize: KeyboardResize.Body,
+      style: KeyboardStyle.Dark,
     },
   },
 };

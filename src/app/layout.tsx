@@ -7,6 +7,7 @@ import { E2EEProvider } from "@/components/providers/e2ee-provider";
 import { RealtimeProvider } from "@/components/providers/realtime-provider";
 import { HostedAppUpdates } from "@/components/hosted-app-updates";
 import { PwaUpdatePrompt } from "@/components/pwa-update-prompt";
+import { NativeAppBridge } from "@/components/native-app-bridge";
 import "./globals.css";
 
 const inter = Inter({
@@ -61,6 +62,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           <E2EEProvider><RealtimeProvider>{children}</RealtimeProvider></E2EEProvider>
           <PwaUpdatePrompt />
           <HostedAppUpdates />
+          <NativeAppBridge />
         </AuthProvider>
       </body>
     </html>

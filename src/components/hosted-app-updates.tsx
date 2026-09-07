@@ -1,10 +1,14 @@
 "use client";
 import { useEffect } from "react";
 import { getCurrentAudioId } from "@/hooks/use-audio-player";
+import { isNativeApp } from "@/lib/native-platform";
 
 /** The installed Android shell uses the hosted app; update only when idle. */
 export function HostedAppUpdates() {
   useEffect(() => {
+    // Native releases are updated through the app store; do not make the
+    // installed app behave like a browser tab that reloads itself.
+    if (isNativeApp()) return;
     const current = process.env.NEXT_PUBLIC_APP_VERSION;
     if (!current || current === "development") return;
     let pending: string | null = null;
