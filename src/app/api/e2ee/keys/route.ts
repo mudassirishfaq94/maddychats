@@ -26,16 +26,27 @@ export async function GET(req: NextRequest) {
   }
   const ownerId = targetId && isUuid(targetId) ? targetId : user.id;
 
-  const keys = await db
+  const rows = await db
     .select({
       id: e2eeKeys.id,
       deviceId: e2eeKeys.deviceId,
       publicKey: e2eeKeys.publicKey,
+      encryptedPrivateKey: e2eeKeys.encryptedPrivateKey,
       createdAt: e2eeKeys.createdAt,
       lastUsedAt: e2eeKeys.lastUsedAt,
     })
     .from(e2eeKeys)
     .where(eq(e2eeKeys.userId, ownerId));
+
+  // Private-key backups are only returned to their authenticated owner. A
+  // peer can receive the public key only, which is all key exchange needs.
+  const keys = rows.map((key) => targetId ? {
+    id: key.id,
+    deviceId: key.deviceId,
+    publicKey: key.publicKey,
+    createdAt: key.createdAt,
+    lastUsedAt: key.lastUsedAt,
+  } : key);
 
   return NextResponse.json({ keys });
 }
@@ -67,9 +78,21 @@ export async function POST(req: NextRequest) {
     .limit(1);
 
   if (existing) {
+    // Never silently replace a device key. Doing that invalidates every
+    // conversation key previously wrapped for this device and makes older
+    // messages permanently unreadable. The client restores the encrypted
+    // backup first when it sees this conflict.
+    const [registered] = await db
+      .select({ publicKey: e2eeKeys.publicKey })
+      .from(e2eeKeys)
+      .where(eq(e2eeKeys.id, existing.id))
+      .limit(1);
+    if (registered && registered.publicKey !== publicKey) {
+      return jsonError(409, "A different encryption key is already registered for this device.");
+    }
     await db
       .update(e2eeKeys)
-      .set({ publicKey, encryptedPrivateKey, lastUsedAt: new Date() })
+      .set({ lastUsedAt: new Date() })
       .where(eq(e2eeKeys.id, existing.id));
   } else {
     await db.insert(e2eeKeys).values({

@@ -74,13 +74,49 @@ export function useE2EE(userId: string | undefined) {
       let publicKeyStr: string;
       let privateKeyStr: string;
 
+      // Fetch the owner's device backup before trusting browser storage. The
+      // device id is intentionally browser-wide, while the keypair is scoped
+      // to an account. Without this recovery step, changing from Google to
+      // password sign-in could overwrite the original keypair and strand the
+      // messages encrypted for it.
+      const backupResponse = await fetch("/api/e2ee/keys", {
+        cache: "no-store",
+        signal: AbortSignal.timeout(15000),
+      });
+      if (!backupResponse.ok) throw new Error("Device key lookup failed");
+      const backupData = await backupResponse.json() as {
+        keys?: Array<{ deviceId: string; publicKey: string; encryptedPrivateKey?: string }>;
+      };
+      const serverDevice = backupData.keys?.find((key) => key.deviceId === deviceId);
+
       if (stored) {
         const parsed = JSON.parse(stored);
-        const privateKey = await importPrivateKey(parsed.privateKey);
-        const publicKey = await importPublicKey(parsed.publicKey);
+        // A matching server key confirms this browser copy is the correct
+        // keypair. If it differs, restore the server backup instead of
+        // registering the stale local key over the recoverable one.
+        if (!serverDevice || serverDevice.publicKey === parsed.publicKey) {
+          const privateKey = await importPrivateKey(parsed.privateKey);
+          const publicKey = await importPublicKey(parsed.publicKey);
+          keyPair = { privateKey, publicKey };
+          publicKeyStr = parsed.publicKey;
+          privateKeyStr = parsed.privateKey;
+        } else if (serverDevice.encryptedPrivateKey) {
+          privateKeyStr = await decryptPrivateKeyFromStorage(serverDevice.encryptedPrivateKey, deviceId);
+          const privateKey = await importPrivateKey(privateKeyStr);
+          const publicKey = await importPublicKey(serverDevice.publicKey);
+          keyPair = { privateKey, publicKey };
+          publicKeyStr = serverDevice.publicKey;
+          localStorage.setItem(`e2ee_keypair_${userId}`, JSON.stringify({ publicKey: publicKeyStr, privateKey: privateKeyStr }));
+        } else {
+          throw new Error("Encryption key recovery is unavailable");
+        }
+      } else if (serverDevice?.encryptedPrivateKey) {
+        privateKeyStr = await decryptPrivateKeyFromStorage(serverDevice.encryptedPrivateKey, deviceId);
+        const privateKey = await importPrivateKey(privateKeyStr);
+        const publicKey = await importPublicKey(serverDevice.publicKey);
         keyPair = { privateKey, publicKey };
-        publicKeyStr = parsed.publicKey;
-        privateKeyStr = parsed.privateKey;
+        publicKeyStr = serverDevice.publicKey;
+        localStorage.setItem(`e2ee_keypair_${userId}`, JSON.stringify({ publicKey: publicKeyStr, privateKey: privateKeyStr }));
       } else {
         keyPair = await generateKeyPair();
         const publicKey = await exportPublicKey(keyPair.publicKey);
