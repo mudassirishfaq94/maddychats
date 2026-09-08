@@ -36,6 +36,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.*
@@ -89,6 +90,7 @@ private class ZipTalkApi(context: Context) {
         .put("displayName", name).put("username", username).put("email", email).put("password", password))
     fun googleClientId(): String = request("/api/auth/google/native").getString("clientId")
     fun loginWithGoogle(idToken: String) = request("/api/auth/google/native", "POST", JSONObject().put("idToken", idToken))
+    fun cookiesForWeb(): List<String> = cookies.values.toList()
     fun currentUserId(): String? = runCatching { request("/api/auth/me").getJSONObject("user").getString("id") }.getOrNull()
     fun conversations(): List<Conversation> {
         val list = request("/api/conversations").optJSONArray("conversations") ?: JSONArray()
@@ -145,6 +147,7 @@ private class ZipTalkApi(context: Context) {
 
 class MainActivity : ComponentActivity() {
     private var webView: WebView? = null
+    private val api by lazy { ZipTalkApi(this) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -154,7 +157,7 @@ class MainActivity : ComponentActivity() {
                 if (webView?.canGoBack() == true) webView?.goBack() else finish()
             }
         })
-        setContent { ZipTalkHostedExperience { webView = it } }
+        setContent { ZipTalkHostedExperience(api) { webView = it } }
     }
 
     override fun onDestroy() { webView?.destroy(); webView = null; super.onDestroy() }
@@ -166,7 +169,7 @@ class MainActivity : ComponentActivity() {
  * (not Chrome, a Custom Tab, or a PWA), while preserving exact web parity and
  * the proven browser E2EE implementation during the native migration.
  */
-@Composable private fun ZipTalkHostedExperience(onReady: (WebView) -> Unit) {
+@Composable private fun ZipTalkHostedExperience(api: ZipTalkApi, onReady: (WebView) -> Unit) {
     AndroidView(
         modifier = Modifier.fillMaxSize(),
         factory = { context ->
@@ -180,7 +183,26 @@ class MainActivity : ComponentActivity() {
                 CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
                 webChromeClient = WebChromeClient()
                 webViewClient = object : WebViewClient() {
-                    override fun shouldOverrideUrlLoading(view: WebView, url: String): Boolean = false
+                    override fun shouldOverrideUrlLoading(view: WebView, url: String): Boolean {
+                        // Google does not permit OAuth inside embedded browsers.
+                        // Use Android Credential Manager and return its session to
+                        // this app-owned web window instead.
+                        if (url.startsWith("${BuildConfig.API_BASE_URL}/api/auth/google")) {
+                            val activity = context as? Activity ?: return false
+                            CoroutineScope(Dispatchers.Main).launch {
+                                runCatching { nativeGoogleSignIn(activity, api) }
+                                    .onSuccess {
+                                        val manager = CookieManager.getInstance()
+                                        api.cookiesForWeb().forEach { manager.setCookie(BuildConfig.API_BASE_URL, it) }
+                                        manager.flush()
+                                        view.loadUrl(BuildConfig.API_BASE_URL)
+                                    }
+                                    .onFailure { view.loadUrl("${BuildConfig.API_BASE_URL}/login?error=google_native_failed") }
+                            }
+                            return true
+                        }
+                        return false
+                    }
                 }
                 loadUrl(BuildConfig.API_BASE_URL)
                 onReady(this)
