@@ -17,8 +17,9 @@ export type E2EEPeer = {
 };
 
 /**
- * Returns every OTHER member of a conversation with their registered device
- * public keys, so the caller can share the conversation key end-to-end.
+ * Returns every conversation member with registered device public keys. The
+ * caller's current device is excluded, but their other devices are included:
+ * a message sent on a laptop must also be wrapped for the same user's phone.
  */
 export async function GET(req: NextRequest) {
   const blocked = guardSameOrigin(req);
@@ -28,6 +29,7 @@ export async function GET(req: NextRequest) {
   if (!user) return jsonError(401, "Not authenticated.");
 
   const conversationId = req.nextUrl.searchParams.get("conversationId");
+  const currentDeviceId = req.nextUrl.searchParams.get("deviceId");
   if (!conversationId) return jsonError(422, "conversationId is required.");
 
   const membership = await getMembership(conversationId, user.id);
@@ -39,7 +41,7 @@ export async function GET(req: NextRequest) {
     .innerJoin(users, eq(conversationMembers.userId, users.id))
     .where(eq(conversationMembers.conversationId, conversationId));
 
-  const peers = memberRows.filter((r) => r.userId !== user.id);
+  const peers = memberRows;
   if (peers.length === 0) return NextResponse.json({ peers: [] });
 
   const keyRows = await db
@@ -68,7 +70,7 @@ export async function GET(req: NextRequest) {
   }
   for (const k of keyRows) {
     const peer = byUser.get(k.userId);
-    if (peer) peer.devices.push({ deviceId: k.deviceId, publicKey: k.publicKey });
+    if (peer && k.deviceId !== currentDeviceId) peer.devices.push({ deviceId: k.deviceId, publicKey: k.publicKey });
   }
 
   return NextResponse.json({ peers: [...byUser.values()] });

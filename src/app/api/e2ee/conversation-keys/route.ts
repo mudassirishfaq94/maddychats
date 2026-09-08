@@ -17,16 +17,24 @@ export async function GET(req: NextRequest) {
   if (!user) return jsonError(401, "Not authenticated.");
 
   const conversationId = req.nextUrl.searchParams.get("conversationId");
+  const recipientDeviceId = req.nextUrl.searchParams.get("deviceId");
   if (!conversationId) return jsonError(422, "conversationId is required.");
+  if (!recipientDeviceId) return jsonError(422, "deviceId is required.");
 
   const membership = await getMembership(conversationId, user.id);
   if (!membership) return jsonError(404, "Conversation not found.");
 
-  // Rows belong to the recipient (userId) and may be addressed to a device
-  // with an id shared by another account in this browser. Do not filter by
-  // device id: the private-key unwrap is the authoritative ownership check.
-  // This also recovers legacy rows written before deviceId meant recipient.
-  const keys = await db
+  // Verify the requested device belongs to this user. Key copies must never
+  // be returned to another one of the user's devices: each copy was wrapped
+  // to exactly one device public key.
+  const [currentDevice] = await db
+    .select({ id: e2eeKeys.id })
+    .from(e2eeKeys)
+    .where(and(eq(e2eeKeys.userId, user.id), eq(e2eeKeys.deviceId, recipientDeviceId)))
+    .limit(1);
+  if (!currentDevice) return jsonError(403, "Unknown encryption device.");
+
+  const allKeys = await db
     .select()
     .from(e2eeConversationKeys)
     .where(
@@ -35,6 +43,13 @@ export async function GET(req: NextRequest) {
         eq(e2eeConversationKeys.userId, user.id),
       ),
     );
+
+  // Rows with a recipientDeviceId are the corrected protocol. Keep legacy
+  // rows as a best-effort recovery path; their recipient cannot be known, so
+  // the client will only use a row that its private key can actually unwrap.
+  const keys = allKeys.filter((k) =>
+    k.recipientDeviceId === recipientDeviceId || k.recipientDeviceId === null,
+  );
 
   return NextResponse.json({ keys });
 }
@@ -53,26 +68,33 @@ export async function POST(req: NextRequest) {
   const conversationId = data.conversationId ? String(data.conversationId) : null;
   const targetUserId = data.targetUserId ? String(data.targetUserId) : null;
   const encryptedKey = data.encryptedKey ? String(data.encryptedKey) : null;
-  const deviceId = data.deviceId ? String(data.deviceId) : null;
+  const senderDeviceId = data.deviceId ? String(data.deviceId) : null;
+  const recipientDeviceId = data.targetDeviceId ? String(data.targetDeviceId) : null;
 
-  if (!conversationId || !targetUserId || !encryptedKey || !deviceId) {
-    return jsonError(422, "conversationId, targetUserId, encryptedKey, and deviceId are required.");
+  if (!conversationId || !targetUserId || !encryptedKey || !senderDeviceId || !recipientDeviceId) {
+    return jsonError(422, "conversationId, targetUserId, targetDeviceId, encryptedKey, and deviceId are required.");
   }
 
   // Verify sender is a member
   const membership = await getMembership(conversationId, user.id);
   if (!membership) return jsonError(404, "Conversation not found.");
 
-  // Reject self-key storage — you cannot share a key with yourself.
-  if (targetUserId === user.id) {
-    return jsonError(422, "Cannot share a key with yourself.");
+  // A sender may share to another one of their own devices, but never needs a
+  // copy encrypted back to the exact device that is already holding the key.
+  if (targetUserId === user.id && recipientDeviceId === senderDeviceId) {
+    return jsonError(422, "Cannot share a key with the same device.");
   }
 
-  // Verify target has registered at least one device key.
+  const [senderDevice] = await db.select({ id: e2eeKeys.id }).from(e2eeKeys)
+    .where(and(eq(e2eeKeys.userId, user.id), eq(e2eeKeys.deviceId, senderDeviceId))).limit(1);
+  if (!senderDevice) return jsonError(403, "Unknown sender encryption device.");
+
+  // Verify the exact recipient device exists and belongs to the target user.
+  // A client-provided public key alone is not an authorization boundary.
   const [targetKey] = await db
     .select({ id: e2eeKeys.id })
     .from(e2eeKeys)
-    .where(eq(e2eeKeys.userId, targetUserId))
+    .where(and(eq(e2eeKeys.userId, targetUserId), eq(e2eeKeys.deviceId, recipientDeviceId)))
     .limit(1);
 
   if (!targetKey) return jsonError(404, "Target user has no registered device key.");
@@ -80,30 +102,21 @@ export async function POST(req: NextRequest) {
   const targetMembership = await getMembership(conversationId, targetUserId);
   if (!targetMembership) return jsonError(404, "Target is not in this conversation.");
 
-  // A share must be addressed to one of the target user's registered devices.
-  // Besides preventing mislabeled rows, this keeps per-device key rotation
-  // and recovery reliable.
-  const [targetDevice] = await db
-    .select({ id: e2eeKeys.id })
-    .from(e2eeKeys)
-    .where(and(eq(e2eeKeys.userId, targetUserId), eq(e2eeKeys.deviceId, deviceId)))
-    .limit(1);
-  if (!targetDevice) return jsonError(422, "Target device is not registered.");
-
-  // The schema permits one active row per recipient device and recipient user.
-  // Serialize replacement and preserve the old share before updating it.
+  // There is one key copy per sender-device/recipient-device pair. Serialize
+  // replacement and preserve the previous copy before updating it.
   const newVersion = await db.transaction(async tx => {
-    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${conversationId}:${targetUserId}:${deviceId}`}, 0))`);
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${conversationId}:${targetUserId}:${senderDeviceId}:${recipientDeviceId}`}, 0))`);
     const [existing] = await tx.select().from(e2eeConversationKeys).where(and(
       eq(e2eeConversationKeys.conversationId, conversationId),
       eq(e2eeConversationKeys.userId, targetUserId),
-      eq(e2eeConversationKeys.deviceId, deviceId),
+      eq(e2eeConversationKeys.deviceId, senderDeviceId),
+      eq(e2eeConversationKeys.recipientDeviceId, recipientDeviceId),
     )).limit(1);
     if (existing?.encryptedKey === encryptedKey) return existing.keyVersion;
     const version = (existing?.keyVersion ?? 0) + 1;
     if (existing) {
       await tx.insert(e2eeKeyHistory).values({
-        conversationId, userId: targetUserId, deviceId,
+        conversationId, userId: targetUserId, deviceId: senderDeviceId, recipientDeviceId,
         encryptedKey: existing.encryptedKey, keyVersion: existing.keyVersion,
       }).onConflictDoNothing();
       await tx.update(e2eeConversationKeys).set({
@@ -111,7 +124,7 @@ export async function POST(req: NextRequest) {
       }).where(eq(e2eeConversationKeys.id, existing.id));
     } else {
       await tx.insert(e2eeConversationKeys).values({
-        conversationId, userId: targetUserId, deviceId,
+        conversationId, userId: targetUserId, deviceId: senderDeviceId, recipientDeviceId,
         encryptedKey, keyVersion: version, isActive: true,
       });
     }

@@ -1173,6 +1173,9 @@ export const e2eeConversationKeys = pgTable(
     conversationId: uuid("conversation_id").references(() => conversations.id, { onDelete: "cascade" }).notNull(),
     userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
     encryptedKey: text("encrypted_key").notNull(),
+    /** Device that can decrypt this copy. Null only for pre-migration rows. */
+    recipientDeviceId: text("recipient_device_id"),
+    /** Device that created this encrypted copy. */
     deviceId: text("device_id").notNull(),
     /** Key version for rotation: incremented on each rotation */
     keyVersion: integer("key_version").default(1).notNull(),
@@ -1183,7 +1186,7 @@ export const e2eeConversationKeys = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
   },
   (table) => [
-    unique("e2ee_conv_keys_unique").on(table.conversationId, table.userId, table.deviceId),
+    unique("e2ee_conv_keys_recipient_unique").on(table.conversationId, table.userId, table.deviceId, table.recipientDeviceId),
     index("e2ee_conv_keys_conv_idx").on(table.conversationId),
     index("e2ee_conv_keys_active_idx").on(table.conversationId, table.userId, table.isActive),
   ],
@@ -1197,6 +1200,7 @@ export const e2eeKeyHistory = pgTable(
     id: uuid("id").defaultRandom().primaryKey(),
     conversationId: uuid("conversation_id").references(() => conversations.id, { onDelete: "cascade" }).notNull(),
     userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+    recipientDeviceId: text("recipient_device_id"),
     deviceId: text("device_id").notNull(),
     encryptedKey: text("encrypted_key").notNull(),
     keyVersion: integer("key_version").notNull(),
@@ -1204,7 +1208,7 @@ export const e2eeKeyHistory = pgTable(
     expiresAt: timestamp("expires_at", { withTimezone: true, mode: "date" }),
   },
   (table) => [
-    unique("e2ee_key_history_unique").on(table.conversationId, table.userId, table.deviceId, table.keyVersion),
+    unique("e2ee_key_history_recipient_unique").on(table.conversationId, table.userId, table.deviceId, table.recipientDeviceId, table.keyVersion),
     index("e2ee_key_history_conv_idx").on(table.conversationId, table.userId),
     index("e2ee_key_history_version_idx").on(table.conversationId, table.keyVersion),
   ],

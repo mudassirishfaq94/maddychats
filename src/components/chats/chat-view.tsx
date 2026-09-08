@@ -223,7 +223,7 @@ export function ChatView({
         if (!alive) return;
         let missing = 0;
         try {
-          const res = await fetch(`/api/e2ee/peers?conversationId=${encodeURIComponent(conversationId)}`);
+          const res = await fetch(`/api/e2ee/peers?conversationId=${encodeURIComponent(conversationId)}&deviceId=${encodeURIComponent(e2ee.deviceId)}`);
           if (res.ok) {
             const data = (await res.json()) as { peers?: { devices: unknown[] }[] };
             missing = (data.peers ?? []).filter((p) => p.devices.length === 0).length;
@@ -235,7 +235,7 @@ export function ChatView({
         let needsRotation = false;
         let keyVersion = 1;
         try {
-          const rotRes = await fetch(`/api/e2ee/key-rotation/status?conversationId=${conversationId}`);
+          const rotRes = await fetch(`/api/e2ee/key-rotation/status?conversationId=${encodeURIComponent(conversationId)}&deviceId=${encodeURIComponent(e2ee.deviceId)}`);
           if (rotRes.ok) {
             const rotData = await rotRes.json();
             needsRotation = rotData.needsRotation ?? false;
@@ -274,7 +274,7 @@ export function ChatView({
       const nextTexts = new Map(decryptedTexts);
       const nextReplies = new Map(decryptedReplies);
       let hadFailure = false;
-      for (const m of encItems) {
+      await Promise.all(encItems.map(async (m) => {
         if (!nextTexts.has(m.id) && m.text) {
           try {
             nextTexts.set(m.id, await decrypt(m.text, conversationId));
@@ -300,7 +300,7 @@ export function ChatView({
             nextReplies.set(m.replyTo.id, "\u{1F512} Undecryptable");
           }
         }
-      }
+      }));
       if (!alive) return;
       if (nextTexts.size !== decryptedTexts.size) {
         setDecryptedTexts(nextTexts);

@@ -165,7 +165,7 @@ export function useE2EE(userId: string | undefined) {
   const fetchSharedKey = useCallback(
     async (conversationId: string): Promise<CryptoKey | null> => {
       try {
-        const res = await fetch(`/api/e2ee/conversation-keys?conversationId=${conversationId}`);
+        const res = await fetch(`/api/e2ee/conversation-keys?conversationId=${encodeURIComponent(conversationId)}&deviceId=${encodeURIComponent(state.deviceId)}`);
         if (res.ok) {
           const data = await res.json();
           // Pick the highest keyVersion shared to us: with rotation there can
@@ -188,7 +188,7 @@ export function useE2EE(userId: string | undefined) {
       } catch {}
       return null;
     },
-    [],
+    [state.deviceId],
   );
 
   // Preserve our own sending keys across app/browser restarts. These backups
@@ -290,7 +290,7 @@ export function useE2EE(userId: string | undefined) {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 10000);
       try {
-        const response = await fetch(`/api/e2ee/${endpoint}?conversationId=${encodeURIComponent(conversationId)}`, {
+        const response = await fetch(`/api/e2ee/${endpoint}?conversationId=${encodeURIComponent(conversationId)}&deviceId=${encodeURIComponent(state.deviceId)}`, {
           cache: "no-store", signal: controller.signal,
         });
         if (!response.ok) continue;
@@ -307,7 +307,7 @@ export function useE2EE(userId: string | undefined) {
       finally { clearTimeout(timeout); }
     }
     throw new Error("This message's key is not available on this device");
-  }, [userId]);
+  }, [userId, state.deviceId]);
 
   /** Share a conversation key with one specific recipient device. */
   const shareKey = useCallback(
@@ -322,16 +322,16 @@ export function useE2EE(userId: string | undefined) {
         body: JSON.stringify({
           conversationId,
           targetUserId,
+          targetDeviceId,
           encryptedKey,
-          // This identifies the recipient device the ciphertext is wrapped
-          // for. Using the sender's browser-wide id here made keys disappear
-          // when one browser was used with Google and password sign-in.
-          deviceId: targetDeviceId,
+          // This is the sender; targetDeviceId identifies the only device
+          // that can unwrap this copy.
+          deviceId: state.deviceId,
         }),
       });
       return res.ok;
     },
-    [getConversationKey],
+    [getConversationKey, state.deviceId],
   );
 
   /* ----------------------- Key Rotation Functions ----------------------- */
@@ -340,7 +340,7 @@ export function useE2EE(userId: string | undefined) {
   const checkRotationNeeded = useCallback(
     async (conversationId: string): Promise<{ needed: boolean; reason: string | null }> => {
       try {
-        const res = await fetch(`/api/e2ee/key-rotation/status?conversationId=${conversationId}`);
+        const res = await fetch(`/api/e2ee/key-rotation/status?conversationId=${encodeURIComponent(conversationId)}&deviceId=${encodeURIComponent(state.deviceId)}`);
         if (res.ok) {
           const data = await res.json();
           return {
@@ -351,13 +351,13 @@ export function useE2EE(userId: string | undefined) {
       } catch {}
       return { needed: false, reason: null };
     },
-    [],
+    [state.deviceId],
   );
 
   /** Publish a new sending key only after every recipient share succeeds. */
   const rotateConversationKey = useCallback(async (conversationId: string): Promise<boolean> => {
     try {
-      const response = await fetch(`/api/e2ee/peers?conversationId=${conversationId}`);
+      const response = await fetch(`/api/e2ee/peers?conversationId=${encodeURIComponent(conversationId)}&deviceId=${encodeURIComponent(state.deviceId)}`);
       if (!response.ok) return false;
       const { peers } = await response.json() as { peers: Peer[] };
       if (peers.some(peer => peer.devices.length === 0)) return false;
@@ -387,7 +387,7 @@ export function useE2EE(userId: string | undefined) {
       const { key } = await getConversationKey(conversationId, { waitForPeer: true });
       let peers: Peer[] = [];
       try {
-        const res = await fetch(`/api/e2ee/peers?conversationId=${encodeURIComponent(conversationId)}`);
+        const res = await fetch(`/api/e2ee/peers?conversationId=${encodeURIComponent(conversationId)}&deviceId=${encodeURIComponent(state.deviceId)}`);
         if (!res.ok) return { ready: false, fingerprint: null };
         if (res.ok) {
           const data = (await res.json()) as { peers?: Peer[] };
