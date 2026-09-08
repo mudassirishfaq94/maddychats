@@ -181,6 +181,12 @@ class MainActivity : ComponentActivity() {
                 settings.loadWithOverviewMode = false
                 settings.useWideViewPort = false
                 CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
+                // Older native builds saved the login cookie in OkHttp. Move it
+                // into WebView before the first server-rendered page request so
+                // the hosted UI receives the same signed-in session and data.
+                val cookieManager = CookieManager.getInstance()
+                api.cookiesForWeb().forEach { cookieManager.setCookie(BuildConfig.API_BASE_URL, it) }
+                cookieManager.flush()
                 webChromeClient = WebChromeClient()
                 webViewClient = object : WebViewClient() {
                     override fun shouldOverrideUrlLoading(view: WebView, url: String): Boolean {
