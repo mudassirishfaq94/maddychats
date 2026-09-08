@@ -5,6 +5,12 @@ import android.content.ContentResolver
 import android.net.Uri
 import android.provider.OpenableColumns
 import android.os.Bundle
+import android.app.Activity
+import androidx.credentials.CredentialManager
+import androidx.credentials.GetCredentialRequest
+import androidx.credentials.CustomCredential
+import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
+import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -16,7 +22,11 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
@@ -69,12 +79,22 @@ private class ZipTalkApi(context: Context) {
     }
 
     fun login(identifier: String, password: String) = request("/api/auth/login", "POST", JSONObject().put("identifier", identifier).put("password", password))
+    fun googleClientId(): String = request("/api/auth/google/native").getString("clientId")
+    fun loginWithGoogle(idToken: String) = request("/api/auth/google/native", "POST", JSONObject().put("idToken", idToken))
     fun currentUserId(): String? = runCatching { request("/api/auth/me").getJSONObject("user").getString("id") }.getOrNull()
     fun conversations(): List<Conversation> {
         val list = request("/api/conversations").optJSONArray("conversations") ?: JSONArray()
         return List(list.length()) { i -> list.getJSONObject(i).let { c ->
             val other = c.optJSONObject("otherMember")
-            Conversation(c.getString("id"), c.optString("name").ifBlank { other?.optString("displayName").orEmpty().ifBlank { "Conversation" } }, c.optJSONObject("lastMessage")?.optString("text").orEmpty())
+            val name = c.opt("name")?.takeIf { it != JSONObject.NULL }?.toString()?.trim().orEmpty()
+            val otherName = other?.opt("displayName")?.takeIf { it != JSONObject.NULL }?.toString()?.trim().orEmpty()
+            val last = c.optJSONObject("lastMessage")
+            val preview = when {
+                last == null -> "No messages yet"
+                last.optBoolean("encrypted") -> "Encrypted message"
+                else -> last.opt("text")?.takeIf { it != JSONObject.NULL }?.toString()?.trim().orEmpty().ifBlank { "Attachment" }
+            }
+            Conversation(c.getString("id"), name.ifBlank { otherName.ifBlank { "Direct message" } }, preview)
         } }
     }
     fun messages(id: String, currentUserId: String?): List<Message> {
@@ -119,30 +139,66 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) { super.onCreate(savedInstanceState); setContent { ZipTalkNativeApp(ZipTalkApi(this)) } }
 }
 
+private suspend fun nativeGoogleSignIn(activity: Activity, api: ZipTalkApi) {
+    val clientId = withContext(Dispatchers.IO) { api.googleClientId() }
+    val googleOption = GetSignInWithGoogleOption.Builder(clientId).build()
+    val result = CredentialManager.create(activity).getCredential(
+        activity,
+        GetCredentialRequest.Builder().addCredentialOption(googleOption).build(),
+    )
+    val credential = result.credential
+    if (credential !is CustomCredential || credential.type != GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
+        throw IOException("Google sign-in did not return an ID token.")
+    }
+    val token = GoogleIdTokenCredential.createFrom(credential.data).idToken
+    withContext(Dispatchers.IO) { api.loginWithGoogle(token) }
+}
+
 @Composable private fun ZipTalkNativeApp(api: ZipTalkApi) {
-    val scope = rememberCoroutineScope(); var signedIn by remember { mutableStateOf(false) }; var error by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(Unit) { signedIn = withContext(Dispatchers.IO) { api.currentUserId() != null } }
-    MaterialTheme(colorScheme = darkColorScheme(primary = MaterialTheme.colorScheme.primary)) {
-        if (!signedIn) LoginScreen(error) { email, password -> scope.launch { runCatching { withContext(Dispatchers.IO) { api.login(email, password) } }.onSuccess { signedIn = true }.onFailure { error = it.message } } }
+    val scope = rememberCoroutineScope(); var signedIn by remember { mutableStateOf(false) }; var restoring by remember { mutableStateOf(true) }; var error by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) { signedIn = withContext(Dispatchers.IO) { api.currentUserId() != null }; restoring = false }
+    val colors = darkColorScheme(primary = Color(0xFF0F766E), secondary = Color(0xFF5EEAD4), background = Color(0xFF0B1211), surface = Color(0xFF121B19), surfaceVariant = Color(0xFF1B2624))
+    MaterialTheme(colorScheme = colors) {
+        if (restoring) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+        else if (!signedIn) {
+            val activity = LocalContext.current as? Activity
+            LoginScreen(error,
+                signIn = { email, password -> scope.launch { runCatching { withContext(Dispatchers.IO) { api.login(email, password) } }.onSuccess { signedIn = true }.onFailure { error = it.message } } },
+                googleSignIn = { if (activity != null) scope.launch { runCatching { nativeGoogleSignIn(activity, api) }.onSuccess { signedIn = true }.onFailure { error = it.message ?: "Google sign-in was cancelled." } } },
+            )
+        }
         else ConversationScreen(api)
     }
 }
 
-@Composable private fun LoginScreen(error: String?, signIn: (String, String) -> Unit) {
-    var email by remember { mutableStateOf("") }; var password by remember { mutableStateOf("") }
-    Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.Center) {
-        Text("ZipTalk", style = MaterialTheme.typography.displaySmall); Spacer(Modifier.height(24.dp))
-        OutlinedTextField(email, { email = it }, label = { Text("Email or username") }, modifier = Modifier.fillMaxWidth())
-        OutlinedTextField(password, { password = it }, label = { Text("Password") }, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
-        error?.let { Text(it, color = MaterialTheme.colorScheme.error) }; Spacer(Modifier.height(16.dp))
-        Button({ signIn(email, password) }, Modifier.fillMaxWidth()) { Text("Sign in") }
+@Composable private fun LoginScreen(error: String?, signIn: (String, String) -> Unit, googleSignIn: () -> Unit) {
+    var email by remember { mutableStateOf("") }; var password by remember { mutableStateOf("") }; var submitting by remember { mutableStateOf(false) }
+    Column(Modifier.fillMaxSize().padding(horizontal = 24.dp), verticalArrangement = Arrangement.Center) {
+        Text("ZipTalk", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.secondary)
+        Spacer(Modifier.height(10.dp)); Text("Welcome back", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+        Text("Sign in to continue your conversations.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(30.dp))
+        OutlinedTextField(email, { email = it }, label = { Text("Email or username") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        Spacer(Modifier.height(12.dp))
+        OutlinedTextField(password, { password = it }, label = { Text("Password") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
+        error?.let { Spacer(Modifier.height(12.dp)); Text(it, color = MaterialTheme.colorScheme.error) }; Spacer(Modifier.height(20.dp))
+        Button({ submitting = true; signIn(email.trim(), password); submitting = false }, Modifier.fillMaxWidth().height(52.dp), enabled = !submitting && email.isNotBlank() && password.isNotBlank()) { if (submitting) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp) else Text("Sign in", fontWeight = FontWeight.Bold) }
+        Spacer(Modifier.height(16.dp)); Text("or", modifier = Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+        Spacer(Modifier.height(12.dp)); OutlinedButton(googleSignIn, Modifier.fillMaxWidth().height(52.dp)) { Text("G", fontWeight = FontWeight.Bold); Spacer(Modifier.width(10.dp)); Text("Continue with Google") }
     }
 }
 
 @Composable private fun ConversationScreen(api: ZipTalkApi) {
-    val scope = rememberCoroutineScope(); var conversations by remember { mutableStateOf<List<Conversation>>(emptyList()) }; var selected by remember { mutableStateOf<Conversation?>(null) }
-    LaunchedEffect(Unit) { conversations = withContext(Dispatchers.IO) { api.conversations() } }
-    if (selected == null) LazyColumn(Modifier.fillMaxSize().padding(16.dp)) { item { Text("Chats", style = MaterialTheme.typography.headlineMedium) }; items(conversations) { c -> ListItem({ Text(c.title) }, supportingContent = { Text(c.preview) }, modifier = Modifier.clickable { selected = c }) } }
+    var conversations by remember { mutableStateOf<List<Conversation>>(emptyList()) }; var selected by remember { mutableStateOf<Conversation?>(null) }; var loading by remember { mutableStateOf(true) }; var loadError by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) { runCatching { withContext(Dispatchers.IO) { api.conversations() } }.onSuccess { conversations = it }.onFailure { loadError = it.message }.also { loading = false } }
+    if (selected == null) Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+        Spacer(Modifier.height(20.dp)); Text("ZipTalk", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.secondary); Spacer(Modifier.height(20.dp)); Text("Chats", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+        when { loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+            loadError != null -> Text(loadError ?: "Could not load chats", color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 24.dp))
+            conversations.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("No conversations yet", color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            else -> LazyColumn(Modifier.fillMaxSize().padding(top = 12.dp)) { items(conversations) { c -> Row(Modifier.fillMaxWidth().clip(androidx.compose.foundation.shape.RoundedCornerShape(18.dp)).clickable { selected = c }.padding(12.dp), verticalAlignment = Alignment.CenterVertically) { Box(Modifier.size(48.dp).clip(androidx.compose.foundation.shape.CircleShape), contentAlignment = Alignment.Center) { Surface(color = MaterialTheme.colorScheme.primary) { Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text(c.title.take(1).uppercase(), fontWeight = FontWeight.Bold) } } }; Spacer(Modifier.width(12.dp)); Column(Modifier.weight(1f)) { Text(c.title, fontWeight = FontWeight.SemiBold); Text(c.preview, maxLines = 1, color = MaterialTheme.colorScheme.onSurfaceVariant) } } } }
+        }
+    }
     else ChatScreen(selected!!, api) { selected = null }
 }
 
