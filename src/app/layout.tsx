@@ -46,7 +46,7 @@ export const viewport: Viewport = {
   viewportFit: "cover",
   // Keeps the composer visible when the mobile keyboard opens.
   interactiveWidget: "resizes-content",
-  themeColor: "#3390ec",
+  themeColor: "#6866d9",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
