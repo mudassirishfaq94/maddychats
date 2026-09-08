@@ -136,7 +136,7 @@ export function MessageActions({
                   onReact(emoji);
                   setPickerOpen(false);
                 }}
-                className="flex h-8 w-8 items-center justify-center rounded-xl text-lg transition-transform duration-150 hover:scale-125 hover:bg-[color-mix(in_srgb,var(--muted)_12%,transparent)]"
+                className="emoji-button flex h-8 w-8 items-center justify-center rounded-xl text-lg transition-transform duration-150 hover:scale-125 hover:bg-[color-mix(in_srgb,var(--muted)_12%,transparent)]"
               >
                 {emoji}
               </button>

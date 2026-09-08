@@ -167,7 +167,7 @@ export function MobileMessageMenu({
                   key={emoji}
                   type="button"
                   onClick={() => handleReact(emoji)}
-                  className="flex h-12 w-12 items-center justify-center rounded-2xl text-2xl transition-transform active:scale-110"
+                  className="emoji-button flex h-12 w-12 items-center justify-center rounded-2xl text-2xl transition-transform active:scale-110"
                 >
                   {emoji}
                 </button>

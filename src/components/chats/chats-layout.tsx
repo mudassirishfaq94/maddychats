@@ -135,7 +135,9 @@ export function ChatsLayout({
             if (!signal.aborted && data?.conversations) setLiveList({ source: initialConversations, items: data.conversations });
           })
           .catch(() => undefined);
-      }, 350);
+      // A short debounce groups message receipts and edits arriving together,
+      // while keeping the conversation preview feeling immediate.
+      }, 180);
     });
     return () => {
       unsubscribe();
@@ -200,20 +202,23 @@ export function ChatsLayout({
       {/* ------------------------ conversation sidebar ------------------------ */}
       <aside
         className={cn(
-          "w-full shrink-0 flex-col border-r border-[var(--border)] bg-[var(--surface)] lg:flex lg:w-[340px]",
+          "w-full shrink-0 flex-col border-r border-[var(--border)] bg-[var(--surface)] lg:flex lg:w-[380px] xl:w-[400px]",
           activeId ? "hidden" : "flex",
         )}
         aria-label="Conversations"
       >
-        <div className="flex items-center justify-between gap-2 px-4 py-3">
-          <h1 className="font-display text-[1.15rem] font-bold">Chats</h1>
+        <div className="flex items-center justify-between gap-2 px-5 pb-3 pt-4">
+          <div>
+            <p className="text-[0.66rem] font-bold uppercase tracking-[0.16em] text-[var(--accent-fg)]">ZipTalk</p>
+            <h1 className="font-display mt-0.5 text-[1.3rem] font-bold tracking-tight">Messages</h1>
+          </div>
           <div className="flex items-center gap-1.5">
             <NewChatDialog start="group-people" />
             <NewChatDialog start="direct" />
           </div>
         </div>
 
-        <div className="px-3.5 pb-2.5">
+        <div className="px-4 pb-3">
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--muted)]" />
             <input
@@ -258,7 +263,7 @@ export function ChatsLayout({
           ) : null}
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto py-1">
+        <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
           {conversations.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center px-6 text-center">
               <LogoMark size={30} className="text-[var(--muted)]" />
@@ -283,17 +288,17 @@ export function ChatsLayout({
                       href={`/app/chats/${conv.id}`}
                       aria-current={active ? "page" : undefined}
                       className={cn(
-                        "flex items-center gap-3 px-4 py-2.5 transition-colors duration-100",
+                        "chat-list-row flex items-center gap-3.5 rounded-2xl px-3 py-3 transition-[background-color,transform,box-shadow] duration-150",
                         active
-                          ? "bg-[color-mix(in_srgb,var(--accent)_9%,transparent)]"
-                          : "hover:bg-[color-mix(in_srgb,var(--muted)_7%,transparent)]",
+                          ? "bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] shadow-[inset_3px_0_0_var(--accent)]"
+                          : "hover:bg-[color-mix(in_srgb,var(--muted)_7%,transparent)] hover:translate-x-0.5",
                       )}
                     >
                       {conv.type === "group" && conv.avatarUrl ? (
-                        <img src={conv.avatarUrl} alt="" className="h-11 w-11 shrink-0 rounded-full object-cover" />
+                        <img src={conv.avatarUrl} alt="" loading="lazy" decoding="async" className="h-12 w-12 shrink-0 rounded-full object-cover ring-1 ring-black/5" />
                       ) : conv.otherMember ? (
                         <span className="relative shrink-0">
-                          <Avatar user={conv.otherMember} size={44} />
+                          <Avatar user={conv.otherMember} size={48} />
                           <span
                             aria-hidden="true"
                             className={cn(
@@ -305,7 +310,7 @@ export function ChatsLayout({
                           />
                         </span>
                       ) : (
-                        <span className="flex h-11 w-11 items-center justify-center rounded-full bg-[var(--surface-2)] text-[var(--muted)]">
+                        <span className="flex h-12 w-12 items-center justify-center rounded-full bg-[var(--surface-2)] text-[var(--muted)]">
                           <LogoMark size={24} />
                         </span>
                       )}
@@ -318,7 +323,7 @@ export function ChatsLayout({
                             {conv.muted ? (
                               <BellOff className="h-3 w-3 shrink-0 text-[var(--muted)]" />
                             ) : null}
-                            <span className="truncate text-[0.92rem] font-semibold">
+                            <span className="truncate text-[0.95rem] font-semibold tracking-[-0.01em]">
                               {name}
                             </span>
                             {conv.requestPending ? <span className="shrink-0 rounded-full bg-[var(--accent-soft)] px-1.5 py-0.5 text-[0.58rem] font-bold uppercase tracking-wide text-[var(--accent-fg)]">Request</span> : null}
@@ -327,11 +332,11 @@ export function ChatsLayout({
                             {stampTime(conv.lastMessageAt ?? conv.createdAt)}
                           </span>
                         </span>
-                        <span className="mt-0.5 flex items-center gap-2">
+                          <span className="mt-1 flex items-center gap-2">
                           <span className="flex min-w-0 flex-1 items-center gap-1.5">
                           <span
                             className={cn(
-                              "block min-w-0 truncate text-[0.82rem]",
+                              "block min-w-0 truncate text-[0.8rem]",
                               conv.unreadCount > 0 && !conv.muted
                                 ? "font-medium text-[var(--text)]"
                                 : "text-[var(--muted)]",

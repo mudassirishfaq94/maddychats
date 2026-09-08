@@ -6,59 +6,59 @@
    ========================================================================== */
 
 :root {
-  --bg: #f6f7ff;
+  --bg: #f3f5f1;
   --surface: #ffffff;
-  --surface-2: #eef0ff;
-  --text: #20243a;
-  --muted: #68708a;
-  --border: #e0e4f2;
-  --border-strong: #c7cde3;
-  --input-bg: #f3f5ff;
-  --action: #5b5bd6;
+  --surface-2: #f5f7f4;
+  --text: #17211d;
+  --muted: #718078;
+  --border: #e1e7e0;
+  --border-strong: #cbd6cb;
+  --input-bg: #f1f4f0;
+  --action: #148d68;
   --action-fg: #ffffff;
-  --accent: #6866d9;
-  --accent-soft: rgba(104, 102, 217, 0.12);
-  --accent-fg: #5553bc;
-  --ring: rgba(104, 102, 217, 0.24);
-  --success: #16856e;
+  --accent: #148d68;
+  --accent-soft: rgba(20, 141, 104, 0.13);
+  --accent-fg: #087657;
+  --ring: rgba(20, 141, 104, 0.22);
+  --success: #148d68;
   --danger: #d73535;
   --warning: #c9862b;
   --shadow-lg: 0 16px 40px -22px rgba(0, 0, 0, 0.28);
 
   /* Message bubbles */
   --bubble-other-bg: #ffffff;
-  --bubble-own-bg: #e8e8ff;
-  --bubble-own-fg: #29285a;
-  --bubble-own-sub: #61618d;
-  --grad-send: #5b5bd6;
+  --bubble-own-bg: #d9f6e8;
+  --bubble-own-fg: #17211d;
+  --bubble-own-sub: #5a7b6d;
+  --grad-send: #148d68;
   color-scheme: light;
 }
 
 html:not(.light) {
-  --bg: #182033;
-  --surface: #222c42;
-  --surface-2: #2b3650;
-  --text: #f4f5ff;
-  --muted: #b1bad2;
-  --border: #36425e;
-  --border-strong: #4b5876;
-  --input-bg: #2a3550;
-  --action: #a9a7ff;
-  --action-fg: #202743;
-  --accent: #aaa8ff;
-  --accent-soft: rgba(170, 168, 255, 0.16);
-  --accent-fg: #c1c0ff;
-  --ring: rgba(170, 168, 255, 0.28);
-  --success: #55d2ad;
-  --danger: #ff858d;
-  --warning: #f4bd70;
-  --shadow-lg: 0 18px 44px -20px rgba(7, 11, 24, 0.5);
+  --bg: #101815;
+  --surface: #16211d;
+  --surface-2: #1d2924;
+  --text: #edf7f1;
+  --muted: #9daca4;
+  --border: #2a3932;
+  --border-strong: #405249;
+  --input-bg: #1d2924;
+  --action: #45d29c;
+  --action-fg: #0d1914;
+  --accent: #45d29c;
+  --accent-soft: rgba(69, 210, 156, 0.14);
+  --accent-fg: #65e6b1;
+  --ring: rgba(69, 210, 156, 0.24);
+  --success: #45d29c;
+  --danger: #ef5b5b;
+  --warning: #e0a44c;
+  --shadow-lg: 0 18px 44px -20px rgba(0, 0, 0, 0.7);
 
-  --bubble-other-bg: #28334c;
-  --bubble-own-bg: #4b4d91;
-  --bubble-own-fg: #fbfbff;
-  --bubble-own-sub: #d0d1fb;
-  --grad-send: #aaa8ff;
+  --bubble-other-bg: #1d2924;
+  --bubble-own-bg: #1a5743;
+  --bubble-own-fg: #f2fbf6;
+  --bubble-own-sub: #b0cfc1;
+  --grad-send: #45d29c;
   color-scheme: dark;
 }
 
@@ -123,7 +123,8 @@ body {
 
 /* Original Maddy Chats doodles, scoped to the conversation canvas only. */
 .chat-message-area {
-  background-image: url("/patterns/maddy-doodles-dark.svg");
+  background-color: #e8eee8;
+  background-image: url("/patterns/maddy-doodles-light.svg");
   background-repeat: repeat;
   background-position: center top;
   background-size: clamp(290px, 34vw, 360px) auto;
@@ -133,6 +134,11 @@ body {
 
 html.light .chat-message-area {
   background-image: url("/patterns/maddy-doodles-light.svg");
+}
+
+html:not(.light) .chat-message-area {
+  background-color: #101815;
+  background-image: url("/patterns/maddy-doodles-dark.svg");
 }
 
 ::selection {
@@ -397,6 +403,25 @@ html.light .chat-message-area {
 
 .pulse-dot {
   animation: pulse-dot 2.4s ease-out infinite;
+}
+
+/* Large conversation lists keep their scroll path responsive. */
+.chat-list-row {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 78px;
+}
+
+/* A light, expressive reaction bounce using transform-only animation. */
+@keyframes emoji-pop {
+  0% { transform: scale(1) rotate(0); }
+  42% { transform: scale(1.28) rotate(-9deg); }
+  70% { transform: scale(1.12) rotate(6deg); }
+  100% { transform: scale(1) rotate(0); }
+}
+
+.emoji-button:hover,
+.emoji-button:focus-visible {
+  animation: emoji-pop 420ms cubic-bezier(0.2, 0.9, 0.25, 1.35) both;
 }
 
 @media (prefers-reduced-motion: reduce) {

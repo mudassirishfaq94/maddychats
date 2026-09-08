@@ -183,7 +183,7 @@ export function EmojiPicker({ onSelect, onClose }: EmojiPickerProps) {
                   key={emoji}
                   type="button"
                   onClick={() => handleSelect(emoji)}
-                  className="flex h-9 w-9 items-center justify-center rounded-lg text-xl transition-colors hover:bg-[var(--surface-2)]"
+                  className="emoji-button flex h-9 w-9 items-center justify-center rounded-lg text-xl transition-colors hover:bg-[var(--surface-2)]"
                 >
                   {emoji}
                 </button>
@@ -201,7 +201,7 @@ export function EmojiPicker({ onSelect, onClose }: EmojiPickerProps) {
                     key={emoji}
                     type="button"
                     onClick={() => handleSelect(emoji)}
-                    className="flex h-9 w-9 items-center justify-center rounded-lg text-xl transition-colors hover:bg-[var(--surface-2)]"
+                    className="emoji-button flex h-9 w-9 items-center justify-center rounded-lg text-xl transition-colors hover:bg-[var(--surface-2)]"
                   >
                     {emoji}
                   </button>
