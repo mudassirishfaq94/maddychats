@@ -79,6 +79,8 @@ private class ZipTalkApi(context: Context) {
     }
 
     fun login(identifier: String, password: String) = request("/api/auth/login", "POST", JSONObject().put("identifier", identifier).put("password", password))
+    fun register(name: String, username: String, email: String, password: String) = request("/api/auth/register", "POST", JSONObject()
+        .put("displayName", name).put("username", username).put("email", email).put("password", password))
     fun googleClientId(): String = request("/api/auth/google/native").getString("clientId")
     fun loginWithGoogle(idToken: String) = request("/api/auth/google/native", "POST", JSONObject().put("idToken", idToken))
     fun currentUserId(): String? = runCatching { request("/api/auth/me").getJSONObject("user").getString("id") }.getOrNull()
@@ -157,13 +159,14 @@ private suspend fun nativeGoogleSignIn(activity: Activity, api: ZipTalkApi) {
 @Composable private fun ZipTalkNativeApp(api: ZipTalkApi) {
     val scope = rememberCoroutineScope(); var signedIn by remember { mutableStateOf(false) }; var restoring by remember { mutableStateOf(true) }; var error by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) { signedIn = withContext(Dispatchers.IO) { api.currentUserId() != null }; restoring = false }
-    val colors = darkColorScheme(primary = Color(0xFF0F766E), secondary = Color(0xFF5EEAD4), background = Color(0xFF0B1211), surface = Color(0xFF121B19), surfaceVariant = Color(0xFF1B2624))
+    val colors = darkColorScheme(primary = Color(0xFFA9A7FF), onPrimary = Color(0xFF202743), secondary = Color(0xFFC1C0FF), background = Color(0xFF182033), surface = Color(0xFF222C42), surfaceVariant = Color(0xFF2B3650))
     MaterialTheme(colorScheme = colors) {
         if (restoring) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
         else if (!signedIn) {
             val activity = LocalContext.current as? Activity
             LoginScreen(error,
                 signIn = { email, password -> scope.launch { runCatching { withContext(Dispatchers.IO) { api.login(email, password) } }.onSuccess { signedIn = true }.onFailure { error = it.message } } },
+                signUp = { name, username, email, password -> scope.launch { runCatching { withContext(Dispatchers.IO) { api.register(name, username, email, password) } }.onSuccess { signedIn = true }.onFailure { error = it.message } } },
                 googleSignIn = { if (activity != null) scope.launch { runCatching { nativeGoogleSignIn(activity, api) }.onSuccess { signedIn = true }.onFailure { error = it.message ?: "Google sign-in was cancelled." } } },
             )
         }
@@ -171,20 +174,25 @@ private suspend fun nativeGoogleSignIn(activity: Activity, api: ZipTalkApi) {
     }
 }
 
-@Composable private fun LoginScreen(error: String?, signIn: (String, String) -> Unit, googleSignIn: () -> Unit) {
+@Composable private fun LoginScreen(error: String?, signIn: (String, String) -> Unit, signUp: (String, String, String, String) -> Unit, googleSignIn: () -> Unit) {
+    var creating by remember { mutableStateOf(false) }; var name by remember { mutableStateOf("") }; var username by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }; var password by remember { mutableStateOf("") }; var submitting by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().padding(horizontal = 24.dp), verticalArrangement = Arrangement.Center) {
-        Text("ZipTalk", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.secondary)
-        Spacer(Modifier.height(10.dp)); Text("Welcome back", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-        Text("Sign in to continue your conversations.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Spacer(Modifier.height(30.dp))
-        OutlinedTextField(email, { email = it }, label = { Text("Email or username") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-        Spacer(Modifier.height(12.dp))
-        OutlinedTextField(password, { password = it }, label = { Text("Password") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
-        error?.let { Spacer(Modifier.height(12.dp)); Text(it, color = MaterialTheme.colorScheme.error) }; Spacer(Modifier.height(20.dp))
-        Button({ submitting = true; signIn(email.trim(), password); submitting = false }, Modifier.fillMaxWidth().height(52.dp), enabled = !submitting && email.isNotBlank() && password.isNotBlank()) { if (submitting) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp) else Text("Sign in", fontWeight = FontWeight.Bold) }
-        Spacer(Modifier.height(16.dp)); Text("or", modifier = Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-        Spacer(Modifier.height(12.dp)); OutlinedButton(googleSignIn, Modifier.fillMaxWidth().height(52.dp)) { Text("G", fontWeight = FontWeight.Bold); Spacer(Modifier.width(10.dp)); Text("Continue with Google") }
+        Surface(color = MaterialTheme.colorScheme.primary.copy(alpha = 0.18f), shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp)) { Text("ZipTalk", modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp), fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.secondary) }
+        Spacer(Modifier.height(20.dp)); Text(if (creating) "Create your account" else "Welcome back", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.ExtraBold)
+        Spacer(Modifier.height(8.dp)); Text(if (creating) "Start chatting securely with the people you know." else "Your conversations are waiting for you.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(28.dp))
+        if (creating) {
+            OutlinedTextField(name, { name = it }, label = { Text("Your name") }, singleLine = true, modifier = Modifier.fillMaxWidth()); Spacer(Modifier.height(10.dp))
+            OutlinedTextField(username, { username = it }, label = { Text("Username") }, singleLine = true, modifier = Modifier.fillMaxWidth()); Spacer(Modifier.height(10.dp))
+        }
+        OutlinedTextField(email, { email = it }, label = { Text(if (creating) "Email address" else "Email or username") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        Spacer(Modifier.height(10.dp)); OutlinedTextField(password, { password = it }, label = { Text("Password") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
+        error?.let { Spacer(Modifier.height(12.dp)); Text(it, color = MaterialTheme.colorScheme.error) }; Spacer(Modifier.height(18.dp))
+        Button({ submitting = true; if (creating) signUp(name.trim(), username.trim(), email.trim(), password) else signIn(email.trim(), password); submitting = false }, Modifier.fillMaxWidth().height(54.dp), enabled = !submitting && email.isNotBlank() && password.isNotBlank() && (!creating || (name.isNotBlank() && username.isNotBlank()))) { Text(if (creating) "Create account" else "Sign in", fontWeight = FontWeight.Bold) }
+        Spacer(Modifier.height(14.dp)); Text("or", modifier = Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+        Spacer(Modifier.height(12.dp)); OutlinedButton(googleSignIn, Modifier.fillMaxWidth().height(54.dp)) { Text("G", fontWeight = FontWeight.Bold); Spacer(Modifier.width(10.dp)); Text("Continue with Google") }
+        Spacer(Modifier.height(14.dp)); TextButton({ creating = !creating; submitting = false }, Modifier.align(Alignment.CenterHorizontally)) { Text(if (creating) "Already have an account? Sign in" else "New to ZipTalk? Create an account") }
     }
 }
 
