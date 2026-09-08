@@ -170,6 +170,28 @@ class MainActivity : ComponentActivity() {
  * the proven browser E2EE implementation during the native migration.
  */
 @Composable private fun ZipTalkHostedExperience(api: ZipTalkApi, onReady: (WebView) -> Unit) {
+    var startUrl by remember { mutableStateOf<String?>(null) }
+
+    // A cookie saved by the retired Compose client can be expired or belong to
+    // an earlier deployment. Do not render an authenticated route until the
+    // server has accepted it; doing so left the WebView showing an empty shell.
+    LaunchedEffect(Unit) {
+        val hasValidSession = withContext(Dispatchers.IO) { api.currentUserId() != null }
+        startUrl = if (hasValidSession) {
+            "${BuildConfig.API_BASE_URL}/app"
+        } else {
+            "${BuildConfig.API_BASE_URL}/login?next=%2Fapp"
+        }
+    }
+
+    if (startUrl == null) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center,
+        ) { CircularProgressIndicator(color = Color(0xFFAAA6FF)) }
+        return
+    }
+
     AndroidView(
         modifier = Modifier.fillMaxSize(),
         factory = { context ->
@@ -210,7 +232,7 @@ class MainActivity : ComponentActivity() {
                         return false
                     }
                 }
-                loadUrl(BuildConfig.API_BASE_URL)
+                loadUrl(startUrl!!)
                 onReady(this)
             }
         },
