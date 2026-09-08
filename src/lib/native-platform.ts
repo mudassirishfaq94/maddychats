@@ -9,5 +9,8 @@ import { Capacitor } from "@capacitor/core";
 export function isNativeApp(): boolean {
   if (typeof window === "undefined") return false;
 
-  return Capacitor.isNativePlatform();
+  // The production Android shell is an app-owned WebView while the full
+  // Capacitor client is being rebuilt. It advertises this stable marker so it
+  // receives native-safe behaviour (no PWA worker or browser update loop).
+  return Capacitor.isNativePlatform() || /ZipTalkAndroid\//.test(navigator.userAgent);
 }

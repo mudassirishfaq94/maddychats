@@ -8,6 +8,7 @@ import android.os.Bundle
 import android.app.Activity
 import android.webkit.CookieManager
 import android.webkit.WebChromeClient
+import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.OnBackPressedCallback
@@ -177,7 +178,12 @@ class MainActivity : ComponentActivity() {
     // server has accepted it; doing so left the WebView showing an empty shell.
     LaunchedEffect(Unit) {
         val hasValidSession = withContext(Dispatchers.IO) { api.currentUserId() != null }
-        startUrl = if (hasValidSession) {
+        // Sessions created in this WebView are HttpOnly and intentionally not
+        // readable by OkHttp. Preserve them across an APK update too.
+        val hasWebSession = CookieManager.getInstance()
+            .getCookie(BuildConfig.API_BASE_URL)
+            ?.contains("maddy_session=") == true
+        startUrl = if (hasValidSession || hasWebSession) {
             "${BuildConfig.API_BASE_URL}/app"
         } else {
             "${BuildConfig.API_BASE_URL}/login?next=%2Fapp"
@@ -199,9 +205,15 @@ class MainActivity : ComponentActivity() {
                 settings.javaScriptEnabled = true
                 settings.domStorageEnabled = true
                 settings.databaseEnabled = true
+                settings.cacheMode = WebSettings.LOAD_NO_CACHE
                 settings.mediaPlaybackRequiresUserGesture = false
                 settings.loadWithOverviewMode = false
                 settings.useWideViewPort = false
+                settings.userAgentString = "${settings.userAgentString} ZipTalkAndroid/0.7"
+                // Do not erase DOM storage: it holds the browser E2EE keys.
+                // Clearing only HTTP resources guarantees that an APK update
+                // cannot keep rendering stale Next.js scripts.
+                clearCache(true)
                 CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
                 // Older native builds saved the login cookie in OkHttp. Move it
                 // into WebView before the first server-rendered page request so
