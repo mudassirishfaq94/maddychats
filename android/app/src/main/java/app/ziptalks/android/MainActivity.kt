@@ -21,6 +21,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -151,7 +152,12 @@ class MainActivity : ComponentActivity() {
     private val api by lazy { ZipTalkApi(this) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Applies AppTheme from postSplashScreenTheme. Without this call the
+        // activity remains styled as the launch screen on affected devices,
+        // producing the extra title bar and unreadable page text.
+        installSplashScreen()
         super.onCreate(savedInstanceState)
+        WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG)
         CookieManager.getInstance().setAcceptCookie(true)
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
@@ -209,7 +215,7 @@ class MainActivity : ComponentActivity() {
                 settings.mediaPlaybackRequiresUserGesture = false
                 settings.loadWithOverviewMode = false
                 settings.useWideViewPort = false
-                settings.userAgentString = "${settings.userAgentString} ZipTalkAndroid/0.7"
+                settings.userAgentString = "${settings.userAgentString} ZipTalkAndroid/0.8"
                 // Do not erase DOM storage: it holds the browser E2EE keys.
                 // Clearing only HTTP resources guarantees that an APK update
                 // cannot keep rendering stale Next.js scripts.

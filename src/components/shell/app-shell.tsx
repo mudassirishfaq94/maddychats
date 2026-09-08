@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useSyncExternalStore, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { CircleDashed, Globe, MessagesSquare, Shield, Users } from "lucide-react";
@@ -12,6 +12,7 @@ import { MobileNav } from "./mobile-nav";
 import { MessageSearch } from "@/components/chats/message-search";
 import { UserMenu } from "./user-menu";
 import { cn } from "@/lib/utils";
+import { isNativeApp } from "@/lib/native-platform";
 
 /**
  * Authenticated shell: one compact header over a full-height content area.
@@ -25,6 +26,11 @@ export function AppShell({
   children: ReactNode;
 }) {
   const pathname = usePathname();
+  const nativeShell = useSyncExternalStore(
+    () => () => undefined,
+    isNativeApp,
+    () => false,
+  );
   const onPeople = pathname.startsWith("/app/people") || pathname.startsWith("/app/users");
   const onStatus = pathname.startsWith("/app/status");
   const onCommunities = pathname.startsWith("/app/communities");
@@ -32,7 +38,13 @@ export function AppShell({
   const inChat = pathname.startsWith("/app/chats/");
 
   return (
-    <div className="flex h-dvh w-full min-w-0 flex-col overflow-hidden bg-[var(--bg)] pb-0 sm:pb-0">
+    <div
+      className="flex h-dvh w-full min-w-0 flex-col overflow-hidden bg-[var(--bg)] pb-0 sm:pb-0"
+      // Android System WebView on some devices accepts `dvh` but resolves it
+      // to the app bar height. A standalone WebView has no browser chrome, so
+      // the stable layout viewport is the correct full-height measurement.
+      style={nativeShell ? { height: "100vh" } : undefined}
+    >
       <a href="#main-content" className="skip-link">
         Skip to content
       </a>
