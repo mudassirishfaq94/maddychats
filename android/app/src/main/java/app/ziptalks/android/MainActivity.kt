@@ -6,6 +6,11 @@ import android.net.Uri
 import android.provider.OpenableColumns
 import android.os.Bundle
 import android.app.Activity
+import android.webkit.CookieManager
+import android.webkit.WebChromeClient
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import androidx.activity.OnBackPressedCallback
 import androidx.credentials.CredentialManager
 import androidx.credentials.GetCredentialRequest
 import androidx.credentials.CustomCredential
@@ -26,6 +31,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
@@ -138,7 +144,49 @@ private class ZipTalkApi(context: Context) {
 }
 
 class MainActivity : ComponentActivity() {
-    override fun onCreate(savedInstanceState: Bundle?) { super.onCreate(savedInstanceState); setContent { ZipTalkNativeApp(ZipTalkApi(this)) } }
+    private var webView: WebView? = null
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        CookieManager.getInstance().setAcceptCookie(true)
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (webView?.canGoBack() == true) webView?.goBack() else finish()
+            }
+        })
+        setContent { ZipTalkHostedExperience { webView = it } }
+    }
+
+    override fun onDestroy() { webView?.destroy(); webView = null; super.onDestroy() }
+}
+
+/**
+ * The production Android experience deliberately renders the existing ZipTalk
+ * application in an app-owned WebView. This is a standalone Android window
+ * (not Chrome, a Custom Tab, or a PWA), while preserving exact web parity and
+ * the proven browser E2EE implementation during the native migration.
+ */
+@Composable private fun ZipTalkHostedExperience(onReady: (WebView) -> Unit) {
+    AndroidView(
+        modifier = Modifier.fillMaxSize(),
+        factory = { context ->
+            WebView(context).apply {
+                settings.javaScriptEnabled = true
+                settings.domStorageEnabled = true
+                settings.databaseEnabled = true
+                settings.mediaPlaybackRequiresUserGesture = false
+                settings.loadWithOverviewMode = false
+                settings.useWideViewPort = false
+                CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
+                webChromeClient = WebChromeClient()
+                webViewClient = object : WebViewClient() {
+                    override fun shouldOverrideUrlLoading(view: WebView, url: String): Boolean = false
+                }
+                loadUrl(BuildConfig.API_BASE_URL)
+                onReady(this)
+            }
+        },
+    )
 }
 
 private suspend fun nativeGoogleSignIn(activity: Activity, api: ZipTalkApi) {
@@ -156,18 +204,32 @@ private suspend fun nativeGoogleSignIn(activity: Activity, api: ZipTalkApi) {
     withContext(Dispatchers.IO) { api.loginWithGoogle(token) }
 }
 
+private fun authErrorMessage(error: Throwable): String {
+    val raw = error.message.orEmpty()
+    return if (raw.contains("[16]") || raw.contains("reauth", ignoreCase = true)) {
+        "Google sign-in needs this Android app to be approved in Google Cloud. Add the ZipTalk package and signing certificate, then try again."
+    } else raw.ifBlank { "Sign-in could not be completed. Please try again." }
+}
+
 @Composable private fun ZipTalkNativeApp(api: ZipTalkApi) {
     val scope = rememberCoroutineScope(); var signedIn by remember { mutableStateOf(false) }; var restoring by remember { mutableStateOf(true) }; var error by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) { signedIn = withContext(Dispatchers.IO) { api.currentUserId() != null }; restoring = false }
-    val colors = darkColorScheme(primary = Color(0xFFA9A7FF), onPrimary = Color(0xFF202743), secondary = Color(0xFFC1C0FF), background = Color(0xFF182033), surface = Color(0xFF222C42), surfaceVariant = Color(0xFF2B3650))
+    val colors = darkColorScheme(
+        primary = Color(0xFFA9A7FF), onPrimary = Color(0xFF202743),
+        secondary = Color(0xFFC1C0FF), onSecondary = Color(0xFF24284D),
+        background = Color(0xFF182033), onBackground = Color(0xFFF4F5FF),
+        surface = Color(0xFF222C42), onSurface = Color(0xFFF4F5FF),
+        surfaceVariant = Color(0xFF2B3650), onSurfaceVariant = Color(0xFFBFC8E3),
+        outline = Color(0xFF64718F), error = Color(0xFFFF858D), onError = Color(0xFF4A111A),
+    )
     MaterialTheme(colorScheme = colors) {
         if (restoring) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
         else if (!signedIn) {
             val activity = LocalContext.current as? Activity
             LoginScreen(error,
-                signIn = { email, password -> scope.launch { runCatching { withContext(Dispatchers.IO) { api.login(email, password) } }.onSuccess { signedIn = true }.onFailure { error = it.message } } },
-                signUp = { name, username, email, password -> scope.launch { runCatching { withContext(Dispatchers.IO) { api.register(name, username, email, password) } }.onSuccess { signedIn = true }.onFailure { error = it.message } } },
-                googleSignIn = { if (activity != null) scope.launch { runCatching { nativeGoogleSignIn(activity, api) }.onSuccess { signedIn = true }.onFailure { error = it.message ?: "Google sign-in was cancelled." } } },
+                signIn = { email, password -> scope.launch { runCatching { withContext(Dispatchers.IO) { api.login(email, password) } }.onSuccess { signedIn = true }.onFailure { error = authErrorMessage(it) } } },
+                signUp = { name, username, email, password -> scope.launch { runCatching { withContext(Dispatchers.IO) { api.register(name, username, email, password) } }.onSuccess { signedIn = true }.onFailure { error = authErrorMessage(it) } } },
+                googleSignIn = { if (activity != null) scope.launch { runCatching { nativeGoogleSignIn(activity, api) }.onSuccess { signedIn = true }.onFailure { error = authErrorMessage(it) } } },
             )
         }
         else ConversationScreen(api)
