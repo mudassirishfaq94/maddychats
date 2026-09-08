@@ -61,26 +61,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const refresh = useCallback(async () => {
     try {
-      const res = await fetch("/api/auth/me", { cache: "no-store" });
+      const res = await fetch("/api/auth/me", {
+        cache: "no-store",
+        credentials: "same-origin",
+      });
       if (!mounted.current) return;
       if (res.ok) {
         const data = (await res.json()) as { user: SafeUser };
         setUser(data.user);
         setStatus("authenticated");
-      } else {
+      } else if (res.status === 401) {
         setUser(null);
         setStatus("unauthenticated");
       }
     } catch {
       if (!mounted.current) return;
-      setUser(null);
-      setStatus("unauthenticated");
+      // A network interruption must not turn a valid, persistent session into
+      // an apparent logout. The next focus/heartbeat check will retry it.
+      setStatus((previous) => previous === "authenticated" ? previous : "unauthenticated");
     }
   }, []);
 
   useEffect(() => {
     const timer = window.setTimeout(() => void refresh(), 0);
     return () => window.clearTimeout(timer);
+  }, [refresh]);
+
+  useEffect(() => {
+    // Keep the signed cookie rolling for tabs that remain open for days. Also
+    // retry as soon as the user returns after sleep or a lost connection.
+    const renew = () => {
+      if (document.visibilityState === "visible") void refresh();
+    };
+    const interval = window.setInterval(renew, 6 * 60 * 60 * 1000);
+    window.addEventListener("focus", renew);
+    document.addEventListener("visibilitychange", renew);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", renew);
+      document.removeEventListener("visibilitychange", renew);
+    };
   }, [refresh]);
 
   const signIn = useCallback(

@@ -280,13 +280,10 @@ export function ChatView({
             nextTexts.set(m.id, await decrypt(m.text, conversationId));
             failedDecryptionRef.current.delete(m.id);
           } catch {
-            // If this message previously failed, give up permanently.
-            if (failedDecryptionRef.current.has(m.id)) {
-              nextTexts.set(m.id, "\u{1F512} This message could not be decrypted on this device.");
-            } else {
-              failedDecryptionRef.current.add(m.id);
-              hadFailure = true;
-            }
+            // Do not permanently mark a legacy message as undecryptable. An
+            // older signed-in device can share its original key later.
+            failedDecryptionRef.current.add(m.id);
+            hadFailure = true;
           }
         }
         if (
@@ -308,17 +305,19 @@ export function ChatView({
       if (nextReplies.size !== decryptedReplies.size) {
         setDecryptedReplies(nextReplies);
       }
-      // Retry failed decryptions after 2 seconds (peer's key may still arrive).
+      // Retry failed decryptions after 10 seconds (a peer or the user's other
+      // device may still be publishing the historical key).
       if (hadFailure && alive) {
         if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
         retryTimerRef.current = setTimeout(() => {
           // Force re-run by bumping items via a no-op state update.
           setItems((prev) => [...prev]);
-        }, 2000);
+        }, 10000);
       }
     })();
     return () => {
       alive = false;
+      if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items, e2ee.initialized, conversationId, decrypt]);
@@ -326,7 +325,10 @@ export function ChatView({
   /** Plaintext for a message: decrypted locally, or raw when not encrypted. */
   const textOf = useCallback((m: { encrypted: boolean; text: string; id: string }) => {
     if (!m.encrypted) return m.text;
-    return decryptedTexts.get(m.id) ?? "";
+    return decryptedTexts.get(m.id)
+      ?? (failedDecryptionRef.current.has(m.id)
+        ? "🔒 Waiting for this device's encryption key…"
+        : "🔒 Decrypting message…");
   }, [decryptedTexts]);
 
   /** Safe text for clipboard/edit: never copy ciphertext. */
