@@ -10,6 +10,7 @@ import { CapacitorDeepLinks } from "@/components/capacitor-deep-links";
 import { PwaUpdatePrompt } from "@/components/pwa-update-prompt";
 import { NativeAppBridge } from "@/components/native-app-bridge";
 import "./globals.css";
+import "./circlo-green.css";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -47,7 +48,7 @@ export const viewport: Viewport = {
   viewportFit: "cover",
   // Keeps the composer visible when the mobile keyboard opens.
   interactiveWidget: "resizes-content",
-  themeColor: "#6255d8",
+  themeColor: "#148d68",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
