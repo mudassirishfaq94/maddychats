@@ -158,6 +158,8 @@ export const conversations = pgTable(
     announcements: text("announcements"),
     /** Slow mode: minimum seconds between messages per user (0 = off) */
     slowModeSeconds: integer("slow_mode_seconds").default(0).notNull(),
+    /** New messages are removed after this duration; 0 means off. */
+    disappearingSeconds: integer("disappearing_seconds").default(0).notNull(),
     /** Last message sender — for system message tracking */
     lastMessageBy: uuid("last_message_by").references((): AnyPgColumn => users.id, { onDelete: "set null" }),
   },
@@ -257,6 +259,8 @@ export const messages = pgTable(
       .notNull(),
     editedAt: timestamp("edited_at", { withTimezone: true, mode: "date" }),
     deletedAt: timestamp("deleted_at", { withTimezone: true, mode: "date" }),
+    /** Automatic expiry for conversations with disappearing messages enabled. */
+    expiresAt: timestamp("expires_at", { withTimezone: true, mode: "date" }),
   },
   (table) => [
     index("messages_conversation_created_idx").on(
@@ -265,6 +269,7 @@ export const messages = pgTable(
       table.id,
     ),
     index("messages_sender_idx").on(table.senderId),
+    index("messages_expires_idx").on(table.expiresAt),
   ],
 );
 

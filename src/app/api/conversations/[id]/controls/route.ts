@@ -6,6 +6,7 @@ import { isUuid } from "@/server/users";
 import {
   applyConversationControl,
   clearConversationForUser,
+  setDisappearingMessages,
   type ConversationControl,
 } from "@/server/chat";
 
@@ -21,8 +22,10 @@ const schema = z.object({
     "unarchive",
     "markUnread",
     "markRead",
+    "setDisappearing",
     "clear",
   ]),
+  disappearingSeconds: z.union([z.literal(0), z.literal(86400), z.literal(604800), z.literal(2592000)]).optional(),
 });
 
 /**
@@ -53,6 +56,12 @@ export async function POST(
     const result = await clearConversationForUser(id, me.id);
     if (!result) return jsonError(404, "Conversation not found.");
     return NextResponse.json({ ok: true, result });
+  }
+
+  if (parsed.data.disappearingSeconds !== undefined) {
+    const ok = await setDisappearingMessages(id, me.id, parsed.data.disappearingSeconds);
+    if (!ok) return jsonError(404, "Conversation not found.");
+    return NextResponse.json({ ok: true, disappearingSeconds: parsed.data.disappearingSeconds });
   }
 
   const ok = await applyConversationControl(

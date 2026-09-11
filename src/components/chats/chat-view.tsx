@@ -164,6 +164,15 @@ export function ChatView({
   const { subscribe, presence } = useRealtime();
 
   const [items, setItems] = useState<MessageDTO[]>(initial.messages);
+  // Remove expired messages promptly in an open chat as well as on the next
+  // server refresh. The server remains the source of truth and soft-deletes
+  // the same records on every history request.
+  useEffect(() => {
+    const prune = () => setItems((current) => current.filter((message) => !message.expiresAt || new Date(message.expiresAt).getTime() > Date.now()));
+    prune();
+    const timer = window.setInterval(prune, 15_000);
+    return () => window.clearInterval(timer);
+  }, []);
   const [nextCursor, setNextCursor] = useState<string | null>(initial.nextCursor);
   const [hasMore, setHasMore] = useState(initial.hasMore);
   const [loadingOlder, setLoadingOlder] = useState(false);

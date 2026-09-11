@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, lt, lte, ne, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   blocks,
@@ -72,6 +72,7 @@ function baseDTO(row: MessageRow, sender: UserRow): MessageDTO {
     updatedAt: row.updatedAt.toISOString(),
     editedAt: row.editedAt ? row.editedAt.toISOString() : null,
     deletedAt: row.deletedAt ? row.deletedAt.toISOString() : null,
+    expiresAt: row.expiresAt ? row.expiresAt.toISOString() : null,
     deliveredAt: row.deliveredAt ? row.deliveredAt.toISOString() : null,
     replyToMessageId: row.replyToMessageId,
     replyTo: null,
@@ -506,6 +507,7 @@ export async function getConversationForUser(
     rules: conv.rules ?? null,
     announcements: conv.announcements ?? null,
     slowModeSeconds: conv.slowModeSeconds ?? 0,
+    disappearingSeconds: conv.disappearingSeconds ?? 0,
     members: memberRows.map((m) => ({
       ...toPublicUser(m.user),
       role: m.member.role as "owner" | "admin" | "member",
@@ -711,6 +713,10 @@ export async function listMessages(
   limit = MESSAGE_PAGE_SIZE,
   viewerId = "",
 ): Promise<MessagePage> {
+  // Expiry is enforced server-side, including for inactive clients returning
+  // long after the selected duration elapsed.
+  await db.update(messages).set({ deletedAt: new Date(), updatedAt: new Date() })
+    .where(and(eq(messages.conversationId, conversationId), isNull(messages.deletedAt), lte(messages.expiresAt, new Date())));
   const pageSize = Math.min(Math.max(1, limit), MAX_PAGE_SIZE);
 
   const where = cursor
@@ -778,6 +784,9 @@ export async function createMessage(
 
   const inserted = await db.transaction(async (tx) => {
     const now = new Date();
+    const setting = await tx.select({ disappearingSeconds: conversations.disappearingSeconds })
+      .from(conversations).where(eq(conversations.id, conversationId)).limit(1);
+    const seconds = setting[0]?.disappearingSeconds ?? 0;
     const rows = await tx
       .insert(messages)
       .values({
@@ -788,6 +797,7 @@ export async function createMessage(
         replyToMessageId: replyId,
         forwarded,
         encrypted,
+        expiresAt: seconds > 0 ? new Date(now.getTime() + seconds * 1000) : null,
       })
       .returning();
     await tx
@@ -1041,7 +1051,21 @@ export type ConversationControl =
   | "archive"
   | "unarchive"
   | "markUnread"
-  | "markRead";
+  | "markRead"
+  | "setDisappearing";
+
+export async function setDisappearingMessages(
+  conversationId: string,
+  userId: string,
+  seconds: number,
+): Promise<boolean> {
+  const membership = await getMembership(conversationId, userId);
+  if (!membership) return false;
+  await db.update(conversations)
+    .set({ disappearingSeconds: seconds, updatedAt: new Date() })
+    .where(eq(conversations.id, conversationId));
+  return true;
+}
 
 export async function applyConversationControl(
   conversationId: string,
@@ -1077,6 +1101,8 @@ export async function applyConversationControl(
       break;
     case "markRead":
       patch.markedUnreadAt = null;
+      break;
+    case "setDisappearing":
       break;
   }
 

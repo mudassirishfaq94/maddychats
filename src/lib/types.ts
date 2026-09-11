@@ -96,6 +96,8 @@ export interface MessageDTO {
   updatedAt: string;
   editedAt: string | null;
   deletedAt: string | null;
+  /** Server-enforced expiry timestamp for disappearing messages. */
+  expiresAt: string | null;
   deliveredAt: string | null;
   replyToMessageId: string | null;
   replyTo: ReplyPreview | null;
@@ -176,6 +178,8 @@ export interface ConversationDetail {
   rules: string | null;
   announcements: string | null;
   slowModeSeconds: number;
+  /** 0 means disappearing messages are disabled. Applies to new messages. */
+  disappearingSeconds: number;
   members: Array<PublicUser & { role: "owner" | "admin" | "member"; joinedAt: string }>;
 }
 

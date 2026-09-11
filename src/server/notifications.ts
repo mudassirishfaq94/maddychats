@@ -115,7 +115,8 @@ export async function notifyUser(
 
 /**
  * Fan-out a "new message" notification to every other member who has not
- * muted the conversation.
+ * muted or archived the conversation. Archived chats stay quiet until the
+ * member explicitly brings them back into their active inbox.
  */
 export async function notifyNewMessage(input: {
   conversationId: string;
@@ -136,7 +137,7 @@ export async function notifyNewMessage(input: {
 
   await Promise.all(
     members
-      .filter((m) => m.userId !== input.actorId && m.mutedAt === null)
+      .filter((m) => m.userId !== input.actorId && m.mutedAt === null && m.archivedAt === null)
       .map(async (m) => {
         const preferences = await getNotificationPreferences(m.userId);
         const enabled = conversation[0]?.type === "group"

@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Archive,
+  Clock3,
+  Download,
   Bell,
   BellOff,
   Ban,
@@ -12,11 +14,13 @@ import {
   Loader2,
   MoreVertical,
   Search,
+  Star,
   Trash2,
+  XCircle,
 } from "lucide-react";
 import type { ConversationDetail, PublicUser } from "@/lib/types";
 
-type Control = "mute" | "unmute" | "archive" | "clear";
+type Control = "mute" | "unmute" | "archive" | "clear" | "setDisappearing";
 
 export function ChatActionsMenu({
   conversationId,
@@ -38,6 +42,7 @@ export function ChatActionsMenu({
   const [busy, setBusy] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
   const [blocked, setBlocked] = useState(conversation.blocked);
+  const [exporting, setExporting] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -83,10 +88,41 @@ export function ChatActionsMenu({
     }
   }
 
+  async function setDisappearing(seconds: number) {
+    setBusy(true);
+    try {
+      const response = await fetch(`/api/conversations/${conversationId}/controls`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "setDisappearing", disappearingSeconds: seconds }),
+      });
+      if (response.ok) { setOpen(false); router.refresh(); }
+    } finally { setBusy(false); }
+  }
+
+  async function exportChat() {
+    setExporting(true);
+    try {
+      const response = await fetch(`/api/conversations/${conversationId}/export`);
+      if (!response.ok) return;
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url; link.download = `circlo-chat-${conversationId}.json`; link.click();
+      URL.revokeObjectURL(url);
+      setOpen(false);
+    } finally { setExporting(false); }
+  }
+
+  async function closeChat() {
+    await control("archive");
+    router.push("/app/chats");
+  }
+
   const item = "flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition-colors hover:bg-[color-mix(in_srgb,var(--muted)_10%,transparent)]";
   const openInfo = () => { setOpen(false); onOpenInfo(); };
   const openSearch = () => { setOpen(false); onOpenSearch(); };
   const openReport = () => { setOpen(false); onReport(); };
+  const openFavorites = () => { setOpen(false); router.push("/app/starred"); };
 
   return (
     <div ref={ref} className="relative shrink-0">
@@ -109,6 +145,9 @@ export function ChatActionsMenu({
           <button type="button" role="menuitem" className={item} onClick={openSearch}>
             <Search className="h-4 w-4" /> Search messages
           </button>
+          <button type="button" role="menuitem" className={item} onClick={openFavorites}>
+            <Star className="h-4 w-4" /> Favorites
+          </button>
           <div className="my-1 border-t border-[var(--border)]" />
           <button type="button" role="menuitem" className={item} onClick={() => void control(conversation.muted ? "unmute" : "mute")}>
             {conversation.muted ? <Bell className="h-4 w-4" /> : <BellOff className="h-4 w-4" />}
@@ -117,6 +156,16 @@ export function ChatActionsMenu({
           <button type="button" role="menuitem" className={item} onClick={() => void control("archive")}>
             <Archive className="h-4 w-4" /> Archive chat
           </button>
+          <button type="button" role="menuitem" className={item} onClick={() => void exportChat()} disabled={exporting}>
+            {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />} Export chat
+          </button>
+          <div className="my-1 border-t border-[var(--border)]" />
+          <p className="px-3 pb-1 pt-1 text-[0.68rem] font-semibold uppercase tracking-wide text-[var(--muted)]">Disappearing messages</p>
+          <div className="px-2 pb-1">
+            <select aria-label="Disappearing message duration" defaultValue={conversation.disappearingSeconds} onChange={(event) => void setDisappearing(Number(event.target.value))} className="field-input py-2! text-xs!">
+              <option value={0}>Off</option><option value={86400}>After 24 hours</option><option value={604800}>After 7 days</option><option value={2592000}>After 30 days</option>
+            </select>
+          </div>
           <div className="my-1 border-t border-[var(--border)]" />
           {other ? (
             <button type="button" role="menuitem" className={`${item} text-[var(--danger)]`} onClick={() => void toggleBlock()}>
@@ -141,6 +190,9 @@ export function ChatActionsMenu({
               <Trash2 className="h-4 w-4" /> Delete chat
             </button>
           )}
+          <button type="button" role="menuitem" className={`${item} text-[var(--muted)]`} onClick={() => void closeChat()}>
+            <XCircle className="h-4 w-4" /> Close chat
+          </button>
         </div>
       ) : null}
     </div>
