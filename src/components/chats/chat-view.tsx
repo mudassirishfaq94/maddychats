@@ -27,6 +27,7 @@ import {
   Pin,
   Reply as ReplyIcon,
   SmilePlus,
+  Sticker,
   Star,
   Send,
   Clock,
@@ -61,6 +62,7 @@ import { cn, formatDate, timeAgo, initials, avatarHue } from "@/lib/utils";
 import { CHAT_BACKGROUNDS, chatBubbleTheme, isBackgroundImage } from "@/lib/chat-backgrounds";
 import { getPattern } from "@/lib/chat-patterns";
 const EmojiPicker = dynamic(() => import("./emoji-picker").then((module) => module.EmojiPicker));
+const StickerPicker = dynamic(() => import("./sticker-picker").then((module) => module.StickerPicker));
 import { AudioMessage } from "./audio-message";
 import { RecordingWaveform } from "./waveform";
 import { useVoiceRecorder } from "@/hooks/use-voice-recorder";
@@ -381,6 +383,7 @@ export function ChatView({
   );
 
   const [showEmoji, setShowEmoji] = useState(false);
+  const [showStickers, setShowStickers] = useState(false);
   const [mobileMenuMsg, setMobileMenuMsg] = useState<MessageDTO | null>(null);
   const [forwardMsg, setForwardMsg] = useState<MessageDTO | null>(null);
   const [reportMsg, setReportMsg] = useState<MessageDTO | null>(null);
@@ -839,7 +842,7 @@ export function ChatView({
     }
   }
 
-  async function forwardMessage(targetConversationId: string) {
+  async function forwardOneMessage(targetConversationId: string) {
     if (!forwardMsg) return;
     const source = forwardMsg;
     const plain = source.encrypted && source.text
@@ -893,6 +896,16 @@ export function ChatView({
     const result = await res.json().catch(() => null);
     if (!res.ok) throw new Error(result?.error ?? "Forwarding failed. Please try again.");
     router.refresh();
+  }
+
+  async function forwardMessage(targetConversationIds: string[]) {
+    if (!forwardMsg) return;
+    if (!targetConversationIds.length || targetConversationIds.length > 10) {
+      throw new Error("Choose between 1 and 10 conversations.");
+    }
+    for (const targetConversationId of targetConversationIds) {
+      await forwardOneMessage(targetConversationId);
+    }
   }
 
   async function scheduleSendMessage() {
@@ -2105,6 +2118,10 @@ export function ChatView({
                   onClose={() => setShowEmoji(false)}
                 />
               ) : null}
+            </div>
+            <div className="relative">
+              <button type="button" onClick={() => setShowStickers((v) => !v)} aria-label="Stickers and GIFs" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-[var(--border)] text-[var(--muted)] transition-colors hover:border-[var(--border-strong)] hover:text-[var(--text)]"><Sticker className="h-4.5 w-4.5" /></button>
+              {showStickers ? <StickerPicker onSelect={(sticker) => { setDraft((prev) => prev + sticker); composerRef.current?.focus(); }} onClose={() => setShowStickers(false)} /> : null}
             </div>
             <div className="min-w-0 flex-1 rounded-2xl bg-[var(--input-bg)] px-3.5">
               <textarea

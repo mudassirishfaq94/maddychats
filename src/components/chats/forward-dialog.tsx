@@ -12,7 +12,7 @@ interface ForwardDialogProps {
   message: MessageDTO | null;
   preview: string;
   onClose: () => void;
-  onForward: (conversationId: string) => Promise<void>;
+  onForward: (conversationIds: string[]) => Promise<void>;
 }
 
 /**
@@ -31,6 +31,7 @@ export function ForwardDialog({
   const [sent, setSent] = useState(false);
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [loadingConvs, setLoadingConvs] = useState(false);
+  const [selected, setSelected] = useState<string[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -43,7 +44,7 @@ export function ForwardDialog({
     void (async () => {
       await Promise.resolve();
       if (controller.signal.aborted) return;
-      setQuery(""); setSending(false); setSent(false); setError(null);
+      setQuery(""); setSelected([]); setSending(false); setSent(false); setError(null);
       setLoadingConvs(true);
       focusTimer = setTimeout(() => inputRef.current?.focus(), 0);
       try {
@@ -74,12 +75,13 @@ export function ForwardDialog({
     return name.includes(q);
   });
 
-  async function handleForward(conversationId: string) {
+  async function handleForward() {
     if (sending) return;
+    if (!selected.length) { setError("Choose at least one conversation."); return; }
     setSending(true);
     setError(null);
     try {
-      await onForward(conversationId);
+      await onForward(selected);
       setSent(true);
       setTimeout(() => onClose(), 600);
     } catch (err) {
@@ -110,7 +112,8 @@ export function ForwardDialog({
         >
           <ArrowLeft className="h-5 w-5" />
         </button>
-        <span className="flex-1 text-sm font-semibold">Forward to…</span>
+        <span className="flex-1 text-sm font-semibold">Forward to… {selected.length ? `(${selected.length}/10)` : ""}</span>
+        <button type="button" onClick={() => void handleForward()} disabled={!selected.length || sending} className="btn btn-primary px-3! py-2! text-xs!">Send</button>
       </div>
 
       {/* Search */}
@@ -171,7 +174,7 @@ export function ForwardDialog({
                   <button
                     type="button"
                     disabled={sending}
-                    onClick={() => void handleForward(conv.id)}
+                    onClick={() => setSelected((current) => current.includes(conv.id) ? current.filter((id) => id !== conv.id) : current.length < 10 ? [...current, conv.id] : current)}
                     className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-[var(--surface-2)] active:bg-[var(--surface)]"
                   >
                     {conv.type === "group" && conv.avatarUrl ? (
@@ -200,6 +203,7 @@ export function ForwardDialog({
                     {sending && (
                       <Loader2 className="h-4 w-4 animate-spin text-[var(--muted)]" />
                     )}
+                    {selected.includes(conv.id) ? <Check className="h-5 w-5 text-[var(--accent-fg)]" /> : null}
                   </button>
                 </li>
               );
