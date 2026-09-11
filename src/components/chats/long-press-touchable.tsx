@@ -8,6 +8,8 @@ interface LongPressTouchableProps {
   className?: string;
   /** Whether long-press is enabled (default: true on touch devices) */
   enabled?: boolean;
+  onSwipeRight?: () => void;
+  onSwipeLeft?: () => void;
 }
 
 /**
@@ -19,6 +21,8 @@ export function LongPressTouchable({
   children,
   className,
   enabled = true,
+  onSwipeRight,
+  onSwipeLeft,
 }: LongPressTouchableProps) {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const startPos = useRef<{ x: number; y: number } | null>(null);
@@ -62,6 +66,16 @@ export function LongPressTouchable({
         }
       }}
       onTouchEnd={(e) => {
+        const touch = e.changedTouches[0];
+        const start = startPos.current;
+        if (start && !fired.current) {
+          const dx = touch.clientX - start.x;
+          const dy = touch.clientY - start.y;
+          if (Math.abs(dx) > 72 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+            navigator.vibrate?.(18);
+            if (dx > 0) onSwipeRight?.(); else onSwipeLeft?.();
+          }
+        }
         if (fired.current) {
           e.preventDefault();
         }

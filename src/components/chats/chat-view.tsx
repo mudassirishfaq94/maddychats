@@ -1591,6 +1591,8 @@ export function ChatView({
                             onLongPress={() => {
                               if (!deleted) setMobileMenuMsg(msg);
                             }}
+                            onSwipeRight={() => { if (!deleted) { setReplyTo(msg); composerRef.current?.focus(); } }}
+                            onSwipeLeft={() => { if (!deleted) setForwardMsg(msg); }}
                           >
                           <div
                             className={cn(
@@ -1789,7 +1791,7 @@ export function ChatView({
                                       );
                                     }
                                     return (
-                                      <p className={cn("whitespace-pre-wrap break-words", emojiOnlyCount(textOf(msg)) === 1 ? "text-[3.5rem] leading-tight py-1" : emojiOnlyCount(textOf(msg)) ? "text-[2.5rem] leading-tight py-1" : "text-[0.9rem] leading-relaxed")}>
+                                      <p className={cn("whitespace-pre-wrap break-words", emojiOnlyCount(textOf(msg)) === 1 ? "emoji-message text-[3.5rem] leading-tight py-1" : emojiOnlyCount(textOf(msg)) ? "text-[2.5rem] leading-tight py-1" : "text-[0.9rem] leading-relaxed")}>
                                         {textOf(msg)}
                                       </p>
                                     );
