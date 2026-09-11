@@ -138,7 +138,13 @@ export async function sendMessagePush(
     .where(eq(fcmTokens.userId, userId));
 
   if (fcmDevices.length > 0) {
-    sendFCM(fcmDevices, notificationPayload).catch((err) =>
+    // Use the registered native scheme for FCM. This never needs Android's
+    // HTTPS domain verification, so a notification tap cannot fall back to
+    // Chrome and show a browser address bar.
+    sendFCM(fcmDevices, {
+      ...notificationPayload,
+      url: `ziptalks://chat/${payload.conversationId}?latest=1`,
+    }).catch((err) =>
       console.error("[push] FCM batch error:", err),
     );
   }

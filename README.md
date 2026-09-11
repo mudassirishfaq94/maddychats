@@ -49,6 +49,11 @@ Configure `.env` with local values. Never commit this file.
 | `JWT_SECRET` | Production | Secret of at least 32 characters used to sign sessions |
 | `PORT` | No | Application port; defaults to `3000` |
 | `CLIENT_URL` | Recommended | Canonical application origin |
+| `NEXT_PUBLIC_FIREBASE_API_KEY` | Phone auth | Firebase web-app API key (public) |
+| `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN` | Phone auth | Firebase Auth domain (for example, `project.firebaseapp.com`) |
+| `NEXT_PUBLIC_FIREBASE_PROJECT_ID` | Phone auth | Firebase project ID (public) |
+| `NEXT_PUBLIC_FIREBASE_APP_ID` | Phone auth | Firebase web app ID (public) |
+| `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY` | Phone auth | Service-account credentials used to verify phone tokens on the server |
 | `MAX_AVATAR_MB` | No | Avatar upload limit |
 | `MAX_IMAGE_MB` | No | Message-image upload limit |
 | `MAX_FILE_MB` | No | Message-file upload limit |

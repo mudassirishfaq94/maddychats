@@ -58,6 +58,20 @@ Add these under **Project Settings → Environment Variables**:
 Optional features require `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`,
 `GOOGLE_CALLBACK_URL`, `RESEND_API_KEY`, and `EMAIL_FROM`.
 
+### Phone-number sign-in (Firebase)
+
+In Firebase Console, enable **Authentication → Sign-in method → Phone** and
+add the deployed domain under **Authentication → Settings → Authorized
+domains**. Create a Web app in Project Settings and add its public config to
+Vercel as `NEXT_PUBLIC_FIREBASE_API_KEY`, `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`,
+`NEXT_PUBLIC_FIREBASE_PROJECT_ID`, and `NEXT_PUBLIC_FIREBASE_APP_ID`.
+
+The server also needs `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, and
+`FIREBASE_PRIVATE_KEY` from a Firebase service-account key; these are already
+used by the Android push integration if it is configured. Phone OTP requires a
+Firebase Blaze billing account and is charged per SMS, so set an SMS region
+policy and a billing alert before enabling it publicly.
+
 Deploy, visit `/api/health`, and test two accounts, messages, reactions,
 statuses, and private media. Never put either database URL, the JWT secret, or
 the Blob token in source control or chat.

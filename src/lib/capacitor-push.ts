@@ -93,6 +93,16 @@ export function setupNotificationTapListener(): void {
     PushNotifications.addListener("pushNotificationActionPerformed", (action) => {
       const url = (action as any).notification?.data?.url;
       if (url && typeof window !== "undefined") {
+        try {
+          const target = new URL(url);
+          if (target.protocol === "ziptalks:" && target.hostname === "chat") {
+            const conversationId = target.pathname.split("/").filter(Boolean)[0];
+            window.location.href = conversationId
+              ? `/app/chats/${conversationId}${target.search}`
+              : "/app/chats";
+            return;
+          }
+        } catch { /* The existing browser URL fallback handles malformed data. */ }
         window.location.href = url;
       }
     });

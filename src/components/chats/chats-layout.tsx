@@ -209,8 +209,8 @@ export function ChatsLayout({
       >
         <div className="flex items-center justify-between gap-2 px-5 pb-3 pt-4">
           <div>
-            <p className="text-[0.66rem] font-bold uppercase tracking-[0.16em] text-[var(--accent-fg)]">ZipTalk</p>
-            <h1 className="font-display mt-0.5 text-[1.3rem] font-bold tracking-tight">Messages</h1>
+            <p className="text-[0.66rem] font-bold uppercase tracking-[0.16em] text-[var(--accent-fg)]">Circlo</p>
+            <h1 className="font-display mt-0.5 text-[1.3rem] font-bold tracking-tight">Your circle</h1>
           </div>
           <div className="flex items-center gap-1.5">
             <NewChatDialog start="group-people" />
@@ -386,8 +386,8 @@ export function ChatsLayout({
         ) : (
           <div className="flex h-full flex-col items-center justify-center px-8 text-center">
             <LogoMark size={54} className="text-[var(--text)]" />
-            <h2 className="font-display mt-6 text-xl font-bold">ZipTalk</h2>
-            <p className="mt-1 text-xs text-[var(--muted)]">App by Mudassir Ishfaq</p>
+            <h2 className="font-display mt-6 text-xl font-bold">Your conversations live here.</h2>
+            <p className="mt-1 text-xs text-[var(--accent-fg)]">Circlo · your people, your conversations.</p>
             <p className="mx-auto mt-2 max-w-[16rem] text-sm leading-relaxed text-[var(--muted)]">
               Select a conversation to start chatting.
             </p>

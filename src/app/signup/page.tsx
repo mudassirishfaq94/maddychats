@@ -4,6 +4,7 @@ import type { Metadata } from "next";
 import { AuthLayout } from "@/components/auth/auth-layout";
 import { RegisterForm } from "@/components/auth/register-form";
 import { GoogleSignIn } from "@/components/auth/google-sign-in";
+import { PhoneSignIn } from "@/components/auth/phone-sign-in";
 import { getSessionUser } from "@/server/session";
 
 export const metadata: Metadata = { title: "Sign up" };
@@ -16,7 +17,7 @@ export default async function SignupPage() {
   return (
     <AuthLayout
       title="Create your account"
-      subtitle="One account. Every conversation, always in sync."
+      subtitle="One account. Your circle, always within reach."
       footer={
         <>
           Already have an account?{" "}
@@ -31,6 +32,7 @@ export default async function SignupPage() {
     >
       <RegisterForm />
       <GoogleSignIn />
+      <PhoneSignIn signup />
     </AuthLayout>
   );
 }

@@ -181,7 +181,7 @@ export default async function SettingsPage() {
             <Link href="/terms" className="hover:text-[var(--text)]">Terms of Service</Link>
           </div>
           <p className="mt-2 text-[0.65rem] text-[var(--muted)] opacity-60">
-            ZipTalk · Built with ❤️ by Mudassir Ishfaq
+            Circlo · Built with ❤️ by Mudassir Ishfaq
           </p>
         </div>
       </div>

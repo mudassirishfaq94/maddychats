@@ -66,7 +66,7 @@ export function AuthenticationMethods({
             <a href="/api/auth/google?mode=link&next=/app/profile" className="btn btn-secondary">Add Google</a>
           </MethodRow>
       </div>
-      <p className="mt-5 text-xs leading-relaxed text-[var(--muted)]">If a method belongs to another ZipTalk account, linking stops and shows a conflict. Accounts and chat histories are never merged automatically.</p>
+      <p className="mt-5 text-xs leading-relaxed text-[var(--muted)]">If a method belongs to another Circlo account, linking stops and shows a conflict. Accounts and chat histories are never merged automatically.</p>
     </section>
   );
 }

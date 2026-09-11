@@ -1,64 +1,63 @@
 @import "tailwindcss";
 
 /* ==========================================================================
-   Maddy Chats — design tokens
-   Soft-indigo foundation with a calm, high-contrast dark counterpart.
+   Circlo — a nocturnal indigo system with warm, human signals.
    ========================================================================== */
 
 :root {
-  --bg: #f3f5f1;
+  --bg: #f6f6ff;
   --surface: #ffffff;
-  --surface-2: #f5f7f4;
-  --text: #17211d;
-  --muted: #718078;
-  --border: #e1e7e0;
-  --border-strong: #cbd6cb;
-  --input-bg: #f1f4f0;
-  --action: #148d68;
+  --surface-2: #f0efff;
+  --text: #19182f;
+  --muted: #74738b;
+  --border: #e3e2f4;
+  --border-strong: #cecdf0;
+  --input-bg: #f4f3ff;
+  --action: #6255d8;
   --action-fg: #ffffff;
-  --accent: #148d68;
-  --accent-soft: rgba(20, 141, 104, 0.13);
-  --accent-fg: #087657;
-  --ring: rgba(20, 141, 104, 0.22);
-  --success: #148d68;
+  --accent: #ff7663;
+  --accent-soft: rgba(255, 118, 99, 0.13);
+  --accent-fg: #d85242;
+  --ring: rgba(98, 85, 216, 0.22);
+  --success: #32a879;
   --danger: #d73535;
   --warning: #c9862b;
   --shadow-lg: 0 16px 40px -22px rgba(0, 0, 0, 0.28);
 
   /* Message bubbles */
   --bubble-other-bg: #ffffff;
-  --bubble-own-bg: #d9f6e8;
-  --bubble-own-fg: #17211d;
-  --bubble-own-sub: #5a7b6d;
-  --grad-send: #148d68;
+  --bubble-own-bg: #6255d8;
+  --bubble-own-fg: #ffffff;
+  --bubble-own-sub: #dedaff;
+  --grad-send: #6255d8;
   color-scheme: light;
 }
 
 html:not(.light) {
-  --bg: #101815;
-  --surface: #16211d;
-  --surface-2: #1d2924;
-  --text: #edf7f1;
-  --muted: #9daca4;
-  --border: #2a3932;
-  --border-strong: #405249;
-  --input-bg: #1d2924;
-  --action: #45d29c;
-  --action-fg: #0d1914;
-  --accent: #45d29c;
-  --accent-soft: rgba(69, 210, 156, 0.14);
-  --accent-fg: #65e6b1;
-  --ring: rgba(69, 210, 156, 0.24);
-  --success: #45d29c;
+  --bg: #111027;
+  --surface: #1a1935;
+  --surface-2: #25234a;
+  --text: #f5f3ff;
+  --muted: #b3b0ca;
+  --border: #302e57;
+  --border-strong: #464274;
+  --input-bg: #25234a;
+  --action: #9c91ff;
+  --action-fg: #17142f;
+  --accent: #ff927f;
+  --accent-soft: rgba(255, 146, 127, 0.14);
+  --accent-fg: #ffab9b;
+  --ring: rgba(156, 145, 255, 0.28);
+  --success: #5cdaa2;
   --danger: #ef5b5b;
   --warning: #e0a44c;
   --shadow-lg: 0 18px 44px -20px rgba(0, 0, 0, 0.7);
 
-  --bubble-other-bg: #1d2924;
-  --bubble-own-bg: #1a5743;
-  --bubble-own-fg: #f2fbf6;
-  --bubble-own-sub: #b0cfc1;
-  --grad-send: #45d29c;
+  --bubble-other-bg: #25234a;
+  --bubble-own-bg: #776be2;
+  --bubble-own-fg: #ffffff;
+  --bubble-own-sub: #e2dfff;
+  --grad-send: #9c91ff;
   color-scheme: dark;
 }
 
@@ -94,7 +93,7 @@ html:not(.light) {
 }
 
 body {
-  background: var(--bg);
+  background: radial-gradient(circle at 8% -10%, color-mix(in srgb, var(--action) 13%, transparent), transparent 28rem), var(--bg);
   color: var(--text);
   font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
   font-size: 0.95rem;
@@ -121,9 +120,9 @@ body {
   word-break: break-word;
 }
 
-/* Original Maddy Chats doodles, scoped to the conversation canvas only. */
+/* Conversation pattern stays scoped to the message canvas. */
 .chat-message-area {
-  background-color: #e8eee8;
+  background-color: #eeecfb;
   background-image: url("/patterns/maddy-doodles-light.svg");
   background-repeat: repeat;
   background-position: center top;
@@ -137,7 +136,7 @@ html.light .chat-message-area {
 }
 
 html:not(.light) .chat-message-area {
-  background-color: #101815;
+  background-color: #121128;
   background-image: url("/patterns/maddy-doodles-dark.svg");
 }
 
@@ -366,6 +365,17 @@ html:not(.light) .chat-message-area {
 .animate-fade-up {
   animation: fade-up 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
   animation-delay: var(--d, 0ms);
+}
+
+@keyframes circlo-drift {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(0, -10px, 0) scale(1.025); }
+}
+
+.circlo-drift { animation: circlo-drift 6s ease-in-out infinite; }
+
+.circlo-shell {
+  background: radial-gradient(circle at 14% 0%, color-mix(in srgb, var(--accent) 9%, transparent), transparent 20rem), var(--bg);
 }
 
 @keyframes slide-up {

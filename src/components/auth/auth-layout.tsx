@@ -24,7 +24,7 @@ export function AuthLayout({
     <main className="grid min-h-dvh bg-[var(--bg)] lg:grid-cols-[1fr_1fr]">
       {/* ------- brand panel ------- */}
       <section className="relative hidden flex-col justify-between border-r border-[var(--border)] bg-[var(--surface)] p-12 lg:flex">
-        <Link href="/" aria-label="ZipTalk home" className="animate-fade-up">
+        <Link href="/" aria-label="Circlo home" className="animate-fade-up">
           <LogoWordmark size={30} />
         </Link>
 
@@ -33,15 +33,15 @@ export function AuthLayout({
             className="font-display text-[2.6rem] font-bold leading-[1.1] animate-fade-up"
             style={{ "--d": "100ms" } as React.CSSProperties}
           >
-            Simple chat.
+            Your people,
             <br />
-            Real connections.
+            your conversations.
           </h2>
           <p
             className="mt-4 text-[1rem] leading-relaxed text-[var(--muted)] animate-fade-up"
             style={{ "--d": "180ms" } as React.CSSProperties}
           >
-            Chat with people in real time — without unnecessary complexity.
+            A private place to stay close to the people who make your day.
           </p>
 
           <div
@@ -49,12 +49,12 @@ export function AuthLayout({
             style={{ "--d": "260ms" } as React.CSSProperties}
             aria-hidden="true"
           >
-            <div className="card-flat w-fit rotate-[-1deg] rounded-2xl px-4 py-3 shadow-sm">
+            <div className="card-glass circlo-drift w-fit rotate-[-2deg] rounded-[1.5rem] px-4 py-3 shadow-sm">
               <div className="flex items-center gap-2.5">
                 <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[var(--surface-2)] text-[var(--muted)]">
                   <LogoMark size={17} />
                 </span>
-                <span className="text-sm font-semibold">ZipTalk</span>
+                <span className="text-sm font-semibold">Circlo</span>
                 <span className="flex items-center gap-1 text-[0.68rem] text-[var(--accent-fg)]">
                   <span className="h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />
                   Online
@@ -78,7 +78,7 @@ export function AuthLayout({
         <div className="mt-2 flex items-center gap-2 rounded-xl border border-[color-mix(in_srgb,var(--accent)_20%,transparent)] bg-[color-mix(in_srgb,var(--accent)_5%,transparent)] px-3 py-2">
           <Lock className="h-3.5 w-3.5 shrink-0 text-[var(--accent-fg)]" />
           <span className="text-[0.7rem] leading-relaxed text-[var(--muted)]">
-            Every message is encrypted before it leaves your device. ZipTalk and its servers cannot read your data.
+            Every message is encrypted before it leaves your device. Circlo and its servers cannot read your data.
           </span>
         </div>
       </section>
@@ -86,7 +86,7 @@ export function AuthLayout({
       {/* ------- form panel ------- */}
       <section className="flex flex-col px-5 py-6 sm:px-10">
         <div className="flex items-center justify-between">
-          <Link href="/" className="lg:hidden" aria-label="ZipTalk home">
+          <Link href="/" className="lg:hidden" aria-label="Circlo home">
             <LogoWordmark size={26} />
           </Link>
           <span className="hidden lg:block" />

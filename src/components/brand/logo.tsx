@@ -1,8 +1,6 @@
 import { cn } from "@/lib/utils";
 
-/**
- * ZipTalk brand mark — a fast "Z" conversation trail inside a chat bubble.
- */
+/** Circlo brand mark — overlapping conversation circles. */
 export function LogoMark({
   size = 30,
   className,
@@ -18,19 +16,20 @@ export function LogoMark({
       fill="none"
       className={className}
       role="img"
-      aria-label="ZipTalk"
+      aria-label="Circlo"
     >
       <path
-        d="M7 4.5h26a4.5 4.5 0 0 1 4.5 4.5v19A4.5 4.5 0 0 1 33 32.5H19l-9.5 5v-5H7A4.5 4.5 0 0 1 2.5 28V9A4.5 4.5 0 0 1 7 4.5Z"
+        d="M20 3.5a16.5 16.5 0 1 0 0 33 16.5 16.5 0 0 0 0-33Z"
         fill="currentColor"
       />
       <path
-        d="M11 12h18L12 25h17"
-        stroke="var(--accent)"
-        strokeWidth="3"
+        d="M14.3 14.1a6.4 6.4 0 0 1 10.8 2.2 6.4 6.4 0 1 1-1.4 12.6l-3.7 3.1v-3.1a6.4 6.4 0 0 1-5.7-6.3Z"
+        stroke="var(--action-fg)"
+        strokeWidth="2.4"
         strokeLinecap="round"
         strokeLinejoin="round"
       />
+      <circle cx="25.8" cy="13.3" r="3.2" fill="var(--accent)" />
     </svg>
   );
 }
@@ -57,7 +56,7 @@ export function LogoWordmark({
           )}
           style={{ fontSize: size * 0.58 }}
         >
-          Zip<span className="text-[var(--accent-fg)]">Talk</span>
+          Circ<span className="text-[var(--accent-fg)]">lo</span>
         </span>
         {byline ? (
           <span className="mt-0.5 whitespace-nowrap text-[0.5rem] leading-none text-[var(--muted)]">

@@ -32,13 +32,13 @@ export function AppShell({
   const inChat = pathname.startsWith("/app/chats/");
 
   return (
-    <div className="flex h-screen w-full min-w-0 flex-col overflow-hidden bg-[var(--bg)] pb-0 sm:pb-0">
+    <div className="circlo-shell flex h-screen w-full min-w-0 flex-col overflow-hidden bg-[var(--bg)] pb-0 sm:pb-0">
       <a href="#main-content" className="skip-link">
         Skip to content
       </a>
 
       <header className="z-40 flex h-14 w-full min-w-0 shrink-0 items-center gap-0.5 overflow-visible border-b border-[var(--border)] bg-[var(--surface)] px-2 sm:gap-1 sm:px-4">
-        <Link href="/app" aria-label="ZipTalk home" className="mr-0.5 shrink-0 sm:mr-3">
+        <Link href="/app" aria-label="Circlo home" className="mr-0.5 shrink-0 sm:mr-3">
           <span className="flex items-center sm:hidden">
             <LogoWordmark size={25} byline />
           </span>
