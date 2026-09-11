@@ -433,6 +433,7 @@ export async function listConversationsFor(
         otherMember: other ? toPublicUser(other) : null,
         unreadCount: unreadByConv.get(conv.id) ?? 0,
         pinned: Boolean(mine?.pinnedAt),
+        favorited: Boolean(mine?.favoritedAt),
         muted: Boolean(mine?.mutedAt),
         archived: Boolean(mine?.archivedAt),
         markedUnread: Boolean(mine?.markedUnreadAt),
@@ -493,6 +494,7 @@ export async function getConversationForUser(
     createdById: conv.createdById,
     myRole: membership.role as "owner" | "admin" | "member",
     muted: Boolean(membership.mutedAt),
+    favorited: Boolean(membership.favoritedAt),
     blocked: other ? await isBlockedBetween(userId, other.id) : false,
     requestPending: conv.type === "dm" && !membership.acceptedAt,
     requestInitiatorId: conv.type === "dm" ? conv.createdById : null,
@@ -1052,7 +1054,9 @@ export type ConversationControl =
   | "unarchive"
   | "markUnread"
   | "markRead"
-  | "setDisappearing";
+  | "setDisappearing"
+  | "favorite"
+  | "unfavorite";
 
 export async function setDisappearingMessages(
   conversationId: string,
@@ -1103,6 +1107,12 @@ export async function applyConversationControl(
       patch.markedUnreadAt = null;
       break;
     case "setDisappearing":
+      break;
+    case "favorite":
+      patch.favoritedAt = now;
+      break;
+    case "unfavorite":
+      patch.favoritedAt = null;
       break;
   }
 

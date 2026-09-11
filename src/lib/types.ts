@@ -136,6 +136,7 @@ export interface ConversationSummary {
   /** Per-user conversation state (never shared between participants). */
   pinned: boolean;
   muted: boolean;
+  favorited: boolean;
   archived: boolean;
   markedUnread: boolean;
   /** True when either side has blocked the other. */
@@ -162,6 +163,8 @@ export interface ConversationDetail {
   createdById: string | null;
   myRole: "owner" | "admin" | "member";
   muted: boolean;
+  /** Personal favorite state for this conversation. */
+  favorited: boolean;
   blocked: boolean;
   requestPending: boolean;
   requestInitiatorId: string | null;

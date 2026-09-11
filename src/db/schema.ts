@@ -187,6 +187,8 @@ export const conversationMembers = pgTable(
      * These are deliberately per-member so one user pinning/archiving or
      * "deleting" a chat never mutates the other participant's view. */
     pinnedAt: timestamp("pinned_at", { withTimezone: true, mode: "date" }),
+    /** Personal favorite state, separate from message stars and pinning. */
+    favoritedAt: timestamp("favorited_at", { withTimezone: true, mode: "date" }),
     mutedAt: timestamp("muted_at", { withTimezone: true, mode: "date" }),
     archivedAt: timestamp("archived_at", { withTimezone: true, mode: "date" }),
     /** Soft "delete for me": hides history up to this point for this user. */

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import type * as React from "react";
-import { Archive, BellOff, Pin, Search } from "lucide-react";
+import { Archive, BellOff, Pin, Search, Star } from "lucide-react";
 import type { ConversationSummary } from "@/lib/types";
 import { useSharedE2EE } from "@/components/providers/e2ee-provider";
 import { Avatar } from "@/components/avatar";
@@ -97,7 +97,7 @@ export function ChatsLayout({
     : null;
   const [filter, setFilter] = useState("");
   const [showArchived, setShowArchived] = useState(false);
-  const [chatFilter, setChatFilter] = useState<"all" | "unread" | "groups" | "dms">("all");
+  const [chatFilter, setChatFilter] = useState<"all" | "unread" | "favorites" | "groups" | "dms">("all");
 
   // Live activity → debounced server refresh keeps previews ordered & fresh.
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -173,6 +173,7 @@ export function ChatsLayout({
   const filterChips: { key: typeof chatFilter; label: string; count: number; color?: string }[] = [
     { key: "all", label: "All", count: conversations.filter((c) => !c.archived).length },
     { key: "unread", label: "Unread", count: unreadCount, color: "var(--accent)" },
+    { key: "favorites", label: "Favorites", count: conversations.filter((c) => !c.archived && c.favorited).length },
     { key: "groups", label: "Groups", count: groupCount },
     { key: "dms", label: "DMs", count: dmCount },
   ];
@@ -191,6 +192,7 @@ export function ChatsLayout({
       })
       .filter((c) => {
         if (chatFilter === "unread") return c.unreadCount > 0 || c.markedUnread;
+        if (chatFilter === "favorites") return c.favorited;
         if (chatFilter === "groups") return c.type === "group";
         if (chatFilter === "dms") return c.type === "dm";
         return true;
@@ -320,6 +322,7 @@ export function ChatsLayout({
                             {conv.pinned ? (
                               <Pin className="h-3 w-3 shrink-0 text-[var(--accent-fg)]" />
                             ) : null}
+                            {conv.favorited ? <Star className="h-3 w-3 shrink-0 fill-current text-[var(--accent-fg)]" /> : null}
                             {conv.muted ? (
                               <BellOff className="h-3 w-3 shrink-0 text-[var(--muted)]" />
                             ) : null}

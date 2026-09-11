@@ -23,6 +23,8 @@ const schema = z.object({
     "markUnread",
     "markRead",
     "setDisappearing",
+    "favorite",
+    "unfavorite",
     "clear",
   ]),
   disappearingSeconds: z.union([z.literal(0), z.literal(86400), z.literal(604800), z.literal(2592000)]).optional(),

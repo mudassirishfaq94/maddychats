@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import type { ConversationDetail, PublicUser } from "@/lib/types";
 
-type Control = "mute" | "unmute" | "archive" | "clear" | "setDisappearing";
+type Control = "mute" | "unmute" | "archive" | "clear" | "setDisappearing" | "favorite" | "unfavorite";
 
 export function ChatActionsMenu({
   conversationId,
@@ -122,7 +122,6 @@ export function ChatActionsMenu({
   const openInfo = () => { setOpen(false); onOpenInfo(); };
   const openSearch = () => { setOpen(false); onOpenSearch(); };
   const openReport = () => { setOpen(false); onReport(); };
-  const openFavorites = () => { setOpen(false); router.push("/app/starred"); };
 
   return (
     <div ref={ref} className="relative shrink-0">
@@ -145,8 +144,8 @@ export function ChatActionsMenu({
           <button type="button" role="menuitem" className={item} onClick={openSearch}>
             <Search className="h-4 w-4" /> Search messages
           </button>
-          <button type="button" role="menuitem" className={item} onClick={openFavorites}>
-            <Star className="h-4 w-4" /> Favorites
+          <button type="button" role="menuitem" className={item} onClick={() => void control(conversation.favorited ? "unfavorite" : "favorite")}>
+            <Star className={`h-4 w-4 ${conversation.favorited ? "fill-current text-[var(--accent-fg)]" : ""}`} /> {conversation.favorited ? "Remove from favorites" : "Add to favorites"}
           </button>
           <div className="my-1 border-t border-[var(--border)]" />
           <button type="button" role="menuitem" className={item} onClick={() => void control(conversation.muted ? "unmute" : "mute")}>
