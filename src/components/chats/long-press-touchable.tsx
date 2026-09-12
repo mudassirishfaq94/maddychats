@@ -37,6 +37,13 @@ export function LongPressTouchable({
     fired.current = false;
   }, []);
 
+  const cancelLongPress = useCallback(() => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  }, []);
+
   if (!enabled) {
     return <div className={className}>{children}</div>;
   }
@@ -62,7 +69,9 @@ export function LongPressTouchable({
         const dx = Math.abs(touch.clientX - startPos.current.x);
         const dy = Math.abs(touch.clientY - startPos.current.y);
         if (dx > 10 || dy > 10) {
-          clear();
+          // A swipe should not trigger the long-press menu, but retain the
+          // initial coordinates so onTouchEnd can determine its direction.
+          cancelLongPress();
         }
       }}
       onTouchEnd={(e) => {

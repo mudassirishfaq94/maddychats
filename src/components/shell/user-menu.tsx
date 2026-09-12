@@ -48,13 +48,13 @@ export function UserMenu({ user }: { user: SafeUser }) {
         aria-expanded={open}
         className="flex items-center gap-0 rounded-full border border-[var(--border)] p-1 transition-all duration-200 hover:border-[var(--border-strong)] hover:bg-[color-mix(in_srgb,var(--muted)_8%,transparent)] sm:gap-2 sm:py-1 sm:pl-1 sm:pr-2.5"
       >
-        <Avatar user={user} size={30} />
+        <Avatar user={user} size={30} preview={false} />
         <span className="hidden max-w-28 truncate text-sm font-semibold sm:block">
           {user.displayName.split(" ")[0]}
         </span>
         <ChevronDown
           className={cn(
-            "hidden h-3.5 w-3.5 text-[var(--muted)] transition-transform duration-200 sm:block",
+            "ml-1 h-3.5 w-3.5 text-[var(--muted)] transition-transform duration-200",
             open && "rotate-180",
           )}
         />
