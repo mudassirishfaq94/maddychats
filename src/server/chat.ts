@@ -165,8 +165,10 @@ export async function hydrateMessages(
   if (dtos.length === 0) return dtos;
 
   const ids = dtos.map((d) => d.id);
+  const replyIds = [...new Set(dtos.map((d) => d.replyToMessageId).filter((v): v is string => typeof v === "string"))];
+  const convIds = [...new Set(dtos.map((d) => d.conversationId))];
 
-  const [reactionRows, readRows, attachmentRows] = await Promise.all([
+  const [reactionRows, readRows, attachmentRows, parents, starSet, deletionSet, pinnedSets] = await Promise.all([
     db
       .select({
         messageId: messageReactions.messageId,
@@ -187,33 +189,25 @@ export async function hydrateMessages(
       .select()
       .from(messageAttachments)
       .where(inArray(messageAttachments.messageId, ids)),
+    replyIds.length > 0
+      ? db.select({ message: messages, sender: users }).from(messages)
+        .innerJoin(users, eq(messages.senderId, users.id)).where(inArray(messages.id, replyIds))
+      : Promise.resolve([]),
+    getMyStars(ids, viewerId),
+    getMyDeletions(ids, viewerId),
+    Promise.all(convIds.map(async (conversationId) => [conversationId, await getPinnedIds(ids, conversationId)] as const)),
   ]);
 
-  // Reply previews (one extra query for referenced parents).
-  const replyIds = [
-    ...new Set(
-      dtos
-        .map((d) => d.replyToMessageId)
-        .filter((v): v is string => typeof v === "string"),
-    ),
-  ];
   const replyMap = new Map<string, ReplyPreview>();
-  if (replyIds.length > 0) {
-    const parents = await db
-      .select({ message: messages, sender: users })
-      .from(messages)
-      .innerJoin(users, eq(messages.senderId, users.id))
-      .where(inArray(messages.id, replyIds));
-    for (const p of parents) {
-      replyMap.set(p.message.id, {
-        id: p.message.id,
-        text: p.message.deletedAt ? "" : p.message.text,
-        senderId: p.message.senderId,
-        senderName: p.sender.displayName,
-        deleted: p.message.deletedAt !== null,
-        encrypted: Boolean(p.message.encrypted),
-      });
-    }
+  for (const p of parents) {
+    replyMap.set(p.message.id, {
+      id: p.message.id,
+      text: p.message.deletedAt ? "" : p.message.text,
+      senderId: p.message.senderId,
+      senderName: p.sender.displayName,
+      deleted: p.message.deletedAt !== null,
+      encrypted: Boolean(p.message.encrypted),
+    });
   }
 
   const reactionsByMessage = groupReactions(reactionRows, viewerId);
@@ -247,20 +241,7 @@ export async function hydrateMessages(
     attachmentsByMessage.set(a.messageId, list);
   }
 
-  // Batch-fetch per-viewer star and deletion status, plus conversation-level pin status.
-  const [starSet, deletionSet] = await Promise.all([
-    getMyStars(ids, viewerId),
-    getMyDeletions(ids, viewerId),
-  ]);
-
-  // Determine conversation ids for pin checks (messages in the batch may come from
-  // different conversations when used in search, but the normal path is one conversation).
-  const convIds = [...new Set(dtos.map((d) => d.conversationId))];
-  const pinnedIdsPerConv = new Map<string, Set<string>>();
-  for (const cid of convIds) {
-    const pids = await getPinnedIds(ids, cid);
-    pinnedIdsPerConv.set(cid, pids);
-  }
+  const pinnedIdsPerConv = new Map(pinnedSets);
 
   for (const dto of dtos) {
     dto.reactions = reactionsByMessage.get(dto.id) ?? [];
@@ -327,75 +308,34 @@ export async function listConversationsFor(
   if (memberships.length === 0) return [];
 
   const convIds = memberships.map((m) => m.conversationId);
-  const convs = await db
-    .select()
-    .from(conversations)
-    .where(and(inArray(conversations.id, convIds), isNull(conversations.deletedAt)));
+  // Once ids are known these reads are independent. Batch them so hosted
+  // database latency does not delay the chat shell by several round-trips.
+  const [convs, allMembers, latest, unread, pinnedConvs, blockRows] = await Promise.all([
+    db.select().from(conversations).where(and(inArray(conversations.id, convIds), isNull(conversations.deletedAt))),
+    db.select({ member: conversationMembers, user: users }).from(conversationMembers).innerJoin(users, eq(conversationMembers.userId, users.id)).where(inArray(conversationMembers.conversationId, convIds)),
+    db.execute<{ id: string; conversation_id: string; sender_id: string; text: string; type: string; created_at: string; deleted_at: string | null; encrypted: boolean }>(sql`
+      SELECT DISTINCT ON (conversation_id) id, conversation_id, sender_id, text, type, created_at, deleted_at, encrypted
+      FROM messages WHERE conversation_id IN (${sql.join(convIds.map((id) => sql`${id}`), sql`, `)})
+      ORDER BY conversation_id, created_at DESC
+    `),
+    db.execute<{ conversation_id: string; count: string }>(sql`
+      SELECT m.conversation_id, count(*)::text AS count FROM messages m
+      LEFT JOIN message_reads r ON r.message_id = m.id AND r.user_id = ${userId}
+      WHERE m.conversation_id IN (${sql.join(convIds.map((id) => sql`${id}`), sql`, `)})
+        AND m.sender_id <> ${userId} AND m.deleted_at IS NULL AND r.id IS NULL
+      GROUP BY m.conversation_id
+    `),
+    db.selectDistinct({ conversationId: pinnedMessages.conversationId }).from(pinnedMessages).where(inArray(pinnedMessages.conversationId, convIds)),
+    db.select({ blockerId: blocks.blockerId, blockedId: blocks.blockedId }).from(blocks).where(or(eq(blocks.blockerId, userId), eq(blocks.blockedId, userId))),
+  ]);
   if (convs.length === 0) return [];
-
-  const allMembers = await db
-    .select({ member: conversationMembers, user: users })
-    .from(conversationMembers)
-    .innerJoin(users, eq(conversationMembers.userId, users.id))
-    .where(inArray(conversationMembers.conversationId, convIds));
-
-  const latest = await db.execute<{
-    id: string;
-    conversation_id: string;
-    sender_id: string;
-    text: string;
-    type: string;
-    created_at: string;
-    deleted_at: string | null;
-    encrypted: boolean;
-  }>(sql`
-    SELECT DISTINCT ON (conversation_id)
-      id, conversation_id, sender_id, text, type, created_at, deleted_at, encrypted
-    FROM messages
-    WHERE conversation_id IN (${sql.join(
-      convIds.map((id) => sql`${id}`),
-      sql`, `,
-    )})
-    ORDER BY conversation_id, created_at DESC
-  `);
   const lastByConv = new Map(latest.rows.map((m) => [m.conversation_id, m]));
 
-  // Unread counts: messages from others this user has not read.
-  const unread = await db.execute<{ conversation_id: string; count: string }>(sql`
-    SELECT m.conversation_id, count(*)::text AS count
-    FROM messages m
-    LEFT JOIN message_reads r
-      ON r.message_id = m.id AND r.user_id = ${userId}
-    WHERE m.conversation_id IN (${sql.join(
-      convIds.map((id) => sql`${id}`),
-      sql`, `,
-    )})
-      AND m.sender_id <> ${userId}
-      AND m.deleted_at IS NULL
-      AND r.id IS NULL
-    GROUP BY m.conversation_id
-  `);
   const unreadByConv = new Map(
     unread.rows.map((r) => [r.conversation_id, Number(r.count)]),
   );
 
-  // Pinned messages: check if any conversation has pinned messages.
-  const pinnedConvs = await db
-    .selectDistinct({ conversationId: pinnedMessages.conversationId })
-    .from(pinnedMessages)
-    .where(
-      inArray(
-        pinnedMessages.conversationId,
-        convIds,
-      ),
-    );
   const hasPinned = new Set(pinnedConvs.map((r) => r.conversationId));
-
-  // Blocking state for every counterpart in one query.
-  const blockRows = await db
-    .select({ blockerId: blocks.blockerId, blockedId: blocks.blockedId })
-    .from(blocks)
-    .where(or(eq(blocks.blockerId, userId), eq(blocks.blockedId, userId)));
   const isBlocked = (otherId: string) =>
     blockRows.some(
       (b) =>
@@ -467,22 +407,16 @@ export async function getConversationForUser(
   conversationId: string,
   userId: string,
 ): Promise<ConversationDetail | null> {
-  const membership = await getMembership(conversationId, userId);
+  const [membership, rows, memberRows] = await Promise.all([
+    getMembership(conversationId, userId),
+    db.select().from(conversations).where(eq(conversations.id, conversationId)).limit(1),
+    db.select({ user: users, member: conversationMembers }).from(conversationMembers)
+      .innerJoin(users, eq(conversationMembers.userId, users.id))
+      .where(eq(conversationMembers.conversationId, conversationId)),
+  ]);
   if (!membership) return null;
-
-  const rows = await db
-    .select()
-    .from(conversations)
-    .where(eq(conversations.id, conversationId))
-    .limit(1);
   const conv = rows[0];
   if (!conv || conv.deletedAt) return null;
-
-  const memberRows = await db
-    .select({ user: users, member: conversationMembers })
-    .from(conversationMembers)
-    .innerJoin(users, eq(conversationMembers.userId, users.id))
-    .where(eq(conversationMembers.conversationId, conversationId));
   const other = conv.type === "dm" ? memberRows.find((row) => row.user.id !== userId)?.user : null;
 
   return {

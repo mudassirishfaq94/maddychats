@@ -23,9 +23,18 @@ export default async function ChatPage({
   if (!me) redirect("/login?next=/app/chats");
 
   const { id } = await params;
-  const detail = isUuid(id) ? await getConversationForUser(id, me.id) : null;
+  // Metadata and the initial history are both needed for a valid chat. Start
+  // them together to avoid a full extra database round-trip on navigation.
+  const detailPromise = isUuid(id) ? getConversationForUser(id, me.id) : Promise.resolve(null);
+  const initialPromise = isUuid(id)
+    ? listMessages(id, null, MESSAGE_PAGE_SIZE, me.id)
+    : Promise.resolve(null);
+  const detail = await detailPromise;
 
   if (!detail) {
+    // History was intentionally started in parallel; consume a possible
+    // background failure when access is denied and its result is unused.
+    void initialPromise.catch(() => undefined);
     return (
       <div className="flex h-full flex-col items-center justify-center px-8 text-center">
         <Ghost className="h-9 w-9 text-[var(--muted)]" />
@@ -43,7 +52,10 @@ export default async function ChatPage({
   }
 
   const other = detail.members.find((m) => m.id !== me.id) ?? null;
-  const initial = await listMessages(detail.id, null, MESSAGE_PAGE_SIZE, me.id);
+  const initial = await initialPromise;
+  // `detail` can only exist for a UUID, which also guarantees the history
+  // request above was started. This guard keeps that invariant explicit.
+  if (!initial) return null;
 
   return (
     <ChatView
