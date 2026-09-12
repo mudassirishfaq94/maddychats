@@ -64,6 +64,7 @@ function baseDTO(row: MessageRow, sender: UserRow): MessageDTO {
   const deleted = row.deletedAt !== null;
   return {
     id: row.id,
+    clientMessageId: row.clientMessageId,
     conversationId: row.conversationId,
     text: deleted ? "" : row.text,
     type: row.type,
@@ -701,13 +702,28 @@ export async function createMessage(
   replyToMessageId?: string | null,
   forwarded = false,
   encrypted = false,
-): Promise<MessageDTO> {
+  options?: {
+    clientMessageId?: string;
+    disappearingSeconds?: number;
+    deliveredAt?: Date | null;
+    sender?: import("@/lib/types").SafeUser;
+  },
+): Promise<{ message: MessageDTO; created: boolean }> {
   // A reply target must belong to the same conversation.
   let replyId: string | null = null;
+  let replyPreview: ReplyPreview | null = null;
   if (replyToMessageId) {
     const parent = await db
-      .select({ id: messages.id })
+      .select({
+        id: messages.id,
+        text: messages.text,
+        senderId: messages.senderId,
+        senderName: users.displayName,
+        deletedAt: messages.deletedAt,
+        encrypted: messages.encrypted,
+      })
       .from(messages)
+      .innerJoin(users, eq(messages.senderId, users.id))
       .where(
         and(
           eq(messages.id, replyToMessageId),
@@ -716,34 +732,100 @@ export async function createMessage(
       )
       .limit(1);
     replyId = parent[0]?.id ?? null;
+    if (parent[0]) {
+      replyPreview = {
+        id: parent[0].id,
+        text: parent[0].deletedAt ? "" : parent[0].text,
+        senderId: parent[0].senderId,
+        senderName: parent[0].senderName,
+        deleted: Boolean(parent[0].deletedAt),
+        encrypted: Boolean(parent[0].encrypted),
+      };
+    }
   }
 
-  const inserted = await db.transaction(async (tx) => {
-    const now = new Date();
-    const setting = await tx.select({ disappearingSeconds: conversations.disappearingSeconds })
-      .from(conversations).where(eq(conversations.id, conversationId)).limit(1);
-    const seconds = setting[0]?.disappearingSeconds ?? 0;
-    const rows = await tx
-      .insert(messages)
-      .values({
-        conversationId,
-        senderId,
-        text,
-        type: "text",
-        replyToMessageId: replyId,
-        forwarded,
-        encrypted,
-        expiresAt: seconds > 0 ? new Date(now.getTime() + seconds * 1000) : null,
-      })
-      .returning();
-    await tx
-      .update(conversations)
-      .set({ lastMessageAt: now, updatedAt: now })
-      .where(eq(conversations.id, conversationId));
-    return rows[0];
-  });
+  const now = new Date();
+  const seconds = options?.disappearingSeconds ?? 0;
+  const expiresAt = seconds > 0 ? new Date(now.getTime() + seconds * 1000) : null;
+  type PersistedResult = MessageRow & { wasCreated: boolean };
+  // Insert/idempotency lookup and conversation bump are one atomic statement.
+  // On a remote database this removes transaction setup plus a second network
+  // round trip from the acknowledgement path.
+  const persisted = await db.execute<PersistedResult>(sql`
+    with inserted as (
+      insert into messages (
+        conversation_id, sender_id, client_message_id, text, type,
+        reply_to_message_id, forwarded, encrypted, delivered_at, expires_at
+      ) values (
+        ${conversationId}, ${senderId}, ${options?.clientMessageId ?? null}, ${text}, 'text',
+        ${replyId}, ${forwarded}, ${encrypted}, ${options?.deliveredAt ?? null}, ${expiresAt}
+      )
+      on conflict (sender_id, client_message_id) do nothing
+      returning id, conversation_id as "conversationId", sender_id as "senderId",
+        client_message_id as "clientMessageId", text, type,
+        reply_to_message_id as "replyToMessageId", forwarded, encrypted,
+        delivered_at as "deliveredAt", created_at as "createdAt",
+        updated_at as "updatedAt", edited_at as "editedAt",
+        deleted_at as "deletedAt", expires_at as "expiresAt"
+    ), bumped as (
+      update conversations set last_message_at = ${now}, updated_at = ${now}
+      where id = ${conversationId} and exists (select 1 from inserted)
+      returning id
+    )
+    select inserted.*, true as "wasCreated" from inserted
+    union all
+    select m.id, m.conversation_id, m.sender_id, m.client_message_id,
+      m.text, m.type, m.reply_to_message_id, m.forwarded, m.encrypted,
+      m.delivered_at, m.created_at, m.updated_at, m.edited_at,
+      m.deleted_at, m.expires_at, false as "wasCreated"
+    from messages m
+    where m.sender_id = ${senderId}
+      and m.client_message_id = ${options?.clientMessageId ?? null}
+      and not exists (select 1 from inserted)
+    limit 1
+  `);
+  const row = persisted.rows[0];
+  if (!row) throw new Error("Message insert failed.");
 
-  return (await getMessageDTO(inserted.id, senderId))!;
+  // New plain text messages have no reactions, reads, attachments, stars,
+  // deletions or pins. Avoid the seven-query generic hydration path.
+  if (options?.sender) {
+    const sender = options.sender;
+    return { created: row.wasCreated, message: {
+      id: row.id,
+      clientMessageId: row.clientMessageId,
+      conversationId: row.conversationId,
+      text: row.text,
+      type: row.type,
+      senderId: row.senderId,
+      createdAt: new Date(row.createdAt).toISOString(),
+      updatedAt: new Date(row.updatedAt).toISOString(),
+      editedAt: null,
+      deletedAt: null,
+      expiresAt: row.expiresAt ? new Date(row.expiresAt).toISOString() : null,
+      deliveredAt: row.deliveredAt ? new Date(row.deliveredAt).toISOString() : null,
+      replyToMessageId: row.replyToMessageId,
+      replyTo: replyPreview,
+      reactions: [],
+      readBy: [],
+      attachments: [],
+      sender: {
+        id: sender.id,
+        username: sender.username,
+        displayName: sender.displayName,
+        avatarUrl: sender.avatarUrl,
+        bio: sender.bio,
+        createdAt: sender.createdAt,
+        lastSeenAt: sender.lastSeenAt,
+      },
+      starred: false,
+      deletedForMe: false,
+      pinned: false,
+      forwarded: Boolean(row.forwarded),
+      encrypted: Boolean(row.encrypted),
+    } };
+  }
+  return { created: row.wasCreated, message: (await getMessageDTO(row.id, senderId))! };
 }
 
 export async function editMessage(

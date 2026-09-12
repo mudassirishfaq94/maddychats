@@ -12,7 +12,10 @@ interface ForwardDialogProps {
   message: MessageDTO | null;
   preview: string;
   onClose: () => void;
-  onForward: (conversationIds: string[]) => Promise<void>;
+  onForward: (
+    conversationIds: string[],
+    onProgress?: (conversationId: string, ok: boolean) => void,
+  ) => Promise<void>;
 }
 
 /**
@@ -32,6 +35,7 @@ export function ForwardDialog({
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [loadingConvs, setLoadingConvs] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
+  const [progress, setProgress] = useState<Record<string, "sending" | "sent" | "failed">>({});
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -44,7 +48,7 @@ export function ForwardDialog({
     void (async () => {
       await Promise.resolve();
       if (controller.signal.aborted) return;
-      setQuery(""); setSelected([]); setSending(false); setSent(false); setError(null);
+      setQuery(""); setSelected([]); setSending(false); setSent(false); setError(null); setProgress({});
       setLoadingConvs(true);
       focusTimer = setTimeout(() => inputRef.current?.focus(), 0);
       try {
@@ -80,8 +84,11 @@ export function ForwardDialog({
     if (!selected.length) { setError("Choose at least one conversation."); return; }
     setSending(true);
     setError(null);
+    setProgress(Object.fromEntries(selected.map((id) => [id, "sending"])));
     try {
-      await onForward(selected);
+      await onForward(selected, (conversationId, ok) => {
+        setProgress((current) => ({ ...current, [conversationId]: ok ? "sent" : "failed" }));
+      });
       setSent(true);
       setTimeout(() => onClose(), 600);
     } catch (err) {
@@ -149,6 +156,11 @@ export function ForwardDialog({
       </div>
 
       {error ? <p role="alert" className="px-4 py-3 text-sm text-[var(--danger)]">{error}</p> : null}
+      {sending ? (
+        <p className="px-4 py-2 text-xs text-[var(--muted)]" aria-live="polite">
+          {Object.values(progress).filter((state) => state !== "sending").length} of {selected.length} completed
+        </p>
+      ) : null}
       {/* Conversation list */}
       <div className="min-h-0 flex-1 overflow-y-auto">
         {loadingConvs ? (
@@ -200,10 +212,11 @@ export function ForwardDialog({
                           : "Direct message"}
                       </span>
                     </span>
-                    {sending && (
+                    {progress[conv.id] === "sending" && (
                       <Loader2 className="h-4 w-4 animate-spin text-[var(--muted)]" />
                     )}
-                    {selected.includes(conv.id) ? <Check className="h-5 w-5 text-[var(--accent-fg)]" /> : null}
+                    {progress[conv.id] === "failed" ? <AlertCircle className="h-5 w-5 text-[var(--danger)]" /> : null}
+                    {(progress[conv.id] === "sent" || (!sending && selected.includes(conv.id))) ? <Check className="h-5 w-5 text-[var(--accent-fg)]" /> : null}
                   </button>
                 </li>
               );
@@ -231,6 +244,14 @@ function Check({ className }: { className?: string }) {
       className={className}
     >
       <polyline points="20 6 9 17 4 12" />
+    </svg>
+  );
+}
+
+function AlertCircle({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className={className} aria-label="Failed">
+      <circle cx="12" cy="12" r="9" /><path d="M12 7v6" /><path d="M12 17h.01" />
     </svg>
   );
 }

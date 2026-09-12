@@ -77,6 +77,8 @@ import {
   exportSymmetricKey,
   generateConversationKey,
 } from "@/lib/crypto";
+import { mapWithConcurrency } from "@/lib/async";
+import { chatPerf } from "@/lib/performance";
 
 function formatDuration(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -124,6 +126,22 @@ function sameDay(a: string, b: string): boolean {
 
 /** Sent → Delivered → Read, with a WhatsApp-style tick and status label. */
 function ReceiptIcon({ message }: { message: MessageDTO }) {
+  if (message.sendStatus === "sending") {
+    return (
+      <span title="Sending" aria-label="Sending" className="inline-flex flex-col items-center leading-none text-[var(--bubble-own-sub)]">
+        <Clock className="h-3.5 w-3.5" />
+        <span className="mt-px text-[0.5rem] font-semibold">Sending</span>
+      </span>
+    );
+  }
+  if (message.sendStatus === "failed") {
+    return (
+      <span title="Failed to send" aria-label="Failed to send" className="inline-flex flex-col items-center leading-none text-red-300">
+        <AlertTriangle className="h-3.5 w-3.5" />
+        <span className="mt-px text-[0.5rem] font-semibold">Failed</span>
+      </span>
+    );
+  }
   if (message.readBy.length > 0) {
     return (
       <span title="Read" aria-label="Read" className="inline-flex flex-col items-center leading-none text-sky-400">
@@ -214,6 +232,8 @@ export function ChatView({
   const [showEncryptionInfo, setShowEncryptionInfo] = useState(false);
   const [decryptedTexts, setDecryptedTexts] = useState<Map<string, string>>(new Map());
   const [decryptedReplies, setDecryptedReplies] = useState<Map<string, string>>(new Map());
+  const decryptedTextsRef = useRef(decryptedTexts);
+  const decryptedRepliesRef = useRef(decryptedReplies);
   const { prepareConversation, decrypt } = e2ee;
 
   // On open: fetch-or-create the conversation key, share it with every peer
@@ -268,61 +288,73 @@ export function ChatView({
     return () => {
       alive = false;
     };
-  }, [e2ee.initialized, e2ee.loading, conversationId, prepareConversation]);
+  }, [e2ee.initialized, e2ee.loading, e2ee.deviceId, conversationId, me.id, prepareConversation]);
 
   // Decrypt any encrypted message text (initial history, older pages, and
   // realtime arrivals all flow through `items`).
   // Failed decryptions are retried after a short delay — the peer's key
   // may still be in flight when the message first arrives.
   const failedDecryptionRef = useRef<Set<string>>(new Set());
+  const arrivalTimesRef = useRef<Map<string, number>>(new Map());
+  const decryptingRef = useRef<Set<string>>(new Set());
+  const decryptingRepliesRef = useRef<Set<string>>(new Set());
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [decryptRetry, setDecryptRetry] = useState(0);
+  useEffect(() => { decryptedTextsRef.current = decryptedTexts; }, [decryptedTexts]);
+  useEffect(() => { decryptedRepliesRef.current = decryptedReplies; }, [decryptedReplies]);
   useEffect(() => {
     if (!e2ee.initialized) return;
-    const encItems = items.filter((m) => m.encrypted);
-    if (encItems.length === 0) return;
+    const pending = items.filter((m) =>
+      m.encrypted && m.text && !decryptedTextsRef.current.has(m.id) && !decryptingRef.current.has(m.id),
+    );
+    const pendingReplies = items.filter((m) =>
+      m.replyTo?.encrypted && m.replyTo.text &&
+      !decryptedRepliesRef.current.has(m.replyTo.id) &&
+      !decryptingRepliesRef.current.has(m.replyTo.id),
+    );
+    if (pending.length === 0 && pendingReplies.length === 0) return;
     let alive = true;
     (async () => {
-      const nextTexts = new Map(decryptedTexts);
-      const nextReplies = new Map(decryptedReplies);
       let hadFailure = false;
-      await Promise.all(encItems.map(async (m) => {
-        if (!nextTexts.has(m.id) && m.text) {
-          try {
-            nextTexts.set(m.id, await decrypt(m.text, conversationId));
-            failedDecryptionRef.current.delete(m.id);
-          } catch {
-            // Do not permanently mark a legacy message as undecryptable. An
-            // older signed-in device can share its original key later.
-            failedDecryptionRef.current.add(m.id);
-            hadFailure = true;
+      pending.forEach((m) => decryptingRef.current.add(m.id));
+      pendingReplies.forEach((m) => decryptingRepliesRef.current.add(m.replyTo!.id));
+      await Promise.all(pending.map(async (m) => {
+        try {
+          const plain = await decrypt(m.text, conversationId);
+          failedDecryptionRef.current.delete(m.id);
+          const arrivedAt = arrivalTimesRef.current.get(m.id);
+          if (arrivedAt !== undefined) {
+            chatPerf("recipient-event-to-decrypted", arrivedAt);
+            arrivalTimesRef.current.delete(m.id);
           }
+          if (alive) setDecryptedTexts((current) => new Map(current).set(m.id, plain));
+        } catch {
+          // Do not permanently mark a legacy message as undecryptable. An
+          // older signed-in device can share its original key later.
+          failedDecryptionRef.current.add(m.id);
+          hadFailure = true;
+        } finally {
+          decryptingRef.current.delete(m.id);
         }
-        if (
-          m.replyTo?.encrypted &&
-          m.replyTo.text &&
-          !nextReplies.has(m.replyTo.id)
-        ) {
-          try {
-            nextReplies.set(m.replyTo.id, await decrypt(m.replyTo.text, conversationId));
-          } catch {
-            nextReplies.set(m.replyTo.id, "\u{1F512} Undecryptable");
-          }
+      }));
+      await Promise.all(pendingReplies.map(async (m) => {
+        const reply = m.replyTo!;
+        try {
+          const plain = await decrypt(reply.text, conversationId);
+          if (alive) setDecryptedReplies((current) => new Map(current).set(reply.id, plain));
+        } catch {
+          hadFailure = true;
+        } finally {
+          decryptingRepliesRef.current.delete(reply.id);
         }
       }));
       if (!alive) return;
-      if (nextTexts.size !== decryptedTexts.size) {
-        setDecryptedTexts(nextTexts);
-      }
-      if (nextReplies.size !== decryptedReplies.size) {
-        setDecryptedReplies(nextReplies);
-      }
       // Retry failed decryptions after 10 seconds (a peer or the user's other
       // device may still be publishing the historical key).
       if (hadFailure && alive) {
         if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
         retryTimerRef.current = setTimeout(() => {
-          // Force re-run by bumping items via a no-op state update.
-          setItems((prev) => [...prev]);
+          setDecryptRetry((value) => value + 1);
         }, 10000);
       }
     })();
@@ -330,8 +362,7 @@ export function ChatView({
       alive = false;
       if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items, e2ee.initialized, conversationId, decrypt]);
+  }, [items, e2ee.initialized, conversationId, decrypt, decryptRetry]);
 
   /** Plaintext for a message: decrypted locally, or raw when not encrypted. */
   const textOf = useCallback((m: { encrypted: boolean; text: string; id: string }) => {
@@ -594,13 +625,28 @@ export function ChatView({
       }
       const msg = event.message;
       if (event.type === "message:new") {
-        setItems((prev) =>
-          prev.some((m) => m.id === msg.id)
-            ? prev
-            : [...prev, msg].sort((a, b) =>
-                a.createdAt.localeCompare(b.createdAt),
-              ),
-        );
+        const arrivalStarted = performance.now();
+        if (msg.encrypted) arrivalTimesRef.current.set(msg.id, arrivalStarted);
+        setItems((prev) => {
+          if (prev.some((m) => m.id === msg.id)) return prev;
+          const optimisticIndex = msg.clientMessageId
+            ? prev.findIndex((m) => m.clientMessageId === msg.clientMessageId)
+            : -1;
+          if (optimisticIndex < 0) return [...prev, msg];
+          const optimistic = prev[optimisticIndex];
+          setDecryptedTexts((texts) => {
+            const plain = texts.get(optimistic.id);
+            if (plain === undefined) return texts;
+            const next = new Map(texts);
+            next.delete(optimistic.id);
+            next.set(msg.id, plain);
+            return next;
+          });
+          const next = [...prev];
+          next[optimisticIndex] = { ...msg, sendStatus: "sent" };
+          return next;
+        });
+        requestAnimationFrame(() => chatPerf("recipient-event-to-render", arrivalStarted));
         if (msg.senderId !== me.id && document.visibilityState === "visible") {
           void markRead();
         }
@@ -730,6 +776,7 @@ export function ChatView({
 
   async function send(e?: FormEvent) {
     e?.preventDefault();
+    const sendStarted = performance.now();
     const text = draft.trim();
     if (typingStopTimerRef.current) clearTimeout(typingStopTimerRef.current);
     signalTyping(false);
@@ -768,42 +815,110 @@ export function ChatView({
     }
 
     if (!text || sendPending) return;
+    const clientMessageId = crypto.randomUUID();
+    const optimisticId = `client:${clientMessageId}`;
+    const now = new Date().toISOString();
+    const optimistic: MessageDTO = {
+      id: optimisticId,
+      clientMessageId,
+      conversationId,
+      text: "",
+      type: "text",
+      senderId: me.id,
+      createdAt: now,
+      updatedAt: now,
+      editedAt: null,
+      deletedAt: null,
+      expiresAt: null,
+      deliveredAt: null,
+      replyToMessageId: replyTo?.id ?? null,
+      replyTo: replyTo ? {
+        id: replyTo.id,
+        text: copyableText(replyTo),
+        senderId: replyTo.senderId,
+        senderName: replyTo.sender.displayName,
+        deleted: Boolean(replyTo.deletedAt),
+        encrypted: false,
+      } : null,
+      reactions: [],
+      readBy: [],
+      attachments: [],
+      sender: me,
+      starred: false,
+      deletedForMe: false,
+      pinned: false,
+      forwarded: false,
+      encrypted: true,
+      sendStatus: "sending",
+    };
+    setDecryptedTexts((prev) => new Map(prev).set(optimisticId, text));
+    setItems((prev) => [...prev, optimistic]);
+    chatPerf("send-click-to-optimistic", sendStarted);
+    const replyId = replyTo?.id ?? null;
+    setDraft("");
+    setReplyTo(null);
+    nearBottomRef.current = true;
+    requestAnimationFrame(() => scrollToBottom(true));
     setSendPending(true);
     setError(null);
     try {
       // E2EE: plaintext never leaves this device — send AES-GCM ciphertext.
       await prepareEncryptedSend();
+      chatPerf("send-key-ready", sendStarted);
       const payload = await e2ee.encrypt(text, conversationId);
-      const res = await fetch(`/api/conversations/${conversationId}/messages`, {
+      chatPerf("send-encrypted", sendStarted);
+      const request = () => fetch(`/api/conversations/${conversationId}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          clientMessageId,
           text: payload,
-          replyToMessageId: replyTo?.id ?? null,
+          replyToMessageId: replyId,
           encrypted: true,
         }),
       });
+      let res: Response;
+      try {
+        res = await request();
+      } catch {
+        // A lost response may happen after the server committed. The stable
+        // client id makes this retry return the original row, never a duplicate.
+        res = await request();
+      }
       const data = (await res.json().catch(() => null)) as {
         message?: MessageDTO;
         error?: string;
       } | null;
       if (!res.ok || !data?.message) {
         setError(data?.error ?? "Message failed to send. Try again.");
+        setItems((prev) => prev.map((m) => m.id === optimisticId ? { ...m, sendStatus: "failed" } : m));
         return;
       }
       const created = data.message;
-      setDecryptedTexts((prev) => new Map(prev).set(created.id, text));
-      setItems((prev) =>
-        prev.some((m) => m.id === created.id) ? prev : [...prev, created],
-      );
-      setDraft("");
-      setReplyTo(null);
-      nearBottomRef.current = true;
-      scrollToBottom(true);
+      chatPerf("send-server-confirmed", sendStarted);
+      setDecryptedTexts((prev) => {
+        const next = new Map(prev);
+        next.delete(optimisticId);
+        next.set(created.id, text);
+        return next;
+      });
+      setItems((prev) => {
+        const optimisticIndex = prev.findIndex((m) => m.id === optimisticId);
+        if (optimisticIndex >= 0) {
+          const next = prev.filter((m) => m.id !== created.id);
+          const index = next.findIndex((m) => m.id === optimisticId);
+          next[index] = { ...created, sendStatus: "sent" };
+          return next;
+        }
+        return prev.some((m) => m.id === created.id)
+          ? prev.map((m) => m.id === created.id ? { ...m, sendStatus: "sent" } : m)
+          : [...prev, { ...created, sendStatus: "sent" }];
+      });
       const ta = composerRef.current;
       if (ta) ta.style.height = "auto";
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Network error. Message was not sent.");
+      setItems((prev) => prev.map((m) => m.id === optimisticId ? { ...m, sendStatus: "failed" } : m));
     } finally {
       setSendPending(false);
       composerRef.current?.focus();
@@ -858,35 +973,31 @@ export function ChatView({
     }
   }
 
-  async function forwardOneMessage(targetConversationId: string) {
+  async function forwardOneMessage(
+    targetConversationId: string,
+    plain: string,
+    preparedAttachments: Array<{
+      bytes: ArrayBuffer;
+      mimeType: string;
+      originalName: string;
+    }>,
+  ) {
     if (!forwardMsg) return;
-    const source = forwardMsg;
-    const plain = source.encrypted && source.text
-      ? await e2ee.decrypt(source.text, conversationId)
-      : source.text;
     const prep = await e2ee.prepareConversation(targetConversationId);
     if (!e2ee.initialized || !prep.ready) {
       throw new Error("Encryption is not ready in the destination chat. No unencrypted message was forwarded.");
     }
     const text = plain ? await e2ee.encrypt(plain, targetConversationId) : plain;
     let res: Response;
-    if (source.attachments.length) {
+    if (preparedAttachments.length) {
       const form = new FormData();
       form.append("conversationId", targetConversationId);
       form.append("forwarded", "true");
       form.append("encrypted", "true");
       form.append("text", text);
       let totalBytes = 0;
-      for (const attachment of source.attachments) {
-        const download = await fetch(attachment.url, { signal: AbortSignal.timeout(30000) });
-        if (!download.ok) throw new Error("Could not download the attachment to forward.");
-        let bytes = await download.arrayBuffer();
-        if (attachment.encrypted) {
-          if (!attachment.encKey) throw new Error("This attachment's encryption key is unavailable.");
-          let binary = "";
-          for (const byte of new Uint8Array(bytes)) binary += String.fromCharCode(byte);
-          bytes = await e2ee.decryptMedia(btoa(binary), attachment.encKey, conversationId);
-        }
+      for (const attachment of preparedAttachments) {
+        let bytes = attachment.bytes.slice(0);
         const { key } = await e2ee.getConversationKey(targetConversationId);
         const mediaKey = await generateConversationKey();
         const wrapped = await encryptBytes(new TextEncoder().encode(await exportSymmetricKey(mediaKey)), key);
@@ -900,24 +1011,122 @@ export function ChatView({
       res = await fetch("/api/upload/message", { method: "POST", body: form, signal: AbortSignal.timeout(60000) });
     } else {
       if (!plain.trim()) throw new Error("This message has no text to forward.");
-      res = await fetch(`/api/conversations/${targetConversationId}/messages`, {
+      const clientMessageId = crypto.randomUUID();
+      const request = () => fetch(`/api/conversations/${targetConversationId}/messages`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, replyToMessageId: null, forwarded: true, encrypted: true }),
+        body: JSON.stringify({ clientMessageId, text, replyToMessageId: null, forwarded: true, encrypted: true }),
         signal: AbortSignal.timeout(30000),
       });
+      try {
+        res = await request();
+      } catch {
+        res = await request();
+      }
     }
     const result = await res.json().catch(() => null);
     if (!res.ok) throw new Error(result?.error ?? "Forwarding failed. Please try again.");
-    router.refresh();
   }
 
-  async function forwardMessage(targetConversationIds: string[]) {
+  async function forwardMessage(
+    targetConversationIds: string[],
+    onProgress?: (conversationId: string, ok: boolean) => void,
+  ) {
     if (!forwardMsg) return;
+    const forwardStarted = performance.now();
     if (!targetConversationIds.length || targetConversationIds.length > 10) {
       throw new Error("Choose between 1 and 10 conversations.");
     }
-    for (const targetConversationId of targetConversationIds) {
-      await forwardOneMessage(targetConversationId);
+    const source = forwardMsg;
+    // Source crypto and downloads are invariant across destinations. Do them
+    // once, then only re-encrypt independently for each destination key.
+    const plain = source.encrypted && source.text
+      ? await e2ee.decrypt(source.text, conversationId)
+      : source.text;
+    const preparedAttachments = await mapWithConcurrency(
+      source.attachments,
+      3,
+      async (attachment) => {
+        const download = await fetch(attachment.url, { signal: AbortSignal.timeout(30000) });
+        if (!download.ok) throw new Error("Could not download the attachment to forward.");
+        let bytes = await download.arrayBuffer();
+        if (attachment.encrypted) {
+          if (!attachment.encKey) throw new Error("This attachment's encryption key is unavailable.");
+          let binary = "";
+          for (const byte of new Uint8Array(bytes)) binary += String.fromCharCode(byte);
+          bytes = await e2ee.decryptMedia(btoa(binary), attachment.encKey, conversationId);
+        }
+        return { bytes, mimeType: attachment.mimeType, originalName: attachment.originalName };
+      },
+    );
+    chatPerf("forward-source-prepared", forwardStarted, { destinations: targetConversationIds.length });
+    const results = await mapWithConcurrency(targetConversationIds, 3, async (targetId) => {
+      try {
+        await forwardOneMessage(targetId, plain, preparedAttachments);
+        onProgress?.(targetId, true);
+        return null;
+      } catch (error) {
+        onProgress?.(targetId, false);
+        return error instanceof Error ? error.message : "Forwarding failed.";
+      }
+    });
+    router.refresh();
+    chatPerf("forward-complete", forwardStarted, {
+      destinations: targetConversationIds.length,
+      failures: results.filter(Boolean).length,
+    });
+    const failures = results.filter((result): result is string => Boolean(result));
+    if (failures.length) {
+      throw new Error(`${failures.length} of ${targetConversationIds.length} forwards failed. ${failures[0]}`);
+    }
+  }
+
+  async function retryFailedMessage(message: MessageDTO) {
+    if (message.sendStatus !== "failed" || !message.clientMessageId) return;
+    const plain = decryptedTextsRef.current.get(message.id);
+    if (!plain) return;
+    setItems((current) => current.map((item) =>
+      item.id === message.id ? { ...item, sendStatus: "sending" } : item,
+    ));
+    setError(null);
+    try {
+      await prepareEncryptedSend();
+      const payload = await e2ee.encrypt(plain, conversationId);
+      const res = await fetch(`/api/conversations/${conversationId}/messages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          clientMessageId: message.clientMessageId,
+          text: payload,
+          replyToMessageId: message.replyToMessageId,
+          encrypted: true,
+        }),
+      });
+      const data = await res.json().catch(() => null) as { message?: MessageDTO; error?: string } | null;
+      if (!res.ok || !data?.message) throw new Error(data?.error ?? "Message failed to send.");
+      const created = data.message;
+      setDecryptedTexts((current) => {
+        const next = new Map(current);
+        next.delete(message.id);
+        next.set(created.id, plain);
+        return next;
+      });
+      setItems((current) => {
+        const optimisticIndex = current.findIndex((item) => item.id === message.id);
+        if (optimisticIndex >= 0) {
+          const next = current.filter((item) => item.id !== created.id);
+          const index = next.findIndex((item) => item.id === message.id);
+          next[index] = { ...created, sendStatus: "sent" };
+          return next;
+        }
+        return current.some((item) => item.id === created.id)
+          ? current.map((item) => item.id === created.id ? { ...item, sendStatus: "sent" } : item)
+          : [...current, { ...created, sendStatus: "sent" }];
+      });
+    } catch (cause) {
+      setItems((current) => current.map((item) =>
+        item.id === message.id ? { ...item, sendStatus: "failed" } : item,
+      ));
+      setError(cause instanceof Error ? cause.message : "Message failed to send.");
     }
   }
 
@@ -1839,7 +2048,13 @@ export function ChatView({
                               ) : null}
                               <span>{timeLabel(msg.createdAt)}</span>
                               {msg.starred ? <Star className="h-2.5 w-2.5 fill-current text-[var(--accent-fg)]" /> : null}
-                              {own && !deleted ? <ReceiptIcon message={msg} /> : null}
+                              {own && !deleted ? (
+                                msg.sendStatus === "failed" ? (
+                                  <button type="button" onClick={() => void retryFailedMessage(msg)} aria-label="Retry failed message">
+                                    <ReceiptIcon message={msg} />
+                                  </button>
+                                ) : <ReceiptIcon message={msg} />
+                              ) : null}
                             </span>
                           </div>
                           </LongPressTouchable>

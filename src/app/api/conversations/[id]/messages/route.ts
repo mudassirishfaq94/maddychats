@@ -1,7 +1,6 @@
 import { after, NextRequest, NextResponse } from "next/server";
-import { eq } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { db } from "@/db";
-import { conversations } from "@/db/schema";
 import { fieldErrors, sendMessageSchema } from "@/lib/schemas";
 import { AUTH_RATE_LIMIT, rateLimit } from "@/server/rate-limit";
 import {
@@ -13,15 +12,12 @@ import {
 import { getSessionUser } from "@/server/session";
 import { isUuid } from "@/server/users";
 import { publishToUsers } from "@/server/realtime";
-import { onlineMembersOf } from "@/server/presence";
+import { isOnline } from "@/server/presence";
 import {
   createMessage,
   decodeCursor,
   getMembership,
-  isBlockedBetween,
   listMessages,
-  markMessageDelivered,
-  memberIdsOf,
   storeMessageMentions,
   MESSAGE_PAGE_SIZE,
 } from "@/server/chat";
@@ -72,6 +68,7 @@ export async function POST(
   req: NextRequest,
   ctx: { params: Promise<{ id: string }> },
 ) {
+  const startedAt = performance.now();
   const blocked = guardSameOrigin(req);
   if (blocked) return blocked;
 
@@ -89,9 +86,6 @@ export async function POST(
 
   const { id } = await ctx.params;
   if (!isUuid(id)) return jsonError(404, "Conversation not found.");
-
-  const membership = await getMembership(id, me.id);
-  if (!membership) return jsonError(404, "Conversation not found.");
 
   const body = await readJson(req);
   if (!body) return jsonError(400, "Invalid request body.");
@@ -111,63 +105,98 @@ export async function POST(
   }
   // Independent reads run together; sending does not need member profiles,
   // backgrounds, or the other detail fields loaded by the chat page.
-  const [spamCheck, isDupe, [detail], members] = await Promise.all([
+  const validationDoneAt = performance.now();
+  type SendContext = {
+    type: "dm" | "group";
+    role: string;
+    admin_only_messaging: boolean;
+    slow_mode_seconds: number;
+    last_message_at: Date | null;
+    deleted_at: Date | null;
+    disappearing_seconds: number;
+    member_ids: string[];
+    blocked: boolean;
+  };
+  const [spamCheck, isDupe, contextResult] = await Promise.all([
     isSpammingMessages(me.id),
     !isEncrypted && parsed.data.text
       ? isDuplicateMessage(me.id, parsed.data.text, id)
       : Promise.resolve(false),
-    db.select({
-      type: conversations.type,
-      adminOnlyMessaging: conversations.adminOnlyMessaging,
-      slowModeSeconds: conversations.slowModeSeconds,
-      lastMessageAt: conversations.lastMessageAt,
-      deletedAt: conversations.deletedAt,
-    }).from(conversations).where(eq(conversations.id, id)).limit(1),
-    memberIdsOf(id),
+    db.execute<SendContext>(sql`
+      select c.type, mine.role,
+        c.admin_only_messaging, c.slow_mode_seconds, c.last_message_at,
+        c.deleted_at, c.disappearing_seconds,
+        array_agg(members.user_id order by members.joined_at) as member_ids,
+        exists (
+          select 1 from blocks b
+          join conversation_members peer
+            on peer.conversation_id = c.id and peer.user_id <> ${me.id}
+          where (b.blocker_id = ${me.id} and b.blocked_id = peer.user_id)
+             or (b.blocker_id = peer.user_id and b.blocked_id = ${me.id})
+        ) as blocked
+      from conversations c
+      join conversation_members mine
+        on mine.conversation_id = c.id and mine.user_id = ${me.id}
+      join conversation_members members on members.conversation_id = c.id
+      where c.id = ${id}
+      group by c.id, mine.role
+    `),
   ]);
+  const detail = contextResult.rows[0];
+  const members = detail?.member_ids ?? [];
   if (!spamCheck.allowed) return jsonError(429, spamCheck.reason ?? "Too many messages.");
   if (isDupe) return jsonError(429, "Duplicate message detected. Please wait before sending the same message again.");
-  if (!detail || detail.deletedAt) return jsonError(404, "Conversation not found.");
+  if (!detail || detail.deleted_at) return jsonError(404, "Conversation not found.");
 
   if (detail?.type === "group") {
     // Admin-only messaging
-    if (detail.adminOnlyMessaging && membership.role === "member") {
+    if (detail.admin_only_messaging && detail.role === "member") {
       return jsonError(403, "Only admins can send messages in this group.");
     }
 
     // Slow mode
-    if (detail.slowModeSeconds > 0 && membership.role !== "owner") {
-      const lastMsg = detail.lastMessageAt ? new Date(detail.lastMessageAt).getTime() : 0;
+    if (detail.slow_mode_seconds > 0 && detail.role !== "owner") {
+      const lastMsg = detail.last_message_at ? new Date(detail.last_message_at).getTime() : 0;
       const elapsed = (Date.now() - lastMsg) / 1000;
-      if (elapsed < detail.slowModeSeconds) {
-        const waitSec = Math.ceil(detail.slowModeSeconds - elapsed);
+      if (elapsed < detail.slow_mode_seconds) {
+        const waitSec = Math.ceil(detail.slow_mode_seconds - elapsed);
         return jsonError(429, `Slow mode: wait ${waitSec} second${waitSec !== 1 ? "s" : ""} before sending another message.`);
       }
     }
   }
 
   // Blocking is enforced here on the server — never in the UI alone.
-  if (detail?.type === "dm") {
-    for (const other of members.filter((m) => m !== me.id)) {
-      if (await isBlockedBetween(me.id, other)) {
-        return jsonError(403, "You cannot send messages in this conversation.");
-      }
-    }
+  if (detail.type === "dm" && detail.blocked) {
+    return jsonError(403, "You cannot send messages in this conversation.");
   }
 
-  const message = await createMessage(
+  const contextDoneAt = performance.now();
+  const createdResult = await createMessage(
     id,
     me.id,
     parsed.data.text,
     parsed.data.replyToMessageId ?? null,
     parsed.data.forwarded,
     isEncrypted,
+    {
+      clientMessageId: parsed.data.clientMessageId,
+      disappearingSeconds: detail.disappearing_seconds,
+      deliveredAt: members.some((memberId) => memberId !== me.id && isOnline(memberId))
+        ? new Date()
+        : null,
+      sender: me,
+    },
   );
+  const message = createdResult.message;
+  const persistedAt = performance.now();
 
-  // Recipient already connected → the message is delivered on arrival.
-  const online = await onlineMembersOf(id, me.id);
-  if (online.length > 0) {
-    message.deliveredAt = (await markMessageDelivered(message.id)).toISOString();
+  // Network retries return the committed row without publishing a duplicate
+  // realtime event or notification.
+  if (!createdResult.created) {
+    return NextResponse.json({ message }, {
+      status: 200,
+      headers: { "Server-Timing": `total;dur=${(persistedAt - startedAt).toFixed(1)}` },
+    });
   }
 
   await publishToUsers(members, {
@@ -175,6 +204,7 @@ export async function POST(
     conversationId: id,
     message,
   });
+  const publishedAt = performance.now();
   // Persist the message and realtime event before acknowledging it. Push
   // services and notification fan-out continue in Next's managed after task.
   after(async () => {
@@ -197,5 +227,16 @@ export async function POST(
       }, me.id)));
     }
   });
-  return NextResponse.json({ message }, { status: 201 });
+  return NextResponse.json({ message }, {
+    status: 201,
+    headers: {
+      "Server-Timing": [
+        `validate;dur=${(validationDoneAt - startedAt).toFixed(1)}`,
+        `context;dur=${(contextDoneAt - validationDoneAt).toFixed(1)}`,
+        `persist;dur=${(persistedAt - contextDoneAt).toFixed(1)}`,
+        `publish;dur=${(publishedAt - persistedAt).toFixed(1)}`,
+        `total;dur=${(publishedAt - startedAt).toFixed(1)}`,
+      ].join(", "),
+    },
+  });
 }

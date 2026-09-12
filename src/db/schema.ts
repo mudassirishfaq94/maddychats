@@ -239,6 +239,8 @@ export const messages = pgTable(
     senderId: uuid("sender_id")
       .references(() => users.id, { onDelete: "cascade" })
       .notNull(),
+    /** Stable client-generated id used to make retries safe and idempotent. */
+    clientMessageId: uuid("client_message_id"),
     text: text("text").notNull(),
     /** text | image | file … — drives message rendering. */
     type: text("type").default("text").notNull(),
@@ -271,6 +273,11 @@ export const messages = pgTable(
       table.id,
     ),
     index("messages_sender_idx").on(table.senderId),
+    index("messages_sender_created_idx").on(table.senderId, table.createdAt),
+    unique("messages_sender_client_id_unique").on(
+      table.senderId,
+      table.clientMessageId,
+    ),
     index("messages_expires_idx").on(table.expiresAt),
   ],
 );

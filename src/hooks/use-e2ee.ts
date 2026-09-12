@@ -21,6 +21,7 @@ import {
   encryptPrivateKeyForStorage,
   decryptPrivateKeyFromStorage,
 } from "@/lib/crypto";
+import { mapWithConcurrency } from "@/lib/async";
 
 interface PeerDevice {
   deviceId: string;
@@ -60,6 +61,10 @@ export function useE2EE(userId: string | undefined) {
 
   const decryptionKeysRef = useRef<Map<string, CryptoKey[]>>(new Map());
   const decryptionLoadRef = useRef<Map<string, Promise<CryptoKey[]>>>(new Map());
+  const preparedConversationsRef = useRef<Map<string, {
+    fingerprint: string;
+    peerSignature: string;
+  }>>(new Map());
 
   // Initialize on mount
   useEffect(() => {
@@ -424,14 +429,28 @@ export function useE2EE(userId: string | undefined) {
       const { peers } = await response.json() as { peers: Peer[] };
       if (peers.some(peer => peer.userId !== userId && peer.devices.length === 0)) return false;
       const key = await generateConversationKey();
-      if (!userId || !state.publicKey || !await shareKey(conversationId, userId, state.deviceId, state.publicKey, key)) return false;
-      for (const peer of peers) for (const device of peer.devices) {
-        if (!await shareKey(conversationId, peer.userId, device.deviceId, device.publicKey, key)) return false;
-      }
+      if (!userId || !state.publicKey) return false;
+      const targets = [
+        { userId, deviceId: state.deviceId, publicKey: state.publicKey },
+        ...peers.flatMap((peer) => peer.devices.map((device) => ({
+          userId: peer.userId, deviceId: device.deviceId, publicKey: device.publicKey,
+        }))),
+      ];
+      const shared = await mapWithConcurrency(targets, 3, (target) =>
+        shareKey(conversationId, target.userId, target.deviceId, target.publicKey, key));
+      if (shared.some((success) => !success)) return false;
       const old = conversationKeysRef.current.get(conversationId);
       if (old) decryptionKeysRef.current.set(conversationId, [old, ...(decryptionKeysRef.current.get(conversationId) ?? [])]);
       await rememberSendingKey(conversationId, key);
       conversationKeysRef.current.set(conversationId, key);
+      const fingerprint = await conversationFingerprint(key);
+      preparedConversationsRef.current.set(conversationId, {
+        fingerprint,
+        peerSignature: targets
+          .map((target) => `${target.userId}:${target.deviceId}:${target.publicKey}`)
+          .sort()
+          .join("|"),
+      });
       return true;
     } catch { return false; }
   }, [shareKey, rememberSendingKey, state.deviceId, state.publicKey, userId]);
@@ -440,9 +459,8 @@ export function useE2EE(userId: string | undefined) {
    * Prepare a conversation for E2EE: fetch-or-create its symmetric key, share
    * it to every device of every peer, and return the verification fingerprint.
    *
-   * ready=false means at least one peer has no registered device key yet, so
-   * the caller should send plaintext this session (messages only become E2EE
-   * once every participant has keys — the UI says so honestly).
+   * ready=false means at least one peer has no registered device key yet. The
+   * caller must wait or fail closed; plaintext fallback is not permitted.
    */
   const prepareConversation = useCallback(
     async (conversationId: string): Promise<{ ready: boolean; fingerprint: string | null }> => {
@@ -460,30 +478,39 @@ export function useE2EE(userId: string | undefined) {
         return { ready: false, fingerprint: null };
       }
 
-      // Persist a copy for this device too. Without this, clearing the in-memory
-      // cache or restarting the app can strand messages sent by this device.
-      let ready = Boolean(userId && state.publicKey);
-      if (ready) {
-        try {
-          ready = await shareKey(conversationId, userId!, state.deviceId, state.publicKey!, key);
-        } catch {
-          ready = false;
-        }
-      }
-
       // The current user is returned so their other devices receive the key,
       // but having no *other* device must not disable E2EE for the whole chat.
-      ready = ready && peers.every((p) => p.userId === userId || p.devices.length > 0);
+      let ready = Boolean(userId && state.publicKey) &&
+        peers.every((p) => p.userId === userId || p.devices.length > 0);
+      const peerSignature = ready
+        ? [
+            { userId: userId!, deviceId: state.deviceId, publicKey: state.publicKey! },
+            ...peers.flatMap((peer) => peer.devices.map((device) => ({
+              userId: peer.userId, deviceId: device.deviceId, publicKey: device.publicKey,
+            }))),
+          ].map((target) => `${target.userId}:${target.deviceId}:${target.publicKey}`).sort().join("|")
+        : "";
+      const prepared = preparedConversationsRef.current.get(conversationId);
+      if (ready && prepared?.peerSignature === peerSignature) {
+        return { ready: true, fingerprint: prepared.fingerprint };
+      }
       if (ready) {
-        for (const peer of peers) {
-          for (const device of peer.devices) {
-            try {
-              if (!await shareKey(conversationId, peer.userId, device.deviceId, device.publicKey, key)) ready = false;
-            } catch {
-              ready = false;
-            }
+        // Include a self-wrapped recovery copy and publish all independent
+        // recipient-device shares with bounded concurrency.
+        const targets = [
+          { userId: userId!, deviceId: state.deviceId, publicKey: state.publicKey! },
+          ...peers.flatMap((peer) => peer.devices.map((device) => ({
+            userId: peer.userId, deviceId: device.deviceId, publicKey: device.publicKey,
+          }))),
+        ];
+        const shared = await mapWithConcurrency(targets, 3, async (target) => {
+          try {
+            return await shareKey(conversationId, target.userId, target.deviceId, target.publicKey, key);
+          } catch {
+            return false;
           }
-        }
+        });
+        if (shared.some((success) => !success)) ready = false;
       }
 
       let fingerprint: string | null = null;
@@ -491,6 +518,14 @@ export function useE2EE(userId: string | undefined) {
         fingerprint = await conversationFingerprint(key);
       } catch {
         fingerprint = null;
+      }
+      if (ready && fingerprint) {
+        preparedConversationsRef.current.set(conversationId, {
+          fingerprint,
+          // The peers endpoint is checked before every send. Shares are only
+          // repeated when membership or registered device keys change.
+          peerSignature,
+        });
       }
       return { ready, fingerprint };
     },

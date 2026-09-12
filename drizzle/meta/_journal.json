@@ -162,6 +162,13 @@
       "when": 1789000000000,
       "tag": "0016_e2ee_messages",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1789171200000,
+      "tag": "0023_message_performance",
+      "breakpoints": true
     }
   ]
 }

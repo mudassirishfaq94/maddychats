@@ -87,6 +87,8 @@ export interface SearchHit {
 
 export interface MessageDTO {
   id: string;
+  /** Stable id supplied by the sending client; also reconciles realtime echoes. */
+  clientMessageId: string | null;
   conversationId: string;
   /** Empty string once soft-deleted; clients render "Message deleted". */
   text: string;
@@ -116,6 +118,8 @@ export interface MessageDTO {
   forwarded: boolean;
   /** True when text holds E2EE ciphertext — decrypt client-side with the conversation key. */
   encrypted: boolean;
+  /** Client-only optimistic state; never persisted. */
+  sendStatus?: "sending" | "sent" | "failed";
 }
 
 export interface ConversationSummary {

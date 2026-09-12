@@ -31,29 +31,15 @@ export async function isSpammingMessages(userId: string): Promise<{
 }> {
   const now = new Date();
 
-  // Check burst limit (10 messages in 5 seconds)
+  // Both windows are calculated in one indexed scan. This used to issue two
+  // sequential database round trips for every message.
   const burstWindow = new Date(now.getTime() - MESSAGE_RATE_LIMIT.burstWindowMs);
-  const [burstResult] = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(messages)
-    .where(
-      and(
-        eq(messages.senderId, userId),
-        gte(messages.createdAt, burstWindow),
-      ),
-    );
-
-  if (burstResult && burstResult.count >= MESSAGE_RATE_LIMIT.burstLimit) {
-    return {
-      allowed: false,
-      reason: "You're sending messages too fast. Please slow down.",
-    };
-  }
-
-  // Check rate limit (30 messages in 1 minute)
   const windowStart = new Date(now.getTime() - MESSAGE_RATE_LIMIT.windowMs);
-  const [rateResult] = await db
-    .select({ count: sql<number>`count(*)::int` })
+  const [counts] = await db
+    .select({
+      burst: sql<number>`count(*) filter (where ${messages.createdAt} >= ${burstWindow})::int`,
+      rate: sql<number>`count(*)::int`,
+    })
     .from(messages)
     .where(
       and(
@@ -62,7 +48,14 @@ export async function isSpammingMessages(userId: string): Promise<{
       ),
     );
 
-  if (rateResult && rateResult.count >= MESSAGE_RATE_LIMIT.maxMessages) {
+  if ((counts?.burst ?? 0) >= MESSAGE_RATE_LIMIT.burstLimit) {
+    return {
+      allowed: false,
+      reason: "You're sending messages too fast. Please slow down.",
+    };
+  }
+
+  if ((counts?.rate ?? 0) >= MESSAGE_RATE_LIMIT.maxMessages) {
     return {
       allowed: false,
       reason: "Message rate limit reached. Please wait a moment before sending more.",

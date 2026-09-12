@@ -3,16 +3,21 @@
  * Registers both accounts, creates a DM, and exchanges encrypted messages.
  */
 const BASE = process.env.QA_BASE ?? "http://localhost:64395";
+import "dotenv/config";
+import { Client } from "pg";
 
 // ---- Crypto imports ----
 import {
   generateKeyPair, exportPublicKey, exportPrivateKey, importPrivateKey,
   importPublicKey, generateConversationKey, exportSymmetricKey,
   encryptKeyForUser, decryptKeyFromSender, encryptMessage, decryptMessage,
+  conversationFingerprint,
 } from "../src/lib/crypto";
 
+const createdUserIds: string[] = [];
+
 function assert(cond: boolean, label: string) {
-  if (!cond) { console.error(`FAIL: ${label}`); process.exit(1); }
+  if (!cond) throw new Error(`FAIL: ${label}`);
   console.log(`  ok: ${label}`);
 }
 
@@ -39,6 +44,7 @@ async function register(name: string): Promise<{ id: string; cookie: string; nam
     .filter((c: string) => c.startsWith("maddy_session="))
     .join("; ");
   if (!cookie) throw new Error(`no session cookie for ${name}`);
+  createdUserIds.push(body.user.id);
   return { id: body.user.id, cookie, name };
 }
 
@@ -82,7 +88,7 @@ async function register(name: string): Promise<{ id: string; cookie: string; nam
 
   // Step 3: Alice shares conversation key to Bob
   console.log("\nStep 3: Share conversation key");
-  const peersRes = await fetch(`${BASE}/api/e2ee/peers?conversationId=${cid}`, {
+  const peersRes = await fetch(`${BASE}/api/e2ee/peers?conversationId=${cid}&deviceId=${aliceKey.deviceId}`, {
     headers: { Cookie: alice.cookie },
   });
   console.log("  peers status:", peersRes.status);
@@ -90,11 +96,13 @@ async function register(name: string): Promise<{ id: string; cookie: string; nam
   console.log("  peers:", JSON.stringify(peersBody).slice(0, 300));
   assert(peersRes.ok, "peers endpoint");
   assert(peersBody.peers?.length > 0, "has peers");
-  assert(peersBody.peers[0].devices?.length > 0, "peer has device keys");
+  const bobPeer = peersBody.peers.find((peer) => peer.userId === bob.id);
+  assert(bobPeer?.devices?.length > 0, "peer has device keys");
 
   const convKey = await generateConversationKey();
-  const bobPub = await importPublicKey(peersBody.peers[0].devices[0].publicKey);
+  const bobPub = await importPublicKey(bobPeer.devices[0].publicKey);
   const wrapped = await encryptKeyForUser(convKey, bobPub);
+  const keyFingerprint = await conversationFingerprint(convKey);
 
   const shareRes = await fetch(`${BASE}/api/e2ee/conversation-keys`, {
     method: "POST",
@@ -102,8 +110,10 @@ async function register(name: string): Promise<{ id: string; cookie: string; nam
     body: JSON.stringify({
       conversationId: cid,
       targetUserId: bob.id,
+      targetDeviceId: bobKey.deviceId,
       encryptedKey: wrapped,
-      deviceId: bobKey.deviceId,
+      keyFingerprint,
+      deviceId: aliceKey.deviceId,
     }),
   });
   console.log("  share status:", shareRes.status, await shareRes.text());
@@ -113,15 +123,26 @@ async function register(name: string): Promise<{ id: string; cookie: string; nam
   console.log("\nStep 4: Alice sends encrypted message");
   const secret = "TOP SECRET " + Date.now();
   const cipher = await encryptMessage(secret, convKey);
+  const clientMessageId = crypto.randomUUID();
+  const sendStartedAt = performance.now();
   const msgRes = await fetch(`${BASE}/api/conversations/${cid}/messages`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Cookie: alice.cookie },
-    body: JSON.stringify({ text: cipher, encrypted: true }),
+    body: JSON.stringify({ clientMessageId, text: cipher, encrypted: true }),
   });
   assert(msgRes.ok, `send message (${msgRes.status})`);
-  const msgBody = await msgRes.json() as { message: { encrypted?: boolean; text: string } };
+  const msgBody = await msgRes.json() as { message: { id: string; encrypted?: boolean; text: string } };
   assert(msgBody.message.encrypted === true, "server flags encrypted");
   assert(!msgBody.message.text.includes("TOP SECRET"), "no plaintext leak");
+  console.log(`  send HTTP: ${(performance.now() - sendStartedAt).toFixed(1)} ms`);
+  console.log(`  ${msgRes.headers.get("server-timing") ?? "Server-Timing unavailable"}`);
+  const retryRes = await fetch(`${BASE}/api/conversations/${cid}/messages`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Cookie: alice.cookie },
+    body: JSON.stringify({ clientMessageId, text: cipher, encrypted: true }),
+  });
+  const retryBody = await retryRes.json() as { message: { id: string } };
+  assert(retryRes.ok && retryBody.message.id === msgBody.message.id, "retry is idempotent");
 
   // Step 5: Bob fetches and decrypts
   console.log("\nStep 5: Bob fetches and decrypts");
@@ -137,7 +158,7 @@ async function register(name: string): Promise<{ id: string; cookie: string; nam
   // Bob decrypts with conversation key
   const bobPriv = await importPrivateKey(bobKey.jwk);
   // First get conversation key from server
-  const ckRes = await fetch(`${BASE}/api/e2ee/conversation-keys?conversationId=${cid}`, {
+  const ckRes = await fetch(`${BASE}/api/e2ee/conversation-keys?conversationId=${cid}&deviceId=${bobKey.deviceId}`, {
     headers: { Cookie: bob.cookie },
   });
   assert(ckRes.ok, "Bob fetches conversation key");
@@ -148,4 +169,14 @@ async function register(name: string): Promise<{ id: string; cookie: string; nam
   assert(decrypted === secret, "Bob decrypts Alice's message ✓");
 
   console.log("\n✔ All E2EE checks passed!\n");
-})().catch((err) => { console.error(err); process.exit(1); });
+})().catch((err) => {
+  console.error(err);
+  process.exitCode = 1;
+}).finally(async () => {
+  if (!createdUserIds.length || !process.env.DATABASE_URL) return;
+  const db = new Client({ connectionString: process.env.DATABASE_URL });
+  await db.connect();
+  await db.query("delete from users where id = any($1::uuid[])", [createdUserIds]);
+  await db.end();
+  console.log(`Cleaned up ${createdUserIds.length} temporary QA accounts.`);
+});

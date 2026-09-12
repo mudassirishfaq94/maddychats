@@ -11,7 +11,9 @@ export const runtime = "nodejs";
 export const maxDuration = 300;
 
 const HEARTBEAT_MS = 25_000;
-const POLL_MS = 1_000;
+// The stream is database-backed for cross-instance reliability. A 500 ms
+// interval keeps the worst fixed delivery wait below the UI's one-second goal.
+const POLL_MS = 500;
 const STREAM_LIFETIME_MS = 280_000;
 
 /** Database-backed SSE stream that remains reliable across Vercel instances. */
