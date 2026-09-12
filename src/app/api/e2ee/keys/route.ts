@@ -92,7 +92,9 @@ export async function POST(req: NextRequest) {
     }
     await db
       .update(e2eeKeys)
-      .set({ lastUsedAt: new Date() })
+      // The public key is immutable, but a legacy private-key backup can be
+      // rewrapped with a device-only recovery secret during client upgrade.
+      .set({ encryptedPrivateKey, lastUsedAt: new Date() })
       .where(eq(e2eeKeys.id, existing.id));
   } else {
     await db.insert(e2eeKeys).values({

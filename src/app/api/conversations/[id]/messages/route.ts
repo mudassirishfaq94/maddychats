@@ -106,6 +106,9 @@ export async function POST(
   }
 
   const isEncrypted = parsed.data.encrypted === true;
+  if (!isEncrypted) {
+    return jsonError(422, "End-to-end encrypted message payload required.");
+  }
   // Independent reads run together; sending does not need member profiles,
   // backgrounds, or the other detail fields loaded by the chat page.
   const [spamCheck, isDupe, [detail], members] = await Promise.all([

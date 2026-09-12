@@ -75,6 +75,9 @@ export async function POST(req: NextRequest) {
   }
 
   const isEncrypted = form.get("encrypted") === "true";
+  if (!isEncrypted) {
+    return jsonError(422, "End-to-end encrypted attachment payload required.");
+  }
   // When encrypting, the caption (if any) is E2EE ciphertext produced client-side.
   const caption = String(form.get("text") ?? "").trim().slice(0, 4000);
   const replyRaw = String(form.get("replyToMessageId") ?? "");

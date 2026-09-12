@@ -236,8 +236,8 @@ export function ChatView({
         try {
           const res = await fetch(`/api/e2ee/peers?conversationId=${encodeURIComponent(conversationId)}&deviceId=${encodeURIComponent(e2ee.deviceId)}`);
           if (res.ok) {
-            const data = (await res.json()) as { peers?: { devices: unknown[] }[] };
-            missing = (data.peers ?? []).filter((p) => p.devices.length === 0).length;
+            const data = (await res.json()) as { peers?: { userId: string; devices: unknown[] }[] };
+            missing = (data.peers ?? []).filter((p) => p.userId !== me.id && p.devices.length === 0).length;
           }
         } catch {
           missing = 0;
@@ -355,8 +355,26 @@ export function ChatView({
     [decryptedTexts],
   );
 
-  /** True when this conversation can send E2EE right now. */
-  const canEncrypt = e2ee.initialized && e2eeState.ready;
+  /** Re-check key delivery immediately before a mutation. Encryption status
+   * can change while a chat remains open, so the initial UI snapshot is not
+   * a safe basis for deciding whether plaintext may leave the device. */
+  async function prepareEncryptedSend() {
+    if (!e2ee.initialized) {
+      throw new Error(e2ee.loading
+        ? "Encryption is still initializing. Please try again in a moment."
+        : e2ee.error ?? "Encryption is unavailable on this device.");
+    }
+    const prepared = await e2ee.prepareConversation(conversationId);
+    setE2eeState((previous) => ({
+      ...previous,
+      ready: prepared.ready,
+      fingerprint: prepared.fingerprint,
+      checking: false,
+    }));
+    if (!prepared.ready) {
+      throw new Error("Encryption keys are not ready for every participant yet. No unencrypted message was sent.");
+    }
+  }
 
   /** Encrypt a pending file into a ciphertext blob + conversation-wrapped key. */
   const encryptPendingFile = useCallback(
@@ -720,28 +738,32 @@ export function ChatView({
       if (sendPending) return;
       setSendPending(true);
       setError(null);
-      const result = await attachments.upload(
-        conversationId,
-        text,
-        replyTo?.id ?? null,
-        canEncrypt ? encryptPendingFile : undefined,
-        canEncrypt
-          ? (plain) => e2ee.encrypt(plain, conversationId)
-          : undefined,
-      );
-      setSendPending(false);
-      if (!result.ok) {
-        if (result.error !== "Upload cancelled.") setError(result.error);
-        return;
+      try {
+        await prepareEncryptedSend();
+        const result = await attachments.upload(
+          conversationId,
+          text,
+          replyTo?.id ?? null,
+          encryptPendingFile,
+          (plain) => e2ee.encrypt(plain, conversationId),
+        );
+        if (!result.ok) {
+          if (result.error !== "Upload cancelled.") setError(result.error);
+          return;
+        }
+        const created = result.message;
+        setItems((prev) =>
+          prev.some((m) => m.id === created.id) ? prev : [...prev, created],
+        );
+        setDraft("");
+        setReplyTo(null);
+        nearBottomRef.current = true;
+        scrollToBottom(true);
+      } catch (cause) {
+        setError(cause instanceof Error ? cause.message : "Encryption failed before upload.");
+      } finally {
+        setSendPending(false);
       }
-      const created = result.message;
-      setItems((prev) =>
-        prev.some((m) => m.id === created.id) ? prev : [...prev, created],
-      );
-      setDraft("");
-      setReplyTo(null);
-      nearBottomRef.current = true;
-      scrollToBottom(true);
       return;
     }
 
@@ -750,17 +772,15 @@ export function ChatView({
     setError(null);
     try {
       // E2EE: plaintext never leaves this device — send AES-GCM ciphertext.
-      const willEncrypt = canEncrypt;
-      const payload = willEncrypt
-        ? await e2ee.encrypt(text, conversationId)
-        : text;
+      await prepareEncryptedSend();
+      const payload = await e2ee.encrypt(text, conversationId);
       const res = await fetch(`/api/conversations/${conversationId}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           text: payload,
           replyToMessageId: replyTo?.id ?? null,
-          encrypted: willEncrypt,
+          encrypted: true,
         }),
       });
       const data = (await res.json().catch(() => null)) as {
@@ -772,7 +792,7 @@ export function ChatView({
         return;
       }
       const created = data.message;
-      if (willEncrypt) setDecryptedTexts((prev) => new Map(prev).set(created.id, text));
+      setDecryptedTexts((prev) => new Map(prev).set(created.id, text));
       setItems((prev) =>
         prev.some((m) => m.id === created.id) ? prev : [...prev, created],
       );
@@ -782,8 +802,8 @@ export function ChatView({
       scrollToBottom(true);
       const ta = composerRef.current;
       if (ta) ta.style.height = "auto";
-    } catch {
-      setError("Network error. Message was not sent.");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Network error. Message was not sent.");
     } finally {
       setSendPending(false);
       composerRef.current?.focus();
@@ -802,16 +822,12 @@ export function ChatView({
       const form = new FormData();
       form.append("conversationId", conversationId);
       // E2EE: encrypt the audio bytes before they reach the server.
-      const willEncrypt = canEncrypt;
-      if (willEncrypt) {
-        const enc = await encryptPendingFile(file);
-        form.append("encrypted", "true");
-        form.append("files", enc.file, file.name);
-        form.append("keys", enc.wrappedKey);
-        form.append("origTypes", enc.originalMime);
-      } else {
-        form.append("files", file, file.name);
-      }
+      await prepareEncryptedSend();
+      const enc = await encryptPendingFile(file);
+      form.append("encrypted", "true");
+      form.append("files", enc.file, file.name);
+      form.append("keys", enc.wrappedKey);
+      form.append("origTypes", enc.originalMime);
       if (replyTo?.id) form.append("replyToMessageId", replyTo.id);
 
       const res = await fetch("/api/upload/message", {
@@ -835,8 +851,8 @@ export function ChatView({
       nearBottomRef.current = true;
       scrollToBottom(true);
       router.refresh();
-    } catch {
-      setError("Network error. Voice message was not sent.");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Network error. Voice message was not sent.");
     } finally {
       setSendPending(false);
     }
@@ -849,17 +865,16 @@ export function ChatView({
       ? await e2ee.decrypt(source.text, conversationId)
       : source.text;
     const prep = await e2ee.prepareConversation(targetConversationId);
-    const willEncrypt = e2ee.initialized && prep.ready;
-    if ((source.encrypted || source.attachments.some((a) => a.encrypted)) && !willEncrypt) {
-      throw new Error("Encryption is not ready in the destination chat. Open that chat and try again.");
+    if (!e2ee.initialized || !prep.ready) {
+      throw new Error("Encryption is not ready in the destination chat. No unencrypted message was forwarded.");
     }
-    const text = willEncrypt && plain ? await e2ee.encrypt(plain, targetConversationId) : plain;
+    const text = plain ? await e2ee.encrypt(plain, targetConversationId) : plain;
     let res: Response;
     if (source.attachments.length) {
       const form = new FormData();
       form.append("conversationId", targetConversationId);
       form.append("forwarded", "true");
-      form.append("encrypted", String(willEncrypt));
+      form.append("encrypted", "true");
       form.append("text", text);
       let totalBytes = 0;
       for (const attachment of source.attachments) {
@@ -872,24 +887,22 @@ export function ChatView({
           for (const byte of new Uint8Array(bytes)) binary += String.fromCharCode(byte);
           bytes = await e2ee.decryptMedia(btoa(binary), attachment.encKey, conversationId);
         }
-        if (willEncrypt) {
-          const { key } = await e2ee.getConversationKey(targetConversationId);
-          const mediaKey = await generateConversationKey();
-          const wrapped = await encryptBytes(new TextEncoder().encode(await exportSymmetricKey(mediaKey)), key);
-          bytes = b64ToBytes(await encryptBytes(bytes, mediaKey)).slice().buffer as ArrayBuffer;
-          form.append("keys", wrapped);
-          form.append("origTypes", attachment.mimeType);
-        }
+        const { key } = await e2ee.getConversationKey(targetConversationId);
+        const mediaKey = await generateConversationKey();
+        const wrapped = await encryptBytes(new TextEncoder().encode(await exportSymmetricKey(mediaKey)), key);
+        bytes = b64ToBytes(await encryptBytes(bytes, mediaKey)).slice().buffer as ArrayBuffer;
+        form.append("keys", wrapped);
+        form.append("origTypes", attachment.mimeType);
         totalBytes += bytes.byteLength;
         if (totalBytes > 3 * 1024 * 1024) throw new Error("These attachments are too large to forward together (3 MB maximum).");
-        form.append("files", new Blob([bytes], { type: willEncrypt ? "application/octet-stream" : attachment.mimeType }), attachment.originalName);
+        form.append("files", new Blob([bytes], { type: "application/octet-stream" }), attachment.originalName);
       }
       res = await fetch("/api/upload/message", { method: "POST", body: form, signal: AbortSignal.timeout(60000) });
     } else {
       if (!plain.trim()) throw new Error("This message has no text to forward.");
       res = await fetch(`/api/conversations/${targetConversationId}/messages`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, replyToMessageId: null, forwarded: true, encrypted: willEncrypt }),
+        body: JSON.stringify({ text, replyToMessageId: null, forwarded: true, encrypted: true }),
         signal: AbortSignal.timeout(30000),
       });
     }
@@ -918,10 +931,8 @@ export function ChatView({
     setSendPending(true);
     setError(null);
     try {
-      const willEncrypt = canEncrypt;
-      const payload = willEncrypt
-        ? await e2ee.encrypt(draft.trim(), conversationId)
-        : draft.trim();
+      await prepareEncryptedSend();
+      const payload = await e2ee.encrypt(draft.trim(), conversationId);
       const res = await fetch(`/api/conversations/${conversationId}/scheduled`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -929,7 +940,7 @@ export function ChatView({
           text: payload,
           scheduledFor: scheduledFor.toISOString(),
           replyToMessageId: replyTo?.id ?? null,
-          encrypted: willEncrypt,
+          encrypted: true,
         }),
       });
       if (!res.ok) {
@@ -981,15 +992,14 @@ export function ChatView({
   async function saveEdit(id: string) {
     const text = editDraft.trim();
     if (!text) return;
-    const willEncrypt = canEncrypt || Boolean(items.find(message => message.id === id)?.encrypted);
-    if (willEncrypt && !e2ee.initialized) { setError("Please wait for messages to finish loading."); return; }
     setBusyId(id);
     setError(null);
     try {
+      await prepareEncryptedSend();
       const res = await fetch(`/api/messages/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: willEncrypt ? await e2ee.encrypt(text, conversationId) : text, encrypted: willEncrypt }),
+        body: JSON.stringify({ text: await e2ee.encrypt(text, conversationId), encrypted: true }),
       });
       const data = (await res.json().catch(() => null)) as {
         message?: MessageDTO;
@@ -1003,8 +1013,8 @@ export function ChatView({
       if (updated.encrypted) setDecryptedTexts(prev => new Map(prev).set(id, text));
       setItems((prev) => prev.map((m) => (m.id === id ? updated : m)));
       setEditingId(null);
-    } catch {
-      setError("Network error while editing.");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Network error while editing.");
     } finally {
       setBusyId(null);
     }

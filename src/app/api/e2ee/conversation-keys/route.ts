@@ -68,22 +68,18 @@ export async function POST(req: NextRequest) {
   const conversationId = data.conversationId ? String(data.conversationId) : null;
   const targetUserId = data.targetUserId ? String(data.targetUserId) : null;
   const encryptedKey = data.encryptedKey ? String(data.encryptedKey) : null;
+  const keyFingerprint = data.keyFingerprint ? String(data.keyFingerprint) : null;
   const senderDeviceId = data.deviceId ? String(data.deviceId) : null;
   const recipientDeviceId = data.targetDeviceId ? String(data.targetDeviceId) : null;
 
-  if (!conversationId || !targetUserId || !encryptedKey || !senderDeviceId || !recipientDeviceId) {
-    return jsonError(422, "conversationId, targetUserId, targetDeviceId, encryptedKey, and deviceId are required.");
+  if (!conversationId || !targetUserId || !encryptedKey || !keyFingerprint || !senderDeviceId || !recipientDeviceId) {
+    return jsonError(422, "conversationId, targetUserId, targetDeviceId, encryptedKey, keyFingerprint, and deviceId are required.");
   }
+  if (keyFingerprint.length > 128) return jsonError(422, "Invalid key fingerprint.");
 
   // Verify sender is a member
   const membership = await getMembership(conversationId, user.id);
   if (!membership) return jsonError(404, "Conversation not found.");
-
-  // A sender may share to another one of their own devices, but never needs a
-  // copy encrypted back to the exact device that is already holding the key.
-  if (targetUserId === user.id && recipientDeviceId === senderDeviceId) {
-    return jsonError(422, "Cannot share a key with the same device.");
-  }
 
   const [senderDevice] = await db.select({ id: e2eeKeys.id }).from(e2eeKeys)
     .where(and(eq(e2eeKeys.userId, user.id), eq(e2eeKeys.deviceId, senderDeviceId))).limit(1);
@@ -112,20 +108,24 @@ export async function POST(req: NextRequest) {
       eq(e2eeConversationKeys.deviceId, senderDeviceId),
       eq(e2eeConversationKeys.recipientDeviceId, recipientDeviceId),
     )).limit(1);
-    if (existing?.encryptedKey === encryptedKey) return existing.keyVersion;
+    // RSA-OAEP is intentionally randomized, so encrypting the same AES key
+    // twice produces different ciphertext. Compare its SHA-256 fingerprint
+    // to avoid treating every chat open as a key rotation.
+    if (existing?.keyFingerprint === keyFingerprint) return existing.keyVersion;
     const version = (existing?.keyVersion ?? 0) + 1;
     if (existing) {
       await tx.insert(e2eeKeyHistory).values({
         conversationId, userId: targetUserId, deviceId: senderDeviceId, recipientDeviceId,
-        encryptedKey: existing.encryptedKey, keyVersion: existing.keyVersion,
+        encryptedKey: existing.encryptedKey, keyFingerprint: existing.keyFingerprint,
+        keyVersion: existing.keyVersion,
       }).onConflictDoNothing();
       await tx.update(e2eeConversationKeys).set({
-        encryptedKey, keyVersion: version, isActive: true, rotatedAt: new Date(),
+        encryptedKey, keyFingerprint, keyVersion: version, isActive: true, rotatedAt: new Date(),
       }).where(eq(e2eeConversationKeys.id, existing.id));
     } else {
       await tx.insert(e2eeConversationKeys).values({
         conversationId, userId: targetUserId, deviceId: senderDeviceId, recipientDeviceId,
-        encryptedKey, keyVersion: version, isActive: true,
+        encryptedKey, keyFingerprint, keyVersion: version, isActive: true,
       });
     }
     return version;

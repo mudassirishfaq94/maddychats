@@ -54,6 +54,7 @@ export async function POST(
   const encrypted = data.encrypted === true;
 
   if (!text) return jsonError(422, "Message text is required.");
+  if (!encrypted) return jsonError(422, "End-to-end encrypted message payload required.");
   if (!scheduledFor || isNaN(scheduledFor.getTime())) return jsonError(422, "Valid scheduledFor date is required.");
   if (scheduledFor <= new Date()) return jsonError(422, "Scheduled time must be in the future.");
 

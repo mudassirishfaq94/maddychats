@@ -20,8 +20,6 @@ import {
   conversationFingerprint,
   encryptPrivateKeyForStorage,
   decryptPrivateKeyFromStorage,
-  shouldRotateKey,
-  KEY_ROTATION_INTERVAL_MS,
 } from "@/lib/crypto";
 
 interface PeerDevice {
@@ -61,6 +59,7 @@ export function useE2EE(userId: string | undefined) {
   const conversationKeysRef = useRef<Map<string, CryptoKey>>(new Map());
 
   const decryptionKeysRef = useRef<Map<string, CryptoKey[]>>(new Map());
+  const decryptionLoadRef = useRef<Map<string, Promise<CryptoKey[]>>>(new Map());
 
   // Initialize on mount
   useEffect(() => {
@@ -69,6 +68,8 @@ export function useE2EE(userId: string | undefined) {
     async function init() {
       const deviceId = generateDeviceId();
       const stored = localStorage.getItem(`e2ee_keypair_${userId}`);
+      const recoveryStorageKey = `e2ee_recovery_${userId}_${deviceId}`;
+      let recoverySecret = localStorage.getItem(recoveryStorageKey);
 
       let keyPair: CryptoKeyPair;
       let publicKeyStr: string;
@@ -89,6 +90,16 @@ export function useE2EE(userId: string | undefined) {
       };
       const serverDevice = backupData.keys?.find((key) => key.deviceId === deviceId);
 
+      async function restorePrivateKey(encryptedBackup: string): Promise<string> {
+        if (encryptedBackup.startsWith("v2:")) {
+          if (!recoverySecret) throw new Error("Device recovery secret is unavailable");
+          return decryptPrivateKeyFromStorage(encryptedBackup.slice(3), recoverySecret);
+        }
+        // One-time compatibility path for backups created by older clients,
+        // which incorrectly used the public device id as their passphrase.
+        return decryptPrivateKeyFromStorage(encryptedBackup, deviceId);
+      }
+
       if (stored) {
         const parsed = JSON.parse(stored);
         // A matching server key confirms this browser copy is the correct
@@ -101,7 +112,7 @@ export function useE2EE(userId: string | undefined) {
           publicKeyStr = parsed.publicKey;
           privateKeyStr = parsed.privateKey;
         } else if (serverDevice.encryptedPrivateKey) {
-          privateKeyStr = await decryptPrivateKeyFromStorage(serverDevice.encryptedPrivateKey, deviceId);
+          privateKeyStr = await restorePrivateKey(serverDevice.encryptedPrivateKey);
           const privateKey = await importPrivateKey(privateKeyStr);
           const publicKey = await importPublicKey(serverDevice.publicKey);
           keyPair = { privateKey, publicKey };
@@ -111,7 +122,7 @@ export function useE2EE(userId: string | undefined) {
           throw new Error("Encryption key recovery is unavailable");
         }
       } else if (serverDevice?.encryptedPrivateKey) {
-        privateKeyStr = await decryptPrivateKeyFromStorage(serverDevice.encryptedPrivateKey, deviceId);
+        privateKeyStr = await restorePrivateKey(serverDevice.encryptedPrivateKey);
         const privateKey = await importPrivateKey(privateKeyStr);
         const publicKey = await importPublicKey(serverDevice.publicKey);
         keyPair = { privateKey, publicKey };
@@ -133,7 +144,15 @@ export function useE2EE(userId: string | undefined) {
 
       // Register on every startup. This makes a restored session recover when
       // the server-side device record was removed or an earlier request failed.
-      const encryptedPrivateKey = await encryptPrivateKeyForStorage(privateKeyStr, deviceId);
+      // Keep the backup decryptable on this device without giving the server
+      // its passphrase. The previous protocol stored deviceId beside the
+      // backup, which did not provide meaningful protection from the server.
+      if (!recoverySecret) {
+        const secretBytes = crypto.getRandomValues(new Uint8Array(32));
+        recoverySecret = Array.from(secretBytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+        localStorage.setItem(recoveryStorageKey, recoverySecret);
+      }
+      const encryptedPrivateKey = `v2:${await encryptPrivateKeyForStorage(privateKeyStr, recoverySecret)}`;
       const response = await fetch("/api/e2ee/keys", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -172,7 +191,13 @@ export function useE2EE(userId: string | undefined) {
           // be several rows (active + history), and array order is unspecified.
           const candidates = (data.keys ?? [])
             .filter((k: { encryptedKey?: string }) => k.encryptedKey)
-            .sort((a: { keyVersion?: number }, b: { keyVersion?: number }) => (b.keyVersion ?? 0) - (a.keyVersion ?? 0));
+            .sort((a: { keyVersion?: number; deviceId?: string }, b: { keyVersion?: number; deviceId?: string }) => {
+              // Prefer this device's self-wrapped sending key. Other rows are
+              // peer sending keys and remain available to the decrypt path.
+              const selfA = a.deviceId === state.deviceId ? 1 : 0;
+              const selfB = b.deviceId === state.deviceId ? 1 : 0;
+              return selfB - selfA || (b.keyVersion ?? 0) - (a.keyVersion ?? 0);
+            });
           for (const keyData of candidates) {
             if (!keyPairRef.current?.privateKey) break;
             try {
@@ -264,8 +289,72 @@ export function useE2EE(userId: string | undefined) {
     [getConversationKey],
   );
 
+  /** Load and unwrap every key available to this device once per batch. Initial
+   * history decrypts run concurrently; sharing this promise prevents every
+   * message from independently repeating the same API and RSA work. */
+  const loadDecryptionKeys = useCallback(async (conversationId: string): Promise<CryptoKey[]> => {
+    const pending = decryptionLoadRef.current.get(conversationId);
+    if (pending) return pending;
+
+    const load = (async () => {
+      if (!keyPairRef.current) throw new Error("Device keys are not ready");
+      const wrappedKeys = new Set<string>();
+
+      if (userId && typeof localStorage !== "undefined") {
+        try {
+          const saved = JSON.parse(localStorage.getItem(`e2ee_sentkeys_${userId}_${conversationId}`) ?? "[]") as Array<{ wrapped?: string }>;
+          for (const entry of saved) if (entry.wrapped) wrappedKeys.add(entry.wrapped);
+        } catch { /* Server shares can still recover a malformed local backup. */ }
+      }
+
+      await Promise.all(["conversation-keys", "key-rotation/history"].map(async (endpoint) => {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 10000);
+        try {
+          const response = await fetch(`/api/e2ee/${endpoint}?conversationId=${encodeURIComponent(conversationId)}&deviceId=${encodeURIComponent(state.deviceId)}`, {
+            cache: "no-store", signal: controller.signal,
+          });
+          if (!response.ok) return;
+          const data = await response.json();
+          for (const row of data.keys ?? data.history ?? []) {
+            if (row.encryptedKey) wrappedKeys.add(row.encryptedKey);
+          }
+        } catch { /* The other endpoint or a later retry may still recover. */ }
+        finally { clearTimeout(timeout); }
+      }));
+
+      const existing = decryptionKeysRef.current.get(conversationId) ?? [];
+      const keys = [...existing];
+      const fingerprints = new Set<string>();
+      for (const key of existing) {
+        try { fingerprints.add(await conversationFingerprint(key)); } catch {}
+      }
+      for (const wrapped of wrappedKeys) {
+        try {
+          const key = await decryptKeyFromSender(wrapped, keyPairRef.current.privateKey);
+          const fingerprint = await conversationFingerprint(key);
+          if (!fingerprints.has(fingerprint)) {
+            fingerprints.add(fingerprint);
+            keys.push(key);
+          }
+        } catch { /* This legacy share was wrapped for a different device. */ }
+      }
+      decryptionKeysRef.current.set(conversationId, keys);
+      return keys;
+    })();
+
+    decryptionLoadRef.current.set(conversationId, load);
+    try {
+      return await load;
+    } finally {
+      if (decryptionLoadRef.current.get(conversationId) === load) {
+        decryptionLoadRef.current.delete(conversationId);
+      }
+    }
+  }, [userId, state.deviceId]);
+
   /** Receiving never generates or replaces a sending key. Try cached keys,
-   * then all current/device/history shares, retaining keys that work locally. */
+   * then current/device/history shares, retaining all recoverable keys. */
   const decrypt = useCallback(async (ciphertext: string, conversationId: string): Promise<string> => {
     if (!keyPairRef.current) throw new Error("Device keys are not ready");
     const local = decryptionKeysRef.current.get(conversationId) ?? [];
@@ -273,41 +362,12 @@ export function useE2EE(userId: string | undefined) {
     for (const key of sending ? [sending, ...local] : local) {
       try { return await decryptMessage(ciphertext, key); } catch { /* Try the next key. */ }
     }
-    if (userId && typeof localStorage !== "undefined") {
-      try {
-        const saved = JSON.parse(localStorage.getItem(`e2ee_sentkeys_${userId}_${conversationId}`) ?? "[]") as Array<{ wrapped: string }>;
-        for (const entry of saved) {
-          try {
-            const key = await decryptKeyFromSender(entry.wrapped, keyPairRef.current.privateKey);
-            const plain = await decryptMessage(ciphertext, key);
-            decryptionKeysRef.current.set(conversationId, [key, ...local].slice(0, 20));
-            return plain;
-          } catch { /* Another historical sending key. */ }
-        }
-      } catch { /* Server shares can still recover a malformed local backup. */ }
-    }
-    for (const endpoint of ["conversation-keys", "key-rotation/history"]) {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 10000);
-      try {
-        const response = await fetch(`/api/e2ee/${endpoint}?conversationId=${encodeURIComponent(conversationId)}&deviceId=${encodeURIComponent(state.deviceId)}`, {
-          cache: "no-store", signal: controller.signal,
-        });
-        if (!response.ok) continue;
-        const data = await response.json();
-        for (const row of data.keys ?? data.history ?? []) {
-          try {
-            const key = await decryptKeyFromSender(row.encryptedKey, keyPairRef.current.privateKey);
-            const plain = await decryptMessage(ciphertext, key);
-            decryptionKeysRef.current.set(conversationId, [key, ...local].slice(0, 20));
-            return plain;
-          } catch { /* This share belongs to another device or message. */ }
-        }
-      } catch { /* Try the history endpoint too. */ }
-      finally { clearTimeout(timeout); }
+    const loaded = await loadDecryptionKeys(conversationId);
+    for (const key of loaded) {
+      try { return await decryptMessage(ciphertext, key); } catch { /* Try the next key. */ }
     }
     throw new Error("This message's key is not available on this device");
-  }, [userId, state.deviceId]);
+  }, [loadDecryptionKeys]);
 
   /** Share a conversation key with one specific recipient device. */
   const shareKey = useCallback(
@@ -315,6 +375,7 @@ export function useE2EE(userId: string | undefined) {
       const key = keyOverride ?? (await getConversationKey(conversationId)).key;
       const targetPublicKey = await importPublicKey(targetPublicKeyBase64);
       const encryptedKey = await encryptKeyForUser(key, targetPublicKey);
+      const keyFingerprint = await conversationFingerprint(key);
 
       const res = await fetch("/api/e2ee/conversation-keys", {
         method: "POST",
@@ -324,6 +385,7 @@ export function useE2EE(userId: string | undefined) {
           targetUserId,
           targetDeviceId,
           encryptedKey,
+          keyFingerprint,
           // This is the sender; targetDeviceId identifies the only device
           // that can unwrap this copy.
           deviceId: state.deviceId,
@@ -360,8 +422,9 @@ export function useE2EE(userId: string | undefined) {
       const response = await fetch(`/api/e2ee/peers?conversationId=${encodeURIComponent(conversationId)}&deviceId=${encodeURIComponent(state.deviceId)}`);
       if (!response.ok) return false;
       const { peers } = await response.json() as { peers: Peer[] };
-      if (peers.some(peer => peer.devices.length === 0)) return false;
+      if (peers.some(peer => peer.userId !== userId && peer.devices.length === 0)) return false;
       const key = await generateConversationKey();
+      if (!userId || !state.publicKey || !await shareKey(conversationId, userId, state.deviceId, state.publicKey, key)) return false;
       for (const peer of peers) for (const device of peer.devices) {
         if (!await shareKey(conversationId, peer.userId, device.deviceId, device.publicKey, key)) return false;
       }
@@ -371,7 +434,7 @@ export function useE2EE(userId: string | undefined) {
       conversationKeysRef.current.set(conversationId, key);
       return true;
     } catch { return false; }
-  }, [shareKey, rememberSendingKey]);
+  }, [shareKey, rememberSendingKey, state.deviceId, state.publicKey, userId]);
 
   /**
    * Prepare a conversation for E2EE: fetch-or-create its symmetric key, share
@@ -397,8 +460,20 @@ export function useE2EE(userId: string | undefined) {
         return { ready: false, fingerprint: null };
       }
 
-      // No peers (self chat, fresh group with only you) → encryption works.
-      let ready = peers.every((p) => p.devices.length > 0);
+      // Persist a copy for this device too. Without this, clearing the in-memory
+      // cache or restarting the app can strand messages sent by this device.
+      let ready = Boolean(userId && state.publicKey);
+      if (ready) {
+        try {
+          ready = await shareKey(conversationId, userId!, state.deviceId, state.publicKey!, key);
+        } catch {
+          ready = false;
+        }
+      }
+
+      // The current user is returned so their other devices receive the key,
+      // but having no *other* device must not disable E2EE for the whole chat.
+      ready = ready && peers.every((p) => p.userId === userId || p.devices.length > 0);
       if (ready) {
         for (const peer of peers) {
           for (const device of peer.devices) {
@@ -419,7 +494,7 @@ export function useE2EE(userId: string | undefined) {
       }
       return { ready, fingerprint };
     },
-    [getConversationKey, shareKey],
+    [getConversationKey, shareKey, state.deviceId, state.publicKey, userId],
   );
 
   /** Encrypt arbitrary bytes (media) with the conversation key. */

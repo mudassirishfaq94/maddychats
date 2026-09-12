@@ -60,6 +60,9 @@ export async function PATCH(
       fieldErrors(parsed.error),
     );
   }
+  if (parsed.data.encrypted !== true) {
+    return jsonError(422, "End-to-end encrypted message payload required.");
+  }
 
   const result = await editMessage(
     id,

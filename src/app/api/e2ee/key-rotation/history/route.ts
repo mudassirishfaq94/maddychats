@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, isNull, or } from "drizzle-orm";
 import { db } from "@/db";
 import { e2eeConversationKeys, e2eeKeyHistory, e2eeKeys } from "@/db/schema";
 import { getSessionUser } from "@/server/session";
@@ -50,7 +50,10 @@ export async function GET(req: NextRequest) {
       and(
         eq(e2eeConversationKeys.conversationId, conversationId),
         eq(e2eeConversationKeys.userId, user.id),
-        eq(e2eeConversationKeys.recipientDeviceId, recipientDeviceId),
+        or(
+          eq(e2eeConversationKeys.recipientDeviceId, recipientDeviceId),
+          isNull(e2eeConversationKeys.recipientDeviceId),
+        ),
         eq(e2eeConversationKeys.isActive, false),
       )
     )
@@ -73,7 +76,10 @@ export async function GET(req: NextRequest) {
       and(
         eq(e2eeKeyHistory.conversationId, conversationId),
         eq(e2eeKeyHistory.userId, user.id),
-        eq(e2eeKeyHistory.recipientDeviceId, recipientDeviceId),
+        or(
+          eq(e2eeKeyHistory.recipientDeviceId, recipientDeviceId),
+          isNull(e2eeKeyHistory.recipientDeviceId),
+        ),
       )
     )
     .orderBy(desc(e2eeKeyHistory.keyVersion));

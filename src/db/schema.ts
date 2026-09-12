@@ -1184,6 +1184,8 @@ export const e2eeConversationKeys = pgTable(
     recipientDeviceId: text("recipient_device_id"),
     /** Device that created this encrypted copy. */
     deviceId: text("device_id").notNull(),
+    /** Stable identity of the raw AES key; RSA-OAEP ciphertext is randomized. */
+    keyFingerprint: text("key_fingerprint"),
     /** Key version for rotation: incremented on each rotation */
     keyVersion: integer("key_version").default(1).notNull(),
     /** When this key was last rotated */
@@ -1210,6 +1212,7 @@ export const e2eeKeyHistory = pgTable(
     recipientDeviceId: text("recipient_device_id"),
     deviceId: text("device_id").notNull(),
     encryptedKey: text("encrypted_key").notNull(),
+    keyFingerprint: text("key_fingerprint"),
     keyVersion: integer("key_version").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
     expiresAt: timestamp("expires_at", { withTimezone: true, mode: "date" }),
