@@ -9,6 +9,9 @@ import { hashPassword } from "@/server/password";
 import { createSessionToken, sessionCookieOptions } from "@/server/session";
 import { jsonError, readJson, requestIsSecure } from "@/server/http";
 import { toSafeUser } from "@/server/users";
+import { verifyGoogleMobileHandoff } from "@/server/google-mobile-handoff";
+import { findUserById } from "@/server/users";
+import { createHash, timingSafeEqual } from "crypto";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +24,20 @@ const googleKeys = createRemoteJWKSet(new URL("https://www.googleapis.com/oauth2
  */
 export async function POST(req: NextRequest) {
   const body = await readJson(req) as { idToken?: unknown } | null;
+  const ticket = typeof (body as { ticket?: unknown } | null)?.ticket === "string" ? (body as { ticket: string }).ticket : null;
+  const verifier = typeof (body as { verifier?: unknown } | null)?.verifier === "string" ? (body as { verifier: string }).verifier : null;
+  if (ticket && verifier) {
+    const handoff = await verifyGoogleMobileHandoff(ticket);
+    const actual = createHash("sha256").update(verifier).digest("base64url");
+    if (!handoff || actual.length !== handoff.codeChallenge.length || !timingSafeEqual(Buffer.from(actual), Buffer.from(handoff.codeChallenge))) {
+      return jsonError(401, "Google mobile sign-in could not be verified.");
+    }
+    const user = await findUserById(handoff.userId);
+    if (!user || user.username !== handoff.username) return jsonError(401, "Google mobile sign-in expired.");
+    const response = NextResponse.json({ user: toSafeUser(user) });
+    response.cookies.set(SESSION_COOKIE, await createSessionToken(user.id, user.username), sessionCookieOptions(requestIsSecure(req)));
+    return response;
+  }
   const idToken = typeof body?.idToken === "string" ? body.idToken : null;
   if (!idToken) return jsonError(422, "Google ID token is required.");
 

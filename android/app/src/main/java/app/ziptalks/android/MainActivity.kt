@@ -2,6 +2,7 @@ package app.ziptalks.android
 
 import android.content.Context
 import android.content.ContentResolver
+import android.content.Intent
 import android.net.Uri
 import android.provider.OpenableColumns
 import android.os.Bundle
@@ -53,6 +54,9 @@ import okhttp3.sse.EventSources
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
+import java.security.MessageDigest
+import java.security.SecureRandom
+import android.util.Base64
 import java.util.concurrent.ConcurrentHashMap
 
 private data class Conversation(val id: String, val title: String, val preview: String)
@@ -93,6 +97,7 @@ private class ZipTalkApi(context: Context) {
         .put("displayName", name).put("username", username).put("email", email).put("password", password))
     fun googleClientId(): String = request("/api/auth/google/native").getString("clientId")
     fun loginWithGoogle(idToken: String) = request("/api/auth/google/native", "POST", JSONObject().put("idToken", idToken))
+    fun exchangeGoogleMobileTicket(ticket: String, verifier: String) = request("/api/auth/google/native", "POST", JSONObject().put("ticket", ticket).put("verifier", verifier))
     fun cookiesForWeb(): List<String> = cookies.values.toList()
     fun currentUserId(): String? = runCatching { request("/api/auth/me").getJSONObject("user").getString("id") }.getOrNull()
     fun conversations(): List<Conversation> {
@@ -173,9 +178,46 @@ class MainActivity : ComponentActivity() {
         // when that probe or the Compose first frame stalled.
         webView = createHostedWebView()
         setContentView(requireNotNull(webView))
+        handleGoogleMobileCallback(intent)
     }
 
     override fun onDestroy() { webView?.destroy(); webView = null; super.onDestroy() }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleGoogleMobileCallback(intent)
+    }
+
+    private fun startGoogleMobileSignIn() {
+        val verifier = ByteArray(32).also { SecureRandom().nextBytes(it) }
+            .let { Base64.encodeToString(it, Base64.URL_SAFE or Base64.NO_PADDING or Base64.NO_WRAP) }
+        val challenge = Base64.encodeToString(
+            MessageDigest.getInstance("SHA-256").digest(verifier.toByteArray(Charsets.US_ASCII)),
+            Base64.URL_SAFE or Base64.NO_PADDING or Base64.NO_WRAP,
+        )
+        getSharedPreferences("ziptalk-session", Context.MODE_PRIVATE)
+            .edit().putString("google_pkce_verifier", verifier).apply()
+        val url = "${BuildConfig.API_BASE_URL}/api/auth/google?mobile=1&code_challenge=${Uri.encode(challenge)}"
+        startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+    }
+
+    private fun handleGoogleMobileCallback(callbackIntent: Intent?) {
+        val ticket = callbackIntent?.data?.takeIf { it.scheme == "ziptalks" && it.host == "auth" }
+            ?.getQueryParameter("ticket") ?: return
+        val prefs = getSharedPreferences("ziptalk-session", Context.MODE_PRIVATE)
+        val verifier = prefs.getString("google_pkce_verifier", null) ?: return
+        CoroutineScope(Dispatchers.IO).launch {
+            runCatching { api.exchangeGoogleMobileTicket(ticket, verifier) }
+                .onSuccess {
+                    prefs.edit().remove("google_pkce_verifier").apply()
+                    val manager = CookieManager.getInstance()
+                    api.cookiesForWeb().forEach { manager.setCookie(BuildConfig.API_BASE_URL, it) }
+                    manager.flush()
+                    withContext(Dispatchers.Main) { webView?.loadUrl("${BuildConfig.API_BASE_URL}/app") }
+                }
+        }
+    }
 
     private fun createHostedWebView(): WebView = WebView(this).apply {
         setBackgroundColor(AndroidColor.rgb(11, 18, 17))
@@ -200,16 +242,7 @@ class MainActivity : ComponentActivity() {
         webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView, url: String): Boolean {
                 if (url.startsWith("${BuildConfig.API_BASE_URL}/api/auth/google")) {
-                    val activity = this@MainActivity
-                    CoroutineScope(Dispatchers.Main).launch {
-                        runCatching { nativeGoogleSignIn(activity, api) }
-                            .onSuccess {
-                                api.cookiesForWeb().forEach { cookieManager.setCookie(BuildConfig.API_BASE_URL, it) }
-                                cookieManager.flush()
-                                view.loadUrl("${BuildConfig.API_BASE_URL}/app")
-                            }
-                            .onFailure { view.loadUrl("${BuildConfig.API_BASE_URL}/login?error=google_native_failed") }
-                    }
+                    startGoogleMobileSignIn()
                     return true
                 }
                 return false

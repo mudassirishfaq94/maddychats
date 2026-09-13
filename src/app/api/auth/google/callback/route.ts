@@ -8,9 +8,10 @@ import { clientUrl, googleCallbackUrl, SESSION_COOKIE } from "@/server/config";
 import { hashPassword } from "@/server/password";
 import { createSessionToken, getSessionUser, sessionCookieOptions } from "@/server/session";
 import { requestIsSecure } from "@/server/http";
+import { createGoogleMobileHandoff } from "@/server/google-mobile-handoff";
 
 const googleKeys = createRemoteJWKSet(new URL("https://www.googleapis.com/oauth2/v3/certs"));
-const GOOGLE_OAUTH_COOKIES = ["google_oauth_state", "google_oauth_nonce", "google_oauth_verifier", "google_oauth_next", "google_oauth_mode"];
+const GOOGLE_OAUTH_COOKIES = ["google_oauth_state", "google_oauth_nonce", "google_oauth_verifier", "google_oauth_next", "google_oauth_mode", "google_oauth_mobile", "google_oauth_code_challenge"];
 
 function finishGoogleOAuth(response: NextResponse) {
   for (const name of GOOGLE_OAUTH_COOKIES) {
@@ -31,6 +32,8 @@ async function handleGoogleCallback(req: NextRequest) {
   const verifier = req.cookies.get("google_oauth_verifier")?.value;
   const next = req.cookies.get("google_oauth_next")?.value ?? "/app";
   const linking = req.cookies.get("google_oauth_mode")?.value === "link";
+  const mobile = req.cookies.get("google_oauth_mobile")?.value === "1";
+  const mobileChallenge = req.cookies.get("google_oauth_code_challenge")?.value;
   if (!code || !state || !expectedState || state !== expectedState || !nonce || !verifier) return redirectError("google_invalid_state");
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
@@ -111,6 +114,10 @@ async function handleGoogleCallback(req: NextRequest) {
     });
   }
 
+  if (mobile && mobileChallenge && !linking) {
+    const ticket = await createGoogleMobileHandoff(user.id, user.username, mobileChallenge);
+    return finishGoogleOAuth(NextResponse.redirect(new URL(`ziptalks://auth/google?ticket=${encodeURIComponent(ticket)}`)));
+  }
   const response = NextResponse.redirect(new URL(next.startsWith("/") && !next.startsWith("//") ? next : "/app", clientUrl()));
   response.cookies.set(SESSION_COOKIE, await createSessionToken(user.id, user.username), sessionCookieOptions(requestIsSecure(req)));
   return finishGoogleOAuth(response);

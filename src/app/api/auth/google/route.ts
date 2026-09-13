@@ -7,6 +7,11 @@ import { getSessionUser } from "@/server/session";
 const COOKIE_AGE = 10 * 60;
 
 export async function GET(req: NextRequest) {
+  const mobile = req.nextUrl.searchParams.get("mobile") === "1";
+  const codeChallenge = req.nextUrl.searchParams.get("code_challenge");
+  if (mobile && !/^[A-Za-z0-9_-]{43,128}$/.test(codeChallenge ?? "")) {
+    return NextResponse.redirect(new URL("/login?error=google_invalid_mobile_request", clientUrl()));
+  }
   const linking = req.nextUrl.searchParams.get("mode") === "link";
   if (linking && !(await getSessionUser())) {
     return NextResponse.redirect(new URL("/login?next=/app/profile", clientUrl()));
@@ -31,5 +36,9 @@ export async function GET(req: NextRequest) {
   response.cookies.set("google_oauth_verifier", verifier, options);
   response.cookies.set("google_oauth_next", safeNext, options);
   response.cookies.set("google_oauth_mode", linking ? "link" : "signin", options);
+  if (mobile) {
+    response.cookies.set("google_oauth_mobile", "1", options);
+    response.cookies.set("google_oauth_code_challenge", codeChallenge!, options);
+  }
   return response;
 }
