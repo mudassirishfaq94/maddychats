@@ -6,6 +6,7 @@ import android.net.Uri
 import android.provider.OpenableColumns
 import android.os.Bundle
 import android.app.Activity
+import android.graphics.Color as AndroidColor
 import android.webkit.CookieManager
 import android.webkit.WebChromeClient
 import android.webkit.WebSettings
@@ -164,10 +165,58 @@ class MainActivity : ComponentActivity() {
                 if (webView?.canGoBack() == true) webView?.goBack() else finish()
             }
         })
-        setContent { ZipTalkHostedExperience(api) { webView = it } }
+        // Load the hosted app immediately. The server already owns the source
+        // of truth for authentication: /app redirects an unauthenticated
+        // visitor to /login and renders the dashboard for a valid session.
+        // Waiting for a separate native /api/auth/me probe before creating the
+        // WebView could leave some Android devices on an empty launch surface
+        // when that probe or the Compose first frame stalled.
+        webView = createHostedWebView()
+        setContentView(requireNotNull(webView))
     }
 
     override fun onDestroy() { webView?.destroy(); webView = null; super.onDestroy() }
+
+    private fun createHostedWebView(): WebView = WebView(this).apply {
+        setBackgroundColor(AndroidColor.rgb(11, 18, 17))
+        settings.javaScriptEnabled = true
+        settings.domStorageEnabled = true
+        @Suppress("DEPRECATION")
+        settings.databaseEnabled = true
+        settings.cacheMode = WebSettings.LOAD_NO_CACHE
+        settings.mediaPlaybackRequiresUserGesture = false
+        settings.loadWithOverviewMode = false
+        settings.useWideViewPort = false
+        settings.userAgentString = "${settings.userAgentString} ZipTalkAndroid/0.8"
+        // Preserve browser-held E2EE keys while discarding stale HTTP assets.
+        clearCache(true)
+        val cookieManager = CookieManager.getInstance()
+        cookieManager.setAcceptCookie(true)
+        cookieManager.setAcceptThirdPartyCookies(this, true)
+        // Carry sessions created by the earlier native client into the WebView.
+        api.cookiesForWeb().forEach { cookieManager.setCookie(BuildConfig.API_BASE_URL, it) }
+        cookieManager.flush()
+        webChromeClient = WebChromeClient()
+        webViewClient = object : WebViewClient() {
+            override fun shouldOverrideUrlLoading(view: WebView, url: String): Boolean {
+                if (url.startsWith("${BuildConfig.API_BASE_URL}/api/auth/google")) {
+                    val activity = this@MainActivity
+                    CoroutineScope(Dispatchers.Main).launch {
+                        runCatching { nativeGoogleSignIn(activity, api) }
+                            .onSuccess {
+                                api.cookiesForWeb().forEach { cookieManager.setCookie(BuildConfig.API_BASE_URL, it) }
+                                cookieManager.flush()
+                                view.loadUrl("${BuildConfig.API_BASE_URL}/app")
+                            }
+                            .onFailure { view.loadUrl("${BuildConfig.API_BASE_URL}/login?error=google_native_failed") }
+                    }
+                    return true
+                }
+                return false
+            }
+        }
+        loadUrl("${BuildConfig.API_BASE_URL}/app")
+    }
 }
 
 /**
