@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   Users,
   Shield,
@@ -31,14 +31,21 @@ export default function AdminUsersPage() {
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  const loadUsers = useCallback(async () => {
+    try {
+      const response = await fetch("/api/admin/users", { cache: "no-store" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.error ?? "Could not refresh users.");
+      setUsers(data.users ?? []);
+    } catch (error) { setActionError(error instanceof Error ? error.message : "Could not refresh users."); }
+    finally { setLoading(false); }
+  }, []);
 
   useEffect(() => {
-    fetch("/api/admin/users")
-      .then((r) => r.json())
-      .then((data) => setUsers(data.users ?? []))
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, []);
+    void loadUsers();
+  }, [loadUsers]);
 
   const filtered = users.filter(
     (u) =>
@@ -102,9 +109,15 @@ export default function AdminUsersPage() {
   async function deleteUser(user: AdminUser) {
     if (!confirm(`Permanently delete ${user.displayName}? This cannot be undone.`)) return;
     setBusyId(user.id);
+    setActionError(null);
     try {
       const res = await fetch(`/api/admin/users/${user.id}`, { method: "DELETE" });
-      if (res.ok) setUsers((previous) => previous.filter((item) => item.id !== user.id));
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error ?? "Could not delete this user.");
+      // Refetch after the destructive action so the view always reflects the
+      // database, including cascaded membership/message cleanup.
+      await loadUsers();
+    } catch (error) { setActionError(error instanceof Error ? error.message : "Could not delete this user.");
     } finally { setBusyId(null); }
   }
 
@@ -134,6 +147,7 @@ export default function AdminUsersPage() {
           className="field-input field-input--icon w-full"
         />
       </div>
+      {actionError ? <p role="alert" className="text-sm text-[var(--danger)]">{actionError}</p> : null}
 
       <div className="card-flat rounded-2xl overflow-hidden">
         <div className="overflow-x-auto">
