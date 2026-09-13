@@ -170,12 +170,16 @@ export async function DELETE(
   if (!target) return jsonError(404, "User not found.");
   if (target.role === "admin") return jsonError(403, "Cannot delete another administrator.");
 
+  // Write the audit event while the target still exists. The foreign key
+  // subsequently clears targetUserId on deletion, while details retains the
+  // deleted identifier for a durable audit trail.
+  await auditLog({ adminId: me.id, action: "user_deleted", targetUserId: id, details: { deletedUserId: id } });
+
   const [deleted] = await db
     .delete(users)
     .where(eq(users.id, id))
     .returning({ id: users.id });
 
   if (!deleted) return jsonError(404, "User not found.");
-  await auditLog({ adminId: me.id, action: "user_deleted", targetUserId: id });
   return NextResponse.json({ ok: true });
 }
