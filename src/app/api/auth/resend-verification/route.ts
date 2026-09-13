@@ -12,7 +12,7 @@ export async function POST(req: NextRequest) {
   const email = typeof body?.email === "string" ? body.email.trim().toLowerCase() : "";
   if (email && /^\S+@\S+\.\S+$/.test(email)) {
     const user = await findUserByEmail(email);
-    if (user && !user.emailVerifiedAt) await issueEmailVerification(user);
+    if (user) await issueEmailVerification(user);
   }
   return NextResponse.json({ ok: true });
 }

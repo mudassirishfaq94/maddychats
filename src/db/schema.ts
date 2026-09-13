@@ -34,7 +34,6 @@ export const users = pgTable(
     username: text("username").notNull().unique(),
     displayName: text("display_name").notNull(),
     email: text("email").notNull().unique(),
-    emailVerifiedAt: timestamp("email_verified_at", { withTimezone: true, mode: "date" }),
     passwordHash: text("password_hash").notNull(),
     avatarUrl: text("avatar_url"),
     bio: text("bio"),

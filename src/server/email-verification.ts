@@ -30,7 +30,7 @@ export async function consumeEmailVerification(token: string): Promise<"verified
   return db.transaction(async (tx) => {
     const rows = await tx.update(emailVerificationTokens).set({ usedAt: now }).where(and(eq(emailVerificationTokens.tokenHash, hash(token)), isNull(emailVerificationTokens.usedAt), gt(emailVerificationTokens.expiresAt, now))).returning({ userId: emailVerificationTokens.userId });
     if (!rows[0]) return "invalid";
-    await tx.update(users).set({ emailVerifiedAt: now, updatedAt: now }).where(eq(users.id, rows[0].userId));
+    await tx.update(users).set({ updatedAt: now }).where(eq(users.id, rows[0].userId));
     return "verified";
   });
 }

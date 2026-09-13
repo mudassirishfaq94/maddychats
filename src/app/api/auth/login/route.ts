@@ -60,9 +60,6 @@ export async function POST(req: NextRequest) {
     });
     return jsonError(401, "Incorrect email, username, or password.");
   }
-  if (!user.emailVerifiedAt) {
-    return jsonError(403, "Please verify your email address before continuing.");
-  }
 
   // Record successful login
   await recordLoginAttempt({
