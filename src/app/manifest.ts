@@ -15,8 +15,8 @@ export default function manifest(): MetadataRoute.Manifest {
       { name: "Chats", url: "/app/chats", icons: [{ src: "/icons/ziptalk-192.png", sizes: "192x192" }] },
       { name: "People", url: "/app/people", icons: [{ src: "/icons/ziptalk-192.png", sizes: "192x192" }] },
     ],
-    background_color: "#101815",
-    theme_color: "#148d68",
+    background_color: "#FFFFFF",
+    theme_color: "#2563EB",
     icons: [
       { src: "/icons/ziptalk-192.png", sizes: "192x192", type: "image/png" },
       { src: "/icons/ziptalk-512.png", sizes: "512x512", type: "image/png" },

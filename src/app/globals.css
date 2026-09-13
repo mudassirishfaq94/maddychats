@@ -5,59 +5,59 @@
    ========================================================================== */
 
 :root {
-  --bg: #f3f5f1;
+  --bg: #ffffff;
   --surface: #ffffff;
-  --surface-2: #f5f7f4;
-  --text: #17211d;
-  --muted: #718078;
-  --border: #e1e7e0;
-  --border-strong: #cbd6cb;
-  --input-bg: #f1f4f0;
-  --action: #148d68;
+  --surface-2: #f3f4f6;
+  --text: #0f172a;
+  --muted: #475569;
+  --border: #e5e7eb;
+  --border-strong: #cbd5e1;
+  --input-bg: #f3f4f6;
+  --action: #2563eb;
   --action-fg: #ffffff;
-  --accent: #148d68;
-  --accent-soft: rgba(20, 141, 104, 0.13);
-  --accent-fg: #087657;
-  --ring: rgba(20, 141, 104, 0.22);
-  --success: #148d68;
-  --danger: #d73535;
-  --warning: #c9862b;
+  --accent: #2563eb;
+  --accent-soft: rgba(37, 99, 235, 0.13);
+  --accent-fg: #1d4ed8;
+  --ring: rgba(37, 99, 235, 0.22);
+  --success: #059669;
+  --danger: #dc2626;
+  --warning: #d97706;
   --shadow-lg: 0 16px 40px -22px rgba(0, 0, 0, 0.28);
 
   /* Message bubbles */
-  --bubble-other-bg: #ffffff;
-  --bubble-own-bg: #d9f6e8;
-  --bubble-own-fg: #17211d;
-  --bubble-own-sub: #5a7b6d;
-  --grad-send: #148d68;
+  --bubble-other-bg: #f3f4f6;
+  --bubble-own-bg: #dbeafe;
+  --bubble-own-fg: #0f172a;
+  --bubble-own-sub: #475569;
+  --grad-send: #2563eb;
   color-scheme: light;
 }
 
 html:not(.light) {
-  --bg: #101815;
-  --surface: #16211d;
-  --surface-2: #1d2924;
-  --text: #edf7f1;
-  --muted: #9daca4;
-  --border: #2a3932;
-  --border-strong: #405249;
-  --input-bg: #1d2924;
-  --action: #45d29c;
-  --action-fg: #0d1914;
-  --accent: #45d29c;
-  --accent-soft: rgba(69, 210, 156, 0.14);
-  --accent-fg: #65e6b1;
-  --ring: rgba(69, 210, 156, 0.24);
-  --success: #45d29c;
-  --danger: #ef5b5b;
-  --warning: #e0a44c;
+  --bg: #121212;
+  --surface: #1e1e1e;
+  --surface-2: #2d2d2d;
+  --text: #e5e7eb;
+  --muted: #9ca3af;
+  --border: #3f3f46;
+  --border-strong: #52525b;
+  --input-bg: #1e1e1e;
+  --action: #3b82f6;
+  --action-fg: #ffffff;
+  --accent: #3b82f6;
+  --accent-soft: rgba(59, 130, 246, 0.16);
+  --accent-fg: #93c5fd;
+  --ring: rgba(59, 130, 246, 0.28);
+  --success: #34d399;
+  --danger: #f87171;
+  --warning: #fbbf24;
   --shadow-lg: 0 18px 44px -20px rgba(0, 0, 0, 0.7);
 
-  --bubble-other-bg: #1d2924;
-  --bubble-own-bg: #1a5743;
-  --bubble-own-fg: #f2fbf6;
-  --bubble-own-sub: #b0cfc1;
-  --grad-send: #45d29c;
+  --bubble-other-bg: #1e1e1e;
+  --bubble-own-bg: #1e3a8a;
+  --bubble-own-fg: #e5e7eb;
+  --bubble-own-sub: #bfdbfe;
+  --grad-send: #3b82f6;
   color-scheme: dark;
 }
 
@@ -93,7 +93,7 @@ html:not(.light) {
 }
 
 body {
-  background: radial-gradient(circle at 8% -10%, color-mix(in srgb, var(--action) 10%, transparent), transparent 28rem), var(--bg);
+  background: var(--bg);
   color: var(--text);
   font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
   font-size: 0.95rem;
@@ -122,7 +122,7 @@ body {
 
 /* Conversation pattern stays scoped to the message canvas. */
 .chat-message-area {
-  background-color: #e8eee8;
+  background-color: var(--bg);
   background-image: url("/patterns/maddy-doodles-light.svg");
   background-repeat: repeat;
   background-position: center top;
@@ -136,7 +136,7 @@ html.light .chat-message-area {
 }
 
 html:not(.light) .chat-message-area {
-  background-color: #101815;
+  background-color: var(--bg);
   background-image: url("/patterns/maddy-doodles-dark.svg");
 }
 
