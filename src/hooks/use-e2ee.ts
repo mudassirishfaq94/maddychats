@@ -65,6 +65,7 @@ export function useE2EE(userId: string | undefined) {
     fingerprint: string;
     peerSignature: string;
   }>>(new Map());
+  const pendingTrustRef = useRef<Map<string, string>>(new Map());
 
   // Initialize on mount
   useEffect(() => {
@@ -106,23 +107,36 @@ export function useE2EE(userId: string | undefined) {
       }
 
       if (stored) {
-        const parsed = JSON.parse(stored);
+        const parsed = JSON.parse(stored) as {
+          publicKey?: unknown;
+          privateKey?: unknown;
+          encryptedPrivateKey?: unknown;
+        };
+        if (typeof parsed.publicKey !== "string") {
+          throw new Error("Stored encryption key is invalid");
+        }
         // A matching server key confirms this browser copy is the correct
         // keypair. If it differs, restore the server backup instead of
         // registering the stale local key over the recoverable one.
         if (!serverDevice || serverDevice.publicKey === parsed.publicKey) {
-          const privateKey = await importPrivateKey(parsed.privateKey);
+          // v2 is the normal format. `privateKey` is accepted only to migrate
+          // a legacy local record; the successful registration below rewrites
+          // it immediately as an encrypted record.
+          privateKeyStr = typeof parsed.encryptedPrivateKey === "string"
+            ? await restorePrivateKey(parsed.encryptedPrivateKey)
+            : typeof parsed.privateKey === "string"
+              ? parsed.privateKey
+              : (() => { throw new Error("Stored encryption key is invalid"); })();
+          const privateKey = await importPrivateKey(privateKeyStr);
           const publicKey = await importPublicKey(parsed.publicKey);
           keyPair = { privateKey, publicKey };
           publicKeyStr = parsed.publicKey;
-          privateKeyStr = parsed.privateKey;
         } else if (serverDevice.encryptedPrivateKey) {
           privateKeyStr = await restorePrivateKey(serverDevice.encryptedPrivateKey);
           const privateKey = await importPrivateKey(privateKeyStr);
           const publicKey = await importPublicKey(serverDevice.publicKey);
           keyPair = { privateKey, publicKey };
           publicKeyStr = serverDevice.publicKey;
-          localStorage.setItem(`e2ee_keypair_${userId}`, JSON.stringify({ publicKey: publicKeyStr, privateKey: privateKeyStr }));
         } else {
           throw new Error("Encryption key recovery is unavailable");
         }
@@ -132,7 +146,6 @@ export function useE2EE(userId: string | undefined) {
         const publicKey = await importPublicKey(serverDevice.publicKey);
         keyPair = { privateKey, publicKey };
         publicKeyStr = serverDevice.publicKey;
-        localStorage.setItem(`e2ee_keypair_${userId}`, JSON.stringify({ publicKey: publicKeyStr, privateKey: privateKeyStr }));
       } else {
         keyPair = await generateKeyPair();
         const publicKey = await exportPublicKey(keyPair.publicKey);
@@ -140,11 +153,6 @@ export function useE2EE(userId: string | undefined) {
         const privateKey = await exportPrivateKey(keyPair.privateKey);
         privateKeyStr = privateKey;
 
-        // Store locally
-        localStorage.setItem(
-          `e2ee_keypair_${userId}`,
-          JSON.stringify({ publicKey, privateKey }),
-        );
       }
 
       // Register on every startup. This makes a restored session recover when
@@ -158,6 +166,12 @@ export function useE2EE(userId: string | undefined) {
         localStorage.setItem(recoveryStorageKey, recoverySecret);
       }
       const encryptedPrivateKey = `v2:${await encryptPrivateKeyForStorage(privateKeyStr, recoverySecret)}`;
+      // Never persist the raw, exportable JWK. This also migrates legacy
+      // browser records after their next successful initialization.
+      localStorage.setItem(
+        `e2ee_keypair_${userId}`,
+        JSON.stringify({ publicKey: publicKeyStr, encryptedPrivateKey }),
+      );
       const response = await fetch("/api/e2ee/keys", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -463,7 +477,7 @@ export function useE2EE(userId: string | undefined) {
    * caller must wait or fail closed; plaintext fallback is not permitted.
    */
   const prepareConversation = useCallback(
-    async (conversationId: string): Promise<{ ready: boolean; fingerprint: string | null }> => {
+    async (conversationId: string): Promise<{ ready: boolean; fingerprint: string | null; trustChanged?: boolean }> => {
       // waitForPeer=true so we retry if the other side is mid-share
       const { key } = await getConversationKey(conversationId, { waitForPeer: true });
       let peers: Peer[] = [];
@@ -490,6 +504,18 @@ export function useE2EE(userId: string | undefined) {
             }))),
           ].map((target) => `${target.userId}:${target.deviceId}:${target.publicKey}`).sort().join("|")
         : "";
+      // Trust-on-first-use: the first observed device set is pinned locally.
+      // A later replacement/addition blocks new encryption until the user has
+      // compared the conversation fingerprint and explicitly approved it.
+      const trustKey = `e2ee_trust_${userId}_${conversationId}`;
+      const trusted = typeof localStorage === "undefined" ? null : localStorage.getItem(trustKey);
+      if (ready && trusted && trusted !== peerSignature) {
+        pendingTrustRef.current.set(conversationId, peerSignature);
+        return { ready: false, fingerprint: null, trustChanged: true };
+      }
+      if (ready && !trusted && typeof localStorage !== "undefined") {
+        localStorage.setItem(trustKey, peerSignature);
+      }
       const prepared = preparedConversationsRef.current.get(conversationId);
       if (ready && prepared?.peerSignature === peerSignature) {
         return { ready: true, fingerprint: prepared.fingerprint };
@@ -531,6 +557,16 @@ export function useE2EE(userId: string | undefined) {
     },
     [getConversationKey, shareKey, state.deviceId, state.publicKey, userId],
   );
+
+  /** Accept a detected device-set change only after out-of-band verification. */
+  const approvePeerKeyChange = useCallback((conversationId: string): boolean => {
+    const pending = pendingTrustRef.current.get(conversationId);
+    if (!pending || typeof localStorage === "undefined") return false;
+    localStorage.setItem(`e2ee_trust_${userId}_${conversationId}`, pending);
+    pendingTrustRef.current.delete(conversationId);
+    preparedConversationsRef.current.delete(conversationId);
+    return true;
+  }, [userId]);
 
   /** Encrypt arbitrary bytes (media) with the conversation key. */
   const encryptBytesForConversation = useCallback(
@@ -574,6 +610,7 @@ export function useE2EE(userId: string | undefined) {
     shareKey,
     getConversationKey,
     prepareConversation,
+    approvePeerKeyChange,
     encryptBytesForConversation,
     decryptBytesForConversation,
     decryptMedia,

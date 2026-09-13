@@ -1,6 +1,10 @@
 import type { NextConfig } from "next";
 
 const securityHeaders = [
+  // This baseline CSP blocks plug-in content and clickjacking without
+  // constraining Next's framework-managed inline scripts/styles. A nonce- or
+  // hash-based script policy can be added when those assets are externalized.
+  { key: "Content-Security-Policy", value: "base-uri 'self'; form-action 'self'; frame-ancestors 'self'; object-src 'none'" },
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "X-Frame-Options", value: "SAMEORIGIN" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },

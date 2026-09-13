@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
  * enforced by a membership join in the query itself.
  */
 export async function GET(req: NextRequest) {
-  const rl = rateLimit(
+  const rl = await rateLimit(
     `search-msg:${clientIp(req)}`,
     AUTH_RATE_LIMIT.limit * 3,
     AUTH_RATE_LIMIT.windowMs,

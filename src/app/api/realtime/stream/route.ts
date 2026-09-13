@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { getSessionUser } from "@/server/session";
 import { jsonError } from "@/server/http";
 import { eventsForUser, publishToConversation, publishToUsers } from "@/server/realtime";
-import { addConnection, peersOf, presenceSnapshotFor, removeConnection, touch } from "@/server/presence";
+import { addConnection, connectionCount, peersOf, presenceSnapshotFor, removeConnection, touch } from "@/server/presence";
 import { markDeliveredFor } from "@/server/chat";
 import type { RealtimeEvent } from "@/lib/types";
 
@@ -15,11 +15,18 @@ const HEARTBEAT_MS = 25_000;
 // interval keeps the worst fixed delivery wait below the UI's one-second goal.
 const POLL_MS = 500;
 const STREAM_LIFETIME_MS = 280_000;
+// Each live stream polls the event queue twice per second. A small cap keeps
+// an authenticated client from multiplying database work with many tabs or
+// scripted connections while allowing normal multi-tab/device use.
+const MAX_STREAMS_PER_USER = 5;
 
 /** Database-backed SSE stream that remains reliable across Vercel instances. */
 export async function GET(req: NextRequest) {
   const me = await getSessionUser();
   if (!me) return jsonError(401, "Not authenticated.");
+  if (connectionCount(me.id) >= MAX_STREAMS_PER_USER) {
+    return jsonError(429, "Too many realtime connections.");
+  }
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({

@@ -228,7 +228,8 @@ export function ChatView({
     peersMissingKeys: number;
     keyVersion: number;
     needsRotation: boolean;
-  }>({ ready: false, fingerprint: null, checking: true, peersMissingKeys: 0, keyVersion: 1, needsRotation: false });
+    trustChanged: boolean;
+  }>({ ready: false, fingerprint: null, checking: true, peersMissingKeys: 0, keyVersion: 1, needsRotation: false, trustChanged: false });
   const [showEncryptionInfo, setShowEncryptionInfo] = useState(false);
   const [decryptedTexts, setDecryptedTexts] = useState<Map<string, string>>(new Map());
   const [decryptedReplies, setDecryptedReplies] = useState<Map<string, string>>(new Map());
@@ -250,7 +251,7 @@ export function ChatView({
       }
       setE2eeState((prev) => ({ ...prev, ready: false, checking: true }));
       try {
-        const { ready, fingerprint } = await prepareConversation(conversationId);
+        const { ready, fingerprint, trustChanged } = await prepareConversation(conversationId);
         if (!alive) return;
         let missing = 0;
         try {
@@ -278,10 +279,10 @@ export function ChatView({
         }
 
         if (!alive) return;
-        setE2eeState({ ready, fingerprint, checking: false, peersMissingKeys: missing, keyVersion, needsRotation });
+        setE2eeState({ ready, fingerprint, checking: false, peersMissingKeys: missing, keyVersion, needsRotation, trustChanged: Boolean(trustChanged) });
       } catch {
         if (alive) {
-          setE2eeState({ ready: false, fingerprint: null, checking: false, peersMissingKeys: 0, keyVersion: 1, needsRotation: false });
+          setE2eeState({ ready: false, fingerprint: null, checking: false, peersMissingKeys: 0, keyVersion: 1, needsRotation: false, trustChanged: false });
         }
       }
     })();
@@ -401,6 +402,7 @@ export function ChatView({
       ready: prepared.ready,
       fingerprint: prepared.fingerprint,
       checking: false,
+      trustChanged: Boolean(prepared.trustChanged),
     }));
     if (!prepared.ready) {
       throw new Error("Encryption keys are not ready for every participant yet. No unencrypted message was sent.");
@@ -1546,7 +1548,24 @@ export function ChatView({
       </header>
 
       {/* E2EE status banner — visible proof chats are encrypted */}
-      {e2eeState.ready && requestAccepted ? (
+      {e2eeState.trustChanged ? (
+        <button
+          type="button"
+          onClick={() => {
+            if (e2ee.approvePeerKeyChange(conversationId)) {
+              setE2eeState((previous) => ({ ...previous, checking: true, trustChanged: false }));
+              void e2ee.prepareConversation(conversationId).then((prepared) =>
+                setE2eeState((previous) => ({ ...previous, ready: prepared.ready, fingerprint: prepared.fingerprint, checking: false, trustChanged: Boolean(prepared.trustChanged) })),
+              );
+            }
+          }}
+          className="flex items-center gap-2 border-b border-[var(--warning,#f59e0b)] bg-[color-mix(in_srgb,var(--warning,#f59e0b)_10%,var(--surface))] px-4 py-2 text-left"
+        >
+          <ShieldCheck className="h-4 w-4 shrink-0 text-amber-600" />
+          <span className="min-w-0 flex-1 text-[0.72rem] text-[var(--muted)]">Encryption device keys changed. Verify the safety number with your contact, then approve.</span>
+          <span className="shrink-0 text-[0.65rem] font-bold text-amber-700">Approve</span>
+        </button>
+      ) : e2eeState.ready && requestAccepted ? (
         <button
           type="button"
           onClick={() => setShowEncryptionInfo(true)}

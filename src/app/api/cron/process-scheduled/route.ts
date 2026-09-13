@@ -15,8 +15,14 @@ export const dynamic = "force-dynamic";
  * For security, requires CRON_SECRET header in production.
  */
 export async function GET(req: NextRequest) {
-  // Verify cron secret in production
+  // A missing production secret must fail closed.  Treating it as optional
+  // would leave this state-changing endpoint publicly callable after a
+  // deployment configuration mistake.
   const cronSecret = process.env.CRON_SECRET;
+  if (process.env.NODE_ENV === "production" && !cronSecret) {
+    console.error("[cron] CRON_SECRET is not configured in production.");
+    return jsonError(503, "Scheduled processing is unavailable.");
+  }
   if (cronSecret) {
     const authHeader = req.headers.get("authorization");
     if (authHeader !== `Bearer ${cronSecret}`) {

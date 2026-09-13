@@ -14,7 +14,7 @@ const MAX_QUERY_LENGTH = 80;
  * a chat with yourself), and only safe public fields are returned.
  */
 export async function GET(req: NextRequest) {
-  const rl = rateLimit(
+  const rl = await rateLimit(
     `search:${clientIp(req)}`,
     AUTH_RATE_LIMIT.limit * 2,
     AUTH_RATE_LIMIT.windowMs,

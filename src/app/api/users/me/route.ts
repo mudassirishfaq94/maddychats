@@ -38,7 +38,7 @@ export async function PATCH(req: NextRequest) {
   const blocked = guardSameOrigin(req);
   if (blocked) return blocked;
 
-  const rl = rateLimit(
+  const rl = await rateLimit(
     `profile:${clientIp(req)}`,
     AUTH_RATE_LIMIT.limit,
     AUTH_RATE_LIMIT.windowMs,

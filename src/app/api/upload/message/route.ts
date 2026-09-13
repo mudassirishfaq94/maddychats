@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
   const oversized = guardUploadSize(req);
   if (oversized) return oversized;
 
-  const rl = rateLimit(
+  const rl = await rateLimit(
     `upload-msg:${clientIp(req)}`,
     AUTH_RATE_LIMIT.limit * 2,
     AUTH_RATE_LIMIT.windowMs,

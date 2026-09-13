@@ -34,7 +34,7 @@ export async function POST(
   const blockedOrigin = guardSameOrigin(req);
   if (blockedOrigin) return blockedOrigin;
 
-  const rl = rateLimit(
+  const rl = await rateLimit(
     `typing:${clientIp(req)}`,
     600,
     10 * 60 * 1000,

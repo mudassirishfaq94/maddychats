@@ -34,6 +34,7 @@ export const users = pgTable(
     username: text("username").notNull().unique(),
     displayName: text("display_name").notNull(),
     email: text("email").notNull().unique(),
+    emailVerifiedAt: timestamp("email_verified_at", { withTimezone: true, mode: "date" }),
     passwordHash: text("password_hash").notNull(),
     avatarUrl: text("avatar_url"),
     bio: text("bio"),
@@ -105,6 +106,30 @@ export const realtimeEvents = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
   },
   (table) => [index("realtime_events_user_created_idx").on(table.userId, table.createdAt)],
+);
+
+export const emailVerificationTokens = pgTable(
+  "email_verification_tokens",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+    tokenHash: text("token_hash").notNull().unique(),
+    expiresAt: timestamp("expires_at", { withTimezone: true, mode: "date" }).notNull(),
+    usedAt: timestamp("used_at", { withTimezone: true, mode: "date" }),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+  },
+  (table) => [index("email_verification_tokens_user_idx").on(table.userId)],
+);
+
+/** Shared fixed-window counters used by every application instance. */
+export const rateLimitBuckets = pgTable(
+  "rate_limit_buckets",
+  {
+    key: text("key").primaryKey(),
+    windowStartedAt: timestamp("window_started_at", { withTimezone: true, mode: "date" }).notNull(),
+    count: integer("count").notNull(),
+  },
+  (table) => [index("rate_limit_buckets_window_idx").on(table.windowStartedAt)],
 );
 
 /* ==================== chat-ready models (prepared now) ==================== */

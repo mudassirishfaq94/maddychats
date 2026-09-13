@@ -34,7 +34,7 @@ export async function PATCH(
   const blocked = guardSameOrigin(req);
   if (blocked) return blocked;
 
-  const rl = rateLimit(
+  const rl = await rateLimit(
     `msg-edit:${clientIp(req)}`,
     AUTH_RATE_LIMIT.limit * 2,
     AUTH_RATE_LIMIT.windowMs,

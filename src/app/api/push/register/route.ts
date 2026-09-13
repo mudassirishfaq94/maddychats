@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
   if (!user) return jsonError(401, "Not authenticated.");
 
   // Rate limit: 10 registrations per minute per user
-  const rl = rateLimit(`push-register:${user.id}`, 10, 60_000);
+  const rl = await rateLimit(`push-register:${user.id}`, 10, 60_000);
   if (!rl.allowed) {
     return jsonError(429, "Too many requests. Please try again later.");
   }

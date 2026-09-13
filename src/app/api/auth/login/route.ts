@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
   const blocked = guardSameOrigin(req);
   if (blocked) return blocked;
 
-  const rl = rateLimit(
+  const rl = await rateLimit(
     `login:${clientIp(req)}`,
     AUTH_RATE_LIMIT.limit,
     AUTH_RATE_LIMIT.windowMs,
@@ -59,6 +59,9 @@ export async function POST(req: NextRequest) {
       userAgent: ua,
     });
     return jsonError(401, "Incorrect email, username, or password.");
+  }
+  if (!user.emailVerifiedAt) {
+    return jsonError(403, "Please verify your email address before continuing.");
   }
 
   // Record successful login

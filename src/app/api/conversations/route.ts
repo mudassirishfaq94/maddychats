@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
   const blocked = guardSameOrigin(req);
   if (blocked) return blocked;
 
-  const rl = rateLimit(
+  const rl = await rateLimit(
     `conv-create:${clientIp(req)}`,
     AUTH_RATE_LIMIT.limit,
     AUTH_RATE_LIMIT.windowMs,

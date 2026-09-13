@@ -39,7 +39,7 @@ export async function POST(
   const blocked = guardSameOrigin(req);
   if (blocked) return blocked;
 
-  const rl = rateLimit(
+  const rl = await rateLimit(
     `reaction:${clientIp(req)}`,
     AUTH_RATE_LIMIT.limit * 4,
     AUTH_RATE_LIMIT.windowMs,

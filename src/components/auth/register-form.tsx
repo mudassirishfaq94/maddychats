@@ -71,9 +71,7 @@ export function RegisterForm() {
       if (result.fields) setErrors(result.fields);
       return;
     }
-    // Full navigation: guarantees the just-set session cookie accompanies the
-    // first request to /app in every embedding context (incl. iframes).
-    window.location.assign("/app");
+    window.location.assign(`/verify-email?email=${encodeURIComponent(form.email)}`);
   }
 
   return (

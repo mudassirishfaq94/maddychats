@@ -17,6 +17,7 @@ import {
 } from "@/server/http";
 import { SESSION_COOKIE } from "@/server/config";
 import { createSessionToken, sessionCookieOptions } from "@/server/session";
+import { issueEmailVerification } from "@/server/email-verification";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +25,7 @@ export async function POST(req: NextRequest) {
   const blocked = guardSameOrigin(req);
   if (blocked) return blocked;
 
-  const rl = rateLimit(
+  const rl = await rateLimit(
     `register:${clientIp(req)}`,
     AUTH_RATE_LIMIT.limit,
     AUTH_RATE_LIMIT.windowMs,
@@ -81,8 +82,7 @@ export async function POST(req: NextRequest) {
     return jsonError(500, "Something went wrong. Please try again.");
   }
 
-  const token = await createSessionToken(user.id, user.username);
-  const res = NextResponse.json({ user: toSafeUser(user) }, { status: 201 });
-  res.cookies.set(SESSION_COOKIE, token, sessionCookieOptions(requestIsSecure(req)));
-  return res;
+  const delivered = await issueEmailVerification(user);
+  if (!delivered) console.error("[circlo] verification email could not be sent");
+  return NextResponse.json({ verificationRequired: true }, { status: 201 });
 }
