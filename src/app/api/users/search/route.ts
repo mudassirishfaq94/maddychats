@@ -28,10 +28,6 @@ export async function GET(req: NextRequest) {
 
   const raw = req.nextUrl.searchParams.get("q") ?? "";
   const q = raw.trim().slice(0, MAX_QUERY_LENGTH);
-  if (q.length === 0) {
-    return NextResponse.json({ users: [] });
-  }
-
   const found = await searchUsers(q, me.id, 20);
   return NextResponse.json({ users: found.map(toPublicUser) });
 }

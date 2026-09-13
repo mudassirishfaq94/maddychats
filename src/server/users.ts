@@ -152,9 +152,9 @@ export async function searchUsers(
   limit = 20,
 ): Promise<UserRow[]> {
   const trimmed = query.trim().replace(/\s+/g, " ");
-  if (!trimmed) return [];
-  // Exact match only: normalize whitespace in both the stored name and the query
-  // to ensure "John  Smith" matches "John Smith"
+  if (!trimmed) {
+    return db.select().from(users).where(ne(users.id, excludeUserId)).orderBy(sql`${users.createdAt} DESC`).limit(limit);
+  }
   return db
     .select()
     .from(users)
@@ -162,10 +162,8 @@ export async function searchUsers(
       and(
         ne(users.id, excludeUserId),
         or(
-          // Exact match on full display name (normalize whitespace)
-          sql`lower(regexp_replace(${users.displayName}, '\\s+', ' ', 'g')) = lower(regexp_replace(${trimmed}, '\\s+', ' ', 'g'))`,
-          // Exact match on full username (case-insensitive)
-          sql`lower(${users.username}) = lower(${trimmed})`,
+          sql`${users.displayName} ILIKE ${`%${trimmed}%`}`,
+          sql`${users.username} ILIKE ${`%${trimmed}%`}`,
         ),
       ),
     )

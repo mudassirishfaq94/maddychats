@@ -34,11 +34,6 @@ export function PeopleSearch() {
 
   useEffect(() => {
     const q = query.trim();
-    if (q.length < 2) {
-      abortRef.current?.abort();
-      return;
-    }
-
     const controller = new AbortController();
     abortRef.current = controller;
 
@@ -66,7 +61,7 @@ export function PeopleSearch() {
           setPhase({ kind: "error", message: "Network error. Please try again." });
         }
       }
-    }, 280);
+    }, q.length < 2 ? 0 : 280);
 
     return () => {
       clearTimeout(timer);
@@ -90,7 +85,7 @@ export function PeopleSearch() {
             const value = e.target.value;
             setQuery(value);
             setPhase(
-              value.trim().length < 2 ? { kind: "idle" } : { kind: "loading" },
+              { kind: "loading" },
             );
           }}
           placeholder="Search by username or display name…"
