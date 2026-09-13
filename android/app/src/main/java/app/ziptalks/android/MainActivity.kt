@@ -23,6 +23,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.browser.customtabs.CustomTabsIntent
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -198,8 +199,13 @@ class MainActivity : ComponentActivity() {
         )
         getSharedPreferences("ziptalk-session", Context.MODE_PRIVATE)
             .edit().putString("google_pkce_verifier", verifier).apply()
-        val url = "${BuildConfig.API_BASE_URL}/api/auth/google?mobile=1&code_challenge=${Uri.encode(challenge)}"
-        startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+        val url = Uri.parse("${BuildConfig.API_BASE_URL}/api/auth/google?mobile=1&code_challenge=${Uri.encode(challenge)}")
+        // A plain ACTION_VIEW intent matches this app's verified App Link too.
+        // Selecting Circlo from Android's resolver immediately reopens /app
+        // instead of starting OAuth. Custom Tabs resolve only browser providers,
+        // keeping the authorization flow outside this app until the signed
+        // ziptalks:// callback returns after Google has completed it.
+        CustomTabsIntent.Builder().build().launchUrl(this, url)
     }
 
     private fun handleGoogleMobileCallback(callbackIntent: Intent?) {
