@@ -2,7 +2,6 @@ package app.ziptalks.android
 
 import android.content.Context
 import android.content.ContentResolver
-import android.content.Intent
 import android.net.Uri
 import android.provider.OpenableColumns
 import android.os.Bundle
@@ -23,7 +22,6 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.browser.customtabs.CustomTabsIntent
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -55,9 +53,6 @@ import okhttp3.sse.EventSources
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
-import java.security.MessageDigest
-import java.security.SecureRandom
-import android.util.Base64
 import java.util.concurrent.ConcurrentHashMap
 
 private data class Conversation(val id: String, val title: String, val preview: String)
@@ -179,51 +174,9 @@ class MainActivity : ComponentActivity() {
         // when that probe or the Compose first frame stalled.
         webView = createHostedWebView()
         setContentView(requireNotNull(webView))
-        handleGoogleMobileCallback(intent)
     }
 
     override fun onDestroy() { webView?.destroy(); webView = null; super.onDestroy() }
-
-    override fun onNewIntent(intent: Intent) {
-        super.onNewIntent(intent)
-        setIntent(intent)
-        handleGoogleMobileCallback(intent)
-    }
-
-    private fun startGoogleMobileSignIn() {
-        val verifier = ByteArray(32).also { SecureRandom().nextBytes(it) }
-            .let { Base64.encodeToString(it, Base64.URL_SAFE or Base64.NO_PADDING or Base64.NO_WRAP) }
-        val challenge = Base64.encodeToString(
-            MessageDigest.getInstance("SHA-256").digest(verifier.toByteArray(Charsets.US_ASCII)),
-            Base64.URL_SAFE or Base64.NO_PADDING or Base64.NO_WRAP,
-        )
-        getSharedPreferences("ziptalk-session", Context.MODE_PRIVATE)
-            .edit().putString("google_pkce_verifier", verifier).apply()
-        val url = Uri.parse("${BuildConfig.API_BASE_URL}/api/auth/google?mobile=1&code_challenge=${Uri.encode(challenge)}")
-        // A plain ACTION_VIEW intent matches this app's verified App Link too.
-        // Selecting Circlo from Android's resolver immediately reopens /app
-        // instead of starting OAuth. Custom Tabs resolve only browser providers,
-        // keeping the authorization flow outside this app until the signed
-        // ziptalks:// callback returns after Google has completed it.
-        CustomTabsIntent.Builder().build().launchUrl(this, url)
-    }
-
-    private fun handleGoogleMobileCallback(callbackIntent: Intent?) {
-        val ticket = callbackIntent?.data?.takeIf { it.scheme == "ziptalks" && it.host == "auth" }
-            ?.getQueryParameter("ticket") ?: return
-        val prefs = getSharedPreferences("ziptalk-session", Context.MODE_PRIVATE)
-        val verifier = prefs.getString("google_pkce_verifier", null) ?: return
-        CoroutineScope(Dispatchers.IO).launch {
-            runCatching { api.exchangeGoogleMobileTicket(ticket, verifier) }
-                .onSuccess {
-                    prefs.edit().remove("google_pkce_verifier").apply()
-                    val manager = CookieManager.getInstance()
-                    api.cookiesForWeb().forEach { manager.setCookie(BuildConfig.API_BASE_URL, it) }
-                    manager.flush()
-                    withContext(Dispatchers.Main) { webView?.loadUrl("${BuildConfig.API_BASE_URL}/app") }
-                }
-        }
-    }
 
     private fun createHostedWebView(): WebView = WebView(this).apply {
         setBackgroundColor(AndroidColor.rgb(11, 18, 17))
@@ -248,7 +201,16 @@ class MainActivity : ComponentActivity() {
         webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView, url: String): Boolean {
                 if (url.startsWith("${BuildConfig.API_BASE_URL}/api/auth/google")) {
-                    startGoogleMobileSignIn()
+                    val activity = this@MainActivity
+                    CoroutineScope(Dispatchers.Main).launch {
+                        runCatching { nativeGoogleSignIn(activity, api) }
+                            .onSuccess {
+                                api.cookiesForWeb().forEach { cookieManager.setCookie(BuildConfig.API_BASE_URL, it) }
+                                cookieManager.flush()
+                                view.loadUrl("${BuildConfig.API_BASE_URL}/app")
+                            }
+                            .onFailure { view.loadUrl("${BuildConfig.API_BASE_URL}/login?error=google_native_failed") }
+                    }
                     return true
                 }
                 return false
@@ -363,7 +325,7 @@ private suspend fun nativeGoogleSignIn(activity: Activity, api: ZipTalkApi) {
 private fun authErrorMessage(error: Throwable): String {
     val raw = error.message.orEmpty()
     return if (raw.contains("[16]") || raw.contains("reauth", ignoreCase = true)) {
-        "Google sign-in needs this Android app to be approved in Google Cloud. Add the ZipTalk package and signing certificate, then try again."
+        "Google sign-in needs this Circlo Android app to be approved in Google Cloud. Add the Circlo package and signing certificate, then try again."
     } else raw.ifBlank { "Sign-in could not be completed. Please try again." }
 }
 
