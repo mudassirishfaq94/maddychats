@@ -10,6 +10,7 @@ import {
   Search,
   Loader2,
   ChevronDown,
+  Trash2,
 } from "lucide-react";
 
 interface AdminUser {
@@ -96,6 +97,15 @@ export default function AdminUsersPage() {
       }
     } catch {}
     setBusyId(null);
+  }
+
+  async function deleteUser(user: AdminUser) {
+    if (!confirm(`Permanently delete ${user.displayName}? This cannot be undone.`)) return;
+    setBusyId(user.id);
+    try {
+      const res = await fetch(`/api/admin/users/${user.id}`, { method: "DELETE" });
+      if (res.ok) setUsers((previous) => previous.filter((item) => item.id !== user.id));
+    } finally { setBusyId(null); }
   }
 
   if (loading) {
@@ -188,6 +198,14 @@ export default function AdminUsersPage() {
                     >
                       {user.suspendedAt ? "Unsuspend" : "Suspend"}
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => void deleteUser(user)}
+                      disabled={busyId === user.id || user.role === "admin"}
+                      className="ml-2 rounded-lg p-1.5 text-[var(--danger)] hover:bg-[color-mix(in_srgb,var(--danger)_10%,transparent)] disabled:opacity-50"
+                      aria-label={`Delete ${user.displayName}`}
+                      title="Permanently delete user"
+                    ><Trash2 className="h-3.5 w-3.5" /></button>
                   </td>
                 </tr>
               ))}

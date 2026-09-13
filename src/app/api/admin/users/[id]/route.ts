@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { users, messages, conversationMembers } from "@/db/schema";
-import { requireAdmin } from "@/server/admin";
+import { requireAdmin, requireSuperAdmin, auditLog } from "@/server/admin";
 import { guardSameOrigin, jsonError, readJson } from "@/server/http";
 import bcrypt from "bcryptjs";
 
@@ -157,15 +157,18 @@ export async function DELETE(
   const blocked = guardSameOrigin(req);
   if (blocked) return blocked;
 
-  const authError = await checkAdmin();
-  if (authError === "UNAUTHENTICATED") return jsonError(401, "Not authenticated.");
-  if (authError === "FORBIDDEN") return jsonError(403, "Admin access required.");
+  let me;
+  try { me = await requireSuperAdmin(); }
+  catch (e) { return jsonError((e as Error).message === "UNAUTHENTICATED" ? 401 : 403, "Administrator access required."); }
 
   const { id } = await params;
 
   // Prevent deleting yourself
-  const me = await requireAdmin();
   if (me.id === id) return jsonError(400, "Cannot delete your own account.");
+
+  const [target] = await db.select({ role: users.role }).from(users).where(eq(users.id, id)).limit(1);
+  if (!target) return jsonError(404, "User not found.");
+  if (target.role === "admin") return jsonError(403, "Cannot delete another administrator.");
 
   const [deleted] = await db
     .delete(users)
@@ -173,5 +176,6 @@ export async function DELETE(
     .returning({ id: users.id });
 
   if (!deleted) return jsonError(404, "User not found.");
+  await auditLog({ adminId: me.id, action: "user_deleted", targetUserId: id });
   return NextResponse.json({ ok: true });
 }
