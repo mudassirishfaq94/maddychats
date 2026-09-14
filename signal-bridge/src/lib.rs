@@ -42,3 +42,48 @@ pub fn generate_identity() -> Result<JsValue, JsValue> {
     serde_wasm_bindgen::to_value(&bundle)
         .map_err(|error| JsValue::from_str(&format!("identity serialization failed: {error}")))
 }
+
+#[cfg(test)]
+mod tests {
+    use libsignal_protocol::{
+        AliceSignalProtocolParameters, BobSignalProtocolParameters, IdentityKeyPair, KeyPair,
+        initialize_alice_session_record, initialize_bob_session_record, kem,
+    };
+    use rand::rng;
+
+    /// This is the minimum protocol gate: the initiator and recipient derive
+    /// matching ratchet chain keys through the official Signal implementation.
+    /// It exercises the same X3DH/PQ ratchet setup the browser bridge will use
+    /// before message encryption is exposed to TypeScript.
+    #[test]
+    fn signal_initiator_and_recipient_agree_on_chain_key() {
+        let mut csprng = rng();
+        let alice_identity = IdentityKeyPair::generate(&mut csprng);
+        let alice_base = KeyPair::generate(&mut csprng);
+        let bob_ephemeral = KeyPair::generate(&mut csprng);
+        let bob_identity = IdentityKeyPair::generate(&mut csprng);
+        let bob_signed = KeyPair::generate(&mut csprng);
+        let bob_kyber = kem::KeyPair::generate(kem::KeyType::Kyber1024, &mut csprng);
+
+        let alice_parameters = AliceSignalProtocolParameters::new(
+            alice_identity,
+            alice_base,
+            *bob_identity.identity_key(),
+            bob_signed.public_key,
+            bob_ephemeral.public_key,
+            bob_kyber.public_key.clone(),
+            false,
+        );
+        let alice_record = initialize_alice_session_record(&alice_parameters, &mut csprng).expect("initiator session");
+        let kyber_ciphertext = alice_record.get_kyber_ciphertext().expect("session state").expect("PQ ciphertext").clone().into_boxed_slice();
+        let bob_parameters = BobSignalProtocolParameters::new(
+            bob_identity, bob_signed, None, bob_kyber,
+            *alice_identity.identity_key(), alice_base.public_key, &kyber_ciphertext, false,
+        );
+        let bob_record = initialize_bob_session_record(&bob_parameters, &bob_ephemeral).expect("recipient session");
+        assert_eq!(
+            bob_record.get_sender_chain_key_bytes().expect("sender chain"),
+            alice_record.get_receiver_chain_key_bytes(&bob_ephemeral.public_key).expect("receiver chain").expect("matching chain").to_vec(),
+        );
+    }
+}
