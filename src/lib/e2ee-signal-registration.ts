@@ -105,3 +105,17 @@ export async function refillSignalOneTimePrekeys(
     await publish(deviceId, registration);
   } finally { store.close(); }
 }
+
+/** Keep an offline-session reserve without generating keys on every launch. */
+export async function maintainSignalPrekeyReserve(
+  userId: string, deviceId: string, bridge: SignalRegistrationBridge, minimum = 25,
+): Promise<{ refilled: boolean }> {
+  const response = await fetch("/api/e2ee/signal/devices", { cache: "no-store" });
+  if (!response.ok) throw new Error("signal_prekey_inventory_failed");
+  const data = await response.json() as { devices?: Array<{ deviceId?: string; oneTimePrekeys?: number }> };
+  const device = data.devices?.find((item) => item.deviceId === deviceId);
+  if (!device) throw new Error("signal_device_not_registered");
+  if ((device.oneTimePrekeys ?? 0) >= minimum) return { refilled: false };
+  await refillSignalOneTimePrekeys(userId, deviceId, bridge);
+  return { refilled: true };
+}
