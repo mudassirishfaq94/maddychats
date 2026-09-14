@@ -50,8 +50,18 @@ export async function POST(req: NextRequest) {
   const message = await db.transaction(async (tx) => {
     const [created] = await tx.insert(messages).values({ conversationId, senderId: user.id, clientMessageId, text: "signal:v2", encrypted: true }).onConflictDoNothing().returning({ id: messages.id, createdAt: messages.createdAt });
     if (!created) {
-      const [existing] = await tx.select({ id: messages.id, createdAt: messages.createdAt }).from(messages).where(and(eq(messages.senderId, user.id), eq(messages.clientMessageId, clientMessageId))).limit(1);
-      return existing ?? null;
+      const [existing] = await tx.select({
+        id: messages.id,
+        createdAt: messages.createdAt,
+        conversationId: messages.conversationId,
+        text: messages.text,
+        encrypted: messages.encrypted,
+      }).from(messages).where(and(eq(messages.senderId, user.id), eq(messages.clientMessageId, clientMessageId))).limit(1);
+      // The client-generated id is globally unique per sender. Retrying the
+      // same send is safe, but reusing it for another conversation or a
+      // non-Signal message must never be mistaken for a successful delivery.
+      if (!existing || existing.conversationId !== conversationId || existing.text !== "signal:v2" || !existing.encrypted) return null;
+      return { id: existing.id, createdAt: existing.createdAt };
     }
     await tx.insert(e2eeSignalEnvelopes).values(valid.map((item) => ({ messageId: created.id, senderDeviceId, recipientUserId: item.recipientUserId, recipientDeviceId: item.recipientDeviceId, ciphertext: item.ciphertext }))).onConflictDoNothing();
     return created;
