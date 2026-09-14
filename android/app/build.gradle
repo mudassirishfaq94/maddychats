@@ -8,8 +8,8 @@ android {
         applicationId "app.ziptalks.android"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 9
-        versionName "0.9.0"
+        versionCode 10
+        versionName "0.9.1"
         buildConfigField "String", "API_BASE_URL", '"https://ziptalks.vercel.app"'
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
