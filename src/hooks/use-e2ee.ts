@@ -248,21 +248,19 @@ export function useE2EE(userId: string | undefined) {
   }, [userId]);
 
   /**
-   * Get or create a symmetric key for a conversation.
+   * Return the established legacy symmetric key for a conversation.
    *
-   * When opening a chat, the other user's browser may still be in the middle
-   * of sharing its key via POST /api/e2ee/conversation-keys.  To avoid a race
-   * where both sides generate different keys and can never decrypt each other,
-   * we retry the server fetch a few times before falling back to a locally
-   * generated key.
+   * This legacy key transport must fail closed. Generating a replacement key
+   * after a fetch race creates ciphertext that the other devices can never
+   * decrypt. Session bootstrap is being replaced by per-device Signal-style
+   * sessions; until then callers queue the action and retry instead.
    *
-   * Returns { key, shared } so the caller knows whether E2EE is actually
-   * usable (shared=true) or just locally prepared (shared=false).
+   * A missing key is an explicit, retryable session-not-ready failure.
    */
   const getConversationKey = useCallback(
     async (
       conversationId: string,
-      { waitForPeer = false }: { waitForPeer?: boolean } = {},
+      { waitForPeer: _waitForPeer = false }: { waitForPeer?: boolean } = {},
     ): Promise<{ key: CryptoKey; shared: boolean }> => {
       const cached = conversationKeysRef.current.get(conversationId);
       if (cached) return { key: cached, shared: true };
@@ -275,26 +273,7 @@ export function useE2EE(userId: string | undefined) {
         return { key: sharedKey, shared: true };
       }
 
-      // When called from prepareConversation the other side may still be
-      // mid-POST.  Wait briefly and retry before giving up.
-      if (waitForPeer) {
-        for (let attempt = 0; attempt < 3; attempt++) {
-          await sleep(1500);
-          sharedKey = await fetchSharedKey(conversationId);
-          if (sharedKey) {
-            await rememberSendingKey(conversationId, sharedKey);
-            conversationKeysRef.current.set(conversationId, sharedKey);
-            return { key: sharedKey, shared: true };
-          }
-        }
-      }
-
-      // No peer key found — generate a new local key.
-      // The caller (prepareConversation) will share it with peers.
-      const key = await generateConversationKey();
-      await rememberSendingKey(conversationId, key);
-      conversationKeysRef.current.set(conversationId, key);
-      return { key, shared: false };
+      throw new Error("E2EE_SESSION_NOT_READY");
     },
     [fetchSharedKey, rememberSendingKey],
   );
@@ -478,8 +457,13 @@ export function useE2EE(userId: string | undefined) {
    */
   const prepareConversation = useCallback(
     async (conversationId: string, { forceReshare = false }: { forceReshare?: boolean } = {}): Promise<{ ready: boolean; fingerprint: string | null; trustChanged?: boolean }> => {
-      // waitForPeer=true so we retry if the other side is mid-share
-      const { key } = await getConversationKey(conversationId, { waitForPeer: true });
+      // We never manufacture a competing conversation key.
+      let key: CryptoKey;
+      try {
+        ({ key } = await getConversationKey(conversationId, { waitForPeer: true }));
+      } catch {
+        return { ready: false, fingerprint: null };
+      }
       let peers: Peer[] = [];
       try {
         const res = await fetch(`/api/e2ee/peers?conversationId=${encodeURIComponent(conversationId)}&deviceId=${encodeURIComponent(state.deviceId)}`);
@@ -648,21 +632,9 @@ export function useE2EE(userId: string | undefined) {
     }
   }, [loadDecryptionKeys, prepareConversation, shareKey, state.deviceId, state.initialized, state.publicKey, userId]);
 
-  useEffect(() => {
-    if (!state.initialized) return;
-    void syncKnownConversations();
-    const onVisible = () => {
-      if (document.visibilityState === "visible") void syncKnownConversations();
-    };
-    const interval = window.setInterval(syncKnownConversations, 60_000);
-    window.addEventListener("focus", onVisible);
-    document.addEventListener("visibilitychange", onVisible);
-    return () => {
-      window.clearInterval(interval);
-      window.removeEventListener("focus", onVisible);
-      document.removeEventListener("visibilitychange", onVisible);
-    };
-  }, [state.initialized, syncKnownConversations]);
+  // Do not continually re-publish legacy conversation keys. Re-sharing every
+  // minute causes avoidable database work and can race with device bootstrap.
+  // A deliberate, authenticated device-link flow will replace this mechanism.
 
   /** Encrypt arbitrary bytes (media) with the conversation key. */
   const encryptBytesForConversation = useCallback(
