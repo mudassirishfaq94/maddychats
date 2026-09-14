@@ -1,6 +1,24 @@
 import "client-only";
 import { SignalLocalStore } from "./e2ee-signal-store";
 
+/**
+ * **SECURITY WARNING:** This is a PRE-PRODUCTION implementation that has NOT
+ * undergone formal security audit. DO NOT use in production without external
+ * cryptographic review.
+ *
+ * **CRITICAL LIMITATIONS:**
+ * - Session state does not include Double Ratchet
+ * - No forward secrecy (past messages exposed if key compromised)
+ * - No future secrecy (future messages exposed if key compromised)
+ * - No session recovery mechanism
+ *
+ * **REQUIRED BEFORE PRODUCTION:**
+ * - Double Ratchet implementation
+ * - Forward secrecy verification
+ * - Session recovery design
+ * - Formal security review
+ */
+
 const SESSION_NAMESPACE = "signal-session-v2";
 const PREKEY_NAMESPACE = "signal-private-prekeys-v2";
 

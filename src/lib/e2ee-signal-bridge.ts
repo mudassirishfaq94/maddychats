@@ -1,5 +1,23 @@
 import "client-only";
 
+/**
+ * **SECURITY WARNING:** This is a PRE-PRODUCTION implementation that has NOT
+ * undergone formal security audit. DO NOT use in production without external
+ * cryptographic review.
+ *
+ * **CRITICAL LIMITATIONS:**
+ * - WASM bridge does not implement Double Ratchet
+ * - No session encryption/decryption
+ * - No message key derivation
+ * - No forward secrecy
+ *
+ * **REQUIRED BEFORE PRODUCTION:**
+ * - Double Ratchet implementation in Rust/WASM
+ * - Session encryption/decryption functions
+ * - Message key derivation
+ * - Formal security review
+ */
+
 import type { SignalRegistrationBridge } from "./e2ee-signal-registration";
 
 type SignalWasmModule = SignalRegistrationBridge & {

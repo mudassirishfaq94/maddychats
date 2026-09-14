@@ -7,6 +7,25 @@ import { guardSameOrigin, jsonError, readJson } from "@/server/http";
 import { getSessionUser } from "@/server/session";
 import { isUuid } from "@/server/users";
 
+/**
+ * **SECURITY WARNING:** This is a PRE-PRODUCTION implementation that has NOT
+ * undergone formal security audit. DO NOT use in production without external
+ * cryptographic review.
+ *
+ * **CRITICAL LIMITATIONS:**
+ * - Message sending does not verify encryption status
+ * - No rate limiting for message sending
+ * - No message size validation beyond ciphertext length
+ * - No sender identity verification in envelope
+ *
+ * **REQUIRED BEFORE PRODUCTION:**
+ * - Encryption status verification
+ * - Rate limiting
+ * - Message size validation
+ * - Sender identity verification
+ * - Formal security review
+ */
+
 export const dynamic = "force-dynamic";
 const MAX_ENVELOPES = 50;
 const MAX_CIPHERTEXT = 256 * 1024;

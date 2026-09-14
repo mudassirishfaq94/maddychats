@@ -6,6 +6,25 @@ import { guardSameOrigin, jsonError, readJson } from "@/server/http";
 import { getSessionUser } from "@/server/session";
 import { isUuid } from "@/server/users";
 
+/**
+ * **SECURITY WARNING:** This is a PRE-PRODUCTION implementation that has NOT
+ * undergone formal security audit. DO NOT use in production without external
+ * cryptographic review.
+ *
+ * **CRITICAL LIMITATIONS:**
+ * - Device registration does not verify identity signatures
+ * - No device limit per user
+ * - No rate limiting for registration
+ * - No device revocation notification
+ *
+ * **REQUIRED BEFORE PRODUCTION:**
+ * - Identity signature verification
+ * - Device limit enforcement
+ * - Rate limiting
+ * - Revocation notifications
+ * - Formal security review
+ */
+
 export const dynamic = "force-dynamic";
 
 const MAX_PREKEYS_PER_UPLOAD = 100;

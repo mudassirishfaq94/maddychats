@@ -1,5 +1,23 @@
 import "client-only";
 
+/**
+ * **SECURITY WARNING:** This is a PRE-PRODUCTION implementation that has NOT
+ * undergone formal security audit. DO NOT use in production without external
+ * cryptographic review.
+ *
+ * **CRITICAL LIMITATIONS:**
+ * - Envelope processing does not verify sender identity
+ * - No replay attack protection
+ * - No out-of-order message handling
+ * - No envelope integrity verification
+ *
+ * **REQUIRED BEFORE PRODUCTION:**
+ * - Sender identity verification
+ * - Replay attack protection
+ * - Out-of-order message handling
+ * - Formal security review
+ */
+
 export type SignalEnvelope = {
   id: string;
   messageId: string;

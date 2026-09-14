@@ -1,8 +1,24 @@
 //! Browser bridge for the official Signal protocol implementation.
 //!
+//! **SECURITY WARNING:** This is a PRE-PRODUCTION implementation that has NOT
+//! undergone formal security audit. DO NOT use in production without external
+//! cryptographic review.
+//!
 //! This crate intentionally exposes no message transport or server access.
 //! It only creates client-side cryptographic material; persistence and network
 //! delivery remain in the TypeScript application layer.
+//!
+//! **CRITICAL LIMITATIONS:**
+//! - Double Ratchet not implemented (no forward secrecy)
+//! - X3DH session setup incomplete
+//! - Local key storage not hardware-backed
+//! - No formal verification
+//!
+//! **REQUIRED BEFORE PRODUCTION:**
+//! - External security audit by qualified cryptographer
+//! - Implementation of Double Ratchet
+//! - Hardware-backed key storage
+//! - Formal protocol verification
 
 #![forbid(unsafe_code)]
 

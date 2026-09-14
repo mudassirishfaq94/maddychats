@@ -6,6 +6,25 @@ import { guardSameOrigin, jsonError, readJson } from "@/server/http";
 import { getSessionUser } from "@/server/session";
 import { isUuid } from "@/server/users";
 
+/**
+ * **SECURITY WARNING:** This is a PRE-PRODUCTION implementation that has NOT
+ * undergone formal security audit. DO NOT use in production without external
+ * cryptographic review.
+ *
+ * **CRITICAL LIMITATIONS:**
+ * - Envelope delivery does not verify sender identity
+ * - No replay protection for envelope acknowledgment
+ * - No envelope integrity verification
+ * - No delivery receipt system
+ *
+ * **REQUIRED BEFORE PRODUCTION:**
+ * - Sender identity verification
+ * - Replay protection
+ * - Envelope integrity verification
+ * - Delivery receipts
+ * - Formal security review
+ */
+
 export const dynamic = "force-dynamic";
 const PAGE_SIZE = 100;
 

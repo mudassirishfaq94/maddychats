@@ -1,6 +1,24 @@
 import "client-only";
 import { SignalLocalStore } from "./e2ee-signal-store";
 
+/**
+ * **SECURITY WARNING:** This is a PRE-PRODUCTION implementation that has NOT
+ * undergone formal security audit. DO NOT use in production without external
+ * cryptographic review.
+ *
+ * **CRITICAL LIMITATIONS:**
+ * - Device registration does not include session setup
+ * - No key verification or trust-on-first-use
+ * - No device revocation mechanism
+ * - Prekey refill does not check for compromised keys
+ *
+ * **REQUIRED BEFORE PRODUCTION:**
+ * - External security audit
+ * - Key verification UI
+ * - Device trust management
+ * - Prekey compromise detection
+ */
+
 type ByteValue = Uint8Array | number[];
 type Prekey = { keyId: number; publicKey: ByteValue; signature?: ByteValue };
 

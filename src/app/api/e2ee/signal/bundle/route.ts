@@ -7,6 +7,25 @@ import { guardSameOrigin, jsonError } from "@/server/http";
 import { getSessionUser } from "@/server/session";
 import { isUuid } from "@/server/users";
 
+/**
+ * **SECURITY WARNING:** This is a PRE-PRODUCTION implementation that has NOT
+ * undergone formal security audit. DO NOT use in production without external
+ * cryptographic review.
+ *
+ * **CRITICAL LIMITATIONS:**
+ * - Bundle does not include signature verification
+ * - No key freshness checking
+ * - No replay protection for prekey consumption
+ * - No rate limiting for bundle requests
+ *
+ * **REQUIRED BEFORE PRODUCTION:**
+ * - Signature verification on client
+ * - Key freshness checking
+ * - Replay protection
+ * - Rate limiting
+ * - Formal security review
+ */
+
 export const dynamic = "force-dynamic";
 
 type ConsumedPrekey = { key_id: number; public_key: string };

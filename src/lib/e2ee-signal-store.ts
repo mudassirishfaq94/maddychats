@@ -3,11 +3,26 @@ import "client-only";
 /**
  * Encrypted client-only storage for Signal identity and session state.
  *
+ * **SECURITY WARNING:** This is a PRE-PRODUCTION implementation that has NOT
+ * undergone formal security audit. DO NOT use in production without external
+ * cryptographic review.
+ *
  * The encryption key is a non-extractable Web Crypto key held by IndexedDB;
  * plaintext private material is never placed in localStorage or sent through
  * an API. Android will replace this backing key with Keystore protection in
  * the Capacitor bridge before protocol v2 is enabled for production traffic.
- */
+ *
+ * **CRITICAL LIMITATIONS:**
+ * - IndexedDB encryption is NOT hardware-backed on desktop browsers
+ * - Encryption key stored in same database (no real protection against local compromise)
+ * - No key rotation or recovery mechanism
+ * - No protection against browser extension attacks
+ *
+ * **REQUIRED BEFORE PRODUCTION:**
+ * - Hardware-backed keystore (Android Keystore, WebAuthn)
+ * - Key derivation from user password or biometric
+ * - Key rotation mechanism
+ * - Formal security review
 
 const DATABASE = "maddy-signal-v2";
 const STORE = "records";
