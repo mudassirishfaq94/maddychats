@@ -22,6 +22,9 @@
 
 #![forbid(unsafe_code)]
 
+mod x3dh;
+pub use x3dh::*;
+
 use libsignal_protocol::{IdentityKeyPair, KeyPair, SessionRecord};
 use rand::{Rng, rng};
 use serde::Serialize;

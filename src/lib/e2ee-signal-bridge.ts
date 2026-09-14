@@ -27,6 +27,17 @@ type SignalWasmModule = SignalRegistrationBridge & {
   advance_sender_chain(sessionRecordBytes: Uint8Array): Uint8Array;
   advance_receiver_chain(sessionRecordBytes: Uint8Array): Uint8Array;
   verify_message_signature(signature: Uint8Array, message: Uint8Array, publicKey: Uint8Array): boolean;
+  // X3DH functions
+  create_x3dh_session(aliceIdentityBytes: Uint8Array, bobBundleBytes: Uint8Array): Uint8Array;
+  process_x3dh_initial_message(
+    bobIdentityBytes: Uint8Array,
+    bobSignedPrekeyBytes: Uint8Array,
+    bobKyberPrekeyBytes: Uint8Array,
+    aliceIdentityBytes: Uint8Array,
+    aliceInitialMessageBytes: Uint8Array
+  ): Uint8Array;
+  verify_session_record(sessionBytes: Uint8Array): boolean;
+  get_session_chain_keys(sessionBytes: Uint8Array): Uint8Array;
 };
 
 let bridgePromise: Promise<SignalWasmModule> | null = null;
