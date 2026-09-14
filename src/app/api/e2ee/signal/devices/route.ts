@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { e2eeSignalDevices, e2eeSignalPrekeys } from "@/db/schema";
 import { guardSameOrigin, jsonError, readJson } from "@/server/http";
 import { getSessionUser } from "@/server/session";
+import { isUuid } from "@/server/users";
 
 export const dynamic = "force-dynamic";
 
@@ -68,7 +69,7 @@ export async function POST(req: NextRequest) {
   const signedPrekey = parsePrekey(data.signedPrekey, true);
   const kyberPrekey = parsePrekey(data.kyberPrekey, true);
   const rawOneTime = data.oneTimePrekeys;
-  if (!deviceId || !identityKey || !signingKey || registrationId === null || !signedPrekey || !kyberPrekey || !Array.isArray(rawOneTime) || rawOneTime.length > MAX_PREKEYS_PER_UPLOAD) {
+  if (!deviceId || !isUuid(deviceId) || !identityKey || !signingKey || registrationId === null || !signedPrekey || !kyberPrekey || !Array.isArray(rawOneTime) || rawOneTime.length > MAX_PREKEYS_PER_UPLOAD) {
     return jsonError(422, "Invalid Signal device registration.");
   }
   const oneTimePrekeys = rawOneTime.map((key) => parsePrekey(key, false));
@@ -106,8 +107,9 @@ export async function DELETE(req: NextRequest) {
   if (blocked) return blocked;
   const user = await getSessionUser();
   if (!user) return jsonError(401, "Not authenticated.");
-  const deviceId = req.nextUrl.searchParams.get("deviceId");
-  if (!deviceId || deviceId.length > 256) return jsonError(422, "deviceId is required.");
+  const requestedDeviceId = req.nextUrl.searchParams.get("deviceId");
+  if (!isUuid(requestedDeviceId ?? "")) return jsonError(422, "A valid deviceId is required.");
+  const deviceId = requestedDeviceId!;
   const active = await db.select({ id: e2eeSignalDevices.id, deviceId: e2eeSignalDevices.deviceId }).from(e2eeSignalDevices).where(and(
     eq(e2eeSignalDevices.userId, user.id), isNull(e2eeSignalDevices.revokedAt),
   ));

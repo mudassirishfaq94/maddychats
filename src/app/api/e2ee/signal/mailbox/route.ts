@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { e2eeSignalDevices, e2eeSignalEnvelopes } from "@/db/schema";
 import { guardSameOrigin, jsonError, readJson } from "@/server/http";
 import { getSessionUser } from "@/server/session";
+import { isUuid } from "@/server/users";
 
 export const dynamic = "force-dynamic";
 const PAGE_SIZE = 100;
@@ -14,8 +15,9 @@ export async function GET(req: NextRequest) {
   if (blocked) return blocked;
   const user = await getSessionUser();
   if (!user) return jsonError(401, "Not authenticated.");
-  const deviceId = req.nextUrl.searchParams.get("deviceId");
-  if (!deviceId || deviceId.length > 256) return jsonError(422, "deviceId is required.");
+  const requestedDeviceId = req.nextUrl.searchParams.get("deviceId");
+  if (!isUuid(requestedDeviceId ?? "")) return jsonError(422, "A valid deviceId is required.");
+  const deviceId = requestedDeviceId!;
   const [device] = await db.select({ id: e2eeSignalDevices.id }).from(e2eeSignalDevices).where(and(
     eq(e2eeSignalDevices.userId, user.id), eq(e2eeSignalDevices.deviceId, deviceId), isNull(e2eeSignalDevices.revokedAt),
   )).limit(1);
@@ -39,7 +41,7 @@ export async function POST(req: NextRequest) {
   const data = await readJson(req);
   const deviceId = typeof data?.deviceId === "string" ? data.deviceId : "";
   const ids = Array.isArray(data?.envelopeIds) ? data.envelopeIds.filter((id): id is string => typeof id === "string") : [];
-  if (!deviceId || ids.length === 0 || ids.length > PAGE_SIZE || new Set(ids).size !== ids.length) return jsonError(422, "A deviceId and unique envelopeIds are required.");
+  if (!isUuid(deviceId) || ids.length === 0 || ids.length > PAGE_SIZE || new Set(ids).size !== ids.length) return jsonError(422, "A valid deviceId and unique envelopeIds are required.");
   const [device] = await db.select({ id: e2eeSignalDevices.id }).from(e2eeSignalDevices).where(and(
     eq(e2eeSignalDevices.userId, user.id), eq(e2eeSignalDevices.deviceId, deviceId), isNull(e2eeSignalDevices.revokedAt),
   )).limit(1);
