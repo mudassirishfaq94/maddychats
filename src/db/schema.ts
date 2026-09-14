@@ -1213,6 +1213,8 @@ export const e2eeSignalDevices = pgTable(
     id: uuid("id").defaultRandom().primaryKey(),
     userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
     deviceId: text("device_id").notNull(),
+    /** Numeric device component of Signal's ProtocolAddress (not the app UUID). */
+    protocolDeviceId: integer("protocol_device_id"),
     protocolVersion: integer("protocol_version").default(2).notNull(),
     registrationId: integer("registration_id").notNull(),
     identityKey: text("identity_key").notNull(),
@@ -1223,6 +1225,7 @@ export const e2eeSignalDevices = pgTable(
   },
   (table) => [
     unique("e2ee_signal_devices_user_device_unique").on(table.userId, table.deviceId),
+    uniqueIndex("e2ee_signal_devices_protocol_address_unique").on(table.userId, table.protocolDeviceId),
     index("e2ee_signal_devices_active_idx").on(table.userId, table.revokedAt),
   ],
 );
@@ -1255,6 +1258,8 @@ export const e2eeSignalEnvelopes = pgTable(
   {
     id: uuid("id").defaultRandom().primaryKey(),
     messageId: uuid("message_id").references(() => messages.id, { onDelete: "cascade" }).notNull(),
+    /** Server-derived account half of the remote Signal protocol address. */
+    senderUserId: uuid("sender_user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
     senderDeviceId: text("sender_device_id").notNull(),
     recipientUserId: uuid("recipient_user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
     recipientDeviceId: text("recipient_device_id").notNull(),
@@ -1266,6 +1271,7 @@ export const e2eeSignalEnvelopes = pgTable(
   (table) => [
     unique("e2ee_signal_envelopes_recipient_unique").on(table.messageId, table.recipientDeviceId),
     index("e2ee_signal_envelopes_mailbox_idx").on(table.recipientUserId, table.recipientDeviceId, table.deliveredAt, table.createdAt),
+    index("e2ee_signal_envelopes_sender_idx").on(table.senderUserId, table.senderDeviceId),
   ],
 );
 

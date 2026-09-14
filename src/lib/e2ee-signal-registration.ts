@@ -12,6 +12,7 @@ export interface SignalRegistrationBridge {
 
 type Registration = {
   registrationId: number;
+  protocolDeviceId: number;
   identityKey: ByteValue;
   signingKey: ByteValue;
   signedPrekey: Prekey;
@@ -40,7 +41,7 @@ function base64(value: ByteValue): string {
 function isRegistration(value: unknown): value is Registration {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const candidate = value as Partial<Registration>;
-  return Number.isInteger(candidate.registrationId) && Boolean(candidate.identityKey) && Boolean(candidate.signingKey)
+  return Number.isInteger(candidate.registrationId) && Number.isInteger(candidate.protocolDeviceId) && candidate.protocolDeviceId! > 0 && Boolean(candidate.identityKey) && Boolean(candidate.signingKey)
     && Boolean(candidate.signedPrekey) && Boolean(candidate.kyberPrekey) && Array.isArray(candidate.oneTimePrekeys)
     && Boolean(candidate.privateIdentity) && Boolean(candidate.privateSignedPrekey) && Array.isArray(candidate.privateOneTimePrekeys);
 }
@@ -49,7 +50,7 @@ async function publish(deviceId: string, registration: Registration): Promise<vo
   const response = await fetch("/api/e2ee/signal/devices", {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      deviceId, registrationId: registration.registrationId,
+      deviceId, registrationId: registration.registrationId, protocolDeviceId: registration.protocolDeviceId,
       identityKey: base64(registration.identityKey), signingKey: base64(registration.signingKey),
       signedPrekey: { keyId: registration.signedPrekey.keyId, publicKey: base64(registration.signedPrekey.publicKey), signature: base64(registration.signedPrekey.signature!) },
       kyberPrekey: { keyId: registration.kyberPrekey.keyId, publicKey: base64(registration.kyberPrekey.publicKey), signature: base64(registration.kyberPrekey.signature!) },

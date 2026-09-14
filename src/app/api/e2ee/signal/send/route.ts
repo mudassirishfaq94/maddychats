@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
       if (!existing || existing.conversationId !== conversationId || existing.text !== "signal:v2" || !existing.encrypted) return null;
       return { id: existing.id, createdAt: existing.createdAt };
     }
-    await tx.insert(e2eeSignalEnvelopes).values(valid.map((item) => ({ messageId: created.id, senderDeviceId, recipientUserId: item.recipientUserId, recipientDeviceId: item.recipientDeviceId, ciphertext: item.ciphertext }))).onConflictDoNothing();
+    await tx.insert(e2eeSignalEnvelopes).values(valid.map((item) => ({ messageId: created.id, senderUserId: user.id, senderDeviceId, recipientUserId: item.recipientUserId, recipientDeviceId: item.recipientDeviceId, ciphertext: item.ciphertext }))).onConflictDoNothing();
     return created;
   });
   if (!message) return jsonError(409, "Could not persist Signal message.");

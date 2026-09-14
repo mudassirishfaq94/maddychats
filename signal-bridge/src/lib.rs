@@ -33,6 +33,7 @@ struct PrivatePrekey { key_id: u32, private_key: Vec<u8> }
 #[serde(rename_all = "camelCase")]
 struct DeviceRegistrationBundle {
     registration_id: u32,
+    protocol_device_id: u32,
     identity_key: Vec<u8>,
     // Signal signs the signed prekey with the device identity key. This is
     // duplicated for the existing public-directory shape, never secret data.
@@ -97,6 +98,9 @@ pub fn generate_device_registration(one_time_count: u32) -> Result<JsValue, JsVa
     let identity_public = identity.identity_key().serialize().to_vec();
     let bundle = DeviceRegistrationBundle {
         registration_id: csprng.random::<u32>() & 0x3fff,
+        // Signal addresses are account name + numeric device id. This is
+        // intentionally separate from both the app UUID and registration id.
+        protocol_device_id: (csprng.random::<u32>() & 0x7fff_ffff).max(1),
         identity_key: identity_public.clone(), signing_key: identity_public,
         signed_prekey: PublicPrekey { key_id: signed_id, public_key: signed_public.to_vec(), signature: Some(signature.to_vec()) },
         kyber_prekey: PublicPrekey { key_id: kyber_id, public_key: kyber_public.to_vec(), signature: Some(kyber_signature.to_vec()) },

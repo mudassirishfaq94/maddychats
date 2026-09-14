@@ -66,10 +66,13 @@ export async function POST(req: NextRequest) {
   const registrationId = typeof data.registrationId === "number" && Number.isInteger(data.registrationId)
     ? data.registrationId
     : null;
+  const protocolDeviceId = typeof data.protocolDeviceId === "number" && Number.isInteger(data.protocolDeviceId) && data.protocolDeviceId > 0 && data.protocolDeviceId <= 0x7fff_ffff
+    ? data.protocolDeviceId
+    : null;
   const signedPrekey = parsePrekey(data.signedPrekey, true);
   const kyberPrekey = parsePrekey(data.kyberPrekey, true);
   const rawOneTime = data.oneTimePrekeys;
-  if (!deviceId || !isUuid(deviceId) || !identityKey || !signingKey || registrationId === null || !signedPrekey || !kyberPrekey || !Array.isArray(rawOneTime) || rawOneTime.length > MAX_PREKEYS_PER_UPLOAD) {
+  if (!deviceId || !isUuid(deviceId) || !identityKey || !signingKey || registrationId === null || protocolDeviceId === null || !signedPrekey || !kyberPrekey || !Array.isArray(rawOneTime) || rawOneTime.length > MAX_PREKEYS_PER_UPLOAD) {
     return jsonError(422, "Invalid Signal device registration.");
   }
   const oneTimePrekeys = rawOneTime.map((key) => parsePrekey(key, false));
@@ -82,13 +85,13 @@ export async function POST(req: NextRequest) {
       eq(e2eeSignalDevices.userId, user.id),
       eq(e2eeSignalDevices.deviceId, deviceId),
     )).limit(1);
-    if (existing && (existing.identityKey !== identityKey || existing.signingKey !== signingKey)) {
+    if (existing && (existing.identityKey !== identityKey || existing.signingKey !== signingKey || existing.protocolDeviceId !== protocolDeviceId)) {
       return "identity_changed" as const;
     }
     if (existing) {
       await tx.update(e2eeSignalDevices).set({ lastSeenAt: new Date(), revokedAt: null }).where(eq(e2eeSignalDevices.id, existing.id));
     } else {
-      await tx.insert(e2eeSignalDevices).values({ userId: user.id, deviceId, identityKey, signingKey, registrationId, lastSeenAt: new Date() });
+      await tx.insert(e2eeSignalDevices).values({ userId: user.id, deviceId, protocolDeviceId, identityKey, signingKey, registrationId, lastSeenAt: new Date() });
     }
     await tx.insert(e2eeSignalPrekeys).values({ userId: user.id, deviceId, keyId: signedPrekey.keyId, kind: "signed", publicKey: signedPrekey.publicKey, signature: signedPrekey.signature! })
       .onConflictDoUpdate({ target: [e2eeSignalPrekeys.userId, e2eeSignalPrekeys.deviceId, e2eeSignalPrekeys.kind, e2eeSignalPrekeys.keyId], set: { publicKey: signedPrekey.publicKey, signature: signedPrekey.signature!, createdAt: new Date(), expiresAt: null } });

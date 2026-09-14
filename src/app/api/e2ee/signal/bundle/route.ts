@@ -39,7 +39,7 @@ export async function GET(req: NextRequest) {
       const [kyberPrekey] = await tx.select().from(e2eeSignalPrekeys).where(and(
         eq(e2eeSignalPrekeys.userId, targetUserId), eq(e2eeSignalPrekeys.deviceId, device.deviceId), eq(e2eeSignalPrekeys.kind, "kyber"),
       )).limit(1);
-      if (!signedPrekey?.signature || !kyberPrekey?.signature) return null;
+      if (!device.protocolDeviceId || !signedPrekey?.signature || !kyberPrekey?.signature) return null;
       const consumed = await tx.execute<ConsumedPrekey>(sql`
         WITH candidate AS (
           SELECT id FROM e2ee_signal_prekeys
@@ -54,7 +54,7 @@ export async function GET(req: NextRequest) {
       `);
       const oneTime = consumed.rows[0] ?? null;
       return {
-        deviceId: device.deviceId, registrationId: device.registrationId,
+        deviceId: device.deviceId, protocolDeviceId: device.protocolDeviceId, registrationId: device.registrationId,
         identityKey: device.identityKey, signingKey: device.signingKey,
         signedPrekey: { keyId: signedPrekey.keyId, publicKey: signedPrekey.publicKey, signature: signedPrekey.signature },
         kyberPrekey: { keyId: kyberPrekey.keyId, publicKey: kyberPrekey.publicKey, signature: kyberPrekey.signature },
