@@ -58,6 +58,10 @@ next-env.d.ts
 /drizzle/meta/*
 !/drizzle/meta/_journal.json
 
+# Rust/WebAssembly build output (reproducible from signal-bridge/)
+/signal-bridge/target/
+/signal-bridge/pkg/
+
 # one-time QA transfer artifacts — never commit
 public/downloads/
 
