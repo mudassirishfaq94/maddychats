@@ -8,11 +8,15 @@ import android.os.Bundle
 import android.app.Activity
 import android.graphics.Color as AndroidColor
 import androidx.core.view.WindowCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import android.webkit.CookieManager
 import android.webkit.WebChromeClient
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.view.ViewGroup
+import android.widget.FrameLayout
 import androidx.activity.OnBackPressedCallback
 import androidx.credentials.CredentialManager
 import androidx.credentials.GetCredentialRequest
@@ -160,10 +164,11 @@ class MainActivity : ComponentActivity() {
         // producing the extra title bar and unreadable page text.
         installSplashScreen()
         super.onCreate(savedInstanceState)
-        // This hosted UI starts below the Android system bars. Keeping the
-        // WebView out of edge-to-edge mode prevents the status bar from
-        // overlaying Circlo's header on Android 15 and emulator devices.
-        WindowCompat.setDecorFitsSystemWindows(window, true)
+        // Draw edge-to-edge deliberately and apply the exact system-bar
+        // insets to a native container. Theme-only fitting is ignored on
+        // some Android 15 devices, which put the status bar over Circlo's
+        // hosted header.
+        WindowCompat.setDecorFitsSystemWindows(window, false)
         window.statusBarColor = AndroidColor.WHITE
         window.navigationBarColor = AndroidColor.WHITE
         WindowCompat.getInsetsController(window, window.decorView).apply {
@@ -184,7 +189,22 @@ class MainActivity : ComponentActivity() {
         // WebView could leave some Android devices on an empty launch surface
         // when that probe or the Compose first frame stalled.
         webView = createHostedWebView()
-        setContentView(requireNotNull(webView))
+        val content = FrameLayout(this).apply {
+            addView(requireNotNull(webView), FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT,
+            ))
+        }
+        ViewCompat.setOnApplyWindowInsetsListener(content) { view, insets ->
+            val bars = insets.getInsets(
+                WindowInsetsCompat.Type.statusBars() or WindowInsetsCompat.Type.navigationBars(),
+            )
+            // This native inset is reliable across device skins and rotation;
+            // the Circlo header therefore cannot appear behind the status bar.
+            view.setPadding(bars.left, bars.top, bars.right, bars.bottom)
+            insets
+        }
+        setContentView(content)
     }
 
     override fun onDestroy() { webView?.destroy(); webView = null; super.onDestroy() }
