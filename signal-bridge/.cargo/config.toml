@@ -1,0 +1,4 @@
+[target.wasm32-unknown-unknown]
+# libsignal's transitive getrandom 0.3 dependency requires an explicit browser
+# entropy backend when compiling a raw wasm32 target.
+rustflags = ["--cfg", "getrandom_backend=\"wasm_js\""]
