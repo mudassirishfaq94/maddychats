@@ -305,8 +305,13 @@ export function ChatView({
   useEffect(() => { decryptedRepliesRef.current = decryptedReplies; }, [decryptedReplies]);
   useEffect(() => {
     if (!e2ee.initialized) return;
-    const pending = items.filter((m) =>
-      m.encrypted && m.text && !decryptedTextsRef.current.has(m.id) && !decryptingRef.current.has(m.id),
+    const pending = items.filter(
+      (m) =>
+        m.encrypted &&
+        m.text &&
+        m.text !== "signal:v2" &&
+        !decryptedTextsRef.current.has(m.id) &&
+        !decryptingRef.current.has(m.id),
     );
     const pendingReplies = items.filter((m) =>
       m.replyTo?.encrypted && m.replyTo.text &&
@@ -368,6 +373,7 @@ export function ChatView({
   /** Plaintext for a message: decrypted locally, or raw when not encrypted. */
   const textOf = useCallback((m: { encrypted: boolean; text: string; id: string }) => {
     if (!m.encrypted) return m.text;
+    if (m.text === "signal:v2") return "🔒 Waiting for this device’s secure message…";
     return decryptedTexts.get(m.id)
       ?? (failedDecryptionRef.current.has(m.id)
         ? "🔒 Waiting for this device's encryption key…"
@@ -383,7 +389,10 @@ export function ChatView({
   /** Pending = encrypted but not yet decrypted locally. */
   const isPendingDecrypt = useCallback(
     (m: { encrypted: boolean; text: string; id: string }) =>
-      m.encrypted && Boolean(m.text) && decryptedTexts.get(m.id) === undefined,
+      m.encrypted &&
+      m.text !== "signal:v2" &&
+      Boolean(m.text) &&
+      decryptedTexts.get(m.id) === undefined,
     [decryptedTexts],
   );
 
