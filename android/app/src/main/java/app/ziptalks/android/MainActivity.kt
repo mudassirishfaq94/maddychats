@@ -2,6 +2,7 @@ package app.ziptalks.android
 
 import android.content.Context
 import android.content.ContentResolver
+import android.content.Intent
 import android.net.Uri
 import android.provider.OpenableColumns
 import android.os.Bundle
@@ -15,6 +16,7 @@ import android.webkit.WebChromeClient
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.webkit.ValueCallback
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.activity.OnBackPressedCallback
@@ -156,7 +158,26 @@ private class ZipTalkApi(context: Context) {
 
 class MainActivity : ComponentActivity() {
     private var webView: WebView? = null
+    private var pendingFileChooser: ValueCallback<Array<Uri>>? = null
     private val api by lazy { ZipTalkApi(this) }
+    private val fileChooserLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        val callback = pendingFileChooser ?: return@registerForActivityResult
+        pendingFileChooser = null
+        val uris = if (result.resultCode == Activity.RESULT_OK) {
+            val data = result.data
+            val clipData = data?.clipData
+            when {
+                clipData != null -> Array(clipData.itemCount) { index -> clipData.getItemAt(index).uri }
+                data?.data != null -> arrayOf(data.data!!)
+                else -> emptyArray()
+            }
+        } else {
+            emptyArray()
+        }
+        callback.onReceiveValue(uris)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         // Applies AppTheme from postSplashScreenTheme. Without this call the
@@ -209,6 +230,34 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() { webView?.destroy(); webView = null; super.onDestroy() }
 
+    fun hostedWebChromeClient() = object : WebChromeClient() {
+        override fun onShowFileChooser(
+            view: WebView,
+            filePathCallback: ValueCallback<Array<Uri>>,
+            fileChooserParams: FileChooserParams,
+        ): Boolean {
+            // WebView does not open <input type="file"> itself. Route the
+            // request to Android's system document picker and pass selected
+            // content URIs back to Circlo's existing upload component.
+            pendingFileChooser?.onReceiveValue(emptyArray())
+            pendingFileChooser = filePathCallback
+            return try {
+                val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                    addCategory(Intent.CATEGORY_OPENABLE)
+                    type = "*/*"
+                    putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+                    putExtra(Intent.EXTRA_MIME_TYPES, fileChooserParams.acceptTypes.filter { it.isNotBlank() }.toTypedArray())
+                }
+                fileChooserLauncher.launch(intent)
+                true
+            } catch (_: Exception) {
+                pendingFileChooser = null
+                filePathCallback.onReceiveValue(emptyArray())
+                false
+            }
+        }
+    }
+
     private fun createHostedWebView(): WebView = WebView(this).apply {
         setBackgroundColor(AndroidColor.WHITE)
         settings.javaScriptEnabled = true
@@ -228,7 +277,7 @@ class MainActivity : ComponentActivity() {
         // Carry sessions created by the earlier native client into the WebView.
         api.cookiesForWeb().forEach { cookieManager.setCookie(BuildConfig.API_BASE_URL, it) }
         cookieManager.flush()
-        webChromeClient = WebChromeClient()
+        webChromeClient = hostedWebChromeClient()
         webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView, url: String): Boolean {
                 if (url.startsWith("${BuildConfig.API_BASE_URL}/api/auth/google")) {
@@ -308,7 +357,7 @@ class MainActivity : ComponentActivity() {
                 val cookieManager = CookieManager.getInstance()
                 api.cookiesForWeb().forEach { cookieManager.setCookie(BuildConfig.API_BASE_URL, it) }
                 cookieManager.flush()
-                webChromeClient = WebChromeClient()
+                webChromeClient = (context as? MainActivity)?.hostedWebChromeClient() ?: WebChromeClient()
                 webViewClient = object : WebViewClient() {
                     override fun shouldOverrideUrlLoading(view: WebView, url: String): Boolean {
                         // Google does not permit OAuth inside embedded browsers.
