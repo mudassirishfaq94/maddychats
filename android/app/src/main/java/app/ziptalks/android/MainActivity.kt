@@ -3,6 +3,8 @@ package app.ziptalks.android
 import android.content.Context
 import android.content.ContentResolver
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.Manifest
 import android.net.Uri
 import android.provider.OpenableColumns
 import android.os.Bundle
@@ -11,12 +13,14 @@ import android.graphics.Color as AndroidColor
 import androidx.core.view.WindowCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.content.ContextCompat
 import android.webkit.CookieManager
 import android.webkit.WebChromeClient
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.webkit.ValueCallback
+import android.webkit.PermissionRequest
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.activity.OnBackPressedCallback
@@ -159,6 +163,7 @@ private class ZipTalkApi(context: Context) {
 class MainActivity : ComponentActivity() {
     private var webView: WebView? = null
     private var pendingFileChooser: ValueCallback<Array<Uri>>? = null
+    private var pendingWebPermission: PermissionRequest? = null
     private val api by lazy { ZipTalkApi(this) }
     private val fileChooserLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
@@ -177,6 +182,14 @@ class MainActivity : ComponentActivity() {
             emptyArray()
         }
         callback.onReceiveValue(uris)
+    }
+    private val microphonePermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        val request = pendingWebPermission ?: return@registerForActivityResult
+        pendingWebPermission = null
+        if (granted) request.grant(arrayOf(PermissionRequest.RESOURCE_AUDIO_CAPTURE))
+        else request.deny()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -231,6 +244,29 @@ class MainActivity : ComponentActivity() {
     override fun onDestroy() { webView?.destroy(); webView = null; super.onDestroy() }
 
     fun hostedWebChromeClient() = object : WebChromeClient() {
+        override fun onPermissionRequest(request: PermissionRequest) {
+            // getUserMedia() needs both Android's runtime approval and a
+            // WebView resource grant. Approve audio only, never camera or
+            // unrelated browser permissions.
+            runOnUiThread {
+                if (!request.resources.contains(PermissionRequest.RESOURCE_AUDIO_CAPTURE)) {
+                    request.deny()
+                    return@runOnUiThread
+                }
+                if (ContextCompat.checkSelfPermission(
+                        this@MainActivity,
+                        Manifest.permission.RECORD_AUDIO,
+                    ) == PackageManager.PERMISSION_GRANTED
+                ) {
+                    request.grant(arrayOf(PermissionRequest.RESOURCE_AUDIO_CAPTURE))
+                    return@runOnUiThread
+                }
+                pendingWebPermission?.deny()
+                pendingWebPermission = request
+                microphonePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+            }
+        }
+
         override fun onShowFileChooser(
             view: WebView,
             filePathCallback: ValueCallback<Array<Uri>>,
