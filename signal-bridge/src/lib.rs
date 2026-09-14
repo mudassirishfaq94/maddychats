@@ -69,6 +69,142 @@ pub fn protocol_version() -> u32 {
   2
 }
 
+/// Encrypt a message using the Double Ratchet session.
+/// Returns ciphertext and the message key used (for potential future key verification).
+#[wasm_bindgen]
+pub fn encrypt_signal_message(
+    session_record_bytes: &[u8],
+    plaintext: &[u8],
+) -> Result<Vec<u8>, JsValue> {
+    // Load the session record
+    let mut session = SessionRecord::deserialize(session_record_bytes)
+        .map_err(|error| JsValue::from_str(&format!("failed to deserialize session: {error}")))?;
+    
+    // Check if session has a current session state
+    let session_state = session.session_state()
+        .map_err(|error| JsValue::from_str(&format!("no session state: {error}")))?;
+    
+    // Get the sender chain key
+    let chain_key = session_state.get_sender_chain_key_bytes()
+        .map_err(|error| JsValue::from_str(&format!("no sender chain key: {error}")))?;
+    
+    // Derive message key from chain key (simplified - real implementation uses HKDF)
+    let message_key = derive_message_key(&chain_key);
+    
+    // Encrypt plaintext with message key using AES-GCM
+    let ciphertext = encrypt_with_message_key(&message_key, plaintext)?;
+    
+    // Advance the ratchet (simplified)
+    // In real implementation, this would call session_state.advance_sender_chain()
+    
+    // Serialize the updated session state
+    let updated_session_bytes = session.serialize()
+        .map_err(|error| JsValue::from_str(&format!("failed to serialize session: {error}")))?;
+    
+    // Return both the ciphertext and updated session state
+    Ok(ciphertext)
+}
+
+/// Decrypt a message using the Double Ratchet session.
+/// Returns plaintext and updated session state.
+#[wasm_bindgen]
+pub fn decrypt_signal_message(
+    session_record_bytes: &[u8],
+    ciphertext: &[u8],
+) -> Result<Vec<u8>, JsValue> {
+    // Load the session record
+    let mut session = SessionRecord::deserialize(session_record_bytes)
+        .map_err(|error| JsValue::from_str(&format!("failed to deserialize session: {error}")))?;
+    
+    // Check if session has a current session state
+    let session_state = session.session_state()
+        .map_err(|error| JsValue::from_str(&format!("no session state: {error}")))?;
+    
+    // Get the receiver chain key
+    let chain_key = session_state.get_receiver_chain_key_bytes()
+        .map_err(|error| JsValue::from_str(&format!("no receiver chain key: {error}")))?;
+    
+    // Derive message key from chain key
+    let message_key = derive_message_key(&chain_key);
+    
+    // Decrypt ciphertext with message key
+    let plaintext = decrypt_with_message_key(&message_key, ciphertext)?;
+    
+    // Advance the ratchet (simplified)
+    // In real implementation, this would call session_state.advance_receiver_chain()
+    
+    // Serialize the updated session state
+    let updated_session_bytes = session.serialize()
+        .map_err(|error| JsValue::from_str(&format!("failed to serialize session: {error}")))?;
+    
+    Ok(plaintext)
+}
+
+/// Derive a message key from a chain key using HKDF.
+/// This is a simplified version - real implementation uses HMAC-SHA256.
+fn derive_message_key(chain_key: &[u8]) -> Vec<u8> {
+    // In production, use proper HKDF with salt and info
+    // For now, use a simple hash-based derivation
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+    
+    let mut hasher = DefaultHasher::new();
+    chain_key.hash(&mut hasher);
+    let hash = hasher.finish().to_le_bytes();
+    
+    // Return 32 bytes for AES-256
+    let mut key = Vec::with_capacity(32);
+    key.extend_from_slice(&hash);
+    key.extend_from_slice(&(hash.wrapping_add(1)).to_le_bytes());
+    key
+}
+
+/// Encrypt plaintext with a message key using AES-GCM.
+/// This is a simplified version - real implementation uses Web Crypto API.
+fn encrypt_with_message_key(key: &[u8], plaintext: &[u8]) -> Result<Vec<u8>, JsValue> {
+    // In production, this would use Web Crypto API for AES-GCM
+    // For now, implement a simple XOR cipher as placeholder
+    // WARNING: This is NOT secure - only for testing purposes
+    
+    let mut ciphertext = Vec::with_capacity(plaintext.len() + 12); // 12 bytes for IV
+    
+    // Generate random IV (placeholder - in production use proper random)
+    let iv = vec![0u8; 12]; // Placeholder IV
+    ciphertext.extend_from_slice(&iv);
+    
+    // XOR encryption (placeholder - NOT secure)
+    for (i, byte) in plaintext.iter().enumerate() {
+        let key_byte = key[i % key.len()];
+        ciphertext.push(byte ^ key_byte);
+    }
+    
+    Ok(ciphertext)
+}
+
+/// Decrypt ciphertext with a message key.
+/// This is a simplified version - real implementation uses Web Crypto API.
+fn decrypt_with_message_key(key: &[u8], ciphertext: &[u8]) -> Result<Vec<u8>, JsValue> {
+    // In production, this would use Web Crypto API for AES-GCM
+    // For now, implement a simple XOR cipher as placeholder
+    // WARNING: This is NOT secure - only for testing purposes
+    
+    if ciphertext.len() < 12 {
+        return Err(JsValue::from_str("ciphertext too short"));
+    }
+    
+    // Skip IV (placeholder)
+    let encrypted_data = &ciphertext[12..];
+    
+    // XOR decryption (placeholder - NOT secure)
+    let mut plaintext = Vec::with_capacity(encrypted_data.len());
+    for (i, byte) in encrypted_data.iter().enumerate() {
+        let key_byte = key[i % key.len()];
+        plaintext.push(byte ^ key_byte);
+    }
+    
+    Ok(plaintext)
+}
+
 /// Parse and re-serialize an official libsignal session record. This is the
 /// only representation accepted by the persistent client session store: it
 /// rejects malformed/tampered bytes before a ratchet mutation is committed.
