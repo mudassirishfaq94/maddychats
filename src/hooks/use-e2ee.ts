@@ -22,6 +22,8 @@ import {
   decryptPrivateKeyFromStorage,
 } from "@/lib/crypto";
 import { mapWithConcurrency } from "@/lib/async";
+import { loadSignalBridge } from "@/lib/e2ee-signal-bridge";
+import { ensureSignalDeviceRegistered, maintainSignalPrekeyReserve } from "@/lib/e2ee-signal-registration";
 
 interface PeerDevice {
   deviceId: string;
@@ -70,6 +72,7 @@ export function useE2EE(userId: string | undefined) {
   // Initialize on mount
   useEffect(() => {
     if (!userId) return;
+    const activeUserId = userId;
 
     async function init() {
       const deviceId = generateDeviceId();
@@ -179,6 +182,20 @@ export function useE2EE(userId: string | undefined) {
         signal: AbortSignal.timeout(15000),
       });
       if (!response.ok) throw new Error("Device key registration failed");
+
+      // Register the Signal device directory independently of the legacy
+      // compatibility key. A temporary Signal-directory outage must not make
+      // already-established conversations unreadable; v2 sending is enabled
+      // only after its session ratchet is available.
+      void loadSignalBridge()
+        .then(async (bridge) => {
+          await ensureSignalDeviceRegistered(activeUserId, deviceId, bridge);
+          await maintainSignalPrekeyReserve(activeUserId, deviceId, bridge);
+        })
+        .catch(() => {
+          // Retried at the next application initialization. Do not expose a
+          // silent fallback that would create a replacement Signal identity.
+        });
 
       keyPairRef.current = keyPair;
 
