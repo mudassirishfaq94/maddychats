@@ -2369,7 +2369,7 @@ export function ChatView({
                 />
               ) : null}
             </div>
-            <div className="relative">
+            <div className="relative hidden sm:block">
               <button type="button" onClick={() => setShowStickers((v) => !v)} aria-label="Stickers and GIFs" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-[var(--border)] text-[var(--muted)] transition-colors hover:border-[var(--border-strong)] hover:text-[var(--text)]"><Sticker className="h-4.5 w-4.5" /></button>
               {showStickers ? <StickerPicker onSelect={(sticker) => { setDraft((prev) => prev + sticker); composerRef.current?.focus(); }} onClose={() => setShowStickers(false)} /> : null}
             </div>
@@ -2400,7 +2400,7 @@ export function ChatView({
                   onClick={() => setShowSchedule(true)}
                   disabled={sendPending || !requestAccepted}
                   aria-label="Schedule message"
-                  className="flex h-9 w-9 min-h-[36px] min-w-[36px] items-center justify-center rounded-full border border-[var(--border)] text-[var(--muted)] transition-colors hover:border-[var(--border-strong)] hover:text-[var(--text)]"
+                  className="hidden h-9 w-9 min-h-[36px] min-w-[36px] items-center justify-center rounded-full border border-[var(--border)] text-[var(--muted)] transition-colors hover:border-[var(--border-strong)] hover:text-[var(--text)] sm:flex"
                   title="Schedule message"
                 >
                   <Clock className="h-4 w-4" />
