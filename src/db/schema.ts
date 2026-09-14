@@ -1244,7 +1244,7 @@ export const e2eeSignalPrekeys = pgTable(
     consumedAt: timestamp("consumed_at", { withTimezone: true, mode: "date" }),
   },
   (table) => [
-    unique("e2ee_signal_prekeys_device_key_unique").on(table.userId, table.deviceId, table.keyId),
+    unique("e2ee_signal_prekeys_device_kind_key_unique").on(table.userId, table.deviceId, table.kind, table.keyId),
     index("e2ee_signal_prekeys_available_idx").on(table.userId, table.deviceId, table.kind, table.consumedAt, table.expiresAt),
   ],
 );
