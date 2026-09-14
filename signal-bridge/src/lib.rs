@@ -6,7 +6,7 @@
 
 #![forbid(unsafe_code)]
 
-use libsignal_protocol::{IdentityKeyPair, KeyPair};
+use libsignal_protocol::{IdentityKeyPair, KeyPair, SessionRecord};
 use rand::{Rng, rng};
 use serde::Serialize;
 use wasm_bindgen::prelude::*;
@@ -50,7 +50,18 @@ struct DeviceRegistrationBundle {
 /// Version of the protocol envelope understood by this bridge.
 #[wasm_bindgen]
 pub fn protocol_version() -> u32 {
-    2
+  2
+}
+
+/// Parse and re-serialize an official libsignal session record. This is the
+/// only representation accepted by the persistent client session store: it
+/// rejects malformed/tampered bytes before a ratchet mutation is committed.
+#[wasm_bindgen]
+pub fn canonicalize_session_record(serialized: &[u8]) -> Result<Vec<u8>, JsValue> {
+    let record = SessionRecord::deserialize(serialized)
+        .map_err(|error| JsValue::from_str(&format!("invalid Signal session record: {error}")))?;
+    record.serialize()
+        .map_err(|error| JsValue::from_str(&format!("Signal session serialization failed: {error}")))
 }
 
 /// Create a new Signal identity key pair entirely in the client runtime.
@@ -141,6 +152,14 @@ mod tests {
         initialize_alice_session_record, initialize_bob_session_record, kem,
     };
     use rand::rng;
+
+    #[test]
+    fn session_records_round_trip_through_official_serialization() {
+        let fresh = libsignal_protocol::SessionRecord::new_fresh();
+        let serialized = fresh.serialize().expect("serialize fresh session");
+        let restored = libsignal_protocol::SessionRecord::deserialize(&serialized).expect("deserialize fresh session");
+        assert_eq!(serialized, restored.serialize().expect("re-serialize session"));
+    }
 
     /// This is the minimum protocol gate: the initiator and recipient derive
     /// matching ratchet chain keys through the official Signal implementation.

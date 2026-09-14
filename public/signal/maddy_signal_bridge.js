@@ -1,6 +1,25 @@
 /* @ts-self-types="./maddy_signal_bridge.d.ts" */
 
 /**
+ * Parse and re-serialize an official libsignal session record. This is the
+ * only representation accepted by the persistent client session store: it
+ * rejects malformed/tampered bytes before a ratchet mutation is committed.
+ * @param {Uint8Array} serialized
+ * @returns {Uint8Array}
+ */
+export function canonicalize_session_record(serialized) {
+    const ptr0 = passArray8ToWasm0(serialized, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.canonicalize_session_record(ptr0, len0);
+    if (ret[3]) {
+        throw takeFromExternrefTable0(ret[2]);
+    }
+    var v2 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    return v2;
+}
+
+/**
  * Generate client-side Signal registration material. Only the public fields
  * are suitable for `/api/e2ee/signal/devices`; private fields must be written
  * directly to `SignalLocalStore` and never sent over the network.
@@ -174,6 +193,13 @@ function handleError(f, args) {
         const idx = addToExternrefTable0(e);
         wasm.__wbindgen_exn_store(idx);
     }
+}
+
+function passArray8ToWasm0(arg, malloc) {
+    const ptr = malloc(arg.length * 1, 1) >>> 0;
+    getUint8ArrayMemory0().set(arg, ptr / 1);
+    WASM_VECTOR_LEN = arg.length;
+    return ptr;
 }
 
 function passStringToWasm0(arg, malloc, realloc) {
