@@ -71,7 +71,9 @@ export function RegisterForm() {
       if (result.fields) setErrors(result.fields);
       return;
     }
-    window.location.assign(`/verify-email?email=${encodeURIComponent(form.email)}`);
+    // Email verification is temporarily in compatibility mode while Circlo's
+    // production mail delivery is being configured.
+    window.location.assign("/app");
   }
 
   return (

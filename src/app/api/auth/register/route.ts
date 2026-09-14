@@ -17,7 +17,6 @@ import {
 } from "@/server/http";
 import { SESSION_COOKIE } from "@/server/config";
 import { createSessionToken, sessionCookieOptions } from "@/server/session";
-import { issueEmailVerification } from "@/server/email-verification";
 
 export const dynamic = "force-dynamic";
 
@@ -82,7 +81,16 @@ export async function POST(req: NextRequest) {
     return jsonError(500, "Something went wrong. Please try again.");
   }
 
-  const delivered = await issueEmailVerification(user);
-  if (!delivered) console.error("[circlo] verification email could not be sent");
-  return NextResponse.json({ verificationRequired: true }, { status: 201 });
+  // TEMPORARY COMPATIBILITY MODE: outbound verification is unavailable in the
+  // current production deployment. Keep registration usable until the Circlo
+  // mail provider is configured, then restore `issueEmailVerification` and
+  // the verification-required response before enforcing verification again.
+  const token = await createSessionToken(user.id, user.username);
+  const response = NextResponse.json({ user: toSafeUser(user) }, { status: 201 });
+  response.cookies.set(
+    SESSION_COOKIE,
+    token,
+    sessionCookieOptions(requestIsSecure(req)),
+  );
+  return response;
 }
