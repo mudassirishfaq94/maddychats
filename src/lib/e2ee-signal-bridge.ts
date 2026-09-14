@@ -22,6 +22,11 @@ import type { SignalRegistrationBridge } from "./e2ee-signal-registration";
 
 type SignalWasmModule = SignalRegistrationBridge & {
   protocol_version(): number;
+  get_sender_chain_key(sessionRecordBytes: Uint8Array): Uint8Array;
+  get_receiver_chain_key(sessionRecordBytes: Uint8Array): Uint8Array;
+  advance_sender_chain(sessionRecordBytes: Uint8Array): Uint8Array;
+  advance_receiver_chain(sessionRecordBytes: Uint8Array): Uint8Array;
+  verify_message_signature(signature: Uint8Array, message: Uint8Array, publicKey: Uint8Array): boolean;
 };
 
 let bridgePromise: Promise<SignalWasmModule> | null = null;

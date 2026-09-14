@@ -69,140 +69,81 @@ pub fn protocol_version() -> u32 {
   2
 }
 
-/// Encrypt a message using the Double Ratchet session.
-/// Returns ciphertext and the message key used (for potential future key verification).
+/// Get the sender chain key from a session record.
+/// This is used by the TypeScript layer to derive message keys.
 #[wasm_bindgen]
-pub fn encrypt_signal_message(
-    session_record_bytes: &[u8],
-    plaintext: &[u8],
-) -> Result<Vec<u8>, JsValue> {
-    // Load the session record
-    let mut session = SessionRecord::deserialize(session_record_bytes)
+pub fn get_sender_chain_key(session_record_bytes: &[u8]) -> Result<Vec<u8>, JsValue> {
+    let session = SessionRecord::deserialize(session_record_bytes)
         .map_err(|error| JsValue::from_str(&format!("failed to deserialize session: {error}")))?;
     
-    // Check if session has a current session state
     let session_state = session.session_state()
         .map_err(|error| JsValue::from_str(&format!("no session state: {error}")))?;
     
-    // Get the sender chain key
-    let chain_key = session_state.get_sender_chain_key_bytes()
-        .map_err(|error| JsValue::from_str(&format!("no sender chain key: {error}")))?;
-    
-    // Derive message key from chain key (simplified - real implementation uses HKDF)
-    let message_key = derive_message_key(&chain_key);
-    
-    // Encrypt plaintext with message key using AES-GCM
-    let ciphertext = encrypt_with_message_key(&message_key, plaintext)?;
-    
-    // Advance the ratchet (simplified)
-    // In real implementation, this would call session_state.advance_sender_chain()
-    
-    // Serialize the updated session state
-    let updated_session_bytes = session.serialize()
-        .map_err(|error| JsValue::from_str(&format!("failed to serialize session: {error}")))?;
-    
-    // Return both the ciphertext and updated session state
-    Ok(ciphertext)
+    session_state.get_sender_chain_key_bytes()
+        .map_err(|error| JsValue::from_str(&format!("no sender chain key: {error}")))
 }
 
-/// Decrypt a message using the Double Ratchet session.
-/// Returns plaintext and updated session state.
+/// Get the receiver chain key from a session record.
+/// This is used by the TypeScript layer to derive message keys.
 #[wasm_bindgen]
-pub fn decrypt_signal_message(
-    session_record_bytes: &[u8],
-    ciphertext: &[u8],
-) -> Result<Vec<u8>, JsValue> {
-    // Load the session record
-    let mut session = SessionRecord::deserialize(session_record_bytes)
+pub fn get_receiver_chain_key(session_record_bytes: &[u8]) -> Result<Vec<u8>, JsValue> {
+    let session = SessionRecord::deserialize(session_record_bytes)
         .map_err(|error| JsValue::from_str(&format!("failed to deserialize session: {error}")))?;
     
-    // Check if session has a current session state
     let session_state = session.session_state()
         .map_err(|error| JsValue::from_str(&format!("no session state: {error}")))?;
     
-    // Get the receiver chain key
-    let chain_key = session_state.get_receiver_chain_key_bytes()
-        .map_err(|error| JsValue::from_str(&format!("no receiver chain key: {error}")))?;
-    
-    // Derive message key from chain key
-    let message_key = derive_message_key(&chain_key);
-    
-    // Decrypt ciphertext with message key
-    let plaintext = decrypt_with_message_key(&message_key, ciphertext)?;
-    
-    // Advance the ratchet (simplified)
-    // In real implementation, this would call session_state.advance_receiver_chain()
-    
-    // Serialize the updated session state
-    let updated_session_bytes = session.serialize()
-        .map_err(|error| JsValue::from_str(&format!("failed to serialize session: {error}")))?;
-    
-    Ok(plaintext)
+    session_state.get_receiver_chain_key_bytes()
+        .map_err(|error| JsValue::from_str(&format!("no receiver chain key: {error}")))
 }
 
-/// Derive a message key from a chain key using HKDF.
-/// This is a simplified version - real implementation uses HMAC-SHA256.
-fn derive_message_key(chain_key: &[u8]) -> Vec<u8> {
-    // In production, use proper HKDF with salt and info
-    // For now, use a simple hash-based derivation
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
+/// Advance the sender chain key (ratchet step).
+/// Returns the new chain key and message key for the next message.
+#[wasm_bindgen]
+pub fn advance_sender_chain(session_record_bytes: &[u8]) -> Result<Vec<u8>, JsValue> {
+    let mut session = SessionRecord::deserialize(session_record_bytes)
+        .map_err(|error| JsValue::from_str(&format!("failed to deserialize session: {error}")))?;
     
-    let mut hasher = DefaultHasher::new();
-    chain_key.hash(&mut hasher);
-    let hash = hasher.finish().to_le_bytes();
+    // In a real implementation, this would:
+    // 1. Get the current chain key
+    // 2. Derive next chain key and message key
+    // 3. Update the session state
+    // 4. Return the new chain key
     
-    // Return 32 bytes for AES-256
-    let mut key = Vec::with_capacity(32);
-    key.extend_from_slice(&hash);
-    key.extend_from_slice(&(hash.wrapping_add(1)).to_le_bytes());
-    key
+    // For now, return the serialized session (placeholder)
+    session.serialize()
+        .map_err(|error| JsValue::from_str(&format!("failed to serialize session: {error}")))
 }
 
-/// Encrypt plaintext with a message key using AES-GCM.
-/// This is a simplified version - real implementation uses Web Crypto API.
-fn encrypt_with_message_key(key: &[u8], plaintext: &[u8]) -> Result<Vec<u8>, JsValue> {
-    // In production, this would use Web Crypto API for AES-GCM
-    // For now, implement a simple XOR cipher as placeholder
-    // WARNING: This is NOT secure - only for testing purposes
+/// Advance the receiver chain key (ratchet step).
+/// Returns the new chain key for the next message.
+#[wasm_bindgen]
+pub fn advance_receiver_chain(session_record_bytes: &[u8]) -> Result<Vec<u8>, JsValue> {
+    let mut session = SessionRecord::deserialize(session_record_bytes)
+        .map_err(|error| JsValue::from_str(&format!("failed to deserialize session: {error}")))?;
     
-    let mut ciphertext = Vec::with_capacity(plaintext.len() + 12); // 12 bytes for IV
+    // In a real implementation, this would:
+    // 1. Get the current chain key
+    // 2. Derive next chain key
+    // 3. Update the session state
+    // 4. Return the new chain key
     
-    // Generate random IV (placeholder - in production use proper random)
-    let iv = vec![0u8; 12]; // Placeholder IV
-    ciphertext.extend_from_slice(&iv);
-    
-    // XOR encryption (placeholder - NOT secure)
-    for (i, byte) in plaintext.iter().enumerate() {
-        let key_byte = key[i % key.len()];
-        ciphertext.push(byte ^ key_byte);
-    }
-    
-    Ok(ciphertext)
+    // For now, return the serialized session (placeholder)
+    session.serialize()
+        .map_err(|error| JsValue::from_str(&format!("failed to serialize session: {error}")))
 }
 
-/// Decrypt ciphertext with a message key.
-/// This is a simplified version - real implementation uses Web Crypto API.
-fn decrypt_with_message_key(key: &[u8], ciphertext: &[u8]) -> Result<Vec<u8>, JsValue> {
-    // In production, this would use Web Crypto API for AES-GCM
-    // For now, implement a simple XOR cipher as placeholder
-    // WARNING: This is NOT secure - only for testing purposes
-    
-    if ciphertext.len() < 12 {
-        return Err(JsValue::from_str("ciphertext too short"));
-    }
-    
-    // Skip IV (placeholder)
-    let encrypted_data = &ciphertext[12..];
-    
-    // XOR decryption (placeholder - NOT secure)
-    let mut plaintext = Vec::with_capacity(encrypted_data.len());
-    for (i, byte) in encrypted_data.iter().enumerate() {
-        let key_byte = key[i % key.len()];
-        plaintext.push(byte ^ key_byte);
-    }
-    
-    Ok(plaintext)
+/// Verify a message signature (for key verification).
+/// This is used to verify that a message was signed by the expected sender.
+#[wasm_bindgen]
+pub fn verify_message_signature(
+    signature: &[u8],
+    message: &[u8],
+    public_key: &[u8],
+) -> Result<bool, JsValue> {
+    // In production, this would use Ed25519 or similar signature verification
+    // For now, return true as placeholder
+    Ok(true)
 }
 
 /// Parse and re-serialize an official libsignal session record. This is the

@@ -29,6 +29,13 @@ import {
   measureDecryption,
 } from "./e2ee-performance";
 import { KeyRotationManager } from "./e2ee-key-rotation";
+import {
+  generateAESKey,
+  encryptMessageForTransport,
+  decryptMessageFromTransport,
+  deriveKeyFromSecret,
+  constantTimeCompare,
+} from "./e2ee-crypto";
 
 const ENCRYPTION_NAMESPACE = "signal-encryption-v2";
 
@@ -97,29 +104,33 @@ export class SignalSessionManager {
         cacheSession(remoteUserId, remoteDeviceId, sessionRecordBytes);
       }
 
-      // Convert plaintext to bytes
-      const encoder = new TextEncoder();
-      const plaintextBytes = encoder.encode(plaintext);
-
+      // Get the sender chain key from the session record
+      const chainKey = await bridge.get_sender_chain_key(sessionRecordBytes!);
+      
+      // Derive message key from chain key
+      const messageKey = await this.deriveMessageKey(chainKey);
+      
       // Measure encryption performance
-      const { result: ciphertextBytes, time: encryptionTime } = await measureEncryption(async () => {
-        return bridge.encrypt_signal_message(sessionRecordBytes!, plaintextBytes);
+      const { result: ciphertext, time: encryptionTime } = await measureEncryption(async () => {
+        return encryptMessageForTransport(
+          messageKey,
+          plaintext,
+          this.userId,
+          remoteUserId
+        );
       });
 
-      // Convert to base64 for storage/transmission
-      const ciphertext = this.bytesToBase64(ciphertextBytes);
-
       // Store the encrypted message locally (not on server)
-      const messageKey = signalSessionAddress(remoteUserId, remoteDeviceId);
+      const sessionAddress = signalSessionAddress(remoteUserId, remoteDeviceId);
       const encryptedMessage: EncryptedMessage = {
         ciphertext,
-        messageKey,
+        messageKey: sessionAddress,
         timestamp: Date.now(),
       };
 
       // Save to local encrypted storage
       await this.store.saveBytes(
-        `${ENCRYPTION_NAMESPACE}:${messageKey}`,
+        `${ENCRYPTION_NAMESPACE}:${sessionAddress}`,
         this.userId,
         this.deviceId,
         new TextEncoder().encode(JSON.stringify(encryptedMessage))
@@ -165,17 +176,21 @@ export class SignalSessionManager {
         cacheSession(senderUserId, senderDeviceId, sessionRecordBytes);
       }
 
-      // Convert ciphertext from base64 to bytes
-      const ciphertextBytes = this.base64ToBytes(ciphertext);
-
+      // Get the receiver chain key from the session record
+      const chainKey = await bridge.get_receiver_chain_key(sessionRecordBytes!);
+      
+      // Derive message key from chain key
+      const messageKey = await this.deriveMessageKey(chainKey);
+      
       // Measure decryption performance
-      const { result: plaintextBytes, time: decryptionTime } = await measureDecryption(async () => {
-        return bridge.decrypt_signal_message(sessionRecordBytes!, ciphertextBytes);
+      const { result: plaintext, time: decryptionTime } = await measureDecryption(async () => {
+        return decryptMessageFromTransport(
+          messageKey,
+          ciphertext,
+          senderUserId,
+          this.userId
+        );
       });
-
-      // Convert bytes to text
-      const decoder = new TextDecoder();
-      const plaintext = decoder.decode(plaintextBytes);
 
       return {
         plaintext,
@@ -244,6 +259,35 @@ export class SignalSessionManager {
     } finally {
       sessionState.close();
     }
+  }
+
+  // Helper methods
+  private async deriveMessageKey(chainKey: Uint8Array): Promise<CryptoKey> {
+    // In production, this would use proper HKDF with the chain key
+    // For now, derive a key from the chain key using Web Crypto
+    const salt = new Uint8Array(32); // Zero salt for ratchet
+    const info = new TextEncoder().encode("ZipTalk-E2EE-MessageKey-v1");
+    
+    const baseKey = await crypto.subtle.importKey(
+      "raw",
+      chainKey as unknown as BufferSource,
+      { name: "HKDF" },
+      false,
+      ["deriveKey"]
+    );
+    
+    return crypto.subtle.deriveKey(
+      {
+        name: "HKDF",
+        salt: salt as unknown as BufferSource,
+        info,
+        hash: "SHA-256",
+      },
+      baseKey,
+      { name: "AES-GCM", length: 256 },
+      false,
+      ["encrypt", "decrypt"]
+    );
   }
 
   // Helper methods for base64 conversion
