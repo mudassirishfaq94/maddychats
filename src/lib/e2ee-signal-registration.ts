@@ -14,6 +14,7 @@ type Registration = {
   identityKey: ByteValue;
   signingKey: ByteValue;
   signedPrekey: Prekey;
+  kyberPrekey: Prekey;
   oneTimePrekeys: Prekey[];
   privateIdentity: ByteValue;
   privateSignedPrekey: { keyId: number; privateKey: ByteValue };
@@ -39,7 +40,7 @@ function isRegistration(value: unknown): value is Registration {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const candidate = value as Partial<Registration>;
   return Number.isInteger(candidate.registrationId) && Boolean(candidate.identityKey) && Boolean(candidate.signingKey)
-    && Boolean(candidate.signedPrekey) && Array.isArray(candidate.oneTimePrekeys)
+    && Boolean(candidate.signedPrekey) && Boolean(candidate.kyberPrekey) && Array.isArray(candidate.oneTimePrekeys)
     && Boolean(candidate.privateIdentity) && Boolean(candidate.privateSignedPrekey) && Array.isArray(candidate.privateOneTimePrekeys);
 }
 
@@ -50,6 +51,7 @@ async function publish(deviceId: string, registration: Registration): Promise<vo
       deviceId, registrationId: registration.registrationId,
       identityKey: base64(registration.identityKey), signingKey: base64(registration.signingKey),
       signedPrekey: { keyId: registration.signedPrekey.keyId, publicKey: base64(registration.signedPrekey.publicKey), signature: base64(registration.signedPrekey.signature!) },
+      kyberPrekey: { keyId: registration.kyberPrekey.keyId, publicKey: base64(registration.kyberPrekey.publicKey), signature: base64(registration.kyberPrekey.signature!) },
       oneTimePrekeys: registration.oneTimePrekeys.map((key) => ({ keyId: key.keyId, publicKey: base64(key.publicKey) })),
     }),
   });

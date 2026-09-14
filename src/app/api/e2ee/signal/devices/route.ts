@@ -47,8 +47,9 @@ export async function POST(req: NextRequest) {
     ? data.registrationId
     : null;
   const signedPrekey = parsePrekey(data.signedPrekey, true);
+  const kyberPrekey = parsePrekey(data.kyberPrekey, true);
   const rawOneTime = data.oneTimePrekeys;
-  if (!deviceId || !identityKey || !signingKey || registrationId === null || !signedPrekey || !Array.isArray(rawOneTime) || rawOneTime.length > MAX_PREKEYS_PER_UPLOAD) {
+  if (!deviceId || !identityKey || !signingKey || registrationId === null || !signedPrekey || !kyberPrekey || !Array.isArray(rawOneTime) || rawOneTime.length > MAX_PREKEYS_PER_UPLOAD) {
     return jsonError(422, "Invalid Signal device registration.");
   }
   const oneTimePrekeys = rawOneTime.map((key) => parsePrekey(key, false));
@@ -71,6 +72,8 @@ export async function POST(req: NextRequest) {
     }
     await tx.insert(e2eeSignalPrekeys).values({ userId: user.id, deviceId, keyId: signedPrekey.keyId, kind: "signed", publicKey: signedPrekey.publicKey, signature: signedPrekey.signature! })
       .onConflictDoUpdate({ target: [e2eeSignalPrekeys.userId, e2eeSignalPrekeys.deviceId, e2eeSignalPrekeys.kind, e2eeSignalPrekeys.keyId], set: { publicKey: signedPrekey.publicKey, signature: signedPrekey.signature!, createdAt: new Date(), expiresAt: null } });
+    await tx.insert(e2eeSignalPrekeys).values({ userId: user.id, deviceId, keyId: kyberPrekey.keyId, kind: "kyber", publicKey: kyberPrekey.publicKey, signature: kyberPrekey.signature! })
+      .onConflictDoUpdate({ target: [e2eeSignalPrekeys.userId, e2eeSignalPrekeys.deviceId, e2eeSignalPrekeys.kind, e2eeSignalPrekeys.keyId], set: { publicKey: kyberPrekey.publicKey, signature: kyberPrekey.signature!, createdAt: new Date(), expiresAt: null } });
     if (oneTimePrekeys.length) await tx.insert(e2eeSignalPrekeys).values(oneTimePrekeys.map((key) => ({ userId: user.id, deviceId, keyId: key!.keyId, kind: "one_time", publicKey: key!.publicKey }))).onConflictDoNothing();
     return "ok" as const;
   });

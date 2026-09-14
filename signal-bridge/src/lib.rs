@@ -38,9 +38,11 @@ struct DeviceRegistrationBundle {
     // duplicated for the existing public-directory shape, never secret data.
     signing_key: Vec<u8>,
     signed_prekey: PublicPrekey,
+    kyber_prekey: PublicPrekey,
     one_time_prekeys: Vec<PublicPrekey>,
     private_identity: Vec<u8>,
     private_signed_prekey: PrivatePrekey,
+    private_kyber_prekey: PrivatePrekey,
     private_one_time_prekeys: Vec<PrivatePrekey>,
 }
 
@@ -79,6 +81,11 @@ pub fn generate_device_registration(one_time_count: u32) -> Result<JsValue, JsVa
     let signature = identity.private_key().calculate_signature(&signed_public, &mut csprng)
         .map_err(|error| JsValue::from_str(&format!("signed prekey failed: {error}")))?;
     let signed_id = csprng.random::<u32>();
+    let kyber = libsignal_protocol::kem::KeyPair::generate(libsignal_protocol::kem::KeyType::Kyber1024, &mut csprng);
+    let kyber_public = kyber.public_key.serialize();
+    let kyber_signature = identity.private_key().calculate_signature(&kyber_public, &mut csprng)
+        .map_err(|error| JsValue::from_str(&format!("Kyber prekey failed: {error}")))?;
+    let kyber_id = csprng.random::<u32>();
     let mut public_one_time = Vec::with_capacity(one_time_count as usize);
     let mut private_one_time = Vec::with_capacity(one_time_count as usize);
     for _ in 0..one_time_count {
@@ -92,9 +99,11 @@ pub fn generate_device_registration(one_time_count: u32) -> Result<JsValue, JsVa
         registration_id: csprng.random::<u32>() & 0x3fff,
         identity_key: identity_public.clone(), signing_key: identity_public,
         signed_prekey: PublicPrekey { key_id: signed_id, public_key: signed_public.to_vec(), signature: Some(signature.to_vec()) },
+        kyber_prekey: PublicPrekey { key_id: kyber_id, public_key: kyber_public.to_vec(), signature: Some(kyber_signature.to_vec()) },
         one_time_prekeys: public_one_time,
         private_identity: identity.serialize().into_vec(),
         private_signed_prekey: PrivatePrekey { key_id: signed_id, private_key: signed.private_key.serialize() },
+        private_kyber_prekey: PrivatePrekey { key_id: kyber_id, private_key: kyber.secret_key.serialize().to_vec() },
         private_one_time_prekeys: private_one_time,
     };
     serde_wasm_bindgen::to_value(&bundle).map_err(|error| JsValue::from_str(&format!("registration serialization failed: {error}")))
