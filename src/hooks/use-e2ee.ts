@@ -496,25 +496,49 @@ export function useE2EE(userId: string | undefined) {
       // but having no *other* device must not disable E2EE for the whole chat.
       let ready = Boolean(userId && state.publicKey) &&
         peers.every((p) => p.userId === userId || p.devices.length > 0);
-      const peerSignature = ready
+      const targets = ready
         ? [
             { userId: userId!, deviceId: state.deviceId, publicKey: state.publicKey! },
             ...peers.flatMap((peer) => peer.devices.map((device) => ({
               userId: peer.userId, deviceId: device.deviceId, publicKey: device.publicKey,
             }))),
-          ].map((target) => `${target.userId}:${target.deviceId}:${target.publicKey}`).sort().join("|")
-        : "";
+          ]
+        : [];
+      const peerSignature = targets
+        .map((target) => `${target.userId}:${target.deviceId}:${target.publicKey}`)
+        .sort()
+        .join("|");
+      // An account's own newly authenticated device is a normal multi-device
+      // event: it must receive the owner's existing conversation key so it can
+      // show the same history. Only changes to another participant's devices
+      // need an out-of-band safety-number approval.
+      const trustSignature = targets
+        .filter((target) => target.userId !== userId)
+        .map((target) => `${target.userId}:${target.deviceId}:${target.publicKey}`)
+        .sort()
+        .join("|");
       // Trust-on-first-use: the first observed device set is pinned locally.
       // A later replacement/addition blocks new encryption until the user has
       // compared the conversation fingerprint and explicitly approved it.
       const trustKey = `e2ee_trust_${userId}_${conversationId}`;
       const trusted = typeof localStorage === "undefined" ? null : localStorage.getItem(trustKey);
-      if (ready && trusted && trusted !== peerSignature) {
-        pendingTrustRef.current.set(conversationId, peerSignature);
+      // Previous clients stored the full device set (including this user's
+      // own devices). Preserve that trust decision and migrate it in place so
+      // an app upgrade does not spuriously block every established chat.
+      const legacyPeerSignature = trusted
+        ?.split("|")
+        .filter((entry) => !entry.startsWith(`${userId}:`))
+        .sort()
+        .join("|");
+      if (ready && trusted && legacyPeerSignature === trustSignature && trusted !== trustSignature && typeof localStorage !== "undefined") {
+        localStorage.setItem(trustKey, trustSignature);
+      }
+      if (ready && trusted && trusted !== trustSignature && legacyPeerSignature !== trustSignature) {
+        pendingTrustRef.current.set(conversationId, trustSignature);
         return { ready: false, fingerprint: null, trustChanged: true };
       }
       if (ready && !trusted && typeof localStorage !== "undefined") {
-        localStorage.setItem(trustKey, peerSignature);
+        localStorage.setItem(trustKey, trustSignature);
       }
       const prepared = preparedConversationsRef.current.get(conversationId);
       if (ready && prepared?.peerSignature === peerSignature) {
@@ -523,12 +547,6 @@ export function useE2EE(userId: string | undefined) {
       if (ready) {
         // Include a self-wrapped recovery copy and publish all independent
         // recipient-device shares with bounded concurrency.
-        const targets = [
-          { userId: userId!, deviceId: state.deviceId, publicKey: state.publicKey! },
-          ...peers.flatMap((peer) => peer.devices.map((device) => ({
-            userId: peer.userId, deviceId: device.deviceId, publicKey: device.publicKey,
-          }))),
-        ];
         const shared = await mapWithConcurrency(targets, 3, async (target) => {
           try {
             return await shareKey(conversationId, target.userId, target.deviceId, target.publicKey, key);
@@ -567,6 +585,84 @@ export function useE2EE(userId: string | undefined) {
     preparedConversationsRef.current.delete(conversationId);
     return true;
   }, [userId]);
+
+  /**
+   * Re-publish this device's current conversation keys whenever an account
+   * gains another signed-in device. This is the missing multi-device handoff:
+   * the server only stores wrapped keys and therefore cannot manufacture a
+   * copy for a new Android device by itself. An already-authorized device
+   * must wrap its key to the new device's public key.
+   */
+  const syncKnownConversations = useCallback(async () => {
+    if (!state.initialized || typeof window === "undefined") return;
+    try {
+      const response = await fetch("/api/conversations", { cache: "no-store" });
+      if (!response.ok) return;
+      const data = await response.json() as { conversations?: Array<{ id?: string }> };
+      const ids = (data.conversations ?? [])
+        .map((conversation) => conversation.id)
+        .filter((id): id is string => Boolean(id))
+        .slice(0, 50);
+      await mapWithConcurrency(ids, 2, async (conversationId) => {
+        await prepareConversation(conversationId);
+
+        // Backfill every key this device can already decrypt to the owner's
+        // other registered devices. A conversation can have historical keys
+        // from either participant, so re-sharing only the current sending key
+        // leaves a newly linked phone with locked message bubbles.
+        const peersResponse = await fetch(
+          `/api/e2ee/peers?conversationId=${encodeURIComponent(conversationId)}&deviceId=${encodeURIComponent(state.deviceId)}`,
+          { cache: "no-store" },
+        );
+        if (!peersResponse.ok || !userId || !state.publicKey) return;
+        const peerData = await peersResponse.json() as { peers?: Peer[] };
+        const ownDevices = (peerData.peers ?? [])
+          .filter((peer) => peer.userId === userId)
+          .flatMap((peer) => peer.devices);
+        if (ownDevices.length === 0) return;
+
+        const available = await loadDecryptionKeys(conversationId);
+        const current = conversationKeysRef.current.get(conversationId);
+        const ordered = current ? [...available, current] : available;
+        const unique = new Map<string, CryptoKey>();
+        for (const key of ordered) {
+          try { unique.set(await conversationFingerprint(key), key); } catch { /* Ignore an unusable local key. */ }
+        }
+        const currentFingerprint = current ? await conversationFingerprint(current).catch(() => null) : null;
+        const keyEntries = [...unique.entries()];
+        // Write the current key last so it remains the active server copy;
+        // older keys are retained by the API as device-specific history.
+        const keys = [
+          ...keyEntries.filter(([fingerprint]) => fingerprint !== currentFingerprint),
+          ...keyEntries.filter(([fingerprint]) => fingerprint === currentFingerprint),
+        ].map(([, key]) => key);
+        await mapWithConcurrency(ownDevices.flatMap((device) =>
+          keys.map((key) => ({ device, key })),
+        ), 2, async ({ device, key }) => {
+          await shareKey(conversationId, userId, device.deviceId, device.publicKey, key);
+        });
+      });
+    } catch {
+      // A later focus/interval retry will resume key distribution after a
+      // transient network failure without affecting message delivery.
+    }
+  }, [loadDecryptionKeys, prepareConversation, shareKey, state.deviceId, state.initialized, state.publicKey, userId]);
+
+  useEffect(() => {
+    if (!state.initialized) return;
+    void syncKnownConversations();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void syncKnownConversations();
+    };
+    const interval = window.setInterval(syncKnownConversations, 60_000);
+    window.addEventListener("focus", onVisible);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", onVisible);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [state.initialized, syncKnownConversations]);
 
   /** Encrypt arbitrary bytes (media) with the conversation key. */
   const encryptBytesForConversation = useCallback(
@@ -610,6 +706,7 @@ export function useE2EE(userId: string | undefined) {
     shareKey,
     getConversationKey,
     prepareConversation,
+    syncKnownConversations,
     approvePeerKeyChange,
     encryptBytesForConversation,
     decryptBytesForConversation,

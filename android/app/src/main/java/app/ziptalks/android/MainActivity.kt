@@ -7,6 +7,7 @@ import android.provider.OpenableColumns
 import android.os.Bundle
 import android.app.Activity
 import android.graphics.Color as AndroidColor
+import androidx.core.view.WindowCompat
 import android.webkit.CookieManager
 import android.webkit.WebChromeClient
 import android.webkit.WebSettings
@@ -159,6 +160,16 @@ class MainActivity : ComponentActivity() {
         // producing the extra title bar and unreadable page text.
         installSplashScreen()
         super.onCreate(savedInstanceState)
+        // This hosted UI starts below the Android system bars. Keeping the
+        // WebView out of edge-to-edge mode prevents the status bar from
+        // overlaying Circlo's header on Android 15 and emulator devices.
+        WindowCompat.setDecorFitsSystemWindows(window, true)
+        window.statusBarColor = AndroidColor.WHITE
+        window.navigationBarColor = AndroidColor.WHITE
+        WindowCompat.getInsetsController(window, window.decorView).apply {
+            isAppearanceLightStatusBars = true
+            isAppearanceLightNavigationBars = true
+        }
         WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG)
         CookieManager.getInstance().setAcceptCookie(true)
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
@@ -179,7 +190,7 @@ class MainActivity : ComponentActivity() {
     override fun onDestroy() { webView?.destroy(); webView = null; super.onDestroy() }
 
     private fun createHostedWebView(): WebView = WebView(this).apply {
-        setBackgroundColor(AndroidColor.rgb(11, 18, 17))
+        setBackgroundColor(AndroidColor.WHITE)
         settings.javaScriptEnabled = true
         settings.domStorageEnabled = true
         @Suppress("DEPRECATION")
