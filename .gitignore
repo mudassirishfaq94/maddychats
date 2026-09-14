@@ -61,6 +61,7 @@ next-env.d.ts
 # Rust/WebAssembly build output (reproducible from signal-bridge/)
 /signal-bridge/target/
 /signal-bridge/pkg/
+/signal-bridge/public/
 
 # Type declarations emitted beside the deployable Signal WebAssembly assets.
 /public/signal/*.d.ts
