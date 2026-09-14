@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { e2eeSignalDevices, e2eeSignalPrekeys } from "@/db/schema";
 import { guardSameOrigin, jsonError, readJson } from "@/server/http";
@@ -11,6 +11,25 @@ const MAX_PREKEYS_PER_UPLOAD = 100;
 const MAX_PUBLIC_KEY_LENGTH = 8_192;
 
 type PublicPrekey = { keyId: number; publicKey: string; signature?: string };
+
+/** Inventory used by the client to proactively refill one-time prekeys. */
+export async function GET(req: NextRequest) {
+  const blocked = guardSameOrigin(req);
+  if (blocked) return blocked;
+  const user = await getSessionUser();
+  if (!user) return jsonError(401, "Not authenticated.");
+  const devices = await db.select({
+    deviceId: e2eeSignalDevices.deviceId,
+    registrationId: e2eeSignalDevices.registrationId,
+    createdAt: e2eeSignalDevices.createdAt,
+    lastSeenAt: e2eeSignalDevices.lastSeenAt,
+    oneTimePrekeys: sql<number>`count(${e2eeSignalPrekeys.id}) filter (where ${e2eeSignalPrekeys.kind} = 'one_time' and ${e2eeSignalPrekeys.consumedAt} is null)`,
+  }).from(e2eeSignalDevices)
+    .leftJoin(e2eeSignalPrekeys, and(eq(e2eeSignalPrekeys.userId, e2eeSignalDevices.userId), eq(e2eeSignalPrekeys.deviceId, e2eeSignalDevices.deviceId)))
+    .where(and(eq(e2eeSignalDevices.userId, user.id), isNull(e2eeSignalDevices.revokedAt)))
+    .groupBy(e2eeSignalDevices.id);
+  return NextResponse.json({ devices });
+}
 
 function publicValue(value: unknown): string | null {
   if (typeof value !== "string" || value.length < 16 || value.length > MAX_PUBLIC_KEY_LENGTH) return null;
