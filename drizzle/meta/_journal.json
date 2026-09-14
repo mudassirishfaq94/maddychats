@@ -183,6 +183,13 @@
       "when": 1789344000000,
       "tag": "0025_email_verification",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1789440000000,
+      "tag": "0026_signal_device_prekeys",
+      "breakpoints": true
     }
   ]
 }

@@ -1204,6 +1204,51 @@ export const e2eeKeys = pgTable(
   ],
 );
 
+/** Public Signal-protocol identity directory. Private identity keys and
+ * ratchet state are deliberately local-only and must never be represented in
+ * this schema. */
+export const e2eeSignalDevices = pgTable(
+  "e2ee_signal_devices",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+    deviceId: text("device_id").notNull(),
+    protocolVersion: integer("protocol_version").default(2).notNull(),
+    registrationId: integer("registration_id").notNull(),
+    identityKey: text("identity_key").notNull(),
+    signingKey: text("signing_key").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true, mode: "date" }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true, mode: "date" }),
+  },
+  (table) => [
+    unique("e2ee_signal_devices_user_device_unique").on(table.userId, table.deviceId),
+    index("e2ee_signal_devices_active_idx").on(table.userId, table.revokedAt),
+  ],
+);
+
+/** Signed and one-time public prekeys. A transaction will mark one-time keys
+ * consumed when it hands a bundle to a sender. */
+export const e2eeSignalPrekeys = pgTable(
+  "e2ee_signal_prekeys",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+    deviceId: text("device_id").notNull(),
+    keyId: integer("key_id").notNull(),
+    kind: text("kind").notNull(),
+    publicKey: text("public_key").notNull(),
+    signature: text("signature"),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true, mode: "date" }),
+    consumedAt: timestamp("consumed_at", { withTimezone: true, mode: "date" }),
+  },
+  (table) => [
+    unique("e2ee_signal_prekeys_device_key_unique").on(table.userId, table.deviceId, table.keyId),
+    index("e2ee_signal_prekeys_available_idx").on(table.userId, table.deviceId, table.kind, table.consumedAt, table.expiresAt),
+  ],
+);
+
 export const e2eeConversationKeys = pgTable(
   "e2ee_conversation_keys",
   {
