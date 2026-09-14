@@ -1249,6 +1249,26 @@ export const e2eeSignalPrekeys = pgTable(
   ],
 );
 
+/** Opaque Signal ciphertext for exactly one recipient device. */
+export const e2eeSignalEnvelopes = pgTable(
+  "e2ee_signal_envelopes",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    messageId: uuid("message_id").references(() => messages.id, { onDelete: "cascade" }).notNull(),
+    senderDeviceId: text("sender_device_id").notNull(),
+    recipientUserId: uuid("recipient_user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+    recipientDeviceId: text("recipient_device_id").notNull(),
+    protocolVersion: integer("protocol_version").default(2).notNull(),
+    ciphertext: text("ciphertext").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+    deliveredAt: timestamp("delivered_at", { withTimezone: true, mode: "date" }),
+  },
+  (table) => [
+    unique("e2ee_signal_envelopes_recipient_unique").on(table.messageId, table.recipientDeviceId),
+    index("e2ee_signal_envelopes_mailbox_idx").on(table.recipientUserId, table.recipientDeviceId, table.deliveredAt, table.createdAt),
+  ],
+);
+
 export const e2eeConversationKeys = pgTable(
   "e2ee_conversation_keys",
   {
