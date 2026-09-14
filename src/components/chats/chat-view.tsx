@@ -1379,7 +1379,10 @@ export function ChatView({
     const ta = composerRef.current;
     if (!ta) return;
     ta.style.height = "auto";
-    ta.style.height = `${Math.min(ta.scrollHeight, 140)}px`;
+    // Keep the mobile composer intentionally compact. Longer drafts remain
+    // fully editable inside the textarea instead of pushing the chat and its
+    // controls away from the keyboard.
+    ta.style.height = `${Math.min(ta.scrollHeight, 96)}px`;
   }
 
   function onComposerKey(e: ReactKeyboardEvent<HTMLTextAreaElement>) {
@@ -2339,7 +2342,7 @@ export function ChatView({
             )}
           </div>
         ) : (
-          <div className="flex items-end gap-2">
+          <div className="flex items-center gap-2 sm:items-end">
             <AttachButton
               onFiles={(files) => attachments.addFiles(files)}
               disabled={sendPending || !requestAccepted}
@@ -2387,7 +2390,7 @@ export function ChatView({
                 aria-label="Message text"
                 rows={1}
                 maxLength={2000}
-                className="chat-composer w-full resize-none border-0 bg-transparent py-2.5 text-[0.93rem] outline-none placeholder:text-[color-mix(in_srgb,var(--muted)_60%,transparent)]"
+                className="chat-composer max-h-24 w-full resize-none overflow-y-auto border-0 bg-transparent py-2.5 text-[0.93rem] leading-5 outline-none placeholder:text-[color-mix(in_srgb,var(--muted)_60%,transparent)]"
               />
             </div>
             {draft.trim() || attachments.pending.length > 0 ? (
