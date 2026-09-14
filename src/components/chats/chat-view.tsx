@@ -396,7 +396,10 @@ export function ChatView({
         ? "Encryption is still initializing. Please try again in a moment."
         : e2ee.error ?? "Encryption is unavailable on this device.");
     }
-    const prepared = await e2ee.prepareConversation(conversationId);
+    // Re-publish the active key immediately before each encrypted mutation.
+    // This closes the new-device/bootstrap race where a recipient registers
+    // just after the chat was first opened.
+    const prepared = await e2ee.prepareConversation(conversationId, { forceReshare: true });
     setE2eeState((previous) => ({
       ...previous,
       ready: prepared.ready,

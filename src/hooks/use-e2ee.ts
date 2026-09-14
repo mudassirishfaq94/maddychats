@@ -477,7 +477,7 @@ export function useE2EE(userId: string | undefined) {
    * caller must wait or fail closed; plaintext fallback is not permitted.
    */
   const prepareConversation = useCallback(
-    async (conversationId: string): Promise<{ ready: boolean; fingerprint: string | null; trustChanged?: boolean }> => {
+    async (conversationId: string, { forceReshare = false }: { forceReshare?: boolean } = {}): Promise<{ ready: boolean; fingerprint: string | null; trustChanged?: boolean }> => {
       // waitForPeer=true so we retry if the other side is mid-share
       const { key } = await getConversationKey(conversationId, { waitForPeer: true });
       let peers: Peer[] = [];
@@ -541,7 +541,7 @@ export function useE2EE(userId: string | undefined) {
         localStorage.setItem(trustKey, trustSignature);
       }
       const prepared = preparedConversationsRef.current.get(conversationId);
-      if (ready && prepared?.peerSignature === peerSignature) {
+      if (ready && !forceReshare && prepared?.peerSignature === peerSignature) {
         return { ready: true, fingerprint: prepared.fingerprint };
       }
       if (ready) {
