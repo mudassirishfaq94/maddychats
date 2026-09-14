@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import { e2eeSignalDevices, e2eeSignalPrekeys } from "@/db/schema";
 import { guardSameOrigin, jsonError, readJson } from "@/server/http";
@@ -79,4 +79,23 @@ export async function POST(req: NextRequest) {
   });
   if (result === "identity_changed") return jsonError(409, "A different Signal identity is already registered for this device.");
   return NextResponse.json({ success: true, acceptedOneTimePrekeys: oneTimePrekeys.length });
+}
+
+/** Revoke a lost or untrusted device without deleting its historical records. */
+export async function DELETE(req: NextRequest) {
+  const blocked = guardSameOrigin(req);
+  if (blocked) return blocked;
+  const user = await getSessionUser();
+  if (!user) return jsonError(401, "Not authenticated.");
+  const deviceId = req.nextUrl.searchParams.get("deviceId");
+  if (!deviceId || deviceId.length > 256) return jsonError(422, "deviceId is required.");
+  const active = await db.select({ id: e2eeSignalDevices.id, deviceId: e2eeSignalDevices.deviceId }).from(e2eeSignalDevices).where(and(
+    eq(e2eeSignalDevices.userId, user.id), isNull(e2eeSignalDevices.revokedAt),
+  ));
+  if (!active.some((device) => device.deviceId === deviceId)) return jsonError(404, "Signal device not found.");
+  if (active.length <= 1) return jsonError(409, "Register another Signal device before revoking the last active device.");
+  await db.update(e2eeSignalDevices).set({ revokedAt: new Date() }).where(and(
+    eq(e2eeSignalDevices.userId, user.id), eq(e2eeSignalDevices.deviceId, deviceId), isNull(e2eeSignalDevices.revokedAt),
+  ));
+  return NextResponse.json({ success: true });
 }
