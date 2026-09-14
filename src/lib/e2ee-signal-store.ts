@@ -69,11 +69,26 @@ export class SignalLocalStore {
   }
 
   async saveBytes(namespace: string, userId: string, deviceId: string, bytes: Uint8Array): Promise<void> {
+    await this.saveMany([{ namespace, userId, deviceId, bytes }]);
+  }
+
+  /** Commit related ratchet records in one IndexedDB transaction. */
+  async saveMany(records: Array<{ namespace: string; userId: string; deviceId: string; bytes: Uint8Array }>): Promise<void> {
+    if (records.length === 0) return;
     const key = await masterKey(this.db);
-    const iv = crypto.getRandomValues(new Uint8Array(12));
-    const plaintext = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
-    const ciphertext = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, plaintext);
-    await writeRecord(this.db, { id: recordId(namespace, userId, deviceId), value: { iv: iv.buffer, ciphertext } });
+    const encrypted = await Promise.all(records.map(async ({ namespace, userId, deviceId, bytes }) => {
+      const iv = crypto.getRandomValues(new Uint8Array(12));
+      const plaintext = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+      const ciphertext = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, plaintext);
+      return { id: recordId(namespace, userId, deviceId), value: { iv: iv.buffer, ciphertext } } satisfies StoredRecord;
+    }));
+    const transaction = this.db.transaction(STORE, "readwrite");
+    for (const record of encrypted) transaction.objectStore(STORE).put(record);
+    await new Promise<void>((resolve, reject) => {
+      transaction.oncomplete = () => resolve();
+      transaction.onabort = () => reject(transaction.error ?? new Error("signal_store_write_aborted"));
+      transaction.onerror = () => reject(transaction.error ?? new Error("signal_store_write_failed"));
+    });
   }
 
   async loadBytes(namespace: string, userId: string, deviceId: string): Promise<Uint8Array | null> {

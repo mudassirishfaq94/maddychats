@@ -41,5 +41,24 @@ export class SignalSessionState {
     return this.store.saveBytes(PREKEY_NAMESPACE, this.userId, this.deviceId, serializedRecords);
   }
 
+  /**
+   * Ratchet transitions may consume a prekey and advance a session together.
+   * Persist both encrypted records atomically before a mailbox ACK is sent.
+   */
+  async commitInbound(
+    remoteUserId: string,
+    remoteDeviceId: string,
+    serializedSession: Uint8Array,
+    serializedPrekeys: Uint8Array,
+  ): Promise<void> {
+    if (serializedSession.byteLength === 0 || serializedPrekeys.byteLength === 0) {
+      throw new Error("signal_state_empty_serialization");
+    }
+    await this.store.saveMany([
+      { namespace: `${SESSION_NAMESPACE}:${signalSessionAddress(remoteUserId, remoteDeviceId)}`, userId: this.userId, deviceId: this.deviceId, bytes: serializedSession },
+      { namespace: PREKEY_NAMESPACE, userId: this.userId, deviceId: this.deviceId, bytes: serializedPrekeys },
+    ]);
+  }
+
   close(): void { this.store.close(); }
 }
