@@ -930,6 +930,7 @@ dependencies = [
  "rand 0.9.5",
  "serde",
  "serde-wasm-bindgen",
+ "serde_json",
  "wasm-bindgen",
 ]
 

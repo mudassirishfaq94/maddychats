@@ -7,6 +7,7 @@ type Prekey = { keyId: number; publicKey: ByteValue; signature?: ByteValue };
 /** Minimal, transport-free surface exported by the Signal WASM bridge. */
 export interface SignalRegistrationBridge {
   generate_device_registration(oneTimeCount: number): Promise<unknown> | unknown;
+  generate_one_time_prekeys?(count: number): Promise<unknown> | unknown;
 }
 
 type Registration = {
@@ -83,4 +84,24 @@ export async function ensureSignalDeviceRegistered(
   } finally {
     store.close();
   }
+}
+
+/** Append replacement one-time prekeys without ever rotating device identity. */
+export async function refillSignalOneTimePrekeys(
+  userId: string, deviceId: string, bridge: SignalRegistrationBridge, count = 100,
+): Promise<void> {
+  if (!bridge.generate_one_time_prekeys) throw new Error("signal_bridge_prekey_refill_unavailable");
+  const store = await SignalLocalStore.open();
+  try {
+    const saved = await store.loadBytes(NAMESPACE, userId, deviceId);
+    if (!saved) throw new Error("signal_local_registration_missing");
+    const registration: unknown = JSON.parse(decoder.decode(saved));
+    if (!isRegistration(registration)) throw new Error("signal_local_registration_invalid");
+    const generated = await bridge.generate_one_time_prekeys(count) as { oneTimePrekeys?: Prekey[]; privateOneTimePrekeys?: Array<{ keyId: number; privateKey: ByteValue }> };
+    if (!Array.isArray(generated.oneTimePrekeys) || !Array.isArray(generated.privateOneTimePrekeys)) throw new Error("signal_bridge_prekey_refill_invalid");
+    registration.oneTimePrekeys.push(...generated.oneTimePrekeys);
+    registration.privateOneTimePrekeys.push(...generated.privateOneTimePrekeys);
+    await store.saveBytes(NAMESPACE, userId, deviceId, encoder.encode(JSON.stringify(registration)));
+    await publish(deviceId, registration);
+  } finally { store.close(); }
 }

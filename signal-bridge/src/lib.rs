@@ -109,6 +109,27 @@ pub fn generate_device_registration(one_time_count: u32) -> Result<JsValue, JsVa
     serde_wasm_bindgen::to_value(&bundle).map_err(|error| JsValue::from_str(&format!("registration serialization failed: {error}")))
 }
 
+/// Generate replacement one-time prekeys without replacing the device identity
+/// or signed/PQ prekeys. Their private halves must be appended to the local
+/// encrypted registration state before their public halves are uploaded.
+#[wasm_bindgen]
+pub fn generate_one_time_prekeys(count: u32) -> Result<JsValue, JsValue> {
+    if count == 0 || count > 100 { return Err(JsValue::from_str("invalid one-time prekey count")); }
+    let mut csprng = rng();
+    let mut public = Vec::with_capacity(count as usize);
+    let mut private = Vec::with_capacity(count as usize);
+    for _ in 0..count {
+        let key = KeyPair::generate(&mut csprng);
+        let key_id = csprng.random::<u32>();
+        public.push(PublicPrekey { key_id, public_key: key.public_key.serialize().to_vec(), signature: None });
+        private.push(PrivatePrekey { key_id, private_key: key.private_key.serialize() });
+    }
+    serde_wasm_bindgen::to_value(&serde_json::json!({
+        "oneTimePrekeys": public,
+        "privateOneTimePrekeys": private,
+    })).map_err(|error| JsValue::from_str(&format!("prekey serialization failed: {error}")))
+}
+
 #[cfg(test)]
 mod tests {
     use libsignal_protocol::{
