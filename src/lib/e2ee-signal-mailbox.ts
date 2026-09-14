@@ -3,6 +3,8 @@ import "client-only";
 export type SignalEnvelope = {
   id: string;
   messageId: string;
+  /** Authenticated account half of the sender's Signal ProtocolAddress. */
+  senderUserId: string;
   senderDeviceId: string;
   recipientDeviceId: string;
   protocolVersion: number;
