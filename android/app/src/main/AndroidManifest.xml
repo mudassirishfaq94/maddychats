@@ -86,14 +86,14 @@
                 android:resource="@xml/file_paths" />
         </provider>
 
-        <!-- Push notification receiver -->
-        <receiver
-            android:name="com.google.firebase.messaging.FirebaseMessagingService"
+        <!-- Push notification service -->
+        <service
+            android:name=".MyFirebaseMessagingService"
             android:exported="false">
             <intent-filter>
                 <action android:name="com.google.firebase.MESSAGING_EVENT" />
             </intent-filter>
-        </receiver>
+        </service>
 
     </application>
 </manifest>

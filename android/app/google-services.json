@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "363077018811",
+    "project_id": "ziptalks-5b402",
+    "storage_bucket": "ziptalks-5b402.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:363077018811:android:f82fe553b51e86685fb59e",
+        "android_client_info": {
+          "package_name": "app.ziptalks.android"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCpB39ZZ0wDqL8KhZexZn0d4bm_DbVrXiY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

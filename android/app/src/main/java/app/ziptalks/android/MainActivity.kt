@@ -7,6 +7,9 @@ import android.content.pm.PackageManager
 import android.Manifest
 import android.net.Uri
 import android.provider.OpenableColumns
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.os.Build
 import android.os.Bundle
 import android.app.Activity
 import android.graphics.Color as AndroidColor
@@ -198,6 +201,7 @@ class MainActivity : ComponentActivity() {
         // producing the extra title bar and unreadable page text.
         installSplashScreen()
         super.onCreate(savedInstanceState)
+        createNotificationChannel()
         // Draw edge-to-edge deliberately and apply the exact system-bar
         // insets to a native container. Theme-only fitting is ignored on
         // some Android 15 devices, which put the status bar over Circlo's
@@ -239,6 +243,23 @@ class MainActivity : ComponentActivity() {
             insets
         }
         setContentView(content)
+    }
+
+    private fun createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                "maddychats-messages",
+                "Messages",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "New message notifications"
+                enableVibration(true)
+                vibrationPattern = longArrayOf(100, 50, 100)
+                lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
+            }
+            val notificationManager = getSystemService(NotificationManager::class.java)
+            notificationManager?.createNotificationChannel(channel)
+        }
     }
 
     override fun onDestroy() { webView?.destroy(); webView = null; super.onDestroy() }
