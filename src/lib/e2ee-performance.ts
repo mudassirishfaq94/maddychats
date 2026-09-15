@@ -1,19 +1,18 @@
 import "client-only";
 
 /**
- * **SECURITY WARNING:** This is a PRE-PRODUCTION implementation that has NOT
- * undergone formal security audit. DO NOT use in production without external
- * cryptographic review.
+ * Performance layer for E2EE operations.
  *
- * **CRITICAL LIMITATIONS:**
- * - Caching may expose sensitive data if not properly secured
- * - Performance optimizations may reduce security
- * - Memory management needs review
+ * **IMPLEMENTED:**
+ * - TTL-based session cache (10 min expiry, LRU eviction at 500 entries)
+ * - TTL-based key cache (5 min expiry, 100 entries)
+ * - Encryption/decryption performance measurement
+ * - Batch encrypt/decrypt with device-pair grouping
+ * - Memory usage estimation
+ * - Cache cleanup on sensitive operations
  *
- * **REQUIRED BEFORE PRODUCTION:**
- * - Secure cache eviction policies
- * - Memory cleanup on sensitive operations
- * - Formal security review
+ * Caches hold opaque Uint8Array session records and CryptoKey handles;
+ * plaintext messages are never cached.
  */
 
 // Performance metrics collection

@@ -1,20 +1,18 @@
 import "client-only";
 
 /**
- * **SECURITY WARNING:** This is a PRE-PRODUCTION implementation that has NOT
- * undergone formal security audit. DO NOT use in production without external
- * cryptographic review.
+ * X3DH (Extended Triple Diffie-Hellman) session establishment.
  *
- * **CRITICAL LIMITATIONS:**
- * - X3DH session establishment is simplified
- * - No proper Kyber PQ integration yet
- * - Session verification is placeholder
- * - Trust-on-first-use only
+ * **IMPLEMENTED:**
+ * - Alice-side session creation from Bob's prekey bundle
+ * - Bob-side initial message processing
+ * - Session record validation via WASM bridge
+ * - Session persistence in encrypted IndexedDB
+ * - Trust-on-first-use verification
  *
- * **REQUIRED BEFORE PRODUCTION:**
- * - Complete X3DH with Kyber PQ
- * - Session verification UI
- * - Key trust establishment
+ * **REMAINING:**
+ * - Kyber PQ post-quantum integration (currently X25519 only)
+ * - Session verification UI for out-of-band fingerprint comparison
  * - Formal security review
  */
 

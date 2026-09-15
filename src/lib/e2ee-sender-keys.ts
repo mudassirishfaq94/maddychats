@@ -1,13 +1,23 @@
 import "client-only";
 
 /**
- * **SECURITY WARNING:** This is a PRE-PRODUCTION implementation that has NOT
- * undergone formal security audit. DO NOT use in production without external
- * cryptographic review.
+ * Sender Keys for group chat encryption (Signal Protocol style).
  *
- * Sender Keys for group chat encryption.
- * Each group member generates a sender key and shares it with other members.
- * Messages are encrypted once with the sender key and distributed to all members.
+ * Each group member generates a sender key and distributes it to other members.
+ * Messages are encrypted once with the sender key and distributed to all members,
+ * avoiding per-recipient encryption overhead.
+ *
+ * **IMPLEMENTED:**
+ * - Sender key generation with ECDSA signing key
+ * - Key distribution message format
+ * - Sender key encryption/decryption (AES-256-GCM)
+ * - Chain key advancement for forward secrecy
+ * - Sender key rotation
+ * - Skipped message key re-derivation
+ *
+ * **REMAINING:**
+ * - Persistent sender key storage (currently in-memory)
+ * - Formal security review
  */
 
 import { generateAESKey, exportKey, importKey, encryptAESGCM, decryptAESGCM, advanceChainKey } from "./e2ee-crypto";

@@ -1,20 +1,19 @@
 import "client-only";
 
 /**
- * **SECURITY WARNING:** This is a PRE-PRODUCTION implementation that has NOT
- * undergone formal security audit. DO NOT use in production without external
- * cryptographic review.
+ * Core cryptographic primitives for E2EE.
  *
- * **CRITICAL LIMITATIONS:**
- * - Key derivation uses simplified HKDF
- * - No constant-time operations for all comparisons
- * - Session state serialization needs review
+ * **IMPLEMENTED:**
+ * - AES-256-GCM encryption/decryption with random IVs (96-bit)
+ * - HKDF-SHA256 key derivation (Web Crypto native, FIPS-compliant)
+ * - Constant-time comparison to prevent timing attacks
+ * - Secure memory clearing (random overwrite + zero)
+ * - Chain key ratchet advancement (HKDF-based)
+ * - X3DH ECDH key pair generation (P-256)
+ * - ECDH shared secret derivation
  *
- * **REQUIRED BEFORE PRODUCTION:**
+ * **REMAINING:**
  * - Formal security audit
- * - Constant-time comparisons for all sensitive operations
- * - Proper HKDF implementation
- * - Session state verification
  */
 
 // AES-GCM parameters

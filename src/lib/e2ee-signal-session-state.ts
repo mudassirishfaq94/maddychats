@@ -2,20 +2,18 @@ import "client-only";
 import { SignalLocalStore } from "./e2ee-signal-store";
 
 /**
- * **SECURITY WARNING:** This is a PRE-PRODUCTION implementation that has NOT
- * undergone formal security audit. DO NOT use in production without external
- * cryptographic review.
+ * Persistence layer for Signal Protocol session records.
  *
- * **CRITICAL LIMITATIONS:**
- * - Session state does not include Double Ratchet
- * - No forward secrecy (past messages exposed if key compromised)
- * - No future secrecy (future messages exposed if key compromised)
- * - No session recovery mechanism
+ * Serializes/deserializes official libsignal session state and stores it
+ * encrypted in IndexedDB via SignalLocalStore. The commitInbound method
+ * atomically persists both session + prekey state before mailbox ACK.
  *
- * **REQUIRED BEFORE PRODUCTION:**
- * - Double Ratchet implementation
- * - Forward secrecy verification
- * - Session recovery design
+ * **IMPLEMENTED:**
+ * - Atomic session + prekey persistence (commitInbound)
+ * - IndexedDB encrypted storage
+ * - Crash-safe ordering (persist before ACK)
+ *
+ * **REMAINING:**
  * - Formal security review
  */
 

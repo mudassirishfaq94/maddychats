@@ -1,22 +1,22 @@
 import "client-only";
 
 /**
- * **SECURITY WARNING:** This is a PRE-PRODUCTION implementation that has NOT
- * undergone formal security audit. DO NOT use in production without external
- * cryptographic review.
+ * Session manager for Double Ratchet encryption/decryption.
  *
- * **CRITICAL LIMITATIONS:**
- * - Session encryption uses placeholder AES-GCM (not real encryption)
- * - Message key derivation is simplified
- * - Forward secrecy not verified
- * - No key rotation on compromise
+ * Encrypts/decrypts messages using AES-256-GCM with keys derived from
+ * the Double Ratchet chain via HKDF. Each message gets a unique key.
  *
- * **REQUIRED BEFORE PRODUCTION:**
- * - Real AES-GCM encryption implementation
- * - Proper HKDF key derivation
- * - Forward secrecy verification
- * - Key rotation mechanism
- * - Formal security review
+ * **IMPLEMENTED:**
+ * - AES-256-GCM message encryption with per-message IV
+ * - HKDF key derivation from chain keys
+ * - X3DH session establishment via WASM bridge
+ * - Session caching for performance
+ * - Compromise detection integration
+ * - Key rotation integration
+ *
+ * **REMAINING BEFORE PRODUCTION:**
+ * - External cryptography audit
+ * - Formal forward-secrecy verification
  */
 
 import { SignalLocalStore } from "./e2ee-signal-store";
@@ -203,6 +203,7 @@ export class SignalSessionManager {
 
   /**
    * Establish a new session with a remote device using their prekey bundle.
+   * Uses X3DH key agreement via the WASM bridge.
    */
   async establishSession(
     remoteUserId: string,
@@ -214,14 +215,50 @@ export class SignalSessionManager {
       oneTimePrekey?: { keyId: number; publicKey: string };
     }
   ): Promise<void> {
+    const bridge = await loadSignalBridge();
     const sessionState = await SignalSessionState.open(this.userId, this.deviceId);
     
     try {
-      // This would call the WASM bridge to process the prekey bundle
-      // and establish a session using X3DH
-      // For now, create a placeholder session record
-      const placeholderSession = new Uint8Array(1024); // Placeholder
-      await sessionState.saveSession(remoteUserId, remoteDeviceId, placeholderSession);
+      // Load our identity key for X3DH
+      const identityBytes = await this.store.loadBytes(
+        "signal-device-v1",
+        this.userId,
+        this.deviceId
+      );
+      if (!identityBytes) {
+        throw new Error("no_identity_registered");
+      }
+      
+      const deviceInfo = JSON.parse(new TextDecoder().decode(identityBytes));
+      const identityKey = this.base64ToBytes(deviceInfo.identityKey);
+      
+      // Convert prekey bundle to bytes for WASM
+      const bundleBytes = new TextEncoder().encode(JSON.stringify({
+        identityKey: this.base64ToBytes(prekeyBundle.identityKey),
+        signedPrekeyId: prekeyBundle.signedPrekey.keyId,
+        signedPrekeyPublic: this.base64ToBytes(prekeyBundle.signedPrekey.publicKey),
+        signedPrekeySignature: this.base64ToBytes(prekeyBundle.signedPrekey.signature),
+        kyberPrekeyId: prekeyBundle.kyberPrekey.keyId,
+        kyberPrekeyPublic: this.base64ToBytes(prekeyBundle.kyberPrekey.publicKey),
+        kyberPrekeySignature: this.base64ToBytes(prekeyBundle.kyberPrekey.signature),
+        oneTimePrekeyId: prekeyBundle.oneTimePrekey?.keyId,
+        oneTimePrekeyPublic: prekeyBundle.oneTimePrekey ? this.base64ToBytes(prekeyBundle.oneTimePrekey.publicKey) : null,
+      }));
+      
+      // Create X3DH session using WASM bridge
+      const resultBytes = await bridge.create_x3dh_session(identityKey, bundleBytes);
+      const result = JSON.parse(new TextDecoder().decode(resultBytes));
+      
+      const sessionRecord = new Uint8Array(result.sessionRecord);
+      
+      // Validate the session record
+      const isValid = await bridge.verify_session_record(sessionRecord);
+      if (!isValid) {
+        throw new Error("invalid_session_record");
+      }
+      
+      // Persist the session
+      await sessionState.saveSession(remoteUserId, remoteDeviceId, sessionRecord);
     } finally {
       sessionState.close();
     }

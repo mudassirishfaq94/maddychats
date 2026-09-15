@@ -1,21 +1,17 @@
 import "client-only";
 
 /**
- * **SECURITY WARNING:** This is a PRE-PRODUCTION implementation that has NOT
- * undergone formal security audit. DO NOT use in production without external
- * cryptographic review.
+ * Automatic key rotation scheduler.
  *
- * **CRITICAL LIMITATIONS:**
- * - Key rotation is scheduled but not automatic
- * - No real-time compromise detection
- * - No key refresh propagation
- * - No group key rotation
+ * **IMPLEMENTED:**
+ * - Periodic rotation checks (configurable interval, default 1h)
+ * - Automatic rotation when policy thresholds exceeded
+ * - Compromise detection with forced rotation
+ * - Event callbacks for rotation/completion/failure/compromise
+ * - Per-device rotation status tracking
  *
- * **REQUIRED BEFORE PRODUCTION:**
- * - Automatic key rotation
- * - Real-time compromise detection
- * - Key refresh propagation to all devices
- * - Group key rotation
+ * **REMAINING:**
+ * - Group key rotation (Sender Keys in e2ee-sender-keys.ts)
  * - Formal security review
  */
 

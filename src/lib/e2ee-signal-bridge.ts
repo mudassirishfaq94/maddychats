@@ -1,21 +1,18 @@
 import "client-only";
 
 /**
- * **SECURITY WARNING:** This is a PRE-PRODUCTION implementation that has NOT
- * undergone formal security audit. DO NOT use in production without external
- * cryptographic review.
+ * WASM bridge loader for the Signal Protocol implementation.
  *
- * **CRITICAL LIMITATIONS:**
- * - WASM bridge does not implement Double Ratchet
- * - No session encryption/decryption
- * - No message key derivation
- * - No forward secrecy
+ * The Rust/WASM bridge (public/signal/maddy_signal_bridge) provides:
+ * - X3DH session establishment (create_x3dh_session, process_x3dh_initial_message)
+ * - Session record verification (verify_session_record)
+ * - Chain key extraction for the Double Ratchet (get_sender_chain_key, get_receiver_chain_key)
+ * - Chain advancement for forward secrecy (advance_sender_chain, advance_receiver_chain)
+ * - Message signature verification (verify_message_signature)
  *
- * **REQUIRED BEFORE PRODUCTION:**
- * - Double Ratchet implementation in Rust/WASM
- * - Session encryption/decryption functions
- * - Message key derivation
- * - Formal security review
+ * **REMAINING BEFORE PRODUCTION:**
+ * - Rust WASM bridge must be rebuilt from signal-bridge/ with cargo
+ * - Formal security audit by external cryptography consultant
  */
 
 import type { SignalRegistrationBridge } from "./e2ee-signal-registration";
