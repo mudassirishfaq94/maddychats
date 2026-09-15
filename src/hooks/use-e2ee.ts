@@ -679,13 +679,30 @@ export function useE2EE(userId: string | undefined) {
     [getConversationKey],
   );
 
-  /** The wrapped file key uses the same recovery path as text messages. */
+  /** The wrapped file key uses the same recovery path as text messages.
+   *  Includes retry logic because media keys may arrive slightly after the
+   *  message itself (key sharing is async).
+   */
   const decryptMedia = useCallback(async (
     encryptedBytesB64: string, wrappedKeyB64: string, conversationId: string,
   ): Promise<ArrayBuffer> => {
     if (atob(encryptedBytesB64).length < 28) throw new Error("media_download_incomplete");
-    const mediaKey = await importSymmetricKey(await decrypt(wrappedKeyB64, conversationId));
-    return decryptBytes(encryptedBytesB64, mediaKey);
+    let lastError: unknown;
+    // Try up to 3 times with increasing delay — the key may still be in-flight.
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const mediaKey = await importSymmetricKey(await decrypt(wrappedKeyB64, conversationId));
+        return decryptBytes(encryptedBytesB64, mediaKey);
+      } catch (error) {
+        lastError = error;
+        if (attempt < 2) {
+          // Clear cached keys so the next attempt re-fetches from the server.
+          decryptionKeysRef.current.delete(conversationId);
+          await sleep(1500 + attempt * 1000);
+        }
+      }
+    }
+    throw lastError;
   }, [decrypt]);
 
   return {
