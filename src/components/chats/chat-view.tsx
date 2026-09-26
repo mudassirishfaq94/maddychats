@@ -324,7 +324,9 @@ export function ChatView({
       let hadFailure = false;
       pending.forEach((m) => decryptingRef.current.add(m.id));
       pendingReplies.forEach((m) => decryptingRepliesRef.current.add(m.replyTo!.id));
-      await Promise.all(pending.map(async (m) => {
+      // RSA/AES work is CPU-heavy. Keep history rendering responsive instead
+      // of starting a crypto operation for every message in a large page.
+      await mapWithConcurrency(pending, 4, async (m) => {
         try {
           const plain = await decrypt(m.text, conversationId);
           failedDecryptionRef.current.delete(m.id);
@@ -342,8 +344,8 @@ export function ChatView({
         } finally {
           decryptingRef.current.delete(m.id);
         }
-      }));
-      await Promise.all(pendingReplies.map(async (m) => {
+      });
+      await mapWithConcurrency(pendingReplies, 4, async (m) => {
         const reply = m.replyTo!;
         try {
           const plain = await decrypt(reply.text, conversationId);
@@ -353,7 +355,7 @@ export function ChatView({
         } finally {
           decryptingRepliesRef.current.delete(reply.id);
         }
-      }));
+      });
       if (!alive) return;
       // Retry failed decryptions after 10 seconds (a peer or the user's other
       // device may still be publishing the historical key).
@@ -2588,6 +2590,7 @@ export function ChatView({
           fingerprint={e2eeState.fingerprint}
           peersMissing={e2eeState.peersMissingKeys}
           conversationName={otherName}
+          onRestoreOtherDevices={() => e2ee.syncKnownConversations()}
           onClose={() => setShowEncryptionInfo(false)}
         />
       ) : null}
@@ -2604,6 +2607,7 @@ function EncryptionInfoDialog({
   error,
   peersMissing,
   conversationName,
+  onRestoreOtherDevices,
   onClose,
 }: {
   ready: boolean;
@@ -2612,9 +2616,11 @@ function EncryptionInfoDialog({
   error: string | null;
   peersMissing: number;
   conversationName: string;
+  onRestoreOtherDevices: () => Promise<void>;
   onClose: () => void;
 }) {
   const [copied, setCopied] = useState(false);
+  const [restoring, setRestoring] = useState(false);
   return (
     <div
       className="fixed inset-0 z-[90] flex items-center justify-center bg-black/50 p-4"
@@ -2718,6 +2724,23 @@ function EncryptionInfoDialog({
                   Keys rotate automatically every 7 days or 100 messages for forward secrecy.
                 </li>
               </ul>
+              <div className="mt-4 border-t border-[var(--border)] pt-4">
+                <p className="text-xs leading-relaxed text-[var(--muted)]">
+                  Missing older messages on a second device? Use this on the device that can already read them to securely share its existing keys with your other signed-in devices.
+                </p>
+                <button
+                  type="button"
+                  disabled={restoring}
+                  onClick={() => {
+                    setRestoring(true);
+                    void onRestoreOtherDevices().finally(() => setRestoring(false));
+                  }}
+                  className="mt-3 inline-flex min-h-10 items-center gap-2 rounded-xl border border-[var(--border)] px-3 text-xs font-semibold text-[var(--accent-fg)] transition-colors hover:bg-[var(--accent-soft)] disabled:cursor-wait disabled:opacity-60"
+                >
+                  {restoring ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="h-3.5 w-3.5" />}
+                  {restoring ? "Restoring devices…" : "Restore my other devices"}
+                </button>
+              </div>
             </>
           ) : (
             <div className="space-y-3">
