@@ -29,13 +29,13 @@ export function NativeAppBridge() {
         await Keyboard.setResizeMode({ mode: KeyboardResize.Body });
 
         const appUrlListener = await App.addListener("appUrlOpen", ({ url }) => {
-          // Deep links must stay in the app's WebView. Only accept ZipTalk's
+          // Deep links must stay in the app's WebView. Only accept Circlo's
           // own scheme/host, never route an arbitrary external URL in-app.
           try {
             const target = new URL(url);
-            const isZipTalkLink = target.protocol === "ziptalks:" ||
-              (target.protocol === "https:" && target.host === "ziptalks.vercel.app");
-            if (isZipTalkLink) {
+            const isCircloLink = target.protocol === "ziptalks:" ||
+              (target.protocol === "https:" && target.host === "maddychats.onrender.com");
+            if (isCircloLink) {
               // Custom-scheme URLs encode the first route segment as the
               // hostname (for example ziptalks://app/chats/123).
               const pathname = target.protocol === "ziptalks:"

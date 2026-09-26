@@ -2,7 +2,7 @@ import type { CapacitorConfig } from "@capacitor/cli";
 import { KeyboardResize, KeyboardStyle } from "@capacitor/keyboard";
 
 /**
- * ZipTalk Android — Capacitor wrapper.
+ * Circlo Android — Capacitor wrapper.
  *
  * The Android launcher owns the application window and native capabilities.
  * The hosted origin remains the backend and UI delivery origin because this
@@ -14,13 +14,13 @@ import { KeyboardResize, KeyboardStyle } from "@capacitor/keyboard";
  */
 const config: CapacitorConfig = {
   appId: "app.ziptalks.android",
-  appName: "ZipTalk",
+  appName: "Circlo",
   webDir: "out",
   server: {
     // This is intentionally an in-app Capacitor WebView, not a browser/TWA.
     // Keep navigation constrained to our first-party origin.
-    url: "https://ziptalks.vercel.app",
-    allowNavigation: ["ziptalks.vercel.app"],
+    url: "https://maddychats.onrender.com",
+    allowNavigation: ["maddychats.onrender.com"],
     // Cleartext for local dev (emulator / device on same network):
     // url: "http://10.0.2.2:3000",
     // allowNavigation: ["*"],

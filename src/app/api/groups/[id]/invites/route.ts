@@ -4,6 +4,7 @@ import { isUuid } from "@/server/users";
 import { getMembership } from "@/server/chat";
 import { createGroupInviteLink, listGroupInviteLinks, revokeGroupInviteLink } from "@/server/group-invites";
 import { guardSameOrigin, jsonError, readJson } from "@/server/http";
+import { clientUrl } from "@/server/config";
 
 export const dynamic = "force-dynamic";
 
@@ -54,8 +55,7 @@ export async function POST(
 
   const link = await createGroupInviteLink(id, user.id, { expiresInDays, maxUses });
 
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://maddychats.vercel.app";
-  const inviteUrl = `${baseUrl}/invite/${link.code}`;
+  const inviteUrl = `${clientUrl()}/invite/${link.code}`;
 
   return NextResponse.json({ link: { ...link, url: inviteUrl } }, { status: 201 });
 }

@@ -17,7 +17,7 @@ export function GoogleSignIn({ next = "/app" }: { next?: string }) {
       if (isNativeApp()) {
         e.preventDefault();
         // Open Google OAuth in the device browser (Chrome Custom Tab).
-        // After auth, Google redirects to ziptalks.vercel.app/api/auth/google/callback
+        // After auth, Google redirects to the configured Circlo callback.
         // which sets the session cookie. The user then returns to the app.
         window.open(href, "_blank");
       }

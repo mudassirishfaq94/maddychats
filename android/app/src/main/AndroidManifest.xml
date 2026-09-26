@@ -65,12 +65,12 @@
                 <data android:scheme="ziptalks" android:host="*" />
             </intent-filter>
 
-            <!-- App link: https://ziptalks.vercel.app -->
+            <!-- App link: https://maddychats.onrender.com -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="https" android:host="ziptalks.vercel.app" />
+                <data android:scheme="https" android:host="maddychats.onrender.com" />
             </intent-filter>
 
         </activity>

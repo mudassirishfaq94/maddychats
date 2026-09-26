@@ -1,7 +1,14 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 
-const databaseUrl = process.env.DATABASE_URL;
+// Route modules are evaluated by Next during `next build`, even when the
+// route itself is dynamic.  A build must not open a database connection, but
+// production runtime still must fail closed if the required configuration is
+// absent.
+const isProductionBuild = process.env.NEXT_PHASE === "phase-production-build";
+const databaseUrl = process.env.DATABASE_URL ?? (
+  isProductionBuild ? "postgresql://build:build@127.0.0.1:5432/build" : undefined
+);
 
 if (!databaseUrl) {
   throw new Error("DATABASE_URL is required");
