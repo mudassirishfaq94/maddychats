@@ -628,16 +628,21 @@ export function useE2EE(userId: string | undefined) {
    * copy for a new Android device by itself. An already-authorized device
    * must wrap its key to the new device's public key.
    */
-  const syncKnownConversations = useCallback(async () => {
+  const syncKnownConversations = useCallback(async (priorityConversationId?: string) => {
     if (!state.initialized || typeof window === "undefined") return;
     try {
       const response = await fetch("/api/conversations", { cache: "no-store" });
       if (!response.ok) return;
       const data = await response.json() as { conversations?: Array<{ id?: string }> };
-      const ids = (data.conversations ?? [])
+      const listedIds = (data.conversations ?? [])
         .map((conversation) => conversation.id)
         .filter((id): id is string => Boolean(id))
-        .slice(0, 50);
+      // A user-triggered recovery must repair the chat they are currently
+      // viewing, even when an account has more than one page of conversations.
+      const ids = [...new Set([
+        ...(priorityConversationId ? [priorityConversationId] : []),
+        ...listedIds,
+      ])].slice(0, 50);
       await mapWithConcurrency(ids, 2, async (conversationId) => {
         await prepareConversation(conversationId);
 

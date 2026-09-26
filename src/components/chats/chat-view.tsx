@@ -2590,7 +2590,7 @@ export function ChatView({
           fingerprint={e2eeState.fingerprint}
           peersMissing={e2eeState.peersMissingKeys}
           conversationName={otherName}
-          onRestoreOtherDevices={() => e2ee.syncKnownConversations()}
+          onRestoreOtherDevices={() => e2ee.syncKnownConversations(conversationId)}
           onClose={() => setShowEncryptionInfo(false)}
         />
       ) : null}
