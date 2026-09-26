@@ -40,14 +40,25 @@ async function handleGoogleCallback(req: NextRequest) {
   if (!clientId || !clientSecret) return redirectError("google_not_configured");
 
   const tokenResponse = await fetch("https://oauth2.googleapis.com/token", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ code, client_id: clientId, client_secret: clientSecret, redirect_uri: googleCallbackUrl(), grant_type: "authorization_code", code_verifier: verifier }) });
-  if (!tokenResponse.ok) return redirectError("google_failed");
+  if (!tokenResponse.ok) {
+    // Do not log the authorization code, verifier, client secret, or body.
+    // The status is sufficient to distinguish Google client/redirect issues
+    // from application database failures in production logs.
+    console.error("[auth/google] token exchange failed", { status: tokenResponse.status });
+    return redirectError("google_failed");
+  }
   const tokens = await tokenResponse.json() as { id_token?: string };
   if (!tokens.id_token) return redirectError("google_failed");
 
   let claims;
   try {
     ({ payload: claims } = await jwtVerify(tokens.id_token, googleKeys, { issuer: ["https://accounts.google.com", "accounts.google.com"], audience: clientId }));
-  } catch { return redirectError("google_failed"); }
+  } catch (error) {
+    console.error("[auth/google] ID token verification failed", {
+      message: error instanceof Error ? error.message : "unknown error",
+    });
+    return redirectError("google_failed");
+  }
   if (claims.nonce !== nonce || !claims.sub || typeof claims.email !== "string" || claims.email_verified !== true) return redirectError("google_unverified");
 
   if (linking) {
