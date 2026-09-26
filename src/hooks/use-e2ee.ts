@@ -465,6 +465,35 @@ export function useE2EE(userId: string | undefined) {
     } catch { return false; }
   }, [shareKey, rememberSendingKey, state.deviceId, state.publicKey, userId]);
 
+  /** Create the first conversation key once and wrap it for every current
+   * device. If another device won the bootstrap race, load its key instead. */
+  const bootstrapConversationKey = useCallback(async (
+    conversationId: string,
+    targets: Array<{ userId: string; deviceId: string; publicKey: string }>,
+  ): Promise<CryptoKey | null> => {
+    if (!userId || !state.deviceId) return null;
+    const candidate = await generateConversationKey();
+    const keyFingerprint = await conversationFingerprint(candidate);
+    const shares = await mapWithConcurrency(targets, 3, async (target) => ({
+      targetUserId: target.userId,
+      targetDeviceId: target.deviceId,
+      encryptedKey: await encryptKeyForUser(candidate, await importPublicKey(target.publicKey)),
+      keyFingerprint,
+    }));
+    const response = await fetch("/api/e2ee/bootstrap", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ conversationId, deviceId: state.deviceId, shares }),
+    });
+    if (!response.ok) return null;
+    const data = await response.json() as { created?: boolean };
+    if (!data.created) return fetchSharedKey(conversationId);
+    await rememberSendingKey(conversationId, candidate);
+    conversationKeysRef.current.set(conversationId, candidate);
+    decryptionKeysRef.current.set(conversationId, [candidate]);
+    return candidate;
+  }, [fetchSharedKey, rememberSendingKey, state.deviceId, userId]);
+
   /**
    * Prepare a conversation for E2EE: fetch-or-create its symmetric key, share
    * it to every device of every peer, and return the verification fingerprint.
@@ -474,13 +503,6 @@ export function useE2EE(userId: string | undefined) {
    */
   const prepareConversation = useCallback(
     async (conversationId: string, { forceReshare = false }: { forceReshare?: boolean } = {}): Promise<{ ready: boolean; fingerprint: string | null; trustChanged?: boolean }> => {
-      // We never manufacture a competing conversation key.
-      let key: CryptoKey;
-      try {
-        ({ key } = await getConversationKey(conversationId, { waitForPeer: true }));
-      } catch {
-        return { ready: false, fingerprint: null };
-      }
       let peers: Peer[] = [];
       try {
         const res = await fetch(`/api/e2ee/peers?conversationId=${encodeURIComponent(conversationId)}&deviceId=${encodeURIComponent(state.deviceId)}`);
@@ -505,6 +527,18 @@ export function useE2EE(userId: string | undefined) {
             }))),
           ]
         : [];
+      // A brand-new conversation has no key to fetch. Bootstrap it only once
+      // every participant device is registered; the server lock prevents two
+      // simultaneous first sends from establishing different keys.
+      let key: CryptoKey;
+      try {
+        ({ key } = await getConversationKey(conversationId, { waitForPeer: true }));
+      } catch {
+        if (!ready) return { ready: false, fingerprint: null };
+        const bootstrapped = await bootstrapConversationKey(conversationId, targets);
+        if (!bootstrapped) return { ready: false, fingerprint: null };
+        key = bootstrapped;
+      }
       const peerSignature = targets
         .map((target) => `${target.userId}:${target.deviceId}:${target.publicKey}`)
         .sort()
@@ -574,7 +608,7 @@ export function useE2EE(userId: string | undefined) {
       }
       return { ready, fingerprint };
     },
-    [getConversationKey, shareKey, state.deviceId, state.publicKey, userId],
+    [bootstrapConversationKey, getConversationKey, shareKey, state.deviceId, state.publicKey, userId],
   );
 
   /** Accept a detected device-set change only after out-of-band verification. */
