@@ -251,35 +251,20 @@ export function ChatView({
       }
       setE2eeState((prev) => ({ ...prev, ready: false, checking: true }));
       try {
-        const { ready, fingerprint, trustChanged } = await prepareConversation(conversationId);
+        const rotationPromise = fetch(`/api/e2ee/key-rotation/status?conversationId=${encodeURIComponent(conversationId)}&deviceId=${encodeURIComponent(e2ee.deviceId)}`)
+          .then(async (response) => response.ok ? await response.json() as { needsRotation?: boolean; keyVersion?: number } : null)
+          .catch(() => null);
+        const { ready, fingerprint, trustChanged, missingPeers = 0 } = await prepareConversation(conversationId);
         if (!alive) return;
-        let missing = 0;
-        try {
-          const res = await fetch(`/api/e2ee/peers?conversationId=${encodeURIComponent(conversationId)}&deviceId=${encodeURIComponent(e2ee.deviceId)}`);
-          if (res.ok) {
-            const data = (await res.json()) as { peers?: { userId: string; devices: unknown[] }[] };
-            missing = (data.peers ?? []).filter((p) => p.userId !== me.id && p.devices.length === 0).length;
-          }
-        } catch {
-          missing = 0;
-        }
         // Check if key rotation is needed
         let needsRotation = false;
         let keyVersion = 1;
-        try {
-          const rotRes = await fetch(`/api/e2ee/key-rotation/status?conversationId=${encodeURIComponent(conversationId)}&deviceId=${encodeURIComponent(e2ee.deviceId)}`);
-          if (rotRes.ok) {
-            const rotData = await rotRes.json();
-            needsRotation = rotData.needsRotation ?? false;
-            keyVersion = rotData.keyVersion ?? 1;
-
-          }
-        } catch {
-          // Rotation check is best-effort
-        }
+        const rotData = await rotationPromise;
+        needsRotation = rotData?.needsRotation ?? false;
+        keyVersion = rotData?.keyVersion ?? 1;
 
         if (!alive) return;
-        setE2eeState({ ready, fingerprint, checking: false, peersMissingKeys: missing, keyVersion, needsRotation, trustChanged: Boolean(trustChanged) });
+        setE2eeState({ ready, fingerprint, checking: false, peersMissingKeys: missingPeers, keyVersion, needsRotation, trustChanged: Boolean(trustChanged) });
       } catch {
         if (alive) {
           setE2eeState({ ready: false, fingerprint: null, checking: false, peersMissingKeys: 0, keyVersion: 1, needsRotation: false, trustChanged: false });

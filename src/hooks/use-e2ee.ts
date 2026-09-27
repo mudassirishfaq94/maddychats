@@ -502,7 +502,13 @@ export function useE2EE(userId: string | undefined) {
    * caller must wait or fail closed; plaintext fallback is not permitted.
    */
   const prepareConversation = useCallback(
-    async (conversationId: string, { forceReshare = false }: { forceReshare?: boolean } = {}): Promise<{ ready: boolean; fingerprint: string | null; trustChanged?: boolean }> => {
+    async (conversationId: string, { forceReshare = false }: { forceReshare?: boolean } = {}): Promise<{ ready: boolean; fingerprint: string | null; trustChanged?: boolean; missingPeers?: number }> => {
+      // Device discovery and this device's existing-key lookup are independent
+      // network operations. Starting both together removes one round trip from
+      // every chat open.
+      const existingKeyPromise = getConversationKey(conversationId, { waitForPeer: true })
+        .then(({ key }) => key)
+        .catch(() => null);
       let peers: Peer[] = [];
       try {
         const res = await fetch(`/api/e2ee/peers?conversationId=${encodeURIComponent(conversationId)}&deviceId=${encodeURIComponent(state.deviceId)}`);
@@ -519,6 +525,7 @@ export function useE2EE(userId: string | undefined) {
       // but having no *other* device must not disable E2EE for the whole chat.
       let ready = Boolean(userId && state.publicKey) &&
         peers.every((p) => p.userId === userId || p.devices.length > 0);
+      const missingPeers = peers.filter((peer) => peer.userId !== userId && peer.devices.length === 0).length;
       const targets = ready
         ? [
             { userId: userId!, deviceId: state.deviceId, publicKey: state.publicKey! },
@@ -531,9 +538,10 @@ export function useE2EE(userId: string | undefined) {
       // every participant device is registered; the server lock prevents two
       // simultaneous first sends from establishing different keys.
       let key: CryptoKey;
-      try {
-        ({ key } = await getConversationKey(conversationId, { waitForPeer: true }));
-      } catch {
+      const existingKey = await existingKeyPromise;
+      if (existingKey) {
+        key = existingKey;
+      } else {
         if (!ready) return { ready: false, fingerprint: null };
         const bootstrapped = await bootstrapConversationKey(conversationId, targets);
         if (!bootstrapped) return { ready: false, fingerprint: null };
@@ -583,7 +591,7 @@ export function useE2EE(userId: string | undefined) {
       }
       const prepared = preparedConversationsRef.current.get(conversationId);
       if (ready && !forceReshare && prepared?.peerSignature === peerSignature) {
-        return { ready: true, fingerprint: prepared.fingerprint };
+        return { ready: true, fingerprint: prepared.fingerprint, missingPeers };
       }
       // Avoid re-uploading identical RSA-wrapped key copies after a refresh
       // or navigation. This is especially important for accounts with several
@@ -602,7 +610,7 @@ export function useE2EE(userId: string | undefined) {
       if (ready && !forceReshare && fingerprint &&
         persisted?.fingerprint === fingerprint && persisted.peerSignature === peerSignature) {
         preparedConversationsRef.current.set(conversationId, { fingerprint, peerSignature });
-        return { ready: true, fingerprint };
+        return { ready: true, fingerprint, missingPeers };
       }
       if (ready) {
         // Include a self-wrapped recovery copy and publish all independent
@@ -628,7 +636,7 @@ export function useE2EE(userId: string | undefined) {
           localStorage.setItem(persistedKey, JSON.stringify({ fingerprint, peerSignature }));
         }
       }
-      return { ready, fingerprint };
+      return { ready, fingerprint, missingPeers };
     },
     [bootstrapConversationKey, getConversationKey, shareKey, state.deviceId, state.publicKey, userId],
   );
