@@ -575,9 +575,34 @@ export function useE2EE(userId: string | undefined) {
       if (ready && !trusted && typeof localStorage !== "undefined") {
         localStorage.setItem(trustKey, trustSignature);
       }
+      let fingerprint: string | null = null;
+      try {
+        fingerprint = await conversationFingerprint(key);
+      } catch {
+        fingerprint = null;
+      }
       const prepared = preparedConversationsRef.current.get(conversationId);
       if (ready && !forceReshare && prepared?.peerSignature === peerSignature) {
         return { ready: true, fingerprint: prepared.fingerprint };
+      }
+      // Avoid re-uploading identical RSA-wrapped key copies after a refresh
+      // or navigation. This is especially important for accounts with several
+      // registered devices: one chat open used to fan out a write per device.
+      const persistedKey = `e2ee_prepared_${userId}_${conversationId}`;
+      const persisted = typeof localStorage === "undefined" ? null : (() => {
+        try {
+          return JSON.parse(localStorage.getItem(persistedKey) ?? "null") as {
+            fingerprint?: string;
+            peerSignature?: string;
+          } | null;
+        } catch {
+          return null;
+        }
+      })();
+      if (ready && !forceReshare && fingerprint &&
+        persisted?.fingerprint === fingerprint && persisted.peerSignature === peerSignature) {
+        preparedConversationsRef.current.set(conversationId, { fingerprint, peerSignature });
+        return { ready: true, fingerprint };
       }
       if (ready) {
         // Include a self-wrapped recovery copy and publish all independent
@@ -592,12 +617,6 @@ export function useE2EE(userId: string | undefined) {
         if (shared.some((success) => !success)) ready = false;
       }
 
-      let fingerprint: string | null = null;
-      try {
-        fingerprint = await conversationFingerprint(key);
-      } catch {
-        fingerprint = null;
-      }
       if (ready && fingerprint) {
         preparedConversationsRef.current.set(conversationId, {
           fingerprint,
@@ -605,6 +624,9 @@ export function useE2EE(userId: string | undefined) {
           // repeated when membership or registered device keys change.
           peerSignature,
         });
+        if (typeof localStorage !== "undefined") {
+          localStorage.setItem(persistedKey, JSON.stringify({ fingerprint, peerSignature }));
+        }
       }
       return { ready, fingerprint };
     },
