@@ -24,6 +24,11 @@ import {
 import { mapWithConcurrency } from "@/lib/async";
 import { loadSignalBridge } from "@/lib/e2ee-signal-bridge";
 import { ensureSignalDeviceRegistered, maintainSignalPrekeyReserve } from "@/lib/e2ee-signal-registration";
+import {
+  getMessageCacheKey,
+  readVerifiedMessage,
+  writeVerifiedMessage,
+} from "@/lib/e2ee-message-cache";
 
 interface PeerDevice {
   deviceId: string;
@@ -68,6 +73,7 @@ export function useE2EE(userId: string | undefined) {
   // account boundary, but returning to a chat in the same signed-in session
   // can render already authenticated text without repeating crypto work.
   const decryptedMessageCacheRef = useRef<Map<string, { ciphertext: string; plaintext: string }>>(new Map());
+  const messageCacheKeyRef = useRef<Promise<CryptoKey> | null>(null);
   const preparedConversationsRef = useRef<Map<string, {
     fingerprint: string;
     peerSignature: string;
@@ -78,6 +84,7 @@ export function useE2EE(userId: string | undefined) {
   useEffect(() => {
     if (!userId) return;
     const activeUserId = userId;
+    messageCacheKeyRef.current = null;
 
     async function init() {
       const deviceId = generateDeviceId();
@@ -837,7 +844,35 @@ export function useE2EE(userId: string | undefined) {
 
   const cacheDecryptedMessage = useCallback((conversationId: string, messageId: string, ciphertext: string, plaintext: string) => {
     decryptedMessageCacheRef.current.set(`${conversationId}:${messageId}`, { ciphertext, plaintext });
-  }, []);
+    if (!userId || !state.deviceId || !keyPairRef.current) return;
+    if (!messageCacheKeyRef.current) {
+      messageCacheKeyRef.current = getMessageCacheKey(userId, state.deviceId, keyPairRef.current);
+    }
+    // Persistence is deliberately off the render/decryption critical path.
+    void messageCacheKeyRef.current
+      .then((cacheKey) => writeVerifiedMessage(cacheKey, userId, conversationId, messageId, ciphertext, plaintext))
+      .catch(() => { /* Cache is optional; never affect message delivery. */ });
+  }, [state.deviceId, userId]);
+
+  const loadCachedDecryptedMessages = useCallback(async (
+    conversationId: string,
+    messages: Array<{ id: string; text: string; encrypted: boolean }>,
+  ): Promise<Map<string, string>> => {
+    if (!userId || !state.deviceId || !keyPairRef.current) return new Map();
+    if (!messageCacheKeyRef.current) {
+      messageCacheKeyRef.current = getMessageCacheKey(userId, state.deviceId, keyPairRef.current);
+    }
+    try {
+      const cacheKey = await messageCacheKeyRef.current;
+      const cached = await mapWithConcurrency(messages.filter((message) => message.encrypted), 4, async (message) => {
+        const plaintext = await readVerifiedMessage(cacheKey, userId, conversationId, message.id, message.text);
+        return plaintext === undefined ? null : [message.id, plaintext] as const;
+      });
+      return new Map(cached.filter((entry): entry is readonly [string, string] => entry !== null));
+    } catch {
+      return new Map();
+    }
+  }, [state.deviceId, userId]);
 
   return {
     ...state,
@@ -853,6 +888,7 @@ export function useE2EE(userId: string | undefined) {
     decryptMedia,
     getCachedDecryptedMessage,
     cacheDecryptedMessage,
+    loadCachedDecryptedMessages,
     // Key rotation
     checkRotationNeeded,
     rotateConversationKey,

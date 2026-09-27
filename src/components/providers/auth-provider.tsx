@@ -13,6 +13,7 @@ import {
 import { useRouter } from "next/navigation";
 import type { AuthStatus, SafeUser } from "@/lib/types";
 import type { LoginInput, RegisterInput } from "@/lib/schemas";
+import { clearVerifiedMessageCache } from "@/lib/e2ee-message-cache";
 
 export interface AuthResult {
   ok: boolean;
@@ -176,16 +177,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const signOut = useCallback(async () => {
+    const signedOutUserId = user?.id;
     try {
       await fetch("/api/auth/logout", { method: "POST" });
     } catch {
       // Even if the request fails, clear local state — the cookie is gone or
       // will expire shortly; /api/auth/me remains the source of truth.
     }
+    if (signedOutUserId) {
+      // Best-effort local hygiene. These records are device-encrypted either
+      // way, but logout should not retain readable history for this account.
+      void clearVerifiedMessageCache(signedOutUserId).catch(() => {});
+    }
     setUser(null);
     setStatus("unauthenticated");
     router.refresh();
-  }, [router]);
+  }, [router, user?.id]);
 
   const value = useMemo<AuthContextValue>(
     () => ({ status, user, signIn, signUp, signOut, refresh }),
