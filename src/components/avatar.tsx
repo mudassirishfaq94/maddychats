@@ -95,12 +95,15 @@ export function Avatar({
   preview?: boolean;
 }) {
   const [viewerOpen, setViewerOpen] = useState(false);
+  const [imageFailed, setImageFailed] = useState(false);
+  useEffect(() => setImageFailed(false), [user.avatarUrl]);
   const hue = avatarHue(user.username);
+  const showImage = Boolean(user.avatarUrl) && !imageFailed;
   const style = {
     width: size,
     height: size,
     fontSize: size * 0.38,
-    ...(user.avatarUrl
+    ...(showImage
       ? {}
       : {
           background: `linear-gradient(135deg, hsl(${hue} 48% 46%), hsl(${(hue + 40) % 360} 44% 52%))`,
@@ -110,7 +113,7 @@ export function Avatar({
       : {}),
   };
 
-  if (user.avatarUrl) {
+  if (showImage && user.avatarUrl) {
     const image = (
       <Image
         src={user.avatarUrl}
@@ -118,6 +121,7 @@ export function Avatar({
         width={size}
         height={size}
         unoptimized
+        onError={() => setImageFailed(true)}
         className="shrink-0 rounded-full object-cover"
         style={style}
       />
