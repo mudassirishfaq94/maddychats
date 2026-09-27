@@ -89,15 +89,15 @@ export function useE2EE(userId: string | undefined) {
       // to an account. Without this recovery step, changing from Google to
       // password sign-in could overwrite the original keypair and strand the
       // messages encrypted for it.
-      const backupResponse = await fetch("/api/e2ee/keys", {
+      const backupResponse = !stored ? await fetch("/api/e2ee/keys", {
         cache: "no-store",
         signal: AbortSignal.timeout(15000),
-      });
-      if (!backupResponse.ok) throw new Error("Device key lookup failed");
-      const backupData = await backupResponse.json() as {
+      }) : null;
+      if (backupResponse && !backupResponse.ok) throw new Error("Device key lookup failed");
+      const backupData = backupResponse ? await backupResponse.json() as {
         keys?: Array<{ deviceId: string; publicKey: string; encryptedPrivateKey?: string }>;
-      };
-      const serverDevice = backupData.keys?.find((key) => key.deviceId === deviceId);
+      } : null;
+      const serverDevice = backupData?.keys?.find((key) => key.deviceId === deviceId);
 
       async function restorePrivateKey(encryptedBackup: string): Promise<string> {
         if (encryptedBackup.startsWith("v2:")) {
