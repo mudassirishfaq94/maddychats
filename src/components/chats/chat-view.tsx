@@ -1990,7 +1990,10 @@ export function ChatView({
                                   </div>
                                 ) : null}
                                 {msg.encrypted && isPendingDecrypt(msg) ? (
-                                  <span role="status" aria-label="Loading message" className="block h-4 w-24 animate-pulse rounded bg-current opacity-15" />
+                                  <span role="status" aria-label="Decrypting message" className="inline-flex items-center gap-1.5 text-xs text-[var(--muted)]">
+                                    <Lock className="h-3 w-3" />
+                                    Decrypting…
+                                  </span>
                                 ) : textOf(msg) ? (
                                   (() => {
                                     const parsed = parseStatusReply(textOf(msg));
