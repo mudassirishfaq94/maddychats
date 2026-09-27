@@ -59,10 +59,15 @@ export function useE2EE(userId: string | undefined) {
   });
 
   const keyPairRef = useRef<CryptoKeyPair | null>(null);
+  const deviceRegistrationRef = useRef<Promise<boolean> | null>(null);
   const conversationKeysRef = useRef<Map<string, CryptoKey>>(new Map());
 
   const decryptionKeysRef = useRef<Map<string, CryptoKey[]>>(new Map());
   const decryptionLoadRef = useRef<Map<string, Promise<CryptoKey[]>>>(new Map());
+  // Deliberately memory-only. Plaintext never survives a reload or crosses an
+  // account boundary, but returning to a chat in the same signed-in session
+  // can render already authenticated text without repeating crypto work.
+  const decryptedMessageCacheRef = useRef<Map<string, { ciphertext: string; plaintext: string }>>(new Map());
   const preparedConversationsRef = useRef<Map<string, {
     fingerprint: string;
     peerSignature: string;
@@ -175,13 +180,26 @@ export function useE2EE(userId: string | undefined) {
         `e2ee_keypair_${userId}`,
         JSON.stringify({ publicKey: publicKeyStr, encryptedPrivateKey }),
       );
-      const response = await fetch("/api/e2ee/keys", {
+      // The local private key and locally wrapped conversation keys are enough
+      // to authenticate existing history. Do not hold that render path behind
+      // a device-directory POST. Sending still waits for this promise below.
+      keyPairRef.current = keyPair;
+
+      setState({
+        initialized: true,
+        deviceId,
+        publicKey: publicKeyStr,
+        loading: false,
+        error: null,
+      });
+
+      const registration = fetch("/api/e2ee/keys", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ deviceId, publicKey: publicKeyStr, encryptedPrivateKey }),
         signal: AbortSignal.timeout(15000),
-      });
-      if (!response.ok) throw new Error("Device key registration failed");
+      }).then((response) => response.ok).catch(() => false);
+      deviceRegistrationRef.current = registration;
 
       // Register the Signal device directory independently of the legacy
       // compatibility key. A temporary Signal-directory outage must not make
@@ -197,15 +215,6 @@ export function useE2EE(userId: string | undefined) {
           // silent fallback that would create a replacement Signal identity.
         });
 
-      keyPairRef.current = keyPair;
-
-      setState({
-        initialized: true,
-        deviceId,
-        publicKey: publicKeyStr,
-        loading: false,
-        error: null,
-      });
     }
 
     init().catch(() => setState((prev) => ({
@@ -264,6 +273,37 @@ export function useE2EE(userId: string | undefined) {
     localStorage.setItem(storageKey, JSON.stringify([...saved, { fingerprint, wrapped }]));
   }, [userId]);
 
+  /** Restore keys previously wrapped for *this* device before using the
+   * network. These are ciphertext at rest, not plaintext or raw AES keys. */
+  const loadLocalConversationKeys = useCallback(async (conversationId: string): Promise<CryptoKey[]> => {
+    if (!userId || !keyPairRef.current || typeof localStorage === "undefined") return [];
+    let saved: Array<{ wrapped?: string }> = [];
+    try {
+      saved = JSON.parse(localStorage.getItem(`e2ee_sentkeys_${userId}_${conversationId}`) ?? "[]") as Array<{ wrapped?: string }>;
+    } catch {
+      return [];
+    }
+    const existing = decryptionKeysRef.current.get(conversationId) ?? [];
+    const keys = [...existing];
+    const fingerprints = new Set<string>();
+    for (const key of existing) {
+      try { fingerprints.add(await conversationFingerprint(key)); } catch {}
+    }
+    for (const entry of saved) {
+      if (!entry.wrapped) continue;
+      try {
+        const key = await decryptKeyFromSender(entry.wrapped, keyPairRef.current.privateKey);
+        const fingerprint = await conversationFingerprint(key);
+        if (!fingerprints.has(fingerprint)) {
+          fingerprints.add(fingerprint);
+          keys.push(key);
+        }
+      } catch { /* A corrupt local entry must not block other messages. */ }
+    }
+    decryptionKeysRef.current.set(conversationId, keys);
+    return keys;
+  }, [userId]);
+
   /**
    * Return the established legacy symmetric key for a conversation.
    *
@@ -282,6 +322,15 @@ export function useE2EE(userId: string | undefined) {
       const cached = conversationKeysRef.current.get(conversationId);
       if (cached) return { key: cached, shared: true };
 
+      // A previously established key is already wrapped to this device. Use
+      // it immediately rather than waiting on a server lookup after reload.
+      const localKeys = await loadLocalConversationKeys(conversationId);
+      const newestLocalKey = localKeys.at(-1);
+      if (newestLocalKey) {
+        conversationKeysRef.current.set(conversationId, newestLocalKey);
+        return { key: newestLocalKey, shared: true };
+      }
+
       // Try to load a shared key from the server
       let sharedKey = await fetchSharedKey(conversationId);
       if (sharedKey) {
@@ -292,7 +341,7 @@ export function useE2EE(userId: string | undefined) {
 
       throw new Error("E2EE_SESSION_NOT_READY");
     },
-    [fetchSharedKey, rememberSendingKey],
+    [fetchSharedKey, loadLocalConversationKeys, rememberSendingKey],
   );
 
   /** Encrypt a message before sending */
@@ -314,13 +363,9 @@ export function useE2EE(userId: string | undefined) {
     const load = (async () => {
       if (!keyPairRef.current) throw new Error("Device keys are not ready");
       const wrappedKeys = new Set<string>();
-
-      if (userId && typeof localStorage !== "undefined") {
-        try {
-          const saved = JSON.parse(localStorage.getItem(`e2ee_sentkeys_${userId}_${conversationId}`) ?? "[]") as Array<{ wrapped?: string }>;
-          for (const entry of saved) if (entry.wrapped) wrappedKeys.add(entry.wrapped);
-        } catch { /* Server shares can still recover a malformed local backup. */ }
-      }
+      // Local, device-wrapped keys are available without a round trip. The
+      // decrypt path tries these before awaiting this background reconciliation.
+      await loadLocalConversationKeys(conversationId);
 
       await Promise.all(["conversation-keys", "key-rotation/history"].map(async (endpoint) => {
         const controller = new AbortController();
@@ -366,7 +411,7 @@ export function useE2EE(userId: string | undefined) {
         decryptionLoadRef.current.delete(conversationId);
       }
     }
-  }, [userId, state.deviceId]);
+  }, [loadLocalConversationKeys, state.deviceId]);
 
   /** Receiving never generates or replaces a sending key. Try cached keys,
    * then current/device/history shares, retaining all recoverable keys. */
@@ -377,12 +422,18 @@ export function useE2EE(userId: string | undefined) {
     for (const key of sending ? [sending, ...local] : local) {
       try { return await decryptMessage(ciphertext, key); } catch { /* Try the next key. */ }
     }
+    // This is the reload critical path: unwrap only the local, device-wrapped
+    // keys first. Server key history reconciliation remains a fallback.
+    const restored = await loadLocalConversationKeys(conversationId);
+    for (const key of restored) {
+      try { return await decryptMessage(ciphertext, key); } catch { /* Try the next key. */ }
+    }
     const loaded = await loadDecryptionKeys(conversationId);
     for (const key of loaded) {
       try { return await decryptMessage(ciphertext, key); } catch { /* Try the next key. */ }
     }
     throw new Error("This message's key is not available on this device");
-  }, [loadDecryptionKeys]);
+  }, [loadDecryptionKeys, loadLocalConversationKeys]);
 
   /** Share a conversation key with one specific recipient device. */
   const shareKey = useCallback(
@@ -503,6 +554,11 @@ export function useE2EE(userId: string | undefined) {
    */
   const prepareConversation = useCallback(
     async (conversationId: string, { forceReshare = false }: { forceReshare?: boolean } = {}): Promise<{ ready: boolean; fingerprint: string | null; trustChanged?: boolean; missingPeers?: number }> => {
+      // Existing history may use local keys immediately, but publishing or
+      // sharing a new key must not race device registration.
+      if (deviceRegistrationRef.current && !(await deviceRegistrationRef.current)) {
+        return { ready: false, fingerprint: null };
+      }
       // Device discovery and this device's existing-key lookup are independent
       // network operations. Starting both together removes one round trip from
       // every chat open.
@@ -774,6 +830,15 @@ export function useE2EE(userId: string | undefined) {
     throw lastError;
   }, [decrypt]);
 
+  const getCachedDecryptedMessage = useCallback((conversationId: string, messageId: string, ciphertext: string) => {
+    const entry = decryptedMessageCacheRef.current.get(`${conversationId}:${messageId}`);
+    return entry?.ciphertext === ciphertext ? entry.plaintext : undefined;
+  }, []);
+
+  const cacheDecryptedMessage = useCallback((conversationId: string, messageId: string, ciphertext: string, plaintext: string) => {
+    decryptedMessageCacheRef.current.set(`${conversationId}:${messageId}`, { ciphertext, plaintext });
+  }, []);
+
   return {
     ...state,
     encrypt,
@@ -786,6 +851,8 @@ export function useE2EE(userId: string | undefined) {
     encryptBytesForConversation,
     decryptBytesForConversation,
     decryptMedia,
+    getCachedDecryptedMessage,
+    cacheDecryptedMessage,
     // Key rotation
     checkRotationNeeded,
     rotateConversationKey,

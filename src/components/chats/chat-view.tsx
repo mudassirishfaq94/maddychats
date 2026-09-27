@@ -182,6 +182,7 @@ export function ChatView({
   const router = useRouter();
   const searchParams = useSearchParams();
   const { subscribe, presence } = useRealtime();
+  const e2ee = useSharedE2EE();
 
   const [items, setItems] = useState<MessageDTO[]>(initial.messages);
   // Remove expired messages promptly in an open chat as well as on the next
@@ -220,7 +221,6 @@ export function ChatView({
 
   /* --------------------------- end-to-end encryption ---------------------- */
 
-  const e2ee = useSharedE2EE();
   const [e2eeState, setE2eeState] = useState<{
     ready: boolean;
     fingerprint: string | null;
@@ -231,11 +231,17 @@ export function ChatView({
     trustChanged: boolean;
   }>({ ready: false, fingerprint: null, checking: true, peersMissingKeys: 0, keyVersion: 1, needsRotation: false, trustChanged: false });
   const [showEncryptionInfo, setShowEncryptionInfo] = useState(false);
-  const [decryptedTexts, setDecryptedTexts] = useState<Map<string, string>>(new Map());
+  const [decryptedTexts, setDecryptedTexts] = useState<Map<string, string>>(() => new Map(
+    initial.messages.flatMap((message) => {
+      if (!message.encrypted) return [];
+      const plaintext = e2ee.getCachedDecryptedMessage(conversationId, message.id, message.text);
+      return plaintext === undefined ? [] : [[message.id, plaintext] as const];
+    }),
+  ));
   const [decryptedReplies, setDecryptedReplies] = useState<Map<string, string>>(new Map());
   const decryptedTextsRef = useRef(decryptedTexts);
   const decryptedRepliesRef = useRef(decryptedReplies);
-  const { prepareConversation, decrypt } = e2ee;
+  const { prepareConversation, decrypt, cacheDecryptedMessage } = e2ee;
 
   // On open: fetch-or-create the conversation key, share it with every peer
   // device, and learn whether this chat can actually be E2EE right now.
@@ -280,7 +286,7 @@ export function ChatView({
   // realtime arrivals all flow through `items`).
   // Failed decryptions are retried after a short delay — the peer's key
   // may still be in flight when the message first arrives.
-  const failedDecryptionRef = useRef<Set<string>>(new Set());
+  const failedDecryptionRef = useRef<Map<string, number>>(new Map());
   const arrivalTimesRef = useRef<Map<string, number>>(new Map());
   const decryptingRef = useRef<Set<string>>(new Set());
   const decryptingRepliesRef = useRef<Set<string>>(new Set());
@@ -320,12 +326,14 @@ export function ChatView({
             chatPerf("recipient-event-to-decrypted", arrivedAt);
             arrivalTimesRef.current.delete(m.id);
           }
+          cacheDecryptedMessage(conversationId, m.id, m.text, plain);
           if (alive) setDecryptedTexts((current) => new Map(current).set(m.id, plain));
         } catch {
-          // Do not permanently mark a legacy message as undecryptable. An
-          // older signed-in device can share its original key later.
-          failedDecryptionRef.current.add(m.id);
-          hadFailure = true;
+          // A peer can still publish a just-created key, but retries must be
+          // bounded so one legacy message never burns CPU forever.
+          const attempts = (failedDecryptionRef.current.get(m.id) ?? 0) + 1;
+          failedDecryptionRef.current.set(m.id, attempts);
+          hadFailure ||= attempts < 2;
         } finally {
           decryptingRef.current.delete(m.id);
         }
@@ -342,29 +350,29 @@ export function ChatView({
         }
       });
       if (!alive) return;
-      // Retry failed decryptions after 10 seconds (a peer or the user's other
-      // device may still be publishing the historical key).
+      // Retry once for a key that may still be in flight, then surface a
+      // concise per-message fallback without blocking the rest of the chat.
       if (hadFailure && alive) {
         if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
         retryTimerRef.current = setTimeout(() => {
           setDecryptRetry((value) => value + 1);
-        }, 10000);
+        }, 1000);
       }
     })();
     return () => {
       alive = false;
       if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
     };
-  }, [items, e2ee.initialized, conversationId, decrypt, decryptRetry]);
+  }, [items, e2ee.initialized, conversationId, decrypt, decryptRetry, cacheDecryptedMessage]);
 
   /** Plaintext for a message: decrypted locally, or raw when not encrypted. */
   const textOf = useCallback((m: { encrypted: boolean; text: string; id: string }) => {
     if (!m.encrypted) return m.text;
     if (m.text === "signal:v2") return "🔒 Waiting for this device’s secure message…";
     return decryptedTexts.get(m.id)
-      ?? (failedDecryptionRef.current.has(m.id)
-        ? "🔒 Waiting for this device's encryption key…"
-        : "🔒 Decrypting message…");
+      ?? (failedDecryptionRef.current.get(m.id) === 2
+        ? "🔒 Message unavailable on this device"
+        : "");
   }, [decryptedTexts]);
 
   /** Safe text for clipboard/edit: never copy ciphertext. */
@@ -1990,9 +1998,8 @@ export function ChatView({
                                   </div>
                                 ) : null}
                                 {msg.encrypted && isPendingDecrypt(msg) ? (
-                                  <span role="status" aria-label="Decrypting message" className="inline-flex items-center gap-1.5 text-xs text-[var(--muted)]">
+                                  <span aria-label="Encrypted message" className="inline-flex min-h-4 items-center text-[var(--muted)]">
                                     <Lock className="h-3 w-3" />
-                                    Decrypting…
                                   </span>
                                 ) : textOf(msg) ? (
                                   (() => {
