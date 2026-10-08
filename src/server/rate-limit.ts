@@ -13,6 +13,9 @@ export async function rateLimit(
   limit: number,
   windowMs: number,
 ): Promise<RateLimitResult> {
+  if (!key || key.length > 512 || !Number.isSafeInteger(limit) || limit < 1 || !Number.isSafeInteger(windowMs) || windowMs < 1 || windowMs > 86400000) {
+    return { allowed: false, retryAfterSeconds: 60 };
+  }
   let result;
   try {
     result = await db.execute<{ count: number; window_started_at: Date }>(sql`
@@ -42,3 +45,17 @@ export async function rateLimit(
 
 /** Auth endpoints: 25 requests per 10 minutes per client IP. */
 export const AUTH_RATE_LIMIT = { limit: 25, windowMs: 10 * 60 * 1000 } as const;
+
+/** Bound cleanup work and preserve every possible active (at most 24h) window. */
+export async function cleanupRateLimits() {
+  const result = await db.execute(sql`
+    WITH expired AS (
+      SELECT key FROM rate_limit_buckets
+      WHERE window_started_at < now() - interval '2 days'
+      ORDER BY window_started_at LIMIT 1000 FOR UPDATE SKIP LOCKED
+    )
+    DELETE FROM rate_limit_buckets b USING expired e WHERE b.key=e.key
+    RETURNING b.key
+  `);
+  return result.rows.length;
+}

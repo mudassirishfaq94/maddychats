@@ -39,6 +39,11 @@ session-pooler connection. The standard Supabase transaction endpoint on port
 6543 is rejected. The listener adds one database connection per process;
 account for it alongside `DATABASE_POOL_MAX`. Presence remains process-local,
 so retain one web replica until shared presence is implemented.
+Shared rate-limit windows are bounded to 24 hours; the secret-protected worker
+removes up to 1,000 buckets older than two days per run while preserving active
+windows. Keys and configuration are bounded and invalid inputs fail closed.
+Monitor worker health and database capacity; edge flood protection still belongs
+at the reverse proxy.
 
 Implementation follows PostgreSQL's documented
 [LISTEN startup sequence](https://www.postgresql.org/docs/current/sql-listen.html)
@@ -100,6 +105,10 @@ ClamAV. No antivirus can inspect encrypted attachment plaintext on this server.
 Browser integration now copies standalone static/public assets just as the
 Docker image does and waits for the Web Vitals collector to initialize. Missing
 JavaScript assets can no longer masquerade as an error-free mobile result.
+CI additionally builds the actual Linux production image and verifies private
+readiness, the LISTEN connection, UID 1001 and writable upload/cache directories
+against a separate disposable database. The image keeps those directories
+owned by its unprivileged application user.
 See [the mobile baseline](./ITEM6_MOBILE_BASELINE.md) for the earlier sample.
 
 GitHub's branch-protection API currently responds: “Upgrade to GitHub Pro or

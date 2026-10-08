@@ -10,14 +10,14 @@ permissions:
   contents: read
 
 concurrency:
-  group: quality-${{ github.workflow }}-${{ github.ref }}
+  group: quality-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
   quality:
     name: Lint, types, build, security and integration
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 30
     services:
       clamav:
         image: clamav/clamav:1.4
@@ -87,6 +87,34 @@ jobs:
           npm run db:migrate
       - name: Unit and isolated integration suites
         run: npm test
+      - name: Production container build and readiness smoke test
+        shell: bash
+        run: |
+          set -euo pipefail
+          createdb docker_quality_test
+          image_db="postgresql://circlo_ci:disposable-ci-database-only@127.0.0.1:5432/docker_quality_test"
+          DATABASE_URL="$image_db" npm run db:migrate
+          docker build --target runner --tag ziptalk-quality:local .
+          cleanup_image() {
+            if [ "${image_ready:-0}" != "1" ]; then docker logs ziptalk-quality-smoke || true; fi
+            docker rm -f ziptalk-quality-smoke >/dev/null 2>&1 || true
+          }
+          trap cleanup_image EXIT
+          docker run --detach --name ziptalk-quality-smoke --network host \
+            --env DATABASE_URL="$image_db" \
+            --env JWT_SECRET=disposable-container-only-secret-at-least-thirty-two-characters \
+            --env HEALTHCHECK_SECRET=disposable-container-health \
+            --env CRON_SECRET=disposable-container-cron \
+            --env CLIENT_URL=http://127.0.0.1:3000 \
+            --env CLAMAV_HOST=127.0.0.1 --env CLAMAV_PORT=3310 \
+            ziptalk-quality:local
+          for attempt in $(seq 1 60); do
+            if docker exec ziptalk-quality-smoke node scripts/readiness.mjs; then image_ready=1; break; fi
+            sleep 1
+          done
+          test "${image_ready:-0}" = "1"
+          test "$(docker exec ziptalk-quality-smoke id -u)" = "1001"
+          docker exec ziptalk-quality-smoke node -e "const fs=require('fs'); fs.accessSync('/app/server/uploads',fs.constants.W_OK); fs.accessSync('/app/.next/cache',fs.constants.W_OK);"
       - name: Save local lab measurements
         if: always()
         uses: actions/upload-artifact@v4

@@ -35,7 +35,7 @@ async function main() {
     const account = async (name: string, role = "user") => (await sql.query("insert into users(username,display_name,email,password_hash,email_verified_at,role) values($1,$1,$2,$3,now(),$4) returning id,username", [name, `${name}@example.invalid`, hash, role])).rows[0];
     const alice = await account("remain_alice"), bob = await account("remain_bob"), owner = await account("remain_admin", "admin"), moderator = await account("remain_mod", "moderator"), target = await account("remain_target");
     const base = "http://127.0.0.1:3111", secret = "remaining-only-disposable-secret-at-least-thirty-two-characters";
-    server = spawn(process.execPath, [resolve(".next/standalone/server.js")], { windowsHide: true, stdio: "pipe", env: { ...process.env, NODE_ENV: "production", DATABASE_URL: url, REALTIME_DATABASE_URL: url, HOSTNAME: "127.0.0.1", PORT: "3111", CLIENT_URL: base, JWT_SECRET: secret, HEALTHCHECK_SECRET: "remaining-health", CSP_ENFORCE: "1", SUPABASE_URL: "", SUPABASE_SERVICE_ROLE_KEY: "", VAPID_PRIVATE_KEY: "", RESEND_API_KEY: "", FIREBASE_PROJECT_ID: "", FIREBASE_CLIENT_EMAIL: "", FIREBASE_PRIVATE_KEY: "" } });
+    server = spawn(process.execPath, [resolve(".next/standalone/server.js")], { windowsHide: true, stdio: "pipe", env: { ...process.env, NODE_ENV: "production", DATABASE_URL: url, REALTIME_DATABASE_URL: url, HOSTNAME: "127.0.0.1", PORT: "3111", CLIENT_URL: base, JWT_SECRET: secret, HEALTHCHECK_SECRET: "remaining-health", CRON_SECRET: "remaining-cron", CSP_ENFORCE: "1", SUPABASE_URL: "", SUPABASE_SERVICE_ROLE_KEY: "", VAPID_PRIVATE_KEY: "", RESEND_API_KEY: "", FIREBASE_PROJECT_ID: "", FIREBASE_CLIENT_EMAIL: "", FIREBASE_PRIVATE_KEY: "" } });
     let output = ""; server.stdout?.on("data", (c) => output += c); server.stderr?.on("data", (c) => output += c);
     let ready = false;
     for (let i = 0; i < 100; i++) { try { ready = (await fetch(`${base}/api/health`)).status === 204; } catch { /* startup */ } if (ready || server.exitCode !== null) break; await sleep(200); }
@@ -117,6 +117,12 @@ async function main() {
     await sql.query("alter table rate_limit_buckets rename to unavailable_rate_limits");
     try { assert.equal((await api("/api/auth/login", "", "POST", { identifier: alice.username, password })).status, 429, "Shared rate limit outage fails closed"); }
     finally { await sql.query("alter table unavailable_rate_limits rename to rate_limit_buckets"); }
+    await sql.query("insert into rate_limit_buckets(key,window_started_at,count) values('expired-fixture',now()-interval '3 days',1),('active-fixture',now(),1)");
+    assert.equal((await api("/api/cron/process-scheduled")).status, 401);
+    const cleanup = await api("/api/cron/process-scheduled", "", "GET", undefined, { authorization: "Bearer remaining-cron" });
+    assert.equal(cleanup.status, 200); assert((await cleanup.json()).expiredRateLimits >= 1);
+    assert.equal((await sql.query("select key from rate_limit_buckets where key='expired-fixture'")).rows.length, 0);
+    assert.equal((await sql.query("select key from rate_limit_buckets where key='active-fixture'")).rows.length, 1);
     console.log("Admin MFA, stale-auth/replay, moderator boundaries, immutable/transactional audit and fail-closed abuse limits passed");
 
     type Event = { id?: string; data: Record<string, unknown> };

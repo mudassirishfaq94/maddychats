@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { processScheduledMessages } from "@/server/scheduled-messages";
 import { jsonError } from "@/server/http";
 import { cleanupUploads } from "@/server/upload-retention";
+import { cleanupRateLimits } from "@/server/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -34,11 +35,13 @@ export async function GET(req: NextRequest) {
   try {
     const result = await processScheduledMessages();
     const retention = await cleanupUploads();
+    const expiredRateLimits = await cleanupRateLimits();
     return NextResponse.json({
       success: true,
       processed: result.processed,
       failed: result.failed + retention.failed,
       retention,
+      expiredRateLimits,
       timestamp: new Date().toISOString(),
     });
   } catch (err) {
