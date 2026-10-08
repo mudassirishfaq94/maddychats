@@ -1,9 +1,7 @@
-import { and, asc, eq, gte, lt } from "drizzle-orm";
+import { and, asc, eq, gte, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { conversationMembers, realtimeEvents } from "@/db/schema";
 import type { RealtimeEvent } from "@/lib/types";
-
-const EVENT_TTL_MS = 10 * 60 * 1000;
 
 /** Persist events; the database trigger wakes shared LISTEN subscribers after commit. */
 export async function publishToUsers(
@@ -13,12 +11,19 @@ export async function publishToUsers(
   const ids = [...new Set(userIds)];
   if (ids.length === 0) return 0;
   await db.insert(realtimeEvents).values(ids.map((userId) => ({ userId, payload: event })));
-  if (Math.random() < 0.02) {
-    void db.delete(realtimeEvents)
-      .where(lt(realtimeEvents.createdAt, new Date(Date.now() - EVENT_TTL_MS)))
-      .catch(() => undefined);
-  }
   return ids.length;
+}
+
+/** Expiry runs off the send path; one indexed bounded batch per worker run. */
+export async function cleanupRealtimeEvents() {
+  const result = await db.execute(sql`
+    WITH expired AS (
+      SELECT id FROM realtime_events WHERE created_at < now() - interval '10 minutes'
+      ORDER BY created_at,id LIMIT 5000 FOR UPDATE SKIP LOCKED
+    )
+    DELETE FROM realtime_events r USING expired e WHERE r.id=e.id RETURNING r.id
+  `);
+  return result.rows.length;
 }
 
 export async function publishToConversation(

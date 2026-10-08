@@ -127,7 +127,7 @@ export const realtimeEvents = pgTable(
     payload: jsonb("payload").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
   },
-  (table) => [index("realtime_events_user_created_idx").on(table.userId, table.createdAt), index("realtime_events_replay_idx").on(table.userId, table.createdAt, table.id)],
+  (table) => [index("realtime_events_user_created_idx").on(table.userId, table.createdAt), index("realtime_events_replay_idx").on(table.userId, table.createdAt, table.id), index("realtime_events_expiry_idx").on(table.createdAt, table.id)],
 );
 
 export const emailVerificationTokens = pgTable(

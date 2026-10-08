@@ -44,6 +44,11 @@ removes up to 1,000 buckets older than two days per run while preserving active
 windows. Keys and configuration are bounded and invalid inputs fail closed.
 Monitor worker health and database capacity; edge flood protection still belongs
 at the reverse proxy.
+Migration `0038` supplies a global expiry index. Realtime cleanup moves from
+random unbounded deletion during sending to the independent worker: each run
+removes up to 5,000 events older than ten minutes using `SKIP LOCKED`. Monitor
+the queue and increase worker frequency if publication exceeds cleanup
+throughput. This is global retention work, not delivery polling per client.
 
 Implementation follows PostgreSQL's documented
 [LISTEN startup sequence](https://www.postgresql.org/docs/current/sql-listen.html)

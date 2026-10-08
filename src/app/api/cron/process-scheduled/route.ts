@@ -3,6 +3,7 @@ import { processScheduledMessages } from "@/server/scheduled-messages";
 import { jsonError } from "@/server/http";
 import { cleanupUploads } from "@/server/upload-retention";
 import { cleanupRateLimits } from "@/server/rate-limit";
+import { cleanupRealtimeEvents } from "@/server/realtime";
 
 export const dynamic = "force-dynamic";
 
@@ -36,12 +37,14 @@ export async function GET(req: NextRequest) {
     const result = await processScheduledMessages();
     const retention = await cleanupUploads();
     const expiredRateLimits = await cleanupRateLimits();
+    const expiredRealtimeEvents = await cleanupRealtimeEvents();
     return NextResponse.json({
       success: true,
       processed: result.processed,
       failed: result.failed + retention.failed,
       retention,
       expiredRateLimits,
+      expiredRealtimeEvents,
       timestamp: new Date().toISOString(),
     });
   } catch (err) {

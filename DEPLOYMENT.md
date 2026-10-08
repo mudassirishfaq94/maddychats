@@ -72,7 +72,8 @@ worker only after web becomes ready. Migration failure blocks startup.
 Web also waits for the private ClamAV service, which may take several minutes
 to download signatures on its first start. Keep port 3310 private. Readable
 uploads fail closed if scanning is unavailable. This release applies migrations
-`0035_upload_retention` and `0036_device_sessions`; readiness checks both.
+`0035_upload_retention`, `0036_device_sessions`, and the realtime/admin
+hardening migrations through `0038`; readiness checks this release.
 Start with `CSP_ENFORCE=0`, validate the provider/native/PWA flows in staging,
 then enable enforcement. See [tasks 4–6](./docs/ITEMS4_6_HARDENING_AND_PERFORMANCE.md)
 for retention, session migration, scanner checks, and performance profiling.
@@ -91,7 +92,7 @@ ports 80 and 443; do not expose port 3000 or database credentials.
   rate-limit buckets are persisted in PostgreSQL.
 - Realtime uses one dedicated PostgreSQL LISTEN connection per web process.
   Set `REALTIME_DATABASE_URL` to the same database's direct/session connection
-  if `DATABASE_URL` uses transaction pooling. Apply migration `0037` before
+  if `DATABASE_URL` uses transaction pooling. Apply migrations through `0038` before
   startup; readiness verifies the listener. See
   [remaining audit work](./docs/REMAINING_PROJECT_WORK.md).
 - Monitor Docker health status for web and scheduled-worker and alert when

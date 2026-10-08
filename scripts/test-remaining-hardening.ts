@@ -118,9 +118,12 @@ async function main() {
     try { assert.equal((await api("/api/auth/login", "", "POST", { identifier: alice.username, password })).status, 429, "Shared rate limit outage fails closed"); }
     finally { await sql.query("alter table unavailable_rate_limits rename to rate_limit_buckets"); }
     await sql.query("insert into rate_limit_buckets(key,window_started_at,count) values('expired-fixture',now()-interval '3 days',1),('active-fixture',now(),1)");
+    const expiredEvent = (await sql.query("insert into realtime_events(user_id,payload,created_at) values($1,jsonb_build_object('type','presence:update','expiryFixture',true),now()-interval '15 minutes') returning id", [alice.id])).rows[0];
     assert.equal((await api("/api/cron/process-scheduled")).status, 401);
     const cleanup = await api("/api/cron/process-scheduled", "", "GET", undefined, { authorization: "Bearer remaining-cron" });
-    assert.equal(cleanup.status, 200); assert((await cleanup.json()).expiredRateLimits >= 1);
+    assert.equal(cleanup.status, 200); const pruned = await cleanup.json(); assert(pruned.expiredRateLimits >= 1); assert(pruned.expiredRealtimeEvents >= 1);
+    assert.equal((await sql.query("select id from realtime_events where id=$1", [expiredEvent.id])).rows.length, 0);
+    assert.equal((await sql.query("select count(*)::int n from realtime_events where payload->>'type'='message:deleted'")).rows[0].n, 2, "Active durable events are preserved");
     assert.equal((await sql.query("select key from rate_limit_buckets where key='expired-fixture'")).rows.length, 0);
     assert.equal((await sql.query("select key from rate_limit_buckets where key='active-fixture'")).rows.length, 1);
     console.log("Admin MFA, stale-auth/replay, moderator boundaries, immutable/transactional audit and fail-closed abuse limits passed");

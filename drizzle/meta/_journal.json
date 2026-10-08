@@ -267,6 +267,13 @@
       "when": 1791849600000,
       "tag": "0037_realtime_and_admin_guards",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1791936000000,
+      "tag": "0038_realtime_expiry_index",
+      "breakpoints": true
     }
   ]
 }
