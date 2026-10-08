@@ -36,7 +36,7 @@ export default async function LandingPage() {
     <main className="relative flex min-h-dvh flex-col overflow-hidden bg-[var(--bg)]">
       <div aria-hidden="true" className="circlo-drift pointer-events-none absolute -right-28 top-16 h-80 w-80 rounded-full border border-[color-mix(in_srgb,var(--accent)_35%,transparent)] bg-[color-mix(in_srgb,var(--accent)_8%,transparent)] blur-[1px]" />
       <div aria-hidden="true" className="circlo-drift pointer-events-none absolute -left-28 bottom-28 h-64 w-64 rounded-full bg-[color-mix(in_srgb,var(--action)_10%,transparent)] blur-2xl" style={{ animationDelay: "-3s" }} />
-      <header className="relative z-10 flex h-16 items-center justify-between border-b border-[var(--border)] bg-[color-mix(in_srgb,var(--surface)_86%,transparent)] px-4 backdrop-blur-xl sm:px-6">
+      <header className="relative z-30 flex h-16 items-center justify-between border-b border-[var(--border)] bg-[color-mix(in_srgb,var(--surface)_86%,transparent)] px-4 backdrop-blur-xl sm:px-6">
         <LogoWordmark size={26} />
         <div className="flex items-center gap-2">
           <ThemeToggle />
@@ -56,22 +56,19 @@ export default async function LandingPage() {
             Your people, your conversations
           </span>
           <h1
-            className="font-display mt-5 text-[2.6rem] font-bold leading-[1.06] sm:text-[3.4rem] animate-fade-up"
-            style={{ "--d": "80ms" } as React.CSSProperties}
+            className="font-display mt-5 text-[2.6rem] font-bold leading-[1.06] sm:text-[3.4rem]"
           >
             Keep your
             <br />
             circle close.
           </h1>
           <p
-            className="mt-4 max-w-sm text-base leading-relaxed text-[var(--muted)] animate-fade-up"
-            style={{ "--d": "160ms" } as React.CSSProperties}
+            className="mt-4 max-w-sm text-base leading-relaxed text-[var(--muted)]"
           >
             A calmer place for the conversations that make up your day.
           </p>
           <div
-            className="mt-8 flex flex-wrap items-center gap-3 animate-fade-up"
-            style={{ "--d": "240ms" } as React.CSSProperties}
+            className="mt-8 flex flex-wrap items-center gap-3"
           >
             <Link href="/register" className="btn btn-primary">
               Get started

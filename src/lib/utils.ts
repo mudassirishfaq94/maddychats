@@ -20,15 +20,12 @@ export function avatarHue(seed: string): number {
   return h;
 }
 
+const dateFormatter = new Intl.DateTimeFormat("en", { month: "short", day: "numeric", year: "numeric" });
 export function formatDate(iso: string | null | undefined): string {
   if (!iso) return "—";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "—";
-  return new Intl.DateTimeFormat("en", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  }).format(d);
+  return dateFormatter.format(d);
 }
 
 export function timeAgo(iso: string | null | undefined): string {

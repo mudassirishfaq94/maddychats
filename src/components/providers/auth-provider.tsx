@@ -13,7 +13,6 @@ import {
 import { useRouter } from "next/navigation";
 import type { AuthStatus, SafeUser } from "@/lib/types";
 import type { LoginInput, RegisterInput } from "@/lib/schemas";
-import { clearVerifiedMessageCache } from "@/lib/e2ee-message-cache";
 
 export interface AuthResult {
   ok: boolean;
@@ -197,7 +196,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (signedOutUserId) {
       // Best-effort local hygiene. These records are device-encrypted either
       // way, but logout should not retain readable history for this account.
-      void clearVerifiedMessageCache(signedOutUserId).catch(() => {});
+      void import("@/lib/e2ee-message-cache")
+        .then(({ clearVerifiedMessageCache }) => clearVerifiedMessageCache(signedOutUserId))
+        .catch(() => {});
     }
     setUser(null);
     setStatus("unauthenticated");

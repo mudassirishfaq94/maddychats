@@ -28,9 +28,13 @@ function previewText(conv: ConversationSummary, previews: Map<string, string>): 
   return last.text || ({ audio: "Voice message", image: "Photo", video: "Video", file: "File" }[last.type] ?? "Message");
 }
 
+const utcStampFormatter = new Intl.DateTimeFormat("en", { month: "short", day: "numeric", timeZone: "UTC" });
+const clockStampFormatter = new Intl.DateTimeFormat("en", { hour: "2-digit", minute: "2-digit", hour12: false });
+const weekdayStampFormatter = new Intl.DateTimeFormat("en", { weekday: "short" });
+const dateStampFormatter = new Intl.DateTimeFormat("en", { day: "numeric", month: "short" });
 function stampTime(iso: string | null, hydrated: boolean): string {
   if (!iso) return "";
-  if (!hydrated) return new Intl.DateTimeFormat("en", { month: "short", day: "numeric", timeZone: "UTC" }).format(new Date(iso));
+  if (!hydrated) return utcStampFormatter.format(new Date(iso));
   const d = new Date(iso);
   const now = new Date();
   const sameDay =
@@ -38,20 +42,13 @@ function stampTime(iso: string | null, hydrated: boolean): string {
     d.getMonth() === now.getMonth() &&
     d.getFullYear() === now.getFullYear();
   if (sameDay) {
-    return new Intl.DateTimeFormat("en", {
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-    }).format(d);
+    return clockStampFormatter.format(d);
   }
   const diff = Math.floor((now.getTime() - d.getTime()) / 86_400_000);
   if (diff < 7) {
-    return new Intl.DateTimeFormat("en", { weekday: "short" }).format(d);
+    return weekdayStampFormatter.format(d);
   }
-  return new Intl.DateTimeFormat("en", {
-    day: "numeric",
-    month: "short",
-  }).format(d);
+  return dateStampFormatter.format(d);
 }
 
 /**

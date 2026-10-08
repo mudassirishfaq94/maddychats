@@ -98,17 +98,17 @@ function b64ToBytes(base64: string): Uint8Array {
   return bytes;
 }
 
+// Intl constructors are expensive inside every message render. Keep the UTC
+// server/first-client representation, then use the browser's local timezone.
+const utcTimeFormatter = new Intl.DateTimeFormat("en", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "UTC" });
+const localTimeFormatter = new Intl.DateTimeFormat("en", { hour: "2-digit", minute: "2-digit", hour12: false });
+const utcDayFormatter = new Intl.DateTimeFormat("en", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
 function timeLabel(iso: string, hydrated: boolean): string {
-  return new Intl.DateTimeFormat("en", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-    ...(!hydrated ? { timeZone: "UTC" } : {}),
-  }).format(new Date(iso));
+  return (hydrated ? localTimeFormatter : utcTimeFormatter).format(new Date(iso));
 }
 
 function dayLabel(iso: string, hydrated: boolean): string {
-  if (!hydrated) return new Intl.DateTimeFormat("en", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }).format(new Date(iso));
+  if (!hydrated) return utcDayFormatter.format(new Date(iso));
   const d = new Date(iso);
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());

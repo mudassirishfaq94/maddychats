@@ -4,8 +4,6 @@ import Script from "next/script";
 import { headers } from "next/headers";
 import { Inter, Space_Grotesk } from "next/font/google";
 import { AuthProvider } from "@/components/providers/auth-provider";
-import { E2EEProvider } from "@/components/providers/e2ee-provider";
-import { RealtimeProvider } from "@/components/providers/realtime-provider";
 import { HostedAppUpdates } from "@/components/hosted-app-updates";
 import { CapacitorDeepLinks } from "@/components/capacitor-deep-links";
 import { PwaUpdatePrompt } from "@/components/pwa-update-prompt";
@@ -16,13 +14,13 @@ import "./globals.css";
 const inter = Inter({
   subsets: ["latin"],
   variable: "--font-sans",
-  display: "swap",
+  display: "optional",
 });
 
 const spaceGrotesk = Space_Grotesk({
   subsets: ["latin"],
   variable: "--font-display",
-  display: "swap",
+  display: "optional",
 });
 
 export const metadata: Metadata = {
@@ -63,7 +61,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
       <body>
         <Script src="/theme-init.js" strategy="beforeInteractive" nonce={nonce} />
         <AuthProvider>
-          <PerformanceMonitor><E2EEProvider><RealtimeProvider>{children}</RealtimeProvider></E2EEProvider></PerformanceMonitor>
+          <PerformanceMonitor>{children}</PerformanceMonitor>
           <CapacitorDeepLinks />
           <PwaUpdatePrompt />
           <HostedAppUpdates />

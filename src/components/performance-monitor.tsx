@@ -1,6 +1,6 @@
 "use client";
 import { Profiler, useEffect, useSyncExternalStore, type ProfilerOnRenderCallback, type ReactNode } from "react";
-import { onCLS, onFCP, onINP, onLCP, onTTFB, type Metric } from "web-vitals";
+import type { Metric } from "web-vitals";
 
 type Sample = { kind: string; name: string; value: number; phase?: string };
 declare global { interface Window { __circloPerformance?: Sample[]; __circloProfilingEnabled?: boolean; __circloVitalsRegistered?: boolean } }
@@ -27,11 +27,15 @@ export function PerformanceMonitor({ children }: { children: ReactNode }) {
   const profiling = useSyncExternalStore(subscribe, enabled, () => false);
   useEffect(() => {
     if (!profiling || window.__circloVitalsRegistered) return;
-    window.__circloVitalsRegistered = true;
-    // Report changing values so foreground/headless labs do not depend on
-    // browser backgrounding to obtain CLS and interaction measurements.
-    onCLS(vital, { reportAllChanges: true }); onINP(vital, { reportAllChanges: true, durationThreshold: 16 });
-    onLCP(vital, { reportAllChanges: true }); onFCP(vital); onTTFB(vital);
+    let disposed = false;
+    void import("web-vitals").then(({ onCLS, onFCP, onINP, onLCP, onTTFB }) => {
+      if (disposed || window.__circloVitalsRegistered) return;
+      // Load the measurement library only for an explicitly requested lab.
+      onCLS(vital, { reportAllChanges: true }); onINP(vital, { reportAllChanges: true, durationThreshold: 16 });
+      onLCP(vital, { reportAllChanges: true }); onFCP(vital); onTTFB(vital);
+      window.__circloVitalsRegistered = true;
+    });
+    return () => { disposed = true; };
   }, [profiling]);
   useEffect(() => {
     if (!profiling || !PerformanceObserver.supportedEntryTypes.includes("longtask")) return;

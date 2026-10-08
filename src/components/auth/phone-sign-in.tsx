@@ -2,7 +2,7 @@
 
 import { useRef, useState, type FormEvent } from "react";
 import { Loader2, Phone, ShieldCheck, UserRound } from "lucide-react";
-import { RecaptchaVerifier, signInWithPhoneNumber, type ConfirmationResult } from "firebase/auth";
+import type { RecaptchaVerifier, ConfirmationResult } from "firebase/auth";
 import { firebasePhoneAuth, firebasePhoneAuthConfigured } from "@/lib/firebase-client";
 import { Field } from "./field";
 
@@ -27,7 +27,9 @@ export function PhoneSignIn({ next = "/app", signup = false }: { next?: string; 
     }
     setPending(true);
     try {
-      const auth = firebasePhoneAuth();
+      const [auth, { RecaptchaVerifier, signInWithPhoneNumber }] = await Promise.all([
+        firebasePhoneAuth(), import("firebase/auth"),
+      ]);
       verifier.current?.clear();
       verifier.current = new RecaptchaVerifier(auth, "phone-recaptcha", { size: "invisible" });
       confirmation.current = await signInWithPhoneNumber(auth, phone.trim(), verifier.current);

@@ -178,6 +178,30 @@ async function main() {
     await stop(); await start(true);
     assert((await api("/login")).headers.get("content-security-policy")?.includes("'strict-dynamic'"));
     if (process.env.ITEM456_BROWSER_TESTS === "1") {
+      // Public routes must remain interactive without bootstrapping a private
+      // chat session or a native plugin. Run under the enforced nonce policy.
+      const { chromium } = await import("playwright");
+      const publicBrowser = await chromium.launch({ headless: true });
+      try {
+        const publicContext = await publicBrowser.newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: "block" });
+        const publicPage = await publicContext.newPage();
+        const requests: string[] = [], browserErrors: string[] = [];
+        publicPage.on("request", request => requests.push(new URL(request.url()).pathname));
+        publicPage.on("pageerror", error => browserErrors.push(error.message));
+        assert.equal((await publicPage.goto(base))?.status(), 200);
+        await publicPage.getByRole("button", { name: "Change theme" }).click();
+        await publicPage.getByRole("menuitemradio", { name: "Dark" }).click();
+        assert.equal(await publicPage.evaluate(() => document.documentElement.classList.contains("light")), false);
+        const publicScriptBytes = await publicPage.evaluate(() => performance.getEntriesByType("resource")
+          .filter(entry => new URL(entry.name).pathname.endsWith(".js"))
+          .reduce((sum, entry) => sum + (entry as PerformanceResourceTiming).decodedBodySize, 0));
+        assert(publicScriptBytes > 0 && publicScriptBytes <= 550_000, `Public JavaScript budget exceeded: ${publicScriptBytes} decoded bytes`);
+        await publicPage.getByRole("link", { name: "Log in", exact: true }).last().click();
+        await publicPage.waitForURL("**/login");
+        await publicPage.getByLabel("Email or username", { exact: true }).waitFor({ state: "visible" });
+        assert(!requests.some(path => path.startsWith("/api/e2ee/") || path === "/api/realtime/stream"), "Public navigation must not bootstrap private chat services");
+        assert.deepEqual(browserErrors, [], "Public theme/login hydration must work");
+      } finally { await publicBrowser.close(); }
       const { profileMobile } = await import("./profile-mobile.mjs");
       const results = await profileMobile(base, aliceCookie, conversation.id, process.env.ITEM456_BROWSER_QUICK === "1");
       for (const result of results) {
