@@ -1,5 +1,7 @@
 "use client";
 
+import { navigateWithReload } from "@/lib/navigation";
+
 import { useEffect } from "react";
 import { isNativeApp } from "@/lib/native-platform";
 
@@ -34,14 +36,14 @@ export function NativeAppBridge() {
           try {
             const target = new URL(url);
             const isCircloLink = target.protocol === "ziptalks:" ||
-              (target.protocol === "https:" && target.host === "maddychats.onrender.com");
+              (target.protocol === "https:" && target.origin === window.location.origin);
             if (isCircloLink) {
               // Custom-scheme URLs encode the first route segment as the
               // hostname (for example ziptalks://app/chats/123).
               const pathname = target.protocol === "ziptalks:"
                 ? `/${target.host}${target.pathname}`
                 : target.pathname;
-              window.location.assign(`${pathname}${target.search}${target.hash}`);
+              navigateWithReload(`${pathname}${target.search}${target.hash}`);
             }
           } catch {
             // Ignore malformed deep links.

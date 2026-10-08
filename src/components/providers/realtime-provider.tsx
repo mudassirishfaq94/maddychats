@@ -1,5 +1,8 @@
 "use client";
 
+import { navigateWithReload } from "@/lib/navigation";
+import { useRouter } from "next/navigation";
+
 import {
   createContext,
   useCallback,
@@ -48,6 +51,7 @@ function isOpenConversation(conversationId: string): boolean {
  * (re)connection, so logging out kills the channel server-side too.
  */
 export function RealtimeProvider({ children }: { children: ReactNode }) {
+  const router = useRouter();
   const { status, user } = useAuth();
   const [connected, setConnected] = useState(false);
   const [presence, setPresence] = useState<PresenceState>({});
@@ -170,9 +174,21 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     if (status !== "authenticated") return;
 
     const es = new EventSource("/api/realtime/stream");
-    es.onopen = () => setConnected(true);
+    let hadConnection = false;
+    es.onopen = () => {
+      setConnected(true);
+      if (hadConnection) router.refresh();
+      hadConnection = true;
+    };
+    es.addEventListener("resync", () => router.refresh());
     es.onerror = () => setConnected(false);
+    const received = new Set<string>();
     es.onmessage = (e) => {
+      if (e.lastEventId) {
+        if (received.has(e.lastEventId)) return;
+        received.add(e.lastEventId);
+        if (received.size > 5000) received.delete(received.values().next().value!);
+      }
       let event: RealtimeEvent;
       try {
         event = JSON.parse(e.data) as RealtimeEvent;
@@ -229,7 +245,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
             const notification = new Notification(title, options);
             notification.onclick = () => {
               window.focus();
-              window.location.href = url;
+              navigateWithReload(url);
               notification.close();
             };
           }
@@ -249,7 +265,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
       setConnected(false);
       setPresence({});
     };
-  }, [playNotificationSound, status, user?.id]);
+  }, [playNotificationSound, router, status, user?.id]);
 
   const value = useMemo<RealtimeContextValue>(
     () => ({ connected, subscribe, presence }),

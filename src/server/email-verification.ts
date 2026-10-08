@@ -13,7 +13,12 @@ function sender() {
   return address ? `${name} <${address}>` : process.env.EMAIL_FROM;
 }
 
+export function verificationDeliveryConfigured() {
+  return Boolean(process.env.RESEND_API_KEY && sender());
+}
+
 export async function issueEmailVerification(user: UserRow): Promise<boolean> {
+  if (user.emailVerifiedAt || user.email.endsWith("@auth.maddychats.invalid")) return false;
   const from = sender();
   if (!process.env.RESEND_API_KEY || !from) return false;
   try {
@@ -35,7 +40,7 @@ export async function consumeEmailVerification(token: string): Promise<"verified
   return db.transaction(async (tx) => {
     const rows = await tx.update(emailVerificationTokens).set({ usedAt: now }).where(and(eq(emailVerificationTokens.tokenHash, hash(token)), isNull(emailVerificationTokens.usedAt), gt(emailVerificationTokens.expiresAt, now))).returning({ userId: emailVerificationTokens.userId });
     if (!rows[0]) return "invalid";
-    await tx.update(users).set({ updatedAt: now }).where(eq(users.id, rows[0].userId));
+    await tx.update(users).set({ emailVerifiedAt: now, updatedAt: now }).where(eq(users.id, rows[0].userId));
     return "verified";
   });
 }

@@ -20,6 +20,30 @@ export function jsonError(
  */
 const MAX_JSON_BODY_BYTES = 64 * 1024;
 
+/** Enforce real streamed bytes, including chunked requests with no length. */
+export async function readBoundedBody(req: Request, limit: number): Promise<Uint8Array> {
+  const reader = req.body?.getReader();
+  if (!reader) return new Uint8Array();
+  const chunks: Uint8Array[] = []; let size = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > limit) { await reader.cancel(); throw new Error("body_too_large"); }
+      chunks.push(value);
+    }
+  } finally { reader.releaseLock(); }
+  const result = new Uint8Array(size); let offset = 0;
+  for (const chunk of chunks) { result.set(chunk, offset); offset += chunk.length; }
+  return result;
+}
+
+export async function readUploadForm(req: Request): Promise<FormData> {
+  const bytes = await readBoundedBody(req, 4 * 1024 * 1024);
+  return new Response(new Uint8Array(bytes), { headers: { "content-type": req.headers.get("content-type") ?? "" } }).formData();
+}
+
 /** Parses a JSON request body; returns null on malformed/oversized input. */
 export async function readJson(
   req: NextRequest,
@@ -29,7 +53,7 @@ export async function readJson(
     return null;
   }
   try {
-    const data: unknown = await req.json();
+    const data: unknown = JSON.parse(new TextDecoder().decode(await readBoundedBody(req, MAX_JSON_BODY_BYTES)));
     if (data && typeof data === "object" && !Array.isArray(data)) {
       return data as Record<string, unknown>;
     }

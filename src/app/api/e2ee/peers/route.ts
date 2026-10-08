@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import { db } from "@/db";
 import { conversationMembers, e2eeKeys, users } from "@/db/schema";
 import { getSessionUser } from "@/server/session";
@@ -51,12 +51,13 @@ export async function GET(req: NextRequest) {
       publicKey: e2eeKeys.publicKey,
     })
     .from(e2eeKeys)
-    .where(
+    .where(and(
       inArray(
         e2eeKeys.userId,
         peers.map((p) => p.userId),
       ),
-    );
+      isNotNull(e2eeKeys.trustedAt),
+    ));
 
   const byUser = new Map<string, E2EEPeer>();
   for (const p of peers) {

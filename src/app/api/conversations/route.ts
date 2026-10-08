@@ -24,8 +24,9 @@ export async function GET() {
   const me = await getSessionUser();
   if (!me) return jsonError(401, "Not authenticated.");
 
+  const started = performance.now();
   const list = await listConversationsFor(me.id);
-  return NextResponse.json({ conversations: list });
+  return NextResponse.json({ conversations: list }, { headers: { "Server-Timing": `conversations;dur=${(performance.now() - started).toFixed(1)}`, "Cache-Control": "no-store" } });
 }
 
 /**

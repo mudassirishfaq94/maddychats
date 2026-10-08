@@ -22,9 +22,14 @@ export const pool =
   globalForDb.__arenaNextJsPostgresqlPool ??
   new Pool({
     connectionString: databaseUrl,
-    max: 5,
+    // A long-running VPS can safely hold a small pool. Keep this bounded so
+    // Supabase's shared pooler is not exhausted during traffic spikes.
+    max: Number(process.env.DATABASE_POOL_MAX ?? 5),
     idleTimeoutMillis: 10_000,
     connectionTimeoutMillis: 10_000,
+    ssl: databaseUrl.includes("supabase.co")
+      ? { rejectUnauthorized: true }
+      : undefined,
   });
 
 if (process.env.NODE_ENV !== "production") {
@@ -32,3 +37,9 @@ if (process.env.NODE_ENV !== "production") {
 }
 
 export const db = drizzle(pool);
+
+// Idle connections can fail during a database restart. Keep the process alive
+// so readiness reports the outage and the pool can reconnect after recovery.
+if (pool.listenerCount("error") === 0) {
+  pool.on("error", () => console.error("[database] Idle connection lost; reconnecting on next request."));
+}

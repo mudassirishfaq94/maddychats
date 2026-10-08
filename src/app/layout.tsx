@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import Script from "next/script";
+import { headers } from "next/headers";
 import { Inter, Space_Grotesk } from "next/font/google";
 import { AuthProvider } from "@/components/providers/auth-provider";
 import { E2EEProvider } from "@/components/providers/e2ee-provider";
@@ -9,6 +10,7 @@ import { HostedAppUpdates } from "@/components/hosted-app-updates";
 import { CapacitorDeepLinks } from "@/components/capacitor-deep-links";
 import { PwaUpdatePrompt } from "@/components/pwa-update-prompt";
 import { NativeAppBridge } from "@/components/native-app-bridge";
+import { PerformanceMonitor } from "@/components/performance-monitor";
 import "./globals.css";
 
 const inter = Inter({
@@ -50,7 +52,8 @@ export const viewport: Viewport = {
   themeColor: "#2563EB",
 };
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+export default async function RootLayout({ children }: { children: ReactNode }) {
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
   return (
     <html
       lang="en"
@@ -58,9 +61,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       suppressHydrationWarning
     >
       <body>
-        <Script src="/theme-init.js" strategy="beforeInteractive" />
+        <Script src="/theme-init.js" strategy="beforeInteractive" nonce={nonce} />
         <AuthProvider>
-          <E2EEProvider><RealtimeProvider>{children}</RealtimeProvider></E2EEProvider>
+          <PerformanceMonitor><E2EEProvider><RealtimeProvider>{children}</RealtimeProvider></E2EEProvider></PerformanceMonitor>
           <CapacitorDeepLinks />
           <PwaUpdatePrompt />
           <HostedAppUpdates />

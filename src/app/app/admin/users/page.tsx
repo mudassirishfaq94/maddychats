@@ -1,5 +1,7 @@
 "use client";
 
+import { useAdminProof } from "@/components/admin-authentication";
+
 import { useCallback, useEffect, useState } from "react";
 import {
   Users,
@@ -26,7 +28,15 @@ interface AdminUser {
   lastSeenAt: string | null;
 }
 
+async function fetchAdminUsers(signal?: AbortSignal): Promise<AdminUser[]> {
+  const response = await fetch("/api/admin/users", { cache: "no-store", signal });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data?.error ?? "Could not refresh users.");
+  return data.users ?? [];
+}
+
 export default function AdminUsersPage() {
+  const { proof, clearProof, form } = useAdminProof();
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
@@ -35,17 +45,21 @@ export default function AdminUsersPage() {
 
   const loadUsers = useCallback(async () => {
     try {
-      const response = await fetch("/api/admin/users", { cache: "no-store" });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data?.error ?? "Could not refresh users.");
-      setUsers(data.users ?? []);
+      setUsers(await fetchAdminUsers());
     } catch (error) { setActionError(error instanceof Error ? error.message : "Could not refresh users."); }
     finally { setLoading(false); }
   }, []);
 
   useEffect(() => {
-    void loadUsers();
-  }, [loadUsers]);
+    const controller = new AbortController();
+    void fetchAdminUsers(controller.signal)
+      .then((data) => { if (!controller.signal.aborted) setUsers(data); })
+      .catch((error: unknown) => {
+        if (!controller.signal.aborted) setActionError(error instanceof Error ? error.message : "Could not refresh users.");
+      })
+      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+    return () => controller.abort();
+  }, []);
 
   const filtered = users.filter(
     (u) =>
@@ -55,55 +69,23 @@ export default function AdminUsersPage() {
       u.email.toLowerCase().includes(query.toLowerCase()),
   );
 
-  async function changeRole(userId: string, newRole: string) {
-    setBusyId(userId);
+  async function mutateUser(userId: string, changes: Record<string, unknown>) {
+    setBusyId(userId); setActionError(null);
     try {
-      await fetch("/api/admin/users", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId, action: "role", role: newRole }),
-      });
-      setUsers((prev) =>
-        prev.map((u) => (u.id === userId ? { ...u, role: newRole } : u)),
-      );
-    } catch {}
-    setBusyId(null);
+      const response = await fetch("/api/admin/users", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId, ...changes, ...proof }) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "Administrative change failed.");
+      await loadUsers();
+    } catch (error) { setActionError(error instanceof Error ? error.message : "Administrative change failed."); }
+    finally { clearProof(); setBusyId(null); }
   }
-
+  async function changeRole(userId: string, newRole: string) { await mutateUser(userId, { action: "role", role: newRole }); }
   async function toggleSuspend(user: AdminUser) {
-    setBusyId(user.id);
-    try {
-      if (user.suspendedAt) {
-        await fetch("/api/admin/users", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ userId: user.id, action: "unsuspend" }),
-        });
-        setUsers((prev) =>
-          prev.map((u) =>
-            u.id === user.id
-              ? { ...u, suspendedAt: null, suspendedUntil: null, suspensionReason: null }
-              : u,
-          ),
-        );
-      } else {
-        const reason = prompt("Suspension reason:");
-        if (!reason) { setBusyId(null); return; }
-        await fetch("/api/admin/users", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ userId: user.id, action: "suspend", reason, days: 7 }),
-        });
-        setUsers((prev) =>
-          prev.map((u) =>
-            u.id === user.id
-              ? { ...u, suspendedAt: new Date().toISOString(), suspensionReason: reason }
-              : u,
-          ),
-        );
-      }
-    } catch {}
-    setBusyId(null);
+    if (user.suspendedAt) await mutateUser(user.id, { action: "unsuspend" });
+    else {
+      const reason = prompt("Suspension reason:");
+      if (reason) await mutateUser(user.id, { action: "suspend", reason, days: 7 });
+    }
   }
 
   async function deleteUser(user: AdminUser) {
@@ -111,14 +93,14 @@ export default function AdminUsersPage() {
     setBusyId(user.id);
     setActionError(null);
     try {
-      const res = await fetch(`/api/admin/users/${user.id}`, { method: "DELETE" });
+      const res = await fetch(`/api/admin/users/${user.id}`, { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify(proof) });
       const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error(data?.error ?? "Could not delete this user.");
       // Refetch after the destructive action so the view always reflects the
       // database, including cascaded membership/message cleanup.
       await loadUsers();
     } catch (error) { setActionError(error instanceof Error ? error.message : "Could not delete this user.");
-    } finally { setBusyId(null); }
+    } finally { clearProof(); setBusyId(null); }
   }
 
   if (loading) {
@@ -138,6 +120,7 @@ export default function AdminUsersPage() {
         </p>
       </div>
 
+      {form}
       <div className="relative">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted)]" />
         <input

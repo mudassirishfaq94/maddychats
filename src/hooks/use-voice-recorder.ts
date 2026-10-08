@@ -154,7 +154,7 @@ export function useVoiceRecorder(): UseVoiceRecorderReturn {
           "Try these steps:\n" +
           "1. Type chrome://settings/content/microphone in your address bar\n" +
           "2. Make sure 'Sites can ask to use your microphone' is selected\n" +
-          "3. Remove maddychats.onrender.com from any block list if present\n" +
+          "3. Remove this site from any block list if present\n" +
           "4. Reload this page (Ctrl+Shift+R) and click 'Try again'\n\n" +
           "If it still fails, try opening this page in an incognito window (Ctrl+Shift+N)."
         );

@@ -25,13 +25,13 @@ export function humanSize(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
-function iconFor(mime: string) {
-  if (mime.includes("pdf")) return FileText;
-  if (mime.includes("zip")) return FileArchive;
+function AttachmentIcon({ mime, className }: { mime: string; className: string }) {
+  if (mime.includes("pdf")) return <FileText className={className} />;
+  if (mime.includes("zip")) return <FileArchive className={className} />;
   if (mime.includes("sheet") || mime.includes("excel") || mime.includes("csv"))
-    return FileSpreadsheet;
-  if (mime.startsWith("text/")) return FileText;
-  return FileIcon;
+    return <FileSpreadsheet className={className} />;
+  if (mime.startsWith("text/")) return <FileText className={className} />;
+  return <FileIcon className={className} />;
 }
 
 /** Full-screen media viewer with next/prev navigation. */
@@ -54,13 +54,10 @@ export function Lightbox({
   const resolved = useEncryptedAttachmentUrl(current);
   // The active image may be E2EE — use the decrypted object URL when ready.
   const activeSrc = current?.encrypted ? (resolved.url ?? "") : src;
-  const [loading, setLoading] = useState(true);
-  const [failed, setFailed] = useState(false);
-
-  useEffect(() => {
-    setLoading(true);
-    setFailed(false);
-  }, [activeSrc]);
+  const [mediaState, setMediaState] = useState<{ src: string; status: "loaded" | "failed" } | null>(null);
+  const status = mediaState?.src === activeSrc ? mediaState.status : "loading";
+  const loading = status === "loading";
+  const failed = status === "failed";
 
   const goNext = useCallback(() => {
     if (images && currentIndex !== undefined && onNavigate) {
@@ -177,11 +174,8 @@ export function Lightbox({
             controls
             autoPlay
             preload="metadata"
-            onLoadedData={() => setLoading(false)}
-            onError={() => {
-              setLoading(false);
-              setFailed(true);
-            }}
+            onLoadedData={() => setMediaState({ src: activeSrc, status: "loaded" })}
+            onError={() => setMediaState({ src: activeSrc, status: "failed" })}
             className={cn(
               "max-h-[85vh] max-w-[90vw] rounded-2xl object-contain shadow-2xl",
               loading && "invisible absolute",
@@ -193,11 +187,8 @@ export function Lightbox({
             key={activeSrc}
             src={activeSrc}
             alt={alt}
-            onLoad={() => setLoading(false)}
-            onError={() => {
-              setLoading(false);
-              setFailed(true);
-            }}
+            onLoad={() => setMediaState({ src: activeSrc, status: "loaded" })}
+            onError={() => setMediaState({ src: activeSrc, status: "failed" })}
             className={cn(
               "max-h-[85vh] max-w-[90vw] rounded-2xl object-contain shadow-2xl animate-fade-in",
               loading && "invisible absolute",
@@ -276,7 +267,6 @@ export function AttachmentList({
 /** A downloadable file chip that transparently decrypts E2EE files. */
 function FileChip({ file, own }: { file: AttachmentDTO; own: boolean }) {
   const { url, failed } = useEncryptedAttachmentUrl(file);
-  const Icon = iconFor(file.mimeType);
   const unavailable = Boolean(file.encrypted && (failed || !url));
   return (
     <span
@@ -294,7 +284,8 @@ function FileChip({ file, own }: { file: AttachmentDTO; own: boolean }) {
           own ? "bg-white/20" : "bg-[color-mix(in_srgb,var(--accent)_16%,transparent)]",
         )}
       >
-        <Icon
+        <AttachmentIcon
+          mime={file.mimeType}
           className={cn(
             "h-4.5 w-4.5",
             own ? "text-[var(--bubble-own-fg)]" : "text-[var(--accent-fg)]",

@@ -1,0 +1,9 @@
+[
+  {
+    "package": "braces",
+    "version": "3.0.3",
+    "advisory": "GHSA-vfj7-8cjw-p6xm",
+    "expires": "2026-11-08T00:00:00Z",
+    "reason": "No published patched version. Used only by Next's development ESLint glob matcher; not the running web server. Keep CI bounded and remove this exception when an upstream fix is available. Production findings, other advisories, new versions and expired exceptions remain blocking."
+  }
+]

@@ -1,3 +1,4 @@
+import { MfaForm } from "@/components/auth/mfa-form";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import type { Metadata } from "next";
@@ -13,13 +14,11 @@ export const dynamic = "force-dynamic";
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string; error?: string }>;
+  searchParams: Promise<{ next?: string; error?: string; mfa?: string; reauth?: string }>;
 }) {
-  // Already signed in? Skip straight to the app.
+  const { next, error, mfa, reauth } = await searchParams;
   const user = await getSessionUser();
-  if (user) redirect("/app");
-
-  const { next, error } = await searchParams;
+  if (user && mfa !== "1" && reauth !== "1") redirect("/app");
   const googleError = error === "google_not_configured"
     ? "Google sign-in needs to be configured by the site owner."
     : error === "google_email_exists"
@@ -45,9 +44,11 @@ export default async function LoginPage({
       }
     >
       {googleError ? <p role="alert" className="mb-4 rounded-xl border border-[color-mix(in_srgb,var(--danger)_35%,transparent)] bg-[color-mix(in_srgb,var(--danger)_10%,transparent)] px-4 py-3 text-sm text-[var(--danger)]">{googleError}</p> : null}
-      <LoginForm next={next} />
-      <GoogleSignIn next={next} />
-      <PhoneSignIn next={next} />
+      {mfa === "1" ? <MfaForm next={next} /> : <>
+        <LoginForm next={next} />
+        <GoogleSignIn next={next} />
+        <PhoneSignIn next={next} />
+      </>}
     </AuthLayout>
   );
 }

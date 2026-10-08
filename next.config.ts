@@ -1,9 +1,8 @@
 import type { NextConfig } from "next";
 
 const securityHeaders = [
-  // This baseline CSP blocks plug-in content and clickjacking without
-  // constraining Next's framework-managed inline scripts/styles. A nonce- or
-  // hash-based script policy can be added when those assets are externalized.
+  // API baseline and fallback. Proxy adds the nonce-based page policy in
+  // report-only or enforcement mode; the root layout forwards its nonce.
   { key: "Content-Security-Policy", value: "base-uri 'self'; form-action 'self'; frame-ancestors 'self'; object-src 'none'" },
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "X-Frame-Options", value: "SAMEORIGIN" },
@@ -19,8 +18,10 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  output: "standalone",
   poweredByHeader: false,
-  env: { NEXT_PUBLIC_APP_VERSION: process.env.VERCEL_GIT_COMMIT_SHA ?? process.env.APP_VERSION ?? "development" },
+  reactProductionProfiling: process.env.PROFILE_BUILD === "1",
+  env: { NEXT_PUBLIC_APP_VERSION: process.env.APP_VERSION ?? "development" },
   // Keep Turbopack scoped to this repository when a parent directory also
   // contains a lockfile (common in local preview workspaces).
   turbopack: {

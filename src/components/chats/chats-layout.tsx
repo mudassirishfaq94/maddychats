@@ -1,5 +1,8 @@
 "use client";
 
+import Image from "next/image";
+import { useHydrated } from "@/hooks/use-hydrated";
+
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -25,8 +28,9 @@ function previewText(conv: ConversationSummary, previews: Map<string, string>): 
   return last.text || ({ audio: "Voice message", image: "Photo", video: "Video", file: "File" }[last.type] ?? "Message");
 }
 
-function stampTime(iso: string | null): string {
+function stampTime(iso: string | null, hydrated: boolean): string {
   if (!iso) return "";
+  if (!hydrated) return new Intl.DateTimeFormat("en", { month: "short", day: "numeric", timeZone: "UTC" }).format(new Date(iso));
   const d = new Date(iso);
   const now = new Date();
   const sameDay =
@@ -61,6 +65,7 @@ export function ChatsLayout({
   conversations: ConversationSummary[];
   children: ReactNode;
 }) {
+  const hydrated = useHydrated();
   const [liveList, setLiveList] = useState<{
     source: ConversationSummary[]; items: ConversationSummary[];
   } | null>(null);
@@ -297,7 +302,7 @@ export function ChatsLayout({
                       )}
                     >
                       {conv.type === "group" && conv.avatarUrl ? (
-                        <img src={conv.avatarUrl} alt="" loading="lazy" decoding="async" className="h-12 w-12 shrink-0 rounded-full object-cover ring-1 ring-black/5" />
+                        <Image unoptimized width={1200} height={1200} src={conv.avatarUrl} alt="" loading="lazy" decoding="async" className="h-12 w-12 shrink-0 rounded-full object-cover ring-1 ring-black/5" />
                       ) : conv.otherMember ? (
                         <span className="relative shrink-0">
                           <Avatar user={conv.otherMember} size={48} />
@@ -332,7 +337,7 @@ export function ChatsLayout({
                             {conv.requestPending ? <span className="shrink-0 rounded-full bg-[var(--accent-soft)] px-1.5 py-0.5 text-[0.58rem] font-bold uppercase tracking-wide text-[var(--accent-fg)]">Request</span> : null}
                           </span>
                           <span className="shrink-0 text-[0.66rem] tabular-nums text-[var(--muted)]">
-                            {stampTime(conv.lastMessageAt ?? conv.createdAt)}
+                            {stampTime(conv.lastMessageAt ?? conv.createdAt, hydrated)}
                           </span>
                         </span>
                           <span className="mt-1 flex items-center gap-2">

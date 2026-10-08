@@ -8,22 +8,6 @@ export interface RateLimitResult {
   retryAfterSeconds: number;
 }
 
-const localBuckets = new Map<string, { count: number; started: number }>();
-
-/** Temporary compatibility path for deployments whose migration has not run. */
-function localRateLimit(key: string, limit: number, windowMs: number): RateLimitResult {
-  const now = Date.now();
-  const bucket = localBuckets.get(key);
-  if (!bucket || bucket.started + windowMs <= now) {
-    localBuckets.set(key, { count: 1, started: now });
-    return { allowed: true, retryAfterSeconds: 0 };
-  }
-  bucket.count += 1;
-  return bucket.count <= limit
-    ? { allowed: true, retryAfterSeconds: 0 }
-    : { allowed: false, retryAfterSeconds: Math.max(1, Math.ceil((bucket.started + windowMs - now) / 1000)) };
-}
-
 export async function rateLimit(
   key: string,
   limit: number,
@@ -41,11 +25,10 @@ export async function rateLimit(
         THEN now() ELSE rate_limit_buckets.window_started_at END
     RETURNING count, window_started_at
     `);
-  } catch (error) {
-    // Do not make authentication unavailable during a rolling deployment when
-    // application code reaches production before its database migration.
-    console.error("[circlo] distributed rate-limit store unavailable; using local fallback", error instanceof Error ? error.message : "unknown error");
-    return localRateLimit(key, limit, windowMs);
+  } catch {
+    // An instance-local fallback would let an outage bypass shared abuse limits.
+    console.error("[rate-limit] Shared store unavailable; request denied.");
+    return { allowed: false, retryAfterSeconds: 30 };
   }
   const row = result.rows[0];
   if (!row) throw new Error("rate_limit_unavailable");

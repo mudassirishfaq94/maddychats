@@ -1,5 +1,9 @@
 # Circlo: safe Render and Supabase cutover
 
+Historical runbook. The supported production target is now Docker VPS +
+Supabase; use [DEPLOYMENT.md](./DEPLOYMENT.md) for current deployment and
+restoration steps. Do not use this document for a new deployment.
+
 This runbook deliberately does **not** perform database changes. Neon remains
 the source of truth until the verification steps below pass. Do not add a
 Render pre-deploy command that runs Drizzle migrations for this cutover.

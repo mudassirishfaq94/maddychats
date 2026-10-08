@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { processScheduledMessages } from "@/server/scheduled-messages";
 import { jsonError } from "@/server/http";
+import { cleanupUploads } from "@/server/upload-retention";
 
 export const dynamic = "force-dynamic";
 
@@ -8,7 +9,7 @@ export const dynamic = "force-dynamic";
  * GET /api/cron/process-scheduled
  *
  * Processes all due scheduled messages. Can be called by:
- * - Vercel Cron (vercel.json cron config)
+ * - The independent Docker scheduled-worker service
  * - External cron services (cron-job.org, etc.)
  * - Any HTTP client with the CRON_SECRET
  *
@@ -32,10 +33,12 @@ export async function GET(req: NextRequest) {
 
   try {
     const result = await processScheduledMessages();
+    const retention = await cleanupUploads();
     return NextResponse.json({
       success: true,
       processed: result.processed,
-      failed: result.failed,
+      failed: result.failed + retention.failed,
+      retention,
       timestamp: new Date().toISOString(),
     });
   } catch (err) {

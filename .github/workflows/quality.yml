@@ -1,0 +1,96 @@
+name: Quality
+
+on:
+  push:
+    branches: [main, master, 'codex/audit-remainder-*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Lint, types, build, security and integration
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    services:
+      clamav:
+        image: clamav/clamav:1.4
+        ports: ["3310:3310"]
+        options: >-
+          --health-cmd "clamdcheck.sh"
+          --health-interval 20s
+          --health-timeout 10s
+          --health-retries 20
+          --health-start-period 300s
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: circlo_ci
+          POSTGRES_PASSWORD: disposable-ci-database-only
+          POSTGRES_DB: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U circlo_ci -d postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
+      PGHOST: 127.0.0.1
+      PGPORT: "5432"
+      PGUSER: circlo_ci
+      PGPASSWORD: disposable-ci-database-only
+      DATABASE_URL: postgresql://circlo_ci:disposable-ci-database-only@127.0.0.1:5432/item1_security_test
+      ITEM1_TEST_DATABASE_URL: postgresql://circlo_ci:disposable-ci-database-only@127.0.0.1:5432/item1_security_test
+      ITEM2_TEST_DATABASE_URL: postgresql://circlo_ci:disposable-ci-database-only@127.0.0.1:5432/item2_deployment_test
+      ITEM3_TEST_DATABASE_URL: postgresql://circlo_ci:disposable-ci-database-only@127.0.0.1:5432/item3_authorization_test
+      ITEM456_TEST_DATABASE_URL: postgresql://circlo_ci:disposable-ci-database-only@127.0.0.1:5432/items456_quality_test
+      REMAINING_TEST_DATABASE_URL: postgresql://circlo_ci:disposable-ci-database-only@127.0.0.1:5432/remaining_hardening_test
+      REMAINING_BROWSER_TESTS: "1"
+      ITEM456_BROWSER_TESTS: "1"
+      PROFILE_BUILD: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client-16
+      - run: npm ci
+      - name: Install mobile lab browser
+        run: npx playwright install --with-deps chromium
+      - name: Dependency audit
+        run: |
+          npm audit --omit=dev --audit-level=high
+          npm run audit:dependencies
+      - name: Real scanner integration
+        env:
+          CLAMAV_HOST: 127.0.0.1
+          CLAMAV_PORT: "3310"
+        run: npm run test:scanner
+      - run: npm run lint
+      - run: npm run typecheck
+      - name: Production build
+        run: npm run build
+      - name: Prepare account-security database
+        run: |
+          createdb item1_security_test
+          npm run db:migrate
+      - name: Unit and isolated integration suites
+        run: npm test
+      - name: Save local lab measurements
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-and-database-lab
+          path: .freebuff/performance/*.json
+          if-no-files-found: ignore

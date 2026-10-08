@@ -52,10 +52,10 @@ export function loadSignalBridge(): Promise<SignalWasmModule> {
   if (!bridgePromise) {
     bridgePromise = (async () => {
       const url = new URL("/signal/maddy_signal_bridge.js", window.location.origin).href;
-      const module = await import(/* webpackIgnore: true */ url) as SignalWasmModule & { default: () => Promise<unknown> };
-      await module.default();
-      if (module.protocol_version() !== 2) throw new Error("signal_bridge_protocol_mismatch");
-      return module;
+      const bridgeModule = await import(/* webpackIgnore: true */ url) as SignalWasmModule & { default: () => Promise<unknown> };
+      await bridgeModule.default();
+      if (bridgeModule.protocol_version() !== 2) throw new Error("signal_bridge_protocol_mismatch");
+      return bridgeModule;
     })().catch((error: unknown) => {
       bridgePromise = null;
       throw error;

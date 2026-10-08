@@ -17,6 +17,8 @@ import { clearVerifiedMessageCache } from "@/lib/e2ee-message-cache";
 
 export interface AuthResult {
   ok: boolean;
+  mfaRequired?: boolean;
+  verificationRequired?: boolean;
   error?: string;
   fields?: Record<string, string>;
 }
@@ -116,6 +118,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           body: JSON.stringify(input),
         });
         const data = (await res.json().catch(() => null)) as {
+          mfaRequired?: boolean;
+          verificationRequired?: boolean;
           user?: SafeUser;
           error?: string;
           fields?: Record<string, string>;
@@ -125,8 +129,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             ok: false,
             error: data?.error ?? "Something went wrong. Please try again.",
             fields: data?.fields,
+            verificationRequired: data?.verificationRequired,
           };
         }
+        if (data?.mfaRequired || data?.verificationRequired) return { ok: true, mfaRequired: data.mfaRequired, verificationRequired: data.verificationRequired };
         if (data?.user) {
           setUser(data.user);
           setStatus("authenticated");
@@ -152,6 +158,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           body: JSON.stringify(input),
         });
         const data = (await res.json().catch(() => null)) as {
+          mfaRequired?: boolean;
+          verificationRequired?: boolean;
           user?: SafeUser;
           error?: string;
           fields?: Record<string, string>;
@@ -161,8 +169,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             ok: false,
             error: data?.error ?? "Something went wrong. Please try again.",
             fields: data?.fields,
+            verificationRequired: data?.verificationRequired,
           };
         }
+        if (data?.mfaRequired || data?.verificationRequired) return { ok: true, mfaRequired: data.mfaRequired, verificationRequired: data.verificationRequired };
         if (data?.user) {
           setUser(data.user);
           setStatus("authenticated");

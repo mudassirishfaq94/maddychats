@@ -52,10 +52,11 @@ export function PhoneSignIn({ next = "/app", signup = false }: { next?: string; 
         body: JSON.stringify({ idToken, ...(profile ? { displayName, username } : {}) }),
       });
       let response = await complete(signup || stage === "profile");
-      const data = await response.json().catch(() => null) as { error?: string; needsProfile?: boolean; fields?: Record<string, string> } | null;
+      const data = await response.json().catch(() => null) as { error?: string; needsProfile?: boolean; mfaRequired?: boolean; fields?: Record<string, string> } | null;
       if (response.status === 409 && data?.needsProfile) { setStage("profile"); return; }
       if (!response.ok) { setError(data?.fields?.username ?? data?.error ?? "Phone sign-in failed."); return; }
-      window.location.assign(next.startsWith("/") ? next : "/app");
+      const target = next.startsWith("/") && !next.startsWith("//") ? next : "/app";
+      window.location.assign(data?.mfaRequired ? `/login?mfa=1&next=${encodeURIComponent(target)}` : target);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message.replace(/^Firebase: /, "") : "The verification code was invalid or expired.");
     } finally { setPending(false); }

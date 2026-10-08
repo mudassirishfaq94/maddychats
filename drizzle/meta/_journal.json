@@ -225,6 +225,48 @@
       "when": 1789872000000,
       "tag": "0031_signal_protocol_device_id",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1791417600000,
+      "tag": "0033_account_security",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1791504000000,
+      "tag": "0032_e2ee_trusted_devices",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1791590400000,
+      "tag": "0034_deployment_schema_repair",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1791676800000,
+      "tag": "0035_upload_retention",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1791763200000,
+      "tag": "0036_device_sessions",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1791849600000,
+      "tag": "0037_realtime_and_admin_guards",
+      "breakpoints": true
     }
   ]
 }

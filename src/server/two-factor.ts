@@ -3,8 +3,8 @@
  * No external dependencies — uses HMAC-SHA1 per RFC 6238 / RFC 4226.
  */
 
-import { createHmac, createHash, randomBytes } from "crypto";
-import { eq } from "drizzle-orm";
+import { createHmac, createHash, randomBytes, timingSafeEqual } from "crypto";
+import { and, eq, isNull, lt, or } from "drizzle-orm";
 import { db } from "@/db";
 import { user2fa, users } from "@/db/schema";
 
@@ -52,7 +52,7 @@ function generateSecret(): string {
 }
 
 /** Generate a TOTP code for a given time step */
-function generateTOTP(secret: string, timeStep: number): string {
+export function generateTOTP(secret: string, timeStep: number): string {
   const key = base32Decode(secret);
   const time = Buffer.alloc(8);
   time.writeUInt32BE(0, 0);
@@ -69,10 +69,6 @@ function generateTOTP(secret: string, timeStep: number): string {
   return (code % 10 ** DIGITS).toString().padStart(DIGITS, "0");
 }
 
-/** Get current time step */
-function getCurrentTimeStep(): number {
-  return Math.floor(Date.now() / 1000 / PERIOD);
-}
 
 /* ──────────── Public API ──────────── */
 
@@ -104,63 +100,74 @@ export async function generateTOTPSetup(userId: string) {
     .from(users)
     .where(eq(users.id, userId));
 
-  const issuer = "Maddy Chats";
+  const issuer = "Circlo";
   const accountName = user?.email ?? userId;
   const otpauthUrl = `otpauth://totp/${encodeURIComponent(issuer)}:${encodeURIComponent(accountName)}?secret=${secret}&issuer=${encodeURIComponent(issuer)}&algorithm=${ALGORITHM.toUpperCase()}&digits=${DIGITS}&period=${PERIOD}`;
 
   return { secret, otpauthUrl };
 }
 
-/** Verify a TOTP code and enable 2FA if pending */
-export async function verifyAndEnable2FA(
-  userId: string,
-  code: string,
-): Promise<{ success: boolean; error?: string }> {
-  const [record] = await db
-    .select()
-    .from(user2fa)
-    .where(eq(user2fa.userId, userId));
-
-  if (!record) return { success: false, error: "2FA not set up." };
-  if (record.enabled) return { success: false, error: "2FA is already enabled." };
-
-  // Check current time step and one step before/after for clock drift
-  const currentStep = getCurrentTimeStep();
-  for (const step of [currentStep - 1, currentStep, currentStep + 1]) {
-    if (generateTOTP(record.secret, step) === code) {
-      await db
-        .update(user2fa)
-        .set({ enabled: true, enabledAt: new Date() })
-        .where(eq(user2fa.userId, userId));
-      return { success: true };
-    }
+/** Strict code matching, including a bounded clock-drift window. */
+export function matchingTOTPStep(secret: string, code: string, now = Date.now()): number | null {
+  if (!/^\d{6}$/.test(code)) return null;
+  const current = Math.floor(now / 1000 / PERIOD);
+  for (const step of [current, current - 1, current + 1]) {
+    if (step >= 0 && timingSafeEqual(Buffer.from(generateTOTP(secret, step)), Buffer.from(code))) return step;
   }
-
-  return { success: false, error: "Invalid verification code. Please try again." };
+  return null;
 }
 
-/** Verify a TOTP code during login */
-export async function verifyTOTPLogin(
-  userId: string,
-  code: string,
-): Promise<{ valid: boolean; error?: string }> {
-  const [record] = await db
-    .select()
-    .from(user2fa)
-    .where(eq(user2fa.userId, userId));
+export function hashRecoveryCode(code: string): string {
+  return createHash("sha256").update(code.trim().toLowerCase().replace(/-/g, "")).digest("hex");
+}
 
-  if (!record || !record.enabled) {
-    return { valid: true }; // No 2FA = pass through
+export function newRecoveryCodes() {
+  const codes = Array.from({ length: 10 }, () => randomBytes(16).toString("hex").match(/.{1,8}/g)!.join("-"));
+  return { codes, hashes: codes.map(hashRecoveryCode) };
+}
+
+export async function verifyAndEnable2FA(userId: string, code: string): Promise<{ success: boolean; error?: string; recoveryCodes?: string[]; mfaTime?: number }> {
+  const [record] = await db.select().from(user2fa).where(eq(user2fa.userId, userId));
+  if (!record || record.enabled) return { success: false, error: "2FA is not pending setup." };
+  const step = matchingTOTPStep(record.secret, code);
+  if (step === null) return { success: false, error: "Invalid verification code." };
+  const recovery = newRecoveryCodes();
+  const enabledAt = new Date();
+  const enabled = await db.update(user2fa).set({ enabled: true, enabledAt, lastUsedStep: step, recoveryCodeHashes: recovery.hashes })
+    .where(and(eq(user2fa.userId, userId), eq(user2fa.secret, record.secret), eq(user2fa.enabled, false)))
+    .returning({ userId: user2fa.userId });
+  return enabled.length ? { success: true, recoveryCodes: recovery.codes, mfaTime: enabledAt.getTime() } : { success: false, error: "Setup changed. Please start again." };
+}
+
+type SecurityTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/** Caller holds a transaction; row lock serializes recovery and TOTP consumption. */
+export async function consumeSecondFactor(tx: SecurityTransaction, userId: string, code: string): Promise<boolean> {
+  const [record] = await tx.select().from(user2fa).where(eq(user2fa.userId, userId)).for("update");
+  if (!record?.enabled) return false;
+  if (/^[0-9a-f]{8}(?:-?[0-9a-f]{8}){3}$/i.test(code.trim())) {
+    const hash = hashRecoveryCode(code);
+    const index = record.recoveryCodeHashes.indexOf(hash);
+    if (index < 0) return false;
+    await tx.update(user2fa).set({ recoveryCodeHashes: record.recoveryCodeHashes.filter((_, i) => i !== index) }).where(eq(user2fa.userId, userId));
+    return true;
   }
+  const step = matchingTOTPStep(record.secret, code);
+  if (step === null || (record.lastUsedStep !== null && step <= record.lastUsedStep)) return false;
+  await tx.update(user2fa).set({ lastUsedStep: step }).where(and(eq(user2fa.userId, userId), or(isNull(user2fa.lastUsedStep), lt(user2fa.lastUsedStep, step))));
+  return true;
+}
 
-  const currentStep = getCurrentTimeStep();
-  for (const step of [currentStep - 1, currentStep, currentStep + 1]) {
-    if (generateTOTP(record.secret, step) === code) {
-      return { valid: true };
-    }
-  }
+export async function verifyTOTPLogin(userId: string, code: string): Promise<{ valid: boolean; error?: string }> {
+  const valid = await db.transaction((tx) => consumeSecondFactor(tx, userId, code));
+  return { valid, ...(!valid ? { error: "Invalid or already used verification code." } : {}) };
+}
 
-  return { valid: false, error: "Invalid verification code." };
+export async function replaceRecoveryCodes(userId: string) {
+  const recovery = newRecoveryCodes();
+  const rows = await db.update(user2fa).set({ recoveryCodeHashes: recovery.hashes })
+    .where(and(eq(user2fa.userId, userId), eq(user2fa.enabled, true))).returning({ userId: user2fa.userId });
+  return rows.length ? recovery.codes : null;
 }
 
 /** Check if a user has 2FA enabled */
@@ -188,4 +195,10 @@ export async function disable2FA(
 
   await db.delete(user2fa).where(eq(user2fa.userId, userId));
   return { success: true };
+}
+
+/** Also revokes sessions minted before enrollment, including old-format JWTs. */
+export async function enabledMfaSince(userId: string): Promise<Date | null> {
+  const [record] = await db.select().from(user2fa).where(eq(user2fa.userId, userId));
+  return record?.enabled ? record.enabledAt ?? record.createdAt : null;
 }

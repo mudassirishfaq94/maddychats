@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { eq, and } from "drizzle-orm";
+import { eq, and, isNotNull } from "drizzle-orm";
 import { db } from "@/db";
 import { e2eeKeys } from "@/db/schema";
 import { getSessionUser } from "@/server/session";
@@ -32,6 +32,7 @@ export async function GET(req: NextRequest) {
       deviceId: e2eeKeys.deviceId,
       publicKey: e2eeKeys.publicKey,
       encryptedPrivateKey: e2eeKeys.encryptedPrivateKey,
+      trustedAt: e2eeKeys.trustedAt,
       createdAt: e2eeKeys.createdAt,
       lastUsedAt: e2eeKeys.lastUsedAt,
     })
@@ -40,7 +41,7 @@ export async function GET(req: NextRequest) {
 
   // Private-key backups are only returned to their authenticated owner. A
   // peer can receive the public key only, which is all key exchange needs.
-  const keys = rows.map((key) => targetId ? {
+  const keys = rows.filter((key) => !targetId || key.trustedAt).map((key) => targetId ? {
     id: key.id,
     deviceId: key.deviceId,
     publicKey: key.publicKey,
@@ -97,13 +98,23 @@ export async function POST(req: NextRequest) {
       .set({ encryptedPrivateKey, lastUsedAt: new Date() })
       .where(eq(e2eeKeys.id, existing.id));
   } else {
+    // The first device is the account's trust anchor. Every later device is
+    // intentionally pending until a trusted device approves a QR pairing.
+    const [trustedDevice] = await db
+      .select({ id: e2eeKeys.id })
+      .from(e2eeKeys)
+      .where(and(eq(e2eeKeys.userId, user.id), isNotNull(e2eeKeys.trustedAt)))
+      .limit(1);
     await db.insert(e2eeKeys).values({
       userId: user.id,
       deviceId,
       publicKey,
       encryptedPrivateKey,
+      trustedAt: trustedDevice ? null : new Date(),
     });
   }
 
-  return NextResponse.json({ success: true });
+  const [registered] = await db.select({ trustedAt: e2eeKeys.trustedAt }).from(e2eeKeys)
+    .where(and(eq(e2eeKeys.userId, user.id), eq(e2eeKeys.deviceId, deviceId))).limit(1);
+  return NextResponse.json({ success: true, pendingApproval: !registered?.trustedAt });
 }

@@ -20,6 +20,7 @@ import { PrivacySettings } from "@/components/profile/privacy-settings";
 import { LoginHistory } from "@/components/profile/login-history";
 import { AccountDataSection } from "@/components/profile/account-data";
 import { TwoFactorAuth } from "@/components/profile/two-factor-auth";
+import { Devices } from "@/components/profile/devices";
 import { db } from "@/db";
 import { oauthAccounts } from "@/db/schema";
 import { Avatar } from "@/components/avatar";
@@ -105,6 +106,7 @@ export default async function ProfilePage({
           <ProfileEditor user={user} />
           <AuthenticationMethods initialMethods={initialMethods} notice={notice} />
           <TwoFactorAuth />
+          <Devices />
           <NotificationPreferences />
           <PrivacySettings />
           <LoginHistory />

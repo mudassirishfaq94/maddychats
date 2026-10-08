@@ -1,8 +1,11 @@
+import { authorizeAdminMutation, adminActionError } from "@/server/admin-authentication";
+import { z } from "zod";
+import { isUuid } from "@/server/users";
 import { NextRequest, NextResponse } from "next/server";
 import { eq, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { users, messages, conversationMembers } from "@/db/schema";
-import { requireAdmin, requireSuperAdmin, auditLog } from "@/server/admin";
+import { users, messages, conversationMembers, adminAuditLog } from "@/db/schema";
+import { requireAdmin, lockAdminSubjects } from "@/server/admin";
 import { guardSameOrigin, jsonError, readJson } from "@/server/http";
 import bcrypt from "bcryptjs";
 
@@ -16,7 +19,7 @@ async function checkAdmin() {
   return null;
 }
 
-/** GET /api/admin/users/[id] — Get user details with stats */
+/** GET /api/admin/users/[id] â€” Get user details with stats */
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -89,97 +92,60 @@ export async function GET(
   });
 }
 
-/** PATCH /api/admin/users/[id] — Update user */
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> },
-) {
-  const blocked = guardSameOrigin(req);
-  if (blocked) return blocked;
+const editSchema = z.object({
+  displayName: z.string().trim().min(2).max(50).optional(),
+  username: z.string().regex(/^[a-zA-Z0-9_]{3,20}$/).optional(),
+  email: z.email().max(254).optional(),
+  bio: z.string().max(500).optional(),
+  newPassword: z.string().min(8).max(72).regex(/[a-z]/).regex(/[A-Z]/).regex(/[0-9]/).optional(),
+  ban: z.boolean().optional(),
+  // avatar URLs are uploaded through the safety pipeline, not editable here.
+});
 
-  const authError = await checkAdmin();
-  if (authError === "UNAUTHENTICATED") return jsonError(401, "Not authenticated.");
-  if (authError === "FORBIDDEN") return jsonError(403, "Admin access required.");
-
-  const { id } = await params;
-  const body = await readJson(req);
-  if (!body) return jsonError(400, "Invalid request body.");
-
-  const updateData: Record<string, unknown> = {};
-
-  if (body.displayName !== undefined) updateData.displayName = body.displayName;
-  if (body.username !== undefined) updateData.username = body.username;
-  if (body.email !== undefined) updateData.email = body.email;
-  if (body.bio !== undefined) updateData.bio = body.bio;
-  if (body.avatarUrl !== undefined) updateData.avatarUrl = body.avatarUrl;
-  if (typeof body.password === "string" && body.password.length >= 6) {
-    updateData.passwordHash = await bcrypt.hash(body.password, 12);
-  }
-
-  // Ban/unban
-  if (body.ban === true) {
-    updateData.tokenInvalidBeforeAt = new Date();
-  } else if (body.ban === false) {
-    updateData.tokenInvalidBeforeAt = null;
-  }
-
-  if (Object.keys(updateData).length === 0) {
-    return jsonError(400, "No valid fields to update.");
-  }
-
+/** PATCH /api/admin/users/[id] — freshly authenticated administrator only. */
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const blocked = guardSameOrigin(req); if (blocked) return blocked;
   try {
-    const [updated] = await db
-      .update(users)
-      .set(updateData)
-      .where(eq(users.id, id))
-      .returning({
-        id: users.id,
-        username: users.username,
-        displayName: users.displayName,
-        email: users.email,
-      });
-
-    if (!updated) return jsonError(404, "User not found.");
-    return NextResponse.json({ ok: true, user: updated });
-  } catch (e) {
-    if ((e as Error).message.includes("unique")) {
-      return jsonError(409, "Username or email already exists.");
-    }
-    throw e;
-  }
+    const body = await readJson(req);
+    const me = await authorizeAdminMutation(req, body, true);
+    const { id } = await params;
+    if (!isUuid(id)) return jsonError(422, "Invalid user.");
+    const parsed = editSchema.safeParse(body);
+    if (!parsed.success || !Object.keys(parsed.data).length) return jsonError(422, "Invalid user changes.");
+    const { newPassword, ban, ...changes } = parsed.data;
+    const hash = newPassword ? await bcrypt.hash(newPassword, 12) : undefined;
+    await db.transaction(async (tx) => {
+      const { actor, target } = await lockAdminSubjects(tx, me.id, id);
+      if (actor?.role !== "admin") throw new Error("FORBIDDEN");
+      if (!target) throw new Error("NOT_FOUND");
+      if (target.role === "admin" || id === me.id) throw new Error("FORBIDDEN");
+      await tx.update(users).set({ ...changes,
+        ...(hash ? { passwordHash: hash } : {}),
+        ...(changes.email ? { emailVerifiedAt: null } : {}),
+        ...(hash || changes.email || ban === true ? { tokenInvalidBeforeAt: new Date() } : {}),
+        ...(ban === true ? { suspendedAt: new Date(), suspendedUntil: null, suspendedBy: me.id, suspensionReason: "Administrative suspension" } : {}),
+        ...(ban === false ? { suspendedAt: null, suspendedUntil: null, suspendedBy: null, suspensionReason: null } : {}),
+      }).where(eq(users.id, id));
+      await tx.insert(adminAuditLog).values({ adminId: me.id, targetUserId: id, action: "user_updated", details: { actorUserId: me.id, subjectUserId: id, fields: Object.keys(parsed.data) } });
+    });
+    return NextResponse.json({ ok: true });
+  } catch (error) { return adminActionError(error); }
 }
 
-/** DELETE /api/admin/users/[id] — Delete user */
-export async function DELETE(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> },
-) {
-  const blocked = guardSameOrigin(req);
-  if (blocked) return blocked;
-
-  let me;
-  try { me = await requireSuperAdmin(); }
-  catch (e) { return jsonError((e as Error).message === "UNAUTHENTICATED" ? 401 : 403, "Administrator access required."); }
-
-  const { id } = await params;
-
-  // Prevent deleting yourself
-  if (me.id === id) return jsonError(400, "Cannot delete your own account.");
-
-  const [target] = await db.select({ role: users.role }).from(users).where(eq(users.id, id)).limit(1);
-  if (!target) return jsonError(404, "User not found.");
-  if (target.role === "admin") return jsonError(403, "Cannot delete another administrator.");
-
-  // Write the audit event while the target still exists. The foreign key
-  // subsequently clears targetUserId on deletion, while details retains the
-  // deleted identifier for a durable audit trail.
-  await auditLog({ adminId: me.id, action: "user_deleted", targetUserId: id, details: { deletedUserId: id } });
-
-  const [deleted] = await db
-    .delete(users)
-    .where(eq(users.id, id))
-    .returning({ id: users.id });
-
-  if (!deleted) return jsonError(404, "User not found.");
-  return NextResponse.json({ ok: true });
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const blocked = guardSameOrigin(req); if (blocked) return blocked;
+  try {
+    const me = await authorizeAdminMutation(req, await readJson(req), true);
+    const { id } = await params;
+    if (!isUuid(id)) return jsonError(422, "Invalid user.");
+    await db.transaction(async (tx) => {
+      const { actor, target } = await lockAdminSubjects(tx, me.id, id);
+      if (actor?.role !== "admin") throw new Error("FORBIDDEN");
+      if (!target) throw new Error("NOT_FOUND");
+      if (id === me.id || target.role === "admin") throw new Error("FORBIDDEN");
+      await tx.insert(adminAuditLog).values({ adminId: me.id, action: "user_deleted", targetUserId: id, details: { actorUserId: me.id, deletedUserId: id } });
+      await tx.delete(users).where(eq(users.id, id));
+    });
+    return NextResponse.json({ ok: true });
+  } catch (error) { return adminActionError(error); }
 }

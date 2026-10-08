@@ -1,13 +1,13 @@
+import { beginSignIn } from "@/server/authentication";
 import { randomBytes } from "crypto";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import { and, eq, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { notificationPreferences, oauthAccounts, users } from "@/db/schema";
-import { clientUrl, googleCallbackUrl, SESSION_COOKIE } from "@/server/config";
+import { clientUrl, googleCallbackUrl } from "@/server/config";
 import { hashPassword } from "@/server/password";
-import { createSessionToken, getSessionUser, sessionCookieOptions } from "@/server/session";
-import { requestIsSecure } from "@/server/http";
+import { getSessionUser, newSessionBlockReason } from "@/server/session";
 import { createGoogleMobileHandoff } from "@/server/google-mobile-handoff";
 
 const googleKeys = createRemoteJWKSet(new URL("https://www.googleapis.com/oauth2/v3/certs"));
@@ -59,6 +59,9 @@ async function handleGoogleCallback(req: NextRequest) {
     });
     return redirectError("google_failed");
   }
+  // Google auth_time is optional; this new authorization-code exchange must
+  // return a freshly issued, nonce-bound credential for our application.
+  if (typeof claims.iat !== "number" || claims.iat * 1000 < Date.now() - 5 * 60 * 1000 || claims.iat * 1000 > Date.now() + 30_000) return redirectError("google_fresh_auth_required");
   if (claims.nonce !== nonce || !claims.sub || typeof claims.email !== "string" || claims.email_verified !== true) return redirectError("google_unverified");
 
   if (linking) {
@@ -101,11 +104,7 @@ async function handleGoogleCallback(req: NextRequest) {
   if (!user) {
     const emailTaken = await db.select().from(users).where(sql`lower(${users.email}) = ${claims.email.toLowerCase()}`).limit(1);
     if (emailTaken[0]) {
-      const domain = claims.email.split("@")[1]?.toLowerCase();
-      const googleIsAuthoritative = domain === "gmail.com" || typeof claims.hd === "string";
-      if (!googleIsAuthoritative) return redirectError("google_email_exists");
-      await db.insert(oauthAccounts).values({ userId: emailTaken[0].id, provider: "google", providerAccountId: claims.sub }).onConflictDoNothing();
-      user = emailTaken[0];
+      return redirectError("google_link_required");
     }
   }
   if (!user) {
@@ -118,20 +117,23 @@ async function handleGoogleCallback(req: NextRequest) {
     }
     const passwordHash = await hashPassword(randomBytes(32).toString("base64url"));
     user = await db.transaction(async (tx) => {
-      const created = await tx.insert(users).values({ displayName: typeof claims.name === "string" ? claims.name.slice(0, 50) : username, username, email: claims.email!.toLowerCase(), passwordHash, avatarUrl: typeof claims.picture === "string" ? claims.picture : null }).returning();
+      const created = await tx.insert(users).values({ displayName: typeof claims.name === "string" ? claims.name.slice(0, 50) : username, username, email: claims.email!.toLowerCase(), emailVerifiedAt: new Date(), passwordHash, avatarUrl: typeof claims.picture === "string" ? claims.picture : null }).returning();
       await tx.insert(notificationPreferences).values({ userId: created[0].id });
       await tx.insert(oauthAccounts).values({ userId: created[0].id, provider: "google", providerAccountId: claims.sub! });
       return created[0];
     });
   }
 
+  if (!user.emailVerifiedAt && user.email.toLowerCase() === claims.email.toLowerCase()) {
+    await db.update(users).set({ emailVerifiedAt: new Date() }).where(eq(users.id, user.id));
+  }
   if (mobile && mobileChallenge && !linking) {
+    const sessionBlock = await newSessionBlockReason(user);
+    if (sessionBlock === "suspended") return finishGoogleOAuth(redirectError("account_unavailable"));
     const ticket = await createGoogleMobileHandoff(user.id, user.username, mobileChallenge);
     return finishGoogleOAuth(NextResponse.redirect(new URL(`ziptalks://auth/google?ticket=${encodeURIComponent(ticket)}`)));
   }
-  const response = NextResponse.redirect(new URL(next.startsWith("/") && !next.startsWith("//") ? next : "/app", clientUrl()));
-  response.cookies.set(SESSION_COOKIE, await createSessionToken(user.id, user.username), sessionCookieOptions(requestIsSecure(req)));
-  return finishGoogleOAuth(response);
+  return finishGoogleOAuth(await beginSignIn(req, user, next.startsWith("/") && !next.startsWith("//") ? next : "/app"));
 }
 
 export async function GET(req: NextRequest) {

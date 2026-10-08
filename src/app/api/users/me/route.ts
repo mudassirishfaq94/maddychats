@@ -11,6 +11,9 @@ import {
 import {
   getSessionUser,
   createSessionToken,
+  getSessionAuthTime,
+  getSessionMfaTime,
+  getSessionDeviceId,
   sessionCookieOptions,
 } from "@/server/session";
 import {
@@ -100,7 +103,7 @@ export async function PATCH(req: NextRequest) {
   const res = NextResponse.json({ user: safe });
 
   if (usernameChanged) {
-    const token = await createSessionToken(safe.id, safe.username);
+    const token = await createSessionToken(safe.id, safe.username, await getSessionAuthTime(), await getSessionMfaTime(), await getSessionDeviceId());
     res.cookies.set(
       SESSION_COOKIE,
       token,

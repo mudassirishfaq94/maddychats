@@ -1,3 +1,4 @@
+import { issueEmailVerification, verificationDeliveryConfigured } from "@/server/email-verification";
 import { NextRequest, NextResponse } from "next/server";
 import { fieldErrors, registerSchema } from "@/lib/schemas";
 import { hashPassword } from "@/server/password";
@@ -5,7 +6,6 @@ import {
   createUser,
   findUserByEmail,
   findUserByUsername,
-  toSafeUser,
 } from "@/server/users";
 import { AUTH_RATE_LIMIT, rateLimit } from "@/server/rate-limit";
 import {
@@ -13,10 +13,7 @@ import {
   guardSameOrigin,
   jsonError,
   readJson,
-  requestIsSecure,
 } from "@/server/http";
-import { SESSION_COOKIE } from "@/server/config";
-import { createSessionToken, sessionCookieOptions } from "@/server/session";
 
 export const dynamic = "force-dynamic";
 
@@ -58,6 +55,8 @@ export async function POST(req: NextRequest) {
     });
   }
 
+  if (!verificationDeliveryConfigured()) return jsonError(503, "Email registration is unavailable until verification email delivery is configured.");
+
   const passwordHash = await hashPassword(password);
 
   let user;
@@ -81,16 +80,6 @@ export async function POST(req: NextRequest) {
     return jsonError(500, "Something went wrong. Please try again.");
   }
 
-  // TEMPORARY COMPATIBILITY MODE: outbound verification is unavailable in the
-  // current production deployment. Keep registration usable until the Circlo
-  // mail provider is configured, then restore `issueEmailVerification` and
-  // the verification-required response before enforcing verification again.
-  const token = await createSessionToken(user.id, user.username);
-  const response = NextResponse.json({ user: toSafeUser(user) }, { status: 201 });
-  response.cookies.set(
-    SESSION_COOKIE,
-    token,
-    sessionCookieOptions(requestIsSecure(req)),
-  );
-  return response;
+  const delivered = await issueEmailVerification(user);
+  return NextResponse.json({ verificationRequired: true, emailSent: delivered }, { status: 201 });
 }

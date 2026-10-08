@@ -224,7 +224,7 @@ export async function getAuditLog(limit = 100) {
       },
     })
     .from(adminAuditLog)
-    .innerJoin(users, eq(adminAuditLog.adminId, users.id))
+    .leftJoin(users, eq(adminAuditLog.adminId, users.id))
     .orderBy(desc(adminAuditLog.createdAt))
     .limit(limit);
 }
@@ -232,8 +232,11 @@ export async function getAuditLog(limit = 100) {
 /* ========================== Account Deletion ========================== */
 
 export async function deleteAccount(userId: string) {
-  // Delete user's data (cascades handle most of it)
-  await db.delete(users).where(eq(users.id, userId));
+  // The event and deletion commit together; no success event survives a failed deletion.
+  await db.transaction(async (tx) => {
+    await tx.insert(adminAuditLog).values({ adminId: userId, action: "account_self_deleted", targetUserId: userId, details: { actorUserId: userId } });
+    await tx.delete(users).where(eq(users.id, userId));
+  });
 }
 
 /* ========================== Data Export ========================== */

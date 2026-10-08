@@ -60,7 +60,7 @@ export async function memberIdsOf(conversationId: string): Promise<string[]> {
 
 /* ------------------------------ DTO hydration ----------------------------- */
 
-function baseDTO(row: MessageRow, sender: UserRow): MessageDTO {
+export function baseDTO(row: MessageRow, sender: UserRow): MessageDTO {
   const deleted = row.deletedAt !== null;
   return {
     id: row.id,
@@ -1536,13 +1536,11 @@ export async function deleteForMe(
   const membership = await getMembership(msgRows[0].conversationId, userId);
   if (!membership) return "not_found";
 
-  try {
-    await db.insert(messageDeletions).values({ messageId, userId });
-    return "ok";
-  } catch (err) {
-    if ((err as { code?: string })?.code === "23505") return "already_deleted";
-    throw err;
-  }
+  const inserted = await db.insert(messageDeletions)
+    .values({ messageId, userId })
+    .onConflictDoNothing({ target: [messageDeletions.messageId, messageDeletions.userId] })
+    .returning({ id: messageDeletions.id });
+  return inserted.length ? "ok" : "already_deleted";
 }
 
 /** Check if a user has soft-deleted a specific message for themselves. */

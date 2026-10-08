@@ -1,5 +1,8 @@
 "use client";
 
+import Image from "next/image";
+import { useHydrated } from "@/hooks/use-hydrated";
+
 import {
   useCallback,
   useEffect,
@@ -95,15 +98,17 @@ function b64ToBytes(base64: string): Uint8Array {
   return bytes;
 }
 
-function timeLabel(iso: string): string {
+function timeLabel(iso: string, hydrated: boolean): string {
   return new Intl.DateTimeFormat("en", {
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
+    ...(!hydrated ? { timeZone: "UTC" } : {}),
   }).format(new Date(iso));
 }
 
-function dayLabel(iso: string): string {
+function dayLabel(iso: string, hydrated: boolean): string {
+  if (!hydrated) return new Intl.DateTimeFormat("en", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }).format(new Date(iso));
   const d = new Date(iso);
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -114,7 +119,8 @@ function dayLabel(iso: string): string {
   return formatDate(iso);
 }
 
-function sameDay(a: string, b: string): boolean {
+function sameDay(a: string, b: string, hydrated: boolean): boolean {
+  if (!hydrated) return a.slice(0, 10) === b.slice(0, 10);
   const da = new Date(a);
   const dbb = new Date(b);
   return (
@@ -179,6 +185,7 @@ export function ChatView({
   conversation: ConversationDetail;
   initial: MessagePage;
 }) {
+  const hydrated = useHydrated();
   const router = useRouter();
   const searchParams = useSearchParams();
   const { subscribe, presence } = useRealtime();
@@ -288,6 +295,7 @@ export function ChatView({
   // Failed decryptions are retried after a short delay — the peer's key
   // may still be in flight when the message first arrives.
   const failedDecryptionRef = useRef<Map<string, number>>(new Map());
+  const [unavailableMessageIds, setUnavailableMessageIds] = useState<Set<string>>(() => new Set());
   const arrivalTimesRef = useRef<Map<string, number>>(new Map());
   const decryptingRef = useRef<Set<string>>(new Set());
   const decryptingRepliesRef = useRef<Set<string>>(new Set());
@@ -337,6 +345,10 @@ export function ChatView({
         try {
           const plain = await decrypt(m.text, conversationId);
           failedDecryptionRef.current.delete(m.id);
+          if (alive) setUnavailableMessageIds((current) => {
+            if (!current.has(m.id)) return current;
+            const next = new Set(current); next.delete(m.id); return next;
+          });
           const arrivedAt = arrivalTimesRef.current.get(m.id);
           if (arrivedAt !== undefined) {
             chatPerf("recipient-event-to-decrypted", arrivedAt);
@@ -349,6 +361,7 @@ export function ChatView({
           // bounded so one legacy message never burns CPU forever.
           const attempts = (failedDecryptionRef.current.get(m.id) ?? 0) + 1;
           failedDecryptionRef.current.set(m.id, attempts);
+          if (alive && attempts >= 2) setUnavailableMessageIds((current) => new Set(current).add(m.id));
           hadFailure ||= attempts < 2;
         } finally {
           decryptingRef.current.delete(m.id);
@@ -386,10 +399,10 @@ export function ChatView({
     if (!m.encrypted) return m.text;
     if (m.text === "signal:v2") return "🔒 Waiting for this device’s secure message…";
     return decryptedTexts.get(m.id)
-      ?? (failedDecryptionRef.current.get(m.id) === 2
+      ?? (unavailableMessageIds.has(m.id)
         ? "🔒 Message unavailable on this device"
         : "");
-  }, [decryptedTexts]);
+  }, [decryptedTexts, unavailableMessageIds]);
 
   /** Safe text for clipboard/edit: never copy ciphertext. */
   const copyableText = useCallback((m: { encrypted: boolean; text: string; id: string }) => {
@@ -680,6 +693,10 @@ export function ChatView({
         if (event.type === "message:update") {
           setDecryptedTexts(previous => { const next = new Map(previous); next.delete(msg.id); return next; });
           failedDecryptionRef.current.delete(msg.id);
+          setUnavailableMessageIds((current) => {
+            if (!current.has(msg.id)) return current;
+            const next = new Set(current); next.delete(msg.id); return next;
+          });
         }
         setItems((prev) => prev.map((m) => (m.id === msg.id ? msg : m)));
       }
@@ -1426,17 +1443,17 @@ export function ChatView({
     () =>
       visibleItems.map((msg, i) => ({
         msg,
-        showDate: i === 0 || !sameDay(visibleItems[i - 1].createdAt, msg.createdAt),
+        showDate: i === 0 || !sameDay(visibleItems[i - 1].createdAt, msg.createdAt, hydrated),
         sameSenderPrev:
           i > 0 &&
           visibleItems[i - 1].senderId === msg.senderId &&
           !msg.replyTo &&
-          sameDay(visibleItems[i - 1].createdAt, msg.createdAt) &&
+          sameDay(visibleItems[i - 1].createdAt, msg.createdAt, hydrated) &&
           new Date(msg.createdAt).getTime() -
             new Date(visibleItems[i - 1].createdAt).getTime() <
             5 * 60_000,
       })),
-    [visibleItems],
+    [visibleItems, hydrated],
   );
 
   const firstVisibleUnreadId = useMemo(
@@ -1479,7 +1496,7 @@ export function ChatView({
         </Link>
         {isGroup ? (
           <button type="button" onClick={() => setShowDetails(true)} className="flex min-w-0 flex-1 items-center gap-2.5 text-left">
-            {conversation.avatarUrl ? <img src={conversation.avatarUrl} alt="" className="h-9 w-9 shrink-0 rounded-full object-cover" /> : <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--accent-soft)]"><Users className="h-4 w-4 text-[var(--accent-fg)]" /></span>}
+            {conversation.avatarUrl ? <Image unoptimized width={1200} height={1200} src={conversation.avatarUrl} alt="" className="h-9 w-9 shrink-0 rounded-full object-cover" /> : <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--accent-soft)]"><Users className="h-4 w-4 text-[var(--accent-fg)]" /></span>}
             <span className="min-w-0"><span className="block truncate text-[0.92rem] font-semibold leading-tight">{otherName}</span><span className="block truncate text-[0.72rem] text-[var(--muted)]">{conversation.members.length} members</span></span>
           </button>
         ) : other ? (
@@ -1512,7 +1529,7 @@ export function ChatView({
                 {otherOnline
                   ? "Online"
                   : otherLastSeen
-                    ? `Last seen ${timeAgo(otherLastSeen)}`
+                    ? hydrated ? `Last seen ${timeAgo(otherLastSeen)}` : "Last seen"
                     : e2eeState.ready
                       ? "End-to-end encrypted"
                       : "Offline"}
@@ -1797,7 +1814,7 @@ export function ChatView({
                   {showDate ? (
                     <div className="my-4 flex justify-center">
                       <span className="rounded-full bg-black/50 px-3.5 py-1.5 text-[0.66rem] font-medium text-white/90 shadow-sm backdrop-blur-[2px]">
-                        {dayLabel(msg.createdAt)}
+                        {dayLabel(msg.createdAt, hydrated)}
                       </span>
                     </div>
                   ) : null}
@@ -2094,7 +2111,7 @@ export function ChatView({
                               {msg.editedAt && !deleted ? (
                                 <span className="text-[0.58rem] italic opacity-70">edited</span>
                               ) : null}
-                              <span>{timeLabel(msg.createdAt)}</span>
+                              <span>{timeLabel(msg.createdAt, hydrated)}</span>
                               {msg.starred ? <Star className="h-2.5 w-2.5 fill-current text-[var(--accent-fg)]" /> : null}
                               {own && !deleted ? (
                                 msg.sendStatus === "failed" ? (

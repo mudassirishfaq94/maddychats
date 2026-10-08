@@ -1,5 +1,8 @@
 "use client";
 
+import { navigateWithReload } from "@/lib/navigation";
+
+import { FreshAuthentication } from "./fresh-authentication";
 import { useState } from "react";
 import {
   Download,
@@ -11,6 +14,8 @@ import {
 } from "lucide-react";
 
 export function AccountDataSection() {
+  const [password, setPassword] = useState("");
+  const [mfaCode, setMfaCode] = useState("");
   const [exporting, setExporting] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState("");
@@ -48,7 +53,7 @@ export function AccountDataSection() {
       const res = await fetch("/api/privacy/delete-account", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ confirm: "DELETE" }),
+        body: JSON.stringify({ confirm: "DELETE", password, mfaCode }),
       });
       if (!res.ok) {
         const data = await res.json();
@@ -56,7 +61,7 @@ export function AccountDataSection() {
       }
       setDeleted(true);
       setTimeout(() => {
-        window.location.href = "/login";
+        navigateWithReload("/login");
       }, 2000);
     } catch (e) {
       setDeleteError((e as Error).message);
@@ -128,6 +133,7 @@ export function AccountDataSection() {
                     onClick={() => {
                       setShowDelete(false);
                       setDeleteConfirm("");
+                      setPassword(""); setMfaCode("");
                       setDeleteError("");
                     }}
                     className="flex h-8 w-8 items-center justify-center rounded-full text-[var(--muted)] hover:bg-[var(--surface-2)]"
@@ -160,6 +166,7 @@ export function AccountDataSection() {
                   />
                 </div>
 
+                <FreshAuthentication password={password} code={mfaCode} onPassword={setPassword} onCode={setMfaCode} />
                 {deleteError && (
                   <p className="mt-2 text-xs text-[var(--danger)]">{deleteError}</p>
                 )}
@@ -170,6 +177,7 @@ export function AccountDataSection() {
                     onClick={() => {
                       setShowDelete(false);
                       setDeleteConfirm("");
+                      setPassword(""); setMfaCode("");
                     }}
                     className="rounded-xl px-4 py-2 text-sm font-medium text-[var(--muted)] hover:bg-[var(--surface-2)]"
                   >

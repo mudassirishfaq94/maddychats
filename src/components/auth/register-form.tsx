@@ -1,5 +1,7 @@
 "use client";
 
+import { navigateWithReload } from "@/lib/navigation";
+
 import type * as React from "react";
 import { useMemo, useState, type FormEvent } from "react";
 import {
@@ -71,9 +73,7 @@ export function RegisterForm() {
       if (result.fields) setErrors(result.fields);
       return;
     }
-    // Email verification is temporarily in compatibility mode while Circlo's
-    // production mail delivery is being configured.
-    window.location.assign("/app");
+    navigateWithReload("/verify-email");
   }
 
   return (

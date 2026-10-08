@@ -1,17 +1,16 @@
+import { beginSignIn } from "@/server/authentication";
 import { NextRequest, NextResponse } from "next/server";
 import { fieldErrors, loginSchema } from "@/lib/schemas";
 import { verifyPassword } from "@/server/password";
-import { findUserByIdentifier, toSafeUser, touchLastSeen } from "@/server/users";
+import { findUserByIdentifier } from "@/server/users";
 import { AUTH_RATE_LIMIT, rateLimit } from "@/server/rate-limit";
 import {
   clientIp,
   guardSameOrigin,
   jsonError,
   readJson,
-  requestIsSecure,
 } from "@/server/http";
-import { SESSION_COOKIE } from "@/server/config";
-import { createSessionToken, sessionCookieOptions } from "@/server/session";
+import { newSessionBlockReason } from "@/server/session";
 import { recordLoginAttempt } from "@/server/privacy";
 
 export const dynamic = "force-dynamic";
@@ -61,19 +60,13 @@ export async function POST(req: NextRequest) {
     return jsonError(401, "Incorrect email, username, or password.");
   }
 
-  // Record successful login
-  await recordLoginAttempt({
-    userId: user.id,
-    identifier,
-    success: true,
-    ipAddress: ip,
-    userAgent: ua,
-  });
+  const sessionBlock = await newSessionBlockReason(user);
+  if (sessionBlock === "suspended") {
+    return jsonError(403, "This account is unavailable.");
+  }
+  if (!user.emailVerifiedAt) {
+    return NextResponse.json({ error: "Verify your email before signing in.", verificationRequired: true }, { status: 403 });
+  }
 
-  await touchLastSeen(user.id);
-
-  const token = await createSessionToken(user.id, user.username);
-  const res = NextResponse.json({ user: toSafeUser(user) });
-  res.cookies.set(SESSION_COOKIE, token, sessionCookieOptions(requestIsSecure(req)));
-  return res;
+  return beginSignIn(req, user);
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Search, SearchX, X } from "lucide-react";
 import type { SearchHit } from "@/lib/types";
@@ -21,10 +21,10 @@ export function MessageSearch({
   const router = useRouter();
   const [internalOpen, setInternalOpen] = useState(false);
   const open = controlledOpen ?? internalOpen;
-  const setOpen = (value: boolean) => {
+  const setOpen = useCallback((value: boolean) => {
     if (controlledOpen === undefined) setInternalOpen(value);
     onOpenChange?.(value);
-  };
+  }, [controlledOpen, onOpenChange]);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchHit[]>([]);
   const [loading, setLoading] = useState(false);
@@ -39,7 +39,7 @@ export function MessageSearch({
     }
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [open]);
+  }, [open, setOpen]);
 
   useEffect(() => {
     if (!open) return;

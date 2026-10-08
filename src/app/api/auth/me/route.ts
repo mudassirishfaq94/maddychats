@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { SESSION_COOKIE } from "@/server/config";
 import {
   createSessionToken,
+  getSessionAuthTime,
+  getSessionMfaTime,
+  getSessionDeviceId,
   getSessionUserWithPresence,
   sessionCookieOptions,
 } from "@/server/session";
@@ -14,11 +17,10 @@ export async function GET(req: NextRequest) {
   if (!user) {
     return jsonError(401, "Not authenticated.");
   }
-  // Rolling persistence: every successful session check renews the signed
-  // cookie. Browser/app restarts therefore keep the user logged in, while
-  // explicit logout still revokes all previously issued tokens server-side.
-  const token = await createSessionToken(user.id, user.username);
-  const response = NextResponse.json({ user });
+  const response = NextResponse.json({ user }, { headers: { "Cache-Control": "no-store" } });
+  // Renewal preserves primary/MFA authentication times and cannot satisfy a
+  // fresh-authentication requirement on its own.
+  const token = await createSessionToken(user.id, user.username, await getSessionAuthTime(), await getSessionMfaTime(), await getSessionDeviceId());
   response.cookies.set(
     SESSION_COOKIE,
     token,

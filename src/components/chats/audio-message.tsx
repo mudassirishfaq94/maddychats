@@ -38,7 +38,7 @@ export function AudioMessage({
   /** When given (E2EE voice), bytes are fetched + decrypted client-side. */
   attachment?: AttachmentDTO;
 }) {
-  const [transcript, setTranscript] = useState(initialTranscript ?? null);
+  const [transcript, setTranscript] = useState(attachment?.encrypted ? null : initialTranscript ?? null);
   const [transcribing, setTranscribing] = useState(false);
   const resolved = useEncryptedAttachmentUrl(attachment);
   // Encrypted voice resolves to a decrypted object URL; local previews pass src.
@@ -199,7 +199,7 @@ export function AudioMessage({
           ) : null}
 
           {/* Transcript */}
-          {transcript ? (
+          {!attachment?.encrypted && transcript ? (
             <p className={cn(
               "mt-2 border-t pt-2 text-[0.75rem] leading-relaxed",
               own ? "border-white/15 text-white/70" : "border-[var(--border)] text-[var(--muted)]",

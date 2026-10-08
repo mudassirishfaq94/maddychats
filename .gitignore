@@ -26,6 +26,7 @@ secrets/
 *.dump
 *.backup
 *.bak
+/backups/
 
 # user-uploaded media — NEVER commit uploaded files
 server/uploads/**

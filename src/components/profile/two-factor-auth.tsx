@@ -1,9 +1,13 @@
 "use client";
+import { FreshAuthentication } from "./fresh-authentication";
 
 import { useEffect, useState } from "react";
 import { ShieldCheck, Loader2, QrCode, Key, X, AlertTriangle } from "lucide-react";
 
 export function TwoFactorAuth() {
+  const [password, setPassword] = useState("");
+  const [mfaCode, setMfaCode] = useState("");
+  const [recoveryCodes, setRecoveryCodes] = useState<string[]>([]);
   const [enabled, setEnabled] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
   const [setupMode, setSetupMode] = useState(false);
@@ -26,7 +30,7 @@ export function TwoFactorAuth() {
     setError("");
     setSubmitting(true);
     try {
-      const res = await fetch("/api/privacy/2fa/setup", { method: "POST" });
+      const res = await fetch("/api/privacy/2fa/setup", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password }) });
       const data = await res.json();
       if (!res.ok) {
         setError(data.error || "Failed to set up 2FA.");
@@ -53,13 +57,18 @@ export function TwoFactorAuth() {
       const res = await fetch("/api/privacy/2fa/verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code: verifyCode.trim() }),
+        body: JSON.stringify({ code: verifyCode.trim(), password }),
       });
       const data = await res.json();
       if (!res.ok) {
         setError(data.error || "Verification failed.");
         return;
       }
+      setRecoveryCodes(data.recoveryCodes ?? []);
+      setPassword("");
+      setVerifyCode("");
+      setSecret("");
+      setOtpauthUrl("");
       setEnabled(true);
       setSetupMode(false);
       setSuccess("Two-factor authentication enabled successfully!");
@@ -75,13 +84,16 @@ export function TwoFactorAuth() {
     setError("");
     setSubmitting(true);
     try {
-      const res = await fetch("/api/privacy/2fa/verify", { method: "DELETE" });
+      const res = await fetch("/api/privacy/2fa/verify", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password, mfaCode }) });
       const data = await res.json();
       if (!res.ok) {
         setError(data.error || "Failed to disable 2FA.");
         return;
       }
       setEnabled(false);
+      setPassword("");
+      setMfaCode("");
+      setRecoveryCodes([]);
       setSuccess("Two-factor authentication disabled.");
       setTimeout(() => setSuccess(""), 3000);
     } catch {
@@ -115,6 +127,23 @@ export function TwoFactorAuth() {
         Add an extra layer of security by requiring a verification code from an authenticator app when you sign in.
       </p>
 
+      <FreshAuthentication password={password} code={mfaCode} onPassword={setPassword} onCode={setMfaCode} />
+      {recoveryCodes.length ? <section className="mt-3 rounded-xl border border-[var(--border)] p-3">
+        <p className="text-sm font-bold">Save your recovery codes now</p>
+        <p className="my-2 text-xs">Each code works once. These codes are shown only now. Store them somewhere safe before leaving this page.</p>
+        <pre className="select-all whitespace-pre-wrap break-all text-xs">{recoveryCodes.join("\n")}</pre>
+        <button type="button" className="btn btn-secondary mt-2" onClick={() => setRecoveryCodes([])}>I have saved these codes</button>
+      </section> : null}
+      {enabled && !recoveryCodes.length ? <button type="button" disabled={submitting} className="btn btn-secondary mt-3" onClick={async () => {
+        setSubmitting(true); setError("");
+        try {
+          const res = await fetch("/api/privacy/2fa/recovery", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password, mfaCode }) });
+          const data = await res.json();
+          if (!res.ok) { setError(data.error || "Could not replace recovery codes."); return; }
+          setRecoveryCodes(data.recoveryCodes); setPassword(""); setMfaCode("");
+        } catch { setError("Could not connect. Try again."); }
+        finally { setSubmitting(false); }
+      }}>Replace recovery codes</button> : null}
       {error && (
         <div className="mt-3 flex items-center gap-2 rounded-xl bg-[color-mix(in_srgb,var(--danger)_8%,transparent)] p-3 text-xs text-[var(--danger)]">
           <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
@@ -135,7 +164,7 @@ export function TwoFactorAuth() {
               Step 1: Add to your authenticator app
             </p>
             <p className="mb-2 text-xs text-[var(--muted)]">
-              Scan this QR code or enter the secret manually:
+              Enter this secret manually in your authenticator app:
             </p>
             <div className="flex flex-col items-center gap-3">
               {/* ASCII QR placeholder — the otpauth URL is the actual key */}
@@ -150,7 +179,7 @@ export function TwoFactorAuth() {
                 className="flex items-center gap-1.5 text-xs font-medium text-[var(--accent)] hover:underline"
               >
                 <QrCode className="h-3.5 w-3.5" />
-                Open QR code link
+                Open authenticator app
               </a>
             </div>
           </div>

@@ -5,7 +5,7 @@ import type { RealtimeEvent } from "@/lib/types";
 
 const EVENT_TTL_MS = 10 * 60 * 1000;
 
-/** Persist events so every Vercel function instance can deliver them. */
+/** Persist events; the database trigger wakes shared LISTEN subscribers after commit. */
 export async function publishToUsers(
   userIds: Iterable<string>,
   event: RealtimeEvent,

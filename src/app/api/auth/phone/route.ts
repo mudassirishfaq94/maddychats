@@ -1,3 +1,4 @@
+import { beginSignIn } from "@/server/authentication";
 import { randomBytes } from "crypto";
 import { and, eq } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
@@ -6,11 +7,9 @@ import { db } from "@/db";
 import { notificationPreferences, oauthAccounts, users } from "@/db/schema";
 import { hashPassword } from "@/server/password";
 import { getFirebaseAdmin } from "@/server/firebase-admin";
-import { findUserByUsername, toSafeUser, touchLastSeen } from "@/server/users";
+import { findUserByUsername } from "@/server/users";
 import { AUTH_RATE_LIMIT, rateLimit } from "@/server/rate-limit";
-import { clientIp, guardSameOrigin, jsonError, readJson, requestIsSecure } from "@/server/http";
-import { SESSION_COOKIE } from "@/server/config";
-import { createSessionToken, sessionCookieOptions } from "@/server/session";
+import { clientIp, guardSameOrigin, jsonError, readJson } from "@/server/http";
 
 const phoneAuthSchema = z.object({
   idToken: z.string().min(100).max(16_384),
@@ -33,12 +32,13 @@ export async function POST(req: NextRequest) {
   const admin = await getFirebaseAdmin();
   if (!admin) return jsonError(503, "Phone sign-in is not configured on this server.");
 
-  let decoded: { uid: string; phone_number?: string };
+  let decoded: { uid: string; phone_number?: string; auth_time?: number };
   try {
     decoded = await admin.auth().verifyIdToken(parsed.data.idToken, true);
   } catch {
     return jsonError(401, "Your phone verification expired. Please request a new code.");
   }
+  if (typeof decoded.auth_time !== "number" || decoded.auth_time * 1000 < Date.now() - 5 * 60 * 1000 || decoded.auth_time * 1000 > Date.now() + 30_000) return jsonError(401, "Request a fresh phone verification code.");
   if (!decoded.phone_number) return jsonError(401, "This Firebase credential has no verified phone number.");
 
   let user = (await db.select({ user: users }).from(oauthAccounts)
@@ -82,9 +82,5 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  await touchLastSeen(user.id);
-  const token = await createSessionToken(user.id, user.username);
-  const res = NextResponse.json({ user: toSafeUser(user) });
-  res.cookies.set(SESSION_COOKIE, token, sessionCookieOptions(requestIsSecure(req)));
-  return res;
+  return beginSignIn(req, user);
 }

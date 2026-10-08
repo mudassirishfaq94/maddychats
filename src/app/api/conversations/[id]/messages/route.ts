@@ -59,8 +59,9 @@ export async function GET(
       : MESSAGE_PAGE_SIZE;
   const cursor = decodeCursor(req.nextUrl.searchParams.get("cursor"));
 
+  const started = performance.now();
   const page = await listMessages(id, cursor, limit, me.id);
-  return NextResponse.json(page);
+  return NextResponse.json(page, { headers: { "Server-Timing": `history;dur=${(performance.now() - started).toFixed(1)}`, "Cache-Control": "no-store" } });
 }
 
 /** Send a text message (optionally replying to another). Members only. */

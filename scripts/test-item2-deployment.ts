@@ -1,0 +1,149 @@
+/** Destructive only to three explicitly named, loopback-only disposable databases. */
+import assert from "node:assert/strict";
+import { spawn, type ChildProcess } from "node:child_process";
+import { once } from "node:events";
+import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
+import { Pool } from "pg";
+import { drizzle } from "drizzle-orm/node-postgres";
+import { migrate } from "drizzle-orm/node-postgres/migrator";
+import { is, Table } from "drizzle-orm";
+import { getTableConfig } from "drizzle-orm/pg-core";
+import * as schema from "../src/db/schema";
+
+async function main() {
+  const url = process.env.ITEM2_TEST_DATABASE_URL;
+  assert(url, "Set ITEM2_TEST_DATABASE_URL to loopback /item2_deployment_test");
+  const parsed = new URL(url);
+  assert(["127.0.0.1", "localhost"].includes(parsed.hostname) && parsed.pathname === "/item2_deployment_test", "Refusing non-test database");
+  const temp = await mkdtemp(join(tmpdir(), "circlo-item2-"));
+  const adminUrl = new URL(url); adminUrl.pathname = "/postgres";
+  const admin = new Pool({ connectionString: adminUrl.toString() });
+  const pools: Pool[] = [];
+  const children: ChildProcess[] = [];
+  const names = ["item2_deployment_test", "item2_upgrade_test", "item2_restore_test"];
+  const run = async (script: string, env: Record<string, string | undefined>, args: string[] = [], expectedCode = 0) => {
+    const child = spawn(process.execPath, [script, ...args, ...((env.BACKUP_ACTION && env.BACKUP_FILE) ? [env.BACKUP_ACTION, env.BACKUP_FILE] : [])], { env: { ...process.env, ...env }, stdio: "pipe", windowsHide: true });
+    let output = ""; child.stdout?.on("data", (c) => output += c); child.stderr?.on("data", (c) => output += c);
+    const [code] = await once(child, "exit");
+    assert.equal(code, expectedCode, output);
+  };
+  const verifySchema = async (pool: Pool) => {
+    const columns = (await pool.query("select table_name,column_name,is_nullable from information_schema.columns where table_schema='public'")).rows;
+    for (const table of Object.values(schema)) {
+      if (!is(table, Table)) continue;
+      const config = getTableConfig(table);
+      for (const column of config.columns) {
+        const actual = columns.find((c) => c.table_name === config.name && c.column_name === column.name);
+        assert(actual, `Missing ${config.name}.${column.name}`);
+        assert.equal(actual.is_nullable, column.notNull ? "NO" : "YES", `Nullability ${config.name}.${column.name}`);
+      }
+    }
+  };
+  try {
+    for (const name of names) {
+      await admin.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`);
+      await admin.query(`CREATE DATABASE ${name}`);
+      const next = new URL(url); next.pathname = `/${name}`;
+      pools.push(new Pool({ connectionString: next.toString() }));
+      pools[pools.length - 1].on("error", () => undefined); // intentional outage below
+    }
+    const [fresh, upgrade, restored] = pools;
+    await migrate(drizzle(fresh), { migrationsFolder: "drizzle" });
+    await verifySchema(fresh);
+    await migrate(drizzle(fresh), { migrationsFolder: "drizzle" });
+    const journal = JSON.parse(await readFile("drizzle/meta/_journal.json", "utf8"));
+    const legacy = join(temp, "legacy"); await mkdir(join(legacy, "meta"), { recursive: true });
+    const entries = journal.entries.filter((e: { tag: string; idx: number }) => e.idx < 35 && !["0032_e2ee_trusted_devices", "0034_deployment_schema_repair"].includes(e.tag));
+    await writeFile(join(legacy, "meta/_journal.json"), JSON.stringify({ ...journal, entries }));
+    for (const e of entries) await writeFile(join(legacy, `${e.tag}.sql`), await readFile(`drizzle/${e.tag}.sql`));
+    await migrate(drizzle(upgrade), { migrationsFolder: legacy });
+    const user = (await upgrade.query("insert into users(username,display_name,email,password_hash) values('upgrade_user','Upgrade','upgrade@example.invalid','test-hash') returning id")).rows[0];
+    await upgrade.query("insert into e2ee_keys(user_id,device_id,public_key,encrypted_private_key) values($1,'legacy','public','opaque')", [user.id]);
+    await migrate(drizzle(upgrade), { migrationsFolder: "drizzle" });
+    await verifySchema(upgrade);
+    assert.equal((await upgrade.query("select count(*)::int as count from users where id=$1", [user.id])).rows[0].count, 1);
+    assert((await upgrade.query("select trusted_at from e2ee_keys where device_id='legacy'")).rows[0].trusted_at);
+    await upgrade.query("insert into e2ee_keys(user_id,device_id,public_key,encrypted_private_key) values($1,'pending','public','opaque')", [user.id]);
+    await upgrade.query(await readFile("drizzle/0032_e2ee_trusted_devices.sql", "utf8"));
+    await upgrade.query(await readFile("drizzle/0034_deployment_schema_repair.sql", "utf8"));
+    assert.equal((await upgrade.query("select trusted_at from e2ee_keys where device_id='pending'")).rows[0].trusted_at, null);
+    console.log("Fresh and upgraded migrations preserve data and pending device trust; schema parity passed");
+
+    const base = "http://127.0.0.1:3108";
+    const testEnv = { ...process.env, DATABASE_URL: url, NODE_ENV: "production" as const, HOSTNAME: "127.0.0.1", PORT: "3108", CLIENT_URL: base, JWT_SECRET: "item2-test-only-at-least-thirty-two-characters", HEALTHCHECK_SECRET: "test-readiness", CRON_SECRET: "test-cron", RESEND_API_KEY: "", VAPID_PRIVATE_KEY: "", FIREBASE_PROJECT_ID: "", SUPABASE_URL: "", SUPABASE_SERVICE_ROLE_KEY: "" };
+    const server = spawn(process.execPath, [resolve(".next/standalone/server.js")], { env: testEnv, stdio: "pipe", windowsHide: true });
+    children.push(server);
+    let serverOutput = ""; server.stdout?.on("data", (c) => serverOutput += c); server.stderr?.on("data", (c) => serverOutput += c);
+    let alive = false;
+    for (let i = 0; i < 100; i++) {
+      try { alive = (await fetch(`${base}/api/health`)).status === 204; } catch { /* startup */ }
+      if (alive) break; await sleep(200);
+    }
+    assert(alive, serverOutput);
+    assert.equal((await fetch(`${base}/api/ready`)).status, 401);
+    const ready = () => fetch(`${base}/api/ready`, { headers: { authorization: "Bearer test-readiness" } });
+    assert.equal((await ready()).status, 200);
+    await fresh.query('alter table e2ee_key_history rename to unavailable_history');
+    assert.equal((await ready()).status, 503);
+    assert.equal((await fetch(`${base}/api/health`)).status, 204);
+    await fresh.query('alter table unavailable_history rename to e2ee_key_history');
+    try {
+      await admin.query("ALTER DATABASE item2_deployment_test ALLOW_CONNECTIONS false");
+      await admin.query("select pg_terminate_backend(pid) from pg_stat_activity where datname='item2_deployment_test'");
+      assert.equal((await ready()).status, 503, "Readiness must fail during a real DB outage");
+      assert.equal((await fetch(`${base}/api/health`)).status, 204, "Web process must survive idle connection loss");
+    } finally {
+      await admin.query("ALTER DATABASE item2_deployment_test ALLOW_CONNECTIONS true");
+    }
+    assert.equal((await ready()).status, 200, "Readiness recovers after DB outage");
+    await fresh.query("update drizzle.__drizzle_migrations set created_at=0 where created_at=1791590400000");
+    assert.equal((await ready()).status, 503, "Reachable DB with missing release migration is not ready");
+    await fresh.query("update drizzle.__drizzle_migrations set created_at=1791590400000 where created_at=0");
+    await run("scripts/readiness.mjs", testEnv);
+    assert.equal((await fetch(`${base}/api/cron/process-scheduled`)).status, 401);
+    const sender = (await fresh.query("insert into users(username,display_name,email,password_hash) values('worker_sender','Sender','worker@example.invalid','test-hash') returning id")).rows[0];
+    const conversation = (await fresh.query("insert into conversations(type,created_by_id) values('dm',$1) returning id", [sender.id])).rows[0];
+    await fresh.query("insert into conversation_members(conversation_id,user_id) values($1,$2)", [conversation.id, sender.id]);
+    await fresh.query("insert into scheduled_messages(conversation_id,sender_id,text,scheduled_for) values($1,$2,'Independent delivery',now()-interval '1 minute')", [conversation.id, sender.id]);
+    const heartbeat = join(temp, "heartbeat");
+    const workerEnv = { ...testEnv, SCHEDULED_BASE_URL: base, SCHEDULED_INTERVAL_MS: "1000", WORKER_HEARTBEAT_FILE: heartbeat };
+    const worker = spawn(process.execPath, ["scripts/scheduled-worker.mjs"], { env: workerEnv, stdio: "pipe", windowsHide: true }); children.push(worker);
+    let sent = false;
+    for (let i = 0; i < 100; i++) {
+      sent = (await fresh.query("select sent from scheduled_messages")).rows[0]?.sent;
+      if (sent) break; await sleep(200);
+    }
+    assert(sent, "Worker must deliver without a logged-in client");
+    await sleep(2200);
+    assert.equal((await fresh.query("select count(*)::int as count from messages where text='Independent delivery'")).rows[0].count, 1);
+    const workerStopped = once(worker, "exit");
+    worker.kill();
+    await workerStopped;
+    await run("scripts/scheduled-worker.mjs", workerEnv, ["--healthcheck"]);
+    await writeFile(heartbeat, "1");
+    await run("scripts/scheduled-worker.mjs", workerEnv, ["--healthcheck"], 1);
+    console.log("Private readiness, degraded schema, liveness, and independent scheduled delivery passed");
+
+    const backupFile = join(temp, "application.dump");
+    await run("scripts/database-backup.mjs", { DATABASE_URL: url, BACKUP_ACTION: "backup", BACKUP_FILE: backupFile });
+    const restoreUrl = new URL(url); restoreUrl.pathname = "/item2_restore_test";
+    await run("scripts/database-backup.mjs", { RESTORE_DATABASE_URL: restoreUrl.toString(), BACKUP_ACTION: "restore", BACKUP_FILE: backupFile });
+    await verifySchema(restored);
+    assert.equal((await restored.query("select count(*)::int as count from messages where text='Independent delivery'")).rows[0].count, 1);
+    assert.equal((await restored.query("select count(*)::int as count from drizzle.__drizzle_migrations")).rows[0].count, journal.entries.length);
+    await run("scripts/database-backup.mjs", { RESTORE_DATABASE_URL: restoreUrl.toString(), BACKUP_ACTION: "restore", BACKUP_FILE: backupFile }, [], 1);
+    console.log("Custom-format backup restoration preserved schema, message data, and migration history");
+  } finally {
+    for (const child of children.reverse()) {
+      if (child.exitCode === null && child.signalCode === null) {
+        const stopped = once(child, "exit"); child.kill(); await stopped;
+      }
+    }
+    await Promise.all(pools.map((p) => p.end()));
+    await admin.end();
+  }
+}
+main().catch((error) => { console.error(error); process.exitCode = 1; });

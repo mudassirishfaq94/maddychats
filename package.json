@@ -8,10 +8,21 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint .",
+    "lint": "eslint . --max-warnings=0",
     "typecheck": "tsc --noEmit",
     "db:migrate": "drizzle-kit migrate",
-    "vapid:generate": "web-push generate-vapid-keys"
+    "vapid:generate": "web-push generate-vapid-keys",
+    "test:item1": "tsx scripts/test-item1-security.ts",
+    "worker:scheduled": "node --env-file=.env scripts/scheduled-worker.mjs",
+    "test:item2": "tsx scripts/test-item2-deployment.ts",
+    "audit:dependencies": "tsx scripts/audit-dependencies.ts",
+    "test:unit": "tsx --test tests/*.test.ts",
+    "test:item3": "tsx scripts/test-item3-authorization.ts",
+    "test": "npm run test:unit && npm run test:item1 && npm run test:item2 && npm run test:item3 && npm run test:items4-6 && npm run test:remaining",
+    "test:remaining": "tsx scripts/test-remaining-hardening.ts",
+    "test:items4-6": "tsx scripts/test-items4-6.ts",
+    "profile:mobile": "node scripts/profile-mobile.mjs",
+    "test:scanner": "tsx scripts/test-clamav.ts"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.1",
@@ -26,7 +37,7 @@
     "@capacitor/push-notifications": "^8.1.2",
     "@capacitor/splash-screen": "^8.0.2",
     "@capacitor/status-bar": "^8.0.3",
-    "@vercel/blob": "2.8.0",
+    "@supabase/supabase-js": "2.117.2",
     "bcryptjs": "^3.0.3",
     "dotenv": "17.3.1",
     "drizzle-orm": "0.45.2",
@@ -35,13 +46,15 @@
     "jose": "^6.2.10",
     "libphonenumber-js": "1.13.12",
     "lucide-react": "^1.38.0",
-    "next": "16.3.4",
+    "next": "16.3.8",
     "otpauth": "^9.5.2",
     "pg": "8.20.0",
     "qrcode": "^1.5.4",
     "react": "19.2.6",
     "react-dom": "19.2.6",
+    "sharp": "0.35.5",
     "web-push": "3.6.7",
+    "web-vitals": "6.2.3",
     "zod": "^4.5.4"
   },
   "devDependencies": {
@@ -53,13 +66,18 @@
     "@types/web-push": "3.6.4",
     "drizzle-kit": "0.31.10",
     "eslint": "9.39.4",
-    "eslint-config-next": "16.2.6",
+    "eslint-config-next": "16.3.8",
+    "playwright": "1.63.0",
     "postcss": "^8.5.28",
     "tailwindcss": "4.1.17",
+    "tsx": "4.23.13",
     "typescript": "5.9.3"
   },
   "overrides": {
     "esbuild": ">=0.25.12",
-    "uuid": ">=11.1.1"
+    "uuid": ">=11.1.1",
+    "@firebase/firestore": {
+      "@grpc/grpc-js": "1.13.6"
+    }
   }
 }

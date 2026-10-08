@@ -1,3 +1,4 @@
+import { readUploadForm } from "@/server/http";
 import { after, NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { conversations, messageAttachments, messages } from "@/db/schema";
@@ -26,6 +27,7 @@ import {
   LIMITS,
   saveBuffer,
   validateUpload,
+  sanitizeName,
 } from "@/server/storage";
 import { eq } from "drizzle-orm";
 
@@ -54,9 +56,9 @@ export async function POST(req: NextRequest) {
 
   let form: FormData;
   try {
-    form = await req.formData();
-  } catch {
-    return jsonError(400, "Invalid upload.");
+    form = await readUploadForm(req);
+  } catch (error) {
+    return jsonError(error instanceof Error && error.message === "body_too_large" ? 413 : 400, "Invalid or oversized upload.");
   }
 
   const conversationId = String(form.get("conversationId") ?? "");
@@ -64,6 +66,9 @@ export async function POST(req: NextRequest) {
 
   const membership = await getMembership(conversationId, me.id);
   if (!membership) return jsonError(404, "Conversation not found.");
+  const [conversation] = await db.select().from(conversations).where(eq(conversations.id, conversationId));
+  if (!conversation || conversation.deletedAt) return jsonError(404, "Conversation not found.");
+  if (conversation.adminOnlyMessaging && !["owner", "admin"].includes(membership.role)) return jsonError(403, "Only group admins can send messages.");
 
   // Blocking is enforced server-side, never in the UI alone.
   const members = await memberIdsOf(conversationId);
@@ -118,11 +123,14 @@ export async function POST(req: NextRequest) {
       const originalMime =
         origTypes[i]?.trim().toLowerCase().split(";")[0] ??
         "application/octet-stream";
+      if (!/^[a-z0-9.+-]+\/[a-z0-9.+-]+$/.test(originalMime) || originalMime.length > 100) return jsonError(422, "Invalid media type.");
+      if (file.size < 29 || file.size > LIMITS.file) return jsonError(413, "Invalid encrypted attachment size.");
+      if (!wrappedKeys[i] || wrappedKeys[i]!.length > 16384) return jsonError(422, "An encrypted media key is required.");
       let kind: "image" | "video" | "file" | "audio" = "file";
       if (originalMime.startsWith("audio/")) kind = "audio";
       else if (originalMime.startsWith("image/")) kind = "image";
       else if (originalMime.startsWith("video/")) kind = "video";
-      const safeName = file.name.replace(/[\r\n\u0000]/g, "").slice(0, 200);
+      const safeName = sanitizeName(file.name);
       prepared.push({
         file,
         storedName: generateStoredName(""),
@@ -159,6 +167,7 @@ export async function POST(req: NextRequest) {
   }
 
   const written: string[] = [];
+  let committed = false;
   try {
     const messageType: string = prepared.every((p) => p.kind === "image")
       ? "image"
@@ -214,6 +223,7 @@ export async function POST(req: NextRequest) {
       return message;
     });
 
+    committed = true;
     // Conversation ordering.
     const now = new Date();
     await db
@@ -247,7 +257,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ message: dto }, { status: 201 });
   } catch (err) {
     // Best-effort cleanup of partial writes.
-    await Promise.all(written.map((p) => deleteStored(p)));
+    if (!committed) await Promise.all(written.map((p) => deleteStored(p)));
     if ((err as Error)?.message === "too_large") {
       return jsonError(413, "That file is too large.");
     }
