@@ -9,6 +9,7 @@ import {
   useMemo,
   useRef,
   useState,
+  startTransition,
   type FormEvent,
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
@@ -206,7 +207,15 @@ export function ChatView({
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [sendPending, setSendPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [draft, setDraft] = useState("");
+  const [draft, setDraftState] = useState("");
+  const draftRef = useRef("");
+  const composerRef = useRef<HTMLTextAreaElement>(null);
+  const setDraft = useCallback((next: React.SetStateAction<string>) => {
+    const value = typeof next === "function" ? next(draftRef.current) : next;
+    draftRef.current = value;
+    if (composerRef.current) composerRef.current.value = value;
+    setDraftState(value);
+  }, []);
   const [replyTo, setReplyTo] = useState<MessageDTO | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState("");
@@ -481,7 +490,6 @@ export function ChatView({
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const topSentinelRef = useRef<HTMLDivElement>(null);
-  const composerRef = useRef<HTMLTextAreaElement>(null);
   const nearBottomRef = useRef(true);
   const [showScrollDown, setShowScrollDown] = useState(false);
   const [initialUnread, setInitialUnread] = useState<{ ids: Set<string>; count: number } | null>(null);
@@ -509,7 +517,7 @@ export function ChatView({
       draftStorageReady.current = true;
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [draftStorageKey]);
+  }, [draftStorageKey, setDraft]);
 
   useEffect(() => {
     if (!draftStorageReady.current) return;
@@ -820,7 +828,9 @@ export function ChatView({
   async function send(e?: FormEvent) {
     e?.preventDefault();
     const sendStarted = performance.now();
-    const text = draft.trim();
+    // Read the immediate draft, including a last keystroke whose background
+    // UI update has not committed yet. Encryption checks remain below.
+    const text = draftRef.current.trim();
     if (typingStopTimerRef.current) clearTimeout(typingStopTimerRef.current);
     signalTyping(false);
 
@@ -1174,7 +1184,8 @@ export function ChatView({
   }
 
   async function scheduleSendMessage() {
-    if (!draft.trim() || !scheduledTime) return;
+    const text = draftRef.current.trim();
+    if (!text || !scheduledTime) return;
     const scheduledFor = new Date(scheduledTime);
     if (scheduledFor <= new Date()) {
       setError("Scheduled time must be in the future.");
@@ -1184,7 +1195,7 @@ export function ChatView({
     setError(null);
     try {
       await prepareEncryptedSend();
-      const payload = await e2ee.encrypt(draft.trim(), conversationId);
+      const payload = await e2ee.encrypt(text, conversationId);
       const res = await fetch(`/api/conversations/${conversationId}/scheduled`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1424,6 +1435,7 @@ export function ChatView({
   }
 
   function onComposerKey(e: ReactKeyboardEvent<HTMLTextAreaElement>) {
+    if (e.nativeEvent.isComposing) return;
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       void send();
@@ -2416,9 +2428,13 @@ export function ChatView({
             <div className="min-w-0 flex-1 rounded-2xl bg-[var(--input-bg)] px-3.5">
               <textarea
                 ref={composerRef}
-                value={draft}
+                defaultValue={draft}
                 onChange={(e) => {
-                  setDraft(e.target.value);
+                  // Let the browser paint the keystroke immediately. Updating
+                  // mentions/buttons/history is interruptible background work.
+                  const value = e.target.value;
+                  draftRef.current = value;
+                  startTransition(() => setDraftState(value));
                   growComposer();
                   if (e.target.value.trim()) noteTyping();
                   else signalTyping(false);

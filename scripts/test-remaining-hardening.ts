@@ -11,7 +11,7 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { SignJWT, decodeJwt } from "jose";
 import { hashPassword } from "../src/server/password";
-import { generateTOTP } from "../src/server/two-factor";
+import { TOTP } from "otpauth";
 
 async function main() {
   const url = process.env.REMAINING_TEST_DATABASE_URL;
@@ -46,7 +46,7 @@ async function main() {
       const response = await api("/api/auth/login", "", "POST", { identifier: name, password }); assert.equal(response.status, 200);
       if (!mfa) return sessionCookie(response);
       const challenge = response.headers.getSetCookie().find((value) => value.startsWith("maddy_mfa_challenge="))?.split(";")[0]; assert(challenge);
-      const verified = await api("/api/auth/mfa", challenge, "POST", { code: generateTOTP(mfa, Math.floor(Date.now() / 30000)) }); assert.equal(verified.status, 200, await verified.clone().text()); return sessionCookie(verified);
+      const verified = await api("/api/auth/mfa", challenge, "POST", { code: new TOTP({ secret: mfa, algorithm: "SHA1", digits: 6, period: 30 }).generate() }); assert.equal(verified.status, 200, await verified.clone().text()); return sessionCookie(verified);
     };
     const aliceCookie = await login(alice.username), bobCookie = await login(bob.username), noMfaCookie = await login(owner.username);
     assert.equal((await api("/api/admin/users", aliceCookie, "PATCH", { userId: target.id, action: "role", role: "admin" })).status, 403);

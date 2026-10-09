@@ -45,5 +45,8 @@ export function PerformanceMonitor({ children }: { children: ReactNode }) {
     observer.observe({ type: "longtask", buffered: true });
     return () => observer.disconnect();
   }, [profiling]);
-  return profiling ? <Profiler id="application" onRender={render}>{children}</Profiler> : children;
+  // Keep the tree stable when opt-in monitoring initializes. Replacing the
+  // wrapper would remount encryption/realtime and restart private startup.
+  // React ignores Profiler instrumentation in the ordinary production build.
+  return <Profiler id="application" onRender={render}>{children}</Profiler>;
 }

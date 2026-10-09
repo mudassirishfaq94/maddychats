@@ -3,6 +3,8 @@ import { mkdir, writeFile } from "node:fs/promises";
 
 const base = new URL(process.env.SPEED_BASE_URL || "https://ziptalks.vercel.app/");
 if (!["ziptalks.vercel.app", "127.0.0.1", "localhost"].includes(base.hostname)) throw new Error("Unexpected measurement host");
+const label = process.env.SPEED_LABEL || "live";
+if (!/^[a-z0-9-]+$/.test(label)) throw new Error("Use a simple artifact label");
 const results = [];
 for (let run = 0; run < 3; run++) {
   // A new browser process avoids hidden disk/memory cache reuse between runs.
@@ -35,4 +37,4 @@ for (let run = 0; run < 3; run++) {
   } finally { await browser.close(); }
 }
 await mkdir(".freebuff/performance", { recursive: true });
-await writeFile(`.freebuff/performance/public-speed-${process.env.SPEED_LABEL || "live"}.json`, JSON.stringify({ base: base.href, conditions: "fresh Chromium process per run; cache disabled; 4x CPU; 80ms latency; 1.6Mbps download; service worker blocked", results }, null, 2));
+await writeFile(`.freebuff/performance/public-speed-${label}.json`, JSON.stringify({ base: base.href, conditions: "fresh Chromium process per run; cache disabled; 4x CPU; 80ms latency; 1.6Mbps download; service worker blocked", results }, null, 2));

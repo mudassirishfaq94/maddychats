@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { useHydrated } from "@/hooks/use-hydrated";
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { memo, useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import type * as React from "react";
@@ -50,6 +50,101 @@ function stampTime(iso: string | null, hydrated: boolean): string {
   }
   return dateStampFormatter.format(d);
 }
+
+const ConversationRow = memo(function ConversationRow({ conv, active, online, preview, timestamp }: {
+  conv: ConversationSummary; active: boolean; online: boolean; preview: string; timestamp: string;
+}) {
+  const name = conv.name ?? conv.otherMember?.displayName ?? "Unknown";
+  return (
+    <li key={conv.id} className="group/row relative">
+      <Link
+        href={`/app/chats/${conv.id}`}
+        aria-current={active ? "page" : undefined}
+        className={cn(
+          "chat-list-row flex items-center gap-3.5 rounded-2xl px-3 py-3 transition-[background-color,transform,box-shadow] duration-150",
+          active
+            ? "bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] shadow-[inset_3px_0_0_var(--accent)]"
+            : "hover:bg-[color-mix(in_srgb,var(--muted)_7%,transparent)] hover:translate-x-0.5",
+        )}
+      >
+        {conv.type === "group" && conv.avatarUrl ? (
+          <Image unoptimized width={1200} height={1200} src={conv.avatarUrl} alt="" loading="lazy" decoding="async" className="h-12 w-12 shrink-0 rounded-full object-cover ring-1 ring-black/5" />
+        ) : conv.otherMember ? (
+          <span className="relative shrink-0">
+            <Avatar user={conv.otherMember} size={48} />
+            <span
+              aria-hidden="true"
+              className={cn(
+                "absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-[var(--surface)]",
+                online
+                  ? "bg-[var(--accent)] pulse-dot"
+                  : "bg-[var(--muted)] opacity-60",
+              )}
+            />
+          </span>
+        ) : (
+          <span className="flex h-12 w-12 items-center justify-center rounded-full bg-[var(--surface-2)] text-[var(--muted)]">
+            <LogoMark size={24} />
+          </span>
+        )}
+        <span className="min-w-0 flex-1">
+          <span className="flex items-baseline justify-between gap-2">
+            <span className="flex min-w-0 items-center gap-1.5">
+              {conv.pinned ? (
+                <Pin className="h-3 w-3 shrink-0 text-[var(--accent-fg)]" />
+              ) : null}
+              {conv.favorited ? <Star className="h-3 w-3 shrink-0 fill-current text-[var(--accent-fg)]" /> : null}
+              {conv.muted ? (
+                <BellOff className="h-3 w-3 shrink-0 text-[var(--muted)]" />
+              ) : null}
+              <span className="truncate text-[0.95rem] font-semibold tracking-[-0.01em]">
+                {name}
+              </span>
+              {conv.requestPending ? <span className="shrink-0 rounded-full bg-[var(--accent-soft)] px-1.5 py-0.5 text-[0.58rem] font-bold uppercase tracking-wide text-[var(--accent-fg)]">Request</span> : null}
+            </span>
+            <span className="shrink-0 text-[0.66rem] tabular-nums text-[var(--muted)]">
+                              {timestamp}
+            </span>
+          </span>
+            <span className="mt-1 flex items-center gap-2">
+            <span className="flex min-w-0 flex-1 items-center gap-1.5">
+            <span
+              className={cn(
+                "block min-w-0 truncate text-[0.8rem]",
+                conv.unreadCount > 0 && !conv.muted
+                  ? "font-medium text-[var(--text)]"
+                  : "text-[var(--muted)]",
+                conv.lastMessage?.deletedAt && "italic",
+              )}
+            >
+              {preview}
+            </span>
+            </span>
+            {conv.unreadCount > 0 || conv.markedUnread ? (
+              <span
+                aria-label={`${conv.unreadCount || 1} unread`}
+                className={cn(
+                  "flex h-[1.15rem] min-w-[1.15rem] shrink-0 items-center justify-center rounded-full px-1 text-[0.64rem] font-bold text-white",
+                  conv.muted && "opacity-50",
+                )}
+                style={{ background: "var(--accent)" }}
+              >
+                {conv.unreadCount > 0
+                  ? conv.unreadCount > 99
+                    ? "99+"
+                    : conv.unreadCount
+                  : "•"}
+              </span>
+            ) : null}
+          </span>
+        </span>
+      </Link>
+      <span className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 transition-opacity focus-within:opacity-100 group-hover/row:opacity-100">
+        <ConversationMenu conversation={conv} />
+      </span>
+    </li>
+  );
+});
 
 /**
  * Chat-first three-area surface: conversation list · active conversation.
@@ -98,6 +193,7 @@ export function ChatsLayout({
     ? pathname.split("/")[3]
     : null;
   const [filter, setFilter] = useState("");
+  const deferredFilter = useDeferredValue(filter);
   const [showArchived, setShowArchived] = useState(false);
   const [chatFilter, setChatFilter] = useState<"all" | "unread" | "favorites" | "groups" | "dms">("all");
 
@@ -181,7 +277,7 @@ export function ChatsLayout({
   ];
 
   const filtered = useMemo(() => {
-    const q = filter.trim().toLowerCase();
+    const q = deferredFilter.trim().toLowerCase();
     return conversations
       .filter((c) => (showArchived ? c.archived : !c.archived))
       .filter((c) => {
@@ -199,7 +295,7 @@ export function ChatsLayout({
         if (chatFilter === "dms") return c.type === "dm";
         return true;
       });
-  }, [conversations, filter, showArchived, chatFilter]);
+  }, [conversations, deferredFilter, showArchived, chatFilter]);
 
   return (
     <div className="flex h-full w-full min-w-0 overflow-hidden overflow-x-hidden bg-[var(--bg)]">
@@ -282,100 +378,12 @@ export function ChatsLayout({
             </p>
           ) : (
             <ul>
-              {filtered.map((conv) => {
-                const active = conv.id === activeId;
-                const name =
-                  conv.name ?? conv.otherMember?.displayName ?? "Unknown";
-                return (
-                  <li key={conv.id} className="group/row relative">
-                    <Link
-                      href={`/app/chats/${conv.id}`}
-                      aria-current={active ? "page" : undefined}
-                      className={cn(
-                        "chat-list-row flex items-center gap-3.5 rounded-2xl px-3 py-3 transition-[background-color,transform,box-shadow] duration-150",
-                        active
-                          ? "bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] shadow-[inset_3px_0_0_var(--accent)]"
-                          : "hover:bg-[color-mix(in_srgb,var(--muted)_7%,transparent)] hover:translate-x-0.5",
-                      )}
-                    >
-                      {conv.type === "group" && conv.avatarUrl ? (
-                        <Image unoptimized width={1200} height={1200} src={conv.avatarUrl} alt="" loading="lazy" decoding="async" className="h-12 w-12 shrink-0 rounded-full object-cover ring-1 ring-black/5" />
-                      ) : conv.otherMember ? (
-                        <span className="relative shrink-0">
-                          <Avatar user={conv.otherMember} size={48} />
-                          <span
-                            aria-hidden="true"
-                            className={cn(
-                              "absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-[var(--surface)]",
-                              presence[conv.otherMember.id]?.online
-                                ? "bg-[var(--accent)] pulse-dot"
-                                : "bg-[var(--muted)] opacity-60",
-                            )}
-                          />
-                        </span>
-                      ) : (
-                        <span className="flex h-12 w-12 items-center justify-center rounded-full bg-[var(--surface-2)] text-[var(--muted)]">
-                          <LogoMark size={24} />
-                        </span>
-                      )}
-                      <span className="min-w-0 flex-1">
-                        <span className="flex items-baseline justify-between gap-2">
-                          <span className="flex min-w-0 items-center gap-1.5">
-                            {conv.pinned ? (
-                              <Pin className="h-3 w-3 shrink-0 text-[var(--accent-fg)]" />
-                            ) : null}
-                            {conv.favorited ? <Star className="h-3 w-3 shrink-0 fill-current text-[var(--accent-fg)]" /> : null}
-                            {conv.muted ? (
-                              <BellOff className="h-3 w-3 shrink-0 text-[var(--muted)]" />
-                            ) : null}
-                            <span className="truncate text-[0.95rem] font-semibold tracking-[-0.01em]">
-                              {name}
-                            </span>
-                            {conv.requestPending ? <span className="shrink-0 rounded-full bg-[var(--accent-soft)] px-1.5 py-0.5 text-[0.58rem] font-bold uppercase tracking-wide text-[var(--accent-fg)]">Request</span> : null}
-                          </span>
-                          <span className="shrink-0 text-[0.66rem] tabular-nums text-[var(--muted)]">
-                            {stampTime(conv.lastMessageAt ?? conv.createdAt, hydrated)}
-                          </span>
-                        </span>
-                          <span className="mt-1 flex items-center gap-2">
-                          <span className="flex min-w-0 flex-1 items-center gap-1.5">
-                          <span
-                            className={cn(
-                              "block min-w-0 truncate text-[0.8rem]",
-                              conv.unreadCount > 0 && !conv.muted
-                                ? "font-medium text-[var(--text)]"
-                                : "text-[var(--muted)]",
-                              conv.lastMessage?.deletedAt && "italic",
-                            )}
-                          >
-                            {previewText(conv, previews)}
-                          </span>
-                          </span>
-                          {conv.unreadCount > 0 || conv.markedUnread ? (
-                            <span
-                              aria-label={`${conv.unreadCount || 1} unread`}
-                              className={cn(
-                                "flex h-[1.15rem] min-w-[1.15rem] shrink-0 items-center justify-center rounded-full px-1 text-[0.64rem] font-bold text-white",
-                                conv.muted && "opacity-50",
-                              )}
-                              style={{ background: "var(--accent)" }}
-                            >
-                              {conv.unreadCount > 0
-                                ? conv.unreadCount > 99
-                                  ? "99+"
-                                  : conv.unreadCount
-                                : "•"}
-                            </span>
-                          ) : null}
-                        </span>
-                      </span>
-                    </Link>
-                    <span className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 transition-opacity focus-within:opacity-100 group-hover/row:opacity-100">
-                      <ConversationMenu conversation={conv} />
-                    </span>
-                  </li>
-                );
-              })}
+              {filtered.map(conv => <ConversationRow
+                key={conv.id} conv={conv} active={conv.id === activeId}
+                timestamp={stampTime(conv.lastMessageAt ?? conv.createdAt, hydrated)}
+                online={Boolean(conv.otherMember && presence[conv.otherMember.id]?.online)}
+                preview={previewText(conv, previews)}
+              />)}
             </ul>
           )}
         </div>

@@ -48,9 +48,11 @@ function secureContextHeader(): Record<string, string> {
   return {};
 }
 
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const [status, setStatus] = useState<AuthStatus>("loading");
-  const [user, setUser] = useState<SafeUser | null>(null);
+export function AuthProvider({ children, initialUser }: { children: ReactNode; initialUser?: SafeUser | null }) {
+  // This snapshot comes from the same server-side eligibility check used by
+  // protected pages. Still revalidate/rotate through /me on mount and focus.
+  const [status, setStatus] = useState<AuthStatus>(initialUser === undefined ? "loading" : initialUser ? "authenticated" : "unauthenticated");
+  const [user, setUser] = useState<SafeUser | null>(initialUser ?? null);
   const router = useRouter();
   const mounted = useRef(true);
 

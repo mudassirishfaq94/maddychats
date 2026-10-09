@@ -9,6 +9,7 @@ import { CapacitorDeepLinks } from "@/components/capacitor-deep-links";
 import { PwaUpdatePrompt } from "@/components/pwa-update-prompt";
 import { NativeAppBridge } from "@/components/native-app-bridge";
 import { PerformanceMonitor } from "@/components/performance-monitor";
+import { getSessionUser } from "@/server/session";
 import "./globals.css";
 
 const inter = Inter({
@@ -51,7 +52,8 @@ export const viewport: Viewport = {
 };
 
 export default async function RootLayout({ children }: { children: ReactNode }) {
-  const nonce = (await headers()).get("x-nonce") ?? undefined;
+  const [requestHeaders, initialUser] = await Promise.all([headers(), getSessionUser()]);
+  const nonce = requestHeaders.get("x-nonce") ?? undefined;
   return (
     <html
       lang="en"
@@ -60,7 +62,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
     >
       <body>
         <Script src="/theme-init.js" strategy="beforeInteractive" nonce={nonce} />
-        <AuthProvider>
+        <AuthProvider initialUser={initialUser}>
           <PerformanceMonitor>{children}</PerformanceMonitor>
           <CapacitorDeepLinks />
           <PwaUpdatePrompt />

@@ -2,6 +2,7 @@ import { chromium } from "playwright";
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import assert from "node:assert/strict";
 
 /** Small, reproducible lab sample; use real phones for release acceptance. */
 export async function profileMobile(base, cookieHeader = "", conversationId, quick = false) {
@@ -37,6 +38,33 @@ export async function profileMobile(base, cookieHeader = "", conversationId, qui
         const input = page.locator('input[type="search"]:not(:disabled):visible, input[placeholder*="Search"]:not(:disabled):visible, textarea:not(:disabled):visible, input[name="identifier"]:not(:disabled):visible, input[autocomplete="current-password"]:not(:disabled):visible').first();
         if (await input.isVisible().catch(() => false) && await input.isEditable()) { await input.click(); await input.pressSequentially("lab input", { delay: 80, timeout: 5000 }); await input.fill(""); }
         else { const button = page.locator("button:not(:disabled):visible").first(); if (await button.isVisible().catch(() => false)) await button.click(); }
+        if (path.startsWith("/app/chats/")) {
+          const composer = page.getByRole("textbox", { name: "Message text" });
+          await composer.fill("composition probe");
+          await composer.evaluate(node => node.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", isComposing: true, bubbles: true })));
+          assert.equal(await composer.inputValue(), "composition probe", "IME confirmation must not send the draft");
+          const immediateDraft = `last-keystroke-${width}-complete`;
+          const postedBodies = [];
+          const collectPost = request => {
+            if (request.method() === "POST" && new URL(request.url()).pathname === `/api/conversations/${conversationId}/messages`) postedBodies.push(request.postDataJSON());
+          };
+          page.on("request", collectPost);
+          // Input and Enter happen in one browser task, before the deferred
+          // UI render. The optimistic bubble must include the final character.
+          await composer.evaluate((node, text) => {
+            Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value").set.call(node, text);
+            node.dispatchEvent(new Event("input", { bubbles: true }));
+            node.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+          }, immediateDraft);
+          await page.getByText(immediateDraft, { exact: true }).first().waitFor({ state: "visible" });
+          assert.equal(await composer.inputValue(), "", "Submitting clears the browser-owned draft");
+          await page.waitForTimeout(500);
+          for (const body of postedBodies) {
+            assert.equal(body.encrypted, true, "Performance changes must preserve encrypted sends");
+            assert.notEqual(body.text, immediateDraft, "Plaintext must not leave the browser");
+          }
+          page.off("request", collectPost);
+        }
         await page.evaluate(() => window.scrollBy(0, 500));
         // Backgrounding flushes Web Vitals (including interaction latency).
         const background = await context.newPage(); await background.bringToFront(); await page.waitForTimeout(500);
