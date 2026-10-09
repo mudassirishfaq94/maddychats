@@ -104,7 +104,7 @@ export async function testChatRecovery(base, cookieHeader, conversationId) {
     await source.getByRole("button", { name: "Restore my other devices", exact: true }).click();
     await source.getByRole("status").filter({ hasText: "Shared" }).waitFor();
     await target.goto(chatUrl);
-    await target.getByText(submitted, { exact: true }).waitFor({ timeout: 30000 });
+    await target.getByRole("region", { name: "Conversation", exact: true }).getByText(submitted, { exact: true }).waitFor({ timeout: 30000 });
     assert.deepEqual(errors, [], "Recovery must not produce browser errors");
     await mkdir(".freebuff/performance", { recursive: true });
     await writeFile(".freebuff/performance/chat-recovery.json", JSON.stringify({ typingConditions: "Chromium, 390px viewport, 4x CPU, real keystrokes at 20ms intervals", inputToFrameMs: typingSamples, verified: ["encrypted sends", "newer drafts preserved", "failed drafts survive reload", "trusted private-key device approval", "existing keys restore on a second device", "failed restore releases spinner"] }, null, 2));

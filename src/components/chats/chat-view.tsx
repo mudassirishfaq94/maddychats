@@ -215,6 +215,10 @@ export function ChatView({
   const [draft, setDraftState] = useState("");
   const draftRef = useRef("");
   const composerRef = useRef<HTMLTextAreaElement>(null);
+  const composerResizeFrame = useRef<number | null>(null);
+  useEffect(() => () => {
+    if (composerResizeFrame.current !== null) cancelAnimationFrame(composerResizeFrame.current);
+  }, []);
   const draftUpdateTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (draftUpdateTimer.current) clearTimeout(draftUpdateTimer.current); }, []);
   const setDraft = useCallback((next: React.SetStateAction<string>) => {
@@ -1002,7 +1006,7 @@ export function ChatView({
           : [...prev, { ...created, sendStatus: "sent" }];
       });
       const ta = composerRef.current;
-      if (ta) ta.style.height = "auto";
+      if (ta && !draftRef.current) ta.style.height = "auto";
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Network error. Message was not sent.");
       setItems((prev) => prev.map((m) => m.id === optimisticId ? { ...m, sendStatus: "failed" } : m));
@@ -1459,13 +1463,15 @@ export function ChatView({
   /* -------------------------------- composer ------------------------------- */
 
   function growComposer() {
-    const ta = composerRef.current;
-    if (!ta) return;
-    ta.style.height = "auto";
-    // Keep the mobile composer intentionally compact. Longer drafts remain
-    // fully editable inside the textarea instead of pushing the chat and its
-    // controls away from the keyboard.
-    ta.style.height = `${Math.min(ta.scrollHeight, 96)}px`;
+    if (composerResizeFrame.current !== null) return;
+    composerResizeFrame.current = requestAnimationFrame(() => {
+      composerResizeFrame.current = null;
+      const ta = composerRef.current;
+      if (!ta) return;
+      // Coalesce layout reads instead of forcing layout in each input handler.
+      ta.style.height = "auto";
+      ta.style.height = `${Math.min(ta.scrollHeight, 96)}px`;
+    });
   }
 
   function onComposerKey(e: ReactKeyboardEvent<HTMLTextAreaElement>) {
