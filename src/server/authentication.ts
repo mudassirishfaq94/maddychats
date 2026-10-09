@@ -4,7 +4,8 @@ import { and, eq, gt, lt } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { mfaChallenges, users, user2fa, type UserRow } from "@/db/schema";
-import { SESSION_COOKIE, REFRESH_COOKIE } from "./config";
+import { SESSION_COOKIE, REFRESH_COOKIE, clientUrl } from "./config";
+import { sameOriginDestination } from "../lib/navigation";
 import { jsonError, requestIsSecure, clientIp } from "./http";
 import { getSessionAuthTime, newSessionBlockReason, sessionCookieOptions } from "./session";
 import { issueDeviceSession, setDeviceCookies } from "./device-sessions";
@@ -33,6 +34,9 @@ export async function setAuthenticatedSession(response: NextResponse, req: NextR
 
 /** Only called after a primary credential has been verified. */
 export async function beginSignIn(req: NextRequest, user: UserRow, redirectTo?: string) {
+  // Reverse proxies expose an internal req.url; redirect browsers to the public origin.
+  const destination = redirectTo ? new URL(sameOriginDestination(redirectTo, clientUrl())) : undefined;
+  const returnPath = destination ? destination.pathname + destination.search + destination.hash : undefined;
   const blocked = await newSessionBlockReason(user);
   if (blocked === "suspended") return jsonError(403, "This account is unavailable.");
   if (blocked === "mfa_required") {
@@ -41,7 +45,7 @@ export async function beginSignIn(req: NextRequest, user: UserRow, redirectTo?: 
     await db.delete(mfaChallenges).where(lt(mfaChallenges.expiresAt, now));
     await db.insert(mfaChallenges).values({ tokenHash: digest(token), userId: user.id, expiresAt: new Date(now.getTime() + CHALLENGE_MS) });
     const response = redirectTo
-      ? NextResponse.redirect(new URL(`/login?mfa=1&next=${encodeURIComponent(redirectTo)}`, req.url))
+      ? NextResponse.redirect(new URL(`/login?mfa=1&next=${encodeURIComponent(returnPath!)}`, clientUrl()))
       : NextResponse.json({ mfaRequired: true });
     response.cookies.set(MFA_COOKIE, token, { ...sessionCookieOptions(requestIsSecure(req)), maxAge: CHALLENGE_MS / 1000 });
     response.cookies.set(SESSION_COOKIE, "", { ...sessionCookieOptions(requestIsSecure(req)), maxAge: 0 });
@@ -49,7 +53,7 @@ export async function beginSignIn(req: NextRequest, user: UserRow, redirectTo?: 
     response.headers.set("Cache-Control", "no-store");
     return response;
   }
-  const response = redirectTo ? NextResponse.redirect(new URL(redirectTo, req.url)) : NextResponse.json({ user: toSafeUser(user) });
+  const response = destination ? NextResponse.redirect(destination) : NextResponse.json({ user: toSafeUser(user) });
   return setAuthenticatedSession(response, req, user);
 }
 

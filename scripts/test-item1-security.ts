@@ -49,6 +49,32 @@ async function main() {
     assert.equal(new Set(recovery.codes).size, 10);
     assert(!recovery.hashes.includes(recovery.codes[0]));
     await sql.query("INSERT INTO user_2fa(user_id,secret,enabled,enabled_at,recovery_code_hashes) VALUES($1,$2,true,now(),$3)", [alice.id, secret, JSON.stringify(recovery.hashes)]);
+    // Render's internal request origin must never leak into OAuth completion redirects.
+    const publicOrigin = "https://maddychats.onrender.com";
+    process.env.CLIENT_URL = publicOrigin;
+    try {
+      const proxyRequest = new NextRequest("http://localhost:10000/api/auth/google/callback", {
+        headers: { host: "attacker.invalid", "x-forwarded-host": "attacker.invalid", "x-forwarded-proto": "https" },
+      });
+      const pending = await beginSignIn(proxyRequest, (await toUser(alice.id))!, "/app?tab=chat");
+      const location = new URL(pending.headers.get("location")!);
+      assert.equal(location.origin, publicOrigin);
+      assert.equal(location.pathname, "/login");
+      assert.equal(location.searchParams.get("mfa"), "1");
+      assert.equal(location.searchParams.get("next"), "/app?tab=chat");
+      assert(pending.cookies.get("maddy_mfa_challenge")?.value);
+      assert.equal(pending.cookies.get("maddy_session")?.value, "");
+      assert.equal(pending.cookies.get("maddy_refresh")?.value, "");
+      assert.equal(pending.headers.get("cache-control"), "no-store");
+      const signedIn = await beginSignIn(proxyRequest, (await toUser(bob.id))!, "/app");
+      assert.equal(signedIn.headers.get("location"), `${publicOrigin}/app`);
+      assert(signedIn.cookies.get("maddy_session")?.value);
+      for (const path of ["https://attacker.invalid/app", "//attacker.invalid", "/\\attacker.invalid"]) {
+        await assert.rejects(beginSignIn(proxyRequest, (await toUser(bob.id))!, path), /application origin/);
+      }
+    } finally {
+      process.env.CLIENT_URL = "http://localhost:3107";
+    }
     const primary = await beginSignIn(request, (await toUser(alice.id))!);
     assert.equal((await primary.json()).mfaRequired, true);
     assert.equal(primary.cookies.get("maddy_session")?.value, "");
