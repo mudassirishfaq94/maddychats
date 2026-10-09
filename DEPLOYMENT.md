@@ -20,7 +20,7 @@ Set `STARTER_MODE=1` for both the build and runtime. The build exposes only the
 non-secret availability flag. Encrypted text chat, device approval/recovery,
 draft preservation, and recoverable existing media reads remain available.
 The pre-release media inventory and missing-file limits are documented in the release plan. New uploads,
-voice messages, phone sign-in, and scheduled delivery are paused server-side;
+voice messages, phone sign-in, experimental Signal provisioning, and scheduled delivery are paused server-side;
 users can still cancel pending scheduled messages. No scanner or worker is
 provisioned and no scan is bypassed.
 

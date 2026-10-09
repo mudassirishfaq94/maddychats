@@ -164,7 +164,7 @@ async function main() {
       if (starterReady) break; await sleep(200);
     }
     assert(starterReady);
-    for (const path of ["/api/upload/message", "/api/upload/avatar"]) {
+    for (const path of ["/api/upload/message", "/api/upload/avatar", "/api/e2ee/signal/devices"]) {
       const response = await fetch(starterBase + path, { method: "POST", headers: { Origin: starterBase }, body: "unparsed" });
       assert.equal(response.status, 503);
       assert.match((await response.json()).error, /paused/);
@@ -202,6 +202,29 @@ async function main() {
       select $1,$2,'history-source','history-device','wrapped-'||n,'12345 12345 12345 12345 12345 12345',n from generate_series(1,410) n`, [historyConversation.id, proofUser.id]);
     await fresh.query(`insert into e2ee_key_history(conversation_id,user_id,device_id,recipient_device_id,encrypted_key,key_fingerprint,key_version)
       select $1,$2,'history-source',null,'legacy-'||n,null,n from generate_series(411,413) n`, [historyConversation.id, proofUser.id]);
+    const signalRegistration = {
+      deviceId: randomUUID(), registrationId: 1234, protocolDeviceId: 1,
+      identityKey: "A".repeat(44), signingKey: "B".repeat(44),
+      signedPrekey: { keyId: 0xffff_ffff, publicKey: "C".repeat(44), signature: "D".repeat(88) },
+      kyberPrekey: { keyId: 0x8000_0000, publicKey: "E".repeat(44), signature: "F".repeat(88) },
+      oneTimePrekeys: [{ keyId: 0x8000_0001, publicKey: "G".repeat(44) }],
+    };
+    const signalRegister = (body: unknown) => fetch(`${base}/api/e2ee/signal/devices`, {
+      method: "POST", headers: { Origin: base, Cookie: proofCookie, "Content-Type": "application/json" }, body: JSON.stringify(body),
+    });
+    assert.equal((await signalRegister(signalRegistration)).status, 200, "Full uint32 IDs must not overflow PostgreSQL storage");
+    assert.equal((await signalRegister({ ...signalRegistration, signedPrekey: { ...signalRegistration.signedPrekey, keyId: -1 } })).status, 422);
+    assert.equal((await signalRegister({ ...signalRegistration, signedPrekey: { ...signalRegistration.signedPrekey, keyId: 0x1_0000_0000 } })).status, 422);
+    const bundlePath = `/api/e2ee/signal/bundle?conversationId=${historyConversation.id}&userId=${proofUser.id}`;
+    const bundleResponse = await fetch(base + bundlePath, { headers: { Origin: base, Cookie: proofCookie } });
+    assert.equal(bundleResponse.status, 200);
+    const bundle = (await bundleResponse.json()).bundles[0];
+    assert.equal(bundle.signedPrekey.keyId, 0xffff_ffff);
+    assert.equal(bundle.kyberPrekey.keyId, 0x8000_0000);
+    assert.equal(bundle.oneTimePrekey.keyId, 0x8000_0001, "Raw bigint query results must retain the numeric wire format");
+    assert.equal((await fetch(starterBase + bundlePath, { headers: { Origin: starterBase, Cookie: proofCookie } })).status, 503);
+    assert.equal((await fresh.query("select data_type from information_schema.columns where table_name='e2ee_signal_prekeys' and column_name='key_id'")).rows[0].data_type, "bigint");
+    console.log("Full uint32 prekeys round-trip as numbers; invalid IDs are rejected and unused starter provisioning is paused");
     const historyUrl = `${starterBase}/api/e2ee/key-rotation/history?conversationId=${historyConversation.id}&deviceId=history-device`;
     const historyRequest = (extra = "") => fetch(historyUrl + extra, { headers: { Origin: starterBase, Cookie: proofCookie } });
     const compactHistory = await historyRequest("&compact=1");

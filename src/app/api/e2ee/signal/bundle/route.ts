@@ -28,7 +28,7 @@ import { isUuid } from "@/server/users";
 
 export const dynamic = "force-dynamic";
 
-type ConsumedPrekey = { key_id: number; public_key: string };
+type ConsumedPrekey = { key_id: string; public_key: string };
 
 /**
  * Return a public X3DH bundle for every active device belonging to a
@@ -38,6 +38,7 @@ type ConsumedPrekey = { key_id: number; public_key: string };
 export async function GET(req: NextRequest) {
   const blocked = guardSameOrigin(req);
   if (blocked) return blocked;
+  if (process.env.STARTER_MODE === "1") return jsonError(503, "Experimental key provisioning is paused.");
   const user = await getSessionUser();
   if (!user) return jsonError(401, "Not authenticated.");
   const conversationId = req.nextUrl.searchParams.get("conversationId");
@@ -77,7 +78,7 @@ export async function GET(req: NextRequest) {
         identityKey: device.identityKey, signingKey: device.signingKey,
         signedPrekey: { keyId: signedPrekey.keyId, publicKey: signedPrekey.publicKey, signature: signedPrekey.signature },
         kyberPrekey: { keyId: kyberPrekey.keyId, publicKey: kyberPrekey.publicKey, signature: kyberPrekey.signature },
-        oneTimePrekey: oneTime ? { keyId: oneTime.key_id, publicKey: oneTime.public_key } : null,
+        oneTimePrekey: oneTime ? { keyId: Number(oneTime.key_id), publicKey: oneTime.public_key } : null,
       };
     }));
   });

@@ -145,10 +145,9 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     };
   }, [status]);
 
-  // Vercel Hobby cannot run minute-level cron jobs. While any signed-in
-  // ZipTalk client is active, cooperatively process due scheduled messages.
+  // Full deployments retain cooperative scheduling; starter queues stay paused.
   useEffect(() => {
-    if (status !== "authenticated") return;
+    if (status !== "authenticated" || process.env.NEXT_PUBLIC_STARTER_MODE === "1") return;
     const processDue = () => {
       if (document.visibilityState === "visible") {
         void fetch("/api/scheduled/process", { method: "POST" }).catch(() => undefined);

@@ -15,6 +15,23 @@ scheduled delivery. Retain encryption, recovery, drafts, and existing history.
 Google verifies ownership for existing password users through a short-lived
 proof that still requires their password and MFA, without automatic linking.
 
+## Starter release procedure
+
+1. Back up Neon and verify a complete isolated restore before schema changes.
+2. Apply the tested Drizzle migrations to the existing Neon database using
+   verified TLS; preserve all existing identities, ciphertext and key history.
+3. Update the existing Render service by ID. Keep its free instance plan,
+   Neon/JWT/Google credentials, and set STARTER_MODE=1 at build and runtime.
+   Use direct Neon for LISTEN, private Supabase Storage, distinct readiness/cron
+   secrets and enforced nonce CSP. Do not create a scanner or scheduled worker.
+4. Require full CI, pin the exact review-branch commit and disable automatic
+   deployment. The reference Blueprint uses `main`; the currently deployed
+   review branch is `codex/audit-remainder-20261009` until it is merged.
+5. Verify version and private readiness, then test only owned disposable live
+   accounts for encrypted sending, preserved drafts, real typing and trusted
+   device recovery. Remove those fixtures afterward. Measure cold-browser
+   mobile page loads separately from warmed typing and Render cold starts.
+
 ## Prepared resources
 
 - Dedicated `maddy_app` database login with no superuser or RLS-bypass privileges.
@@ -44,7 +61,7 @@ Mumbai. This preserves the existing URL but incurs cross-region database
 latency. Measure it before claiming a performance target; colocating the
 providers would require a separately planned region/endpoint migration.
 
-## Safe deployment sequence
+## Future Supabase database cutover (deferred)
 
 1. Complete a Neon backup and restore rehearsal in isolation. Verify schema,
    migration history, row counts, constraints, and encrypted message data.
@@ -92,11 +109,21 @@ The Signal prekey migration checks the columns of an existing uniqueness
 constraint before accepting it. Regression tests cover manually applied legacy
 DDL, reject incompatible definitions, and verify fresh upgrades and restoration.
 
-Production has not been migrated or redeployed yet. The free Render instance
-still lacks the scanner and independent worker required for the complete release.
+The starter release `6fee6236` was deployed to the existing free Render service
+on October 9, 2026. All 39 migrations preserved 42 users, 77 conversations,
+582 messages, 22 attachment records and 548,650 historical keys. Live encrypted
+sending, failed/newer draft preservation, trusted-device approval and restoration
+passed. No scanner or independent worker is provisioned; their features are
+paused in starter mode. The follow-up uint32 fix is validated against fresh,
+upgraded and restored isolated databases through migration 0039 (40 entries).
+The deployed exact SHA and latest live speed evidence are recorded in PR #6.
 
 ## Legacy media preservation check (October 9, 2026)
 
 Before changing the live service, all 25 referenced media paths were checked through the existing authenticated media endpoint. All 25 returned 404 on the original Render deployment. One exact local file was recovered, backed up and copied to the private `maddy-media` bucket; its SHA-256 was verified after download. The other 24 binaries were already unavailable and are not present in the local upload directory or the existing Supabase bucket. Their message/attachment metadata and encryption key history are preserved. A database backup cannot reconstruct those missing binaries; recovering them requires an original file/storage backup. No remaining source files were deleted.
 
 Key history contained 548,650 rows before deployment. Recovery now returns at most 200 keys per page, compacts repeated wraps for known recipient/fingerprint pairs, and retains paginated raw fallback plus all unknown legacy copies. No historical key rows are deleted. Starter housekeeping removes only expired realtime replay events and inactive rate-limit windows while the app is awake; scheduled messages remain paused.
+
+The live runtime check identified Signal's unsigned 32-bit prekey IDs exceeding PostgreSQL's signed integer range. Migration 0039 widens only `key_id` to bigint, and the adapter retains numeric JSON IDs. Input validation rejects negative/out-of-range IDs. Starter mode pauses the unused experimental Signal directory and its background WASM download/prekey generation; the existing AES-GCM/RSA-OAEP chat encryption and device recovery continue unchanged.
+
+Supabase's connected security advisor reports only pre-existing profile-table GraphQL discovery and Supabase Auth configuration notices. This app does not use those tables or Supabase Auth; its database remains Neon and storage access is authorized server-side through a private bucket. The unrelated existing tables/policies were preserved.

@@ -1264,7 +1264,7 @@ export const e2eeSignalPrekeys = pgTable(
     id: uuid("id").defaultRandom().primaryKey(),
     userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
     deviceId: text("device_id").notNull(),
-    keyId: integer("key_id").notNull(),
+    keyId: bigint("key_id", { mode: "number" }).notNull(),
     kind: text("kind").notNull(),
     publicKey: text("public_key").notNull(),
     signature: text("signature"),
