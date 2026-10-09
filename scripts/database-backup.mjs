@@ -70,11 +70,13 @@ const childEnv = { ...process.env,
   PGUSER: decodeURIComponent(url.username), PGPASSWORD: decodeURIComponent(url.password),
   PGDATABASE: decodeURIComponent(url.pathname.slice(1)),
   PGSSLMODE: url.searchParams.get("sslmode") || process.env.PGSSLMODE || "prefer",
+  PGSSLROOTCERT: url.searchParams.get("sslrootcert") || process.env.PGSSLROOTCERT,
+  PGCONNECT_TIMEOUT: process.env.PGCONNECT_TIMEOUT || "10",
 };
 const executable = action === "backup" ? "pg_dump" : "pg_restore";
 const args = action === "backup"
-  ? ["--format=custom", "--no-owner", "--no-acl", "--schema=public", "--schema=drizzle", "--file", path]
-  : ["--dbname", childEnv.PGDATABASE, "--no-owner", "--no-acl", "--exit-on-error", "--single-transaction", path];
+  ? ["--no-password", "--lock-wait-timeout=10s", "--format=custom", "--no-owner", "--no-acl", "--schema=public", "--schema=drizzle", "--file", path]
+  : ["--no-password", "--dbname", childEnv.PGDATABASE, "--no-owner", "--no-acl", "--exit-on-error", "--single-transaction", path];
 const bin = process.env.PG_BIN ? join(process.env.PG_BIN, executable + (process.platform === "win32" ? ".exe" : "")) : executable;
 const execute = (options, capture = false) => new Promise((accept, reject) => {
   const child = spawn(bin, options, { env: childEnv, stdio: ["ignore", capture ? "pipe" : "inherit", "inherit"], windowsHide: true });

@@ -56,10 +56,13 @@ async function main() {
     await migrate(drizzle(fresh), { migrationsFolder: "drizzle" });
     const journal = JSON.parse(await readFile("drizzle/meta/_journal.json", "utf8"));
     const legacy = join(temp, "legacy"); await mkdir(join(legacy, "meta"), { recursive: true });
-    const entries = journal.entries.filter((e: { tag: string; idx: number }) => e.idx < 35 && !["0032_e2ee_trusted_devices", "0034_deployment_schema_repair"].includes(e.tag));
+    const entries = journal.entries.filter((e: { tag: string; idx: number }) => e.idx < 32);
     await writeFile(join(legacy, "meta/_journal.json"), JSON.stringify({ ...journal, entries }));
     for (const e of entries) await writeFile(join(legacy, `${e.tag}.sql`), await readFile(`drizzle/${e.tag}.sql`));
     await migrate(drizzle(upgrade), { migrationsFolder: legacy });
+    // Production had manually applied feature DDL while its journal stopped
+    // at 0013. Replaying those features must preserve existing schema/data.
+    await upgrade.query("delete from drizzle.__drizzle_migrations where created_at > 1788465600000");
     const user = (await upgrade.query("insert into users(username,display_name,email,password_hash) values('upgrade_user','Upgrade','upgrade@example.invalid','test-hash') returning id")).rows[0];
     await upgrade.query("insert into e2ee_keys(user_id,device_id,public_key,encrypted_private_key) values($1,'legacy','public','opaque')", [user.id]);
     await migrate(drizzle(upgrade), { migrationsFolder: "drizzle" });
@@ -70,6 +73,17 @@ async function main() {
     await upgrade.query(await readFile("drizzle/0032_e2ee_trusted_devices.sql", "utf8"));
     await upgrade.query(await readFile("drizzle/0034_deployment_schema_repair.sql", "utf8"));
     assert.equal((await upgrade.query("select trusted_at from e2ee_keys where device_id='pending'")).rows[0].trusted_at, null);
+    await fresh.query("BEGIN");
+    try {
+      await fresh.query("ALTER TYPE report_status RENAME VALUE 'pending' TO 'incompatible'");
+      await assert.rejects(fresh.query(await readFile("drizzle/0010_privacy_safety.sql", "utf8")), /Incompatible existing report_status enum/);
+    } finally { await fresh.query("ROLLBACK"); }
+    await fresh.query("BEGIN");
+    try {
+      await fresh.query('ALTER TABLE e2ee_signal_prekeys DROP CONSTRAINT e2ee_signal_prekeys_device_kind_key_unique');
+      await fresh.query('ALTER TABLE e2ee_signal_prekeys ADD CONSTRAINT e2ee_signal_prekeys_device_kind_key_unique UNIQUE (id)');
+      await assert.rejects(fresh.query(await readFile("drizzle/0027_signal_prekey_kind_unique.sql", "utf8")), /Incompatible existing Signal prekey uniqueness constraint/);
+    } finally { await fresh.query("ROLLBACK"); }
     console.log("Fresh and upgraded migrations preserve data and pending device trust; schema parity passed");
 
     const base = "http://127.0.0.1:3108";

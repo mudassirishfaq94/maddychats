@@ -27,6 +27,9 @@ Check current prices at https://render.com/pricing before provisioning.
 Render validation currently rejects these plans with `need_payment_info`.
 No paid services have been created or upgraded.
 
+The user declined paid services. This configuration is retained as a reviewed
+reference and must not be provisioned without a later change to that instruction.
+
 The current Render service is in Oregon, while this Supabase project is in
 Mumbai. This preserves the existing URL but incurs cross-region database
 latency. Measure it before claiming a performance target; colocating the
@@ -64,4 +67,21 @@ providers would require a separately planned region/endpoint migration.
    rollback must account for writes after cutover; a code rollback alone is not
    a safe database rollback.
 
-Production has not been migrated or redeployed yet.
+## Verified rehearsal
+
+A 179,004,111-byte custom-format backup of the live Neon application schemas
+was restored successfully into an isolated local database. Its extension
+manifest includes `pg_trgm`, and the archive has a recorded SHA256 checksum.
+All 39 release migrations then completed, including the five required by
+readiness. The restored database is approximately 424 MB; the free Supabase
+database allowance therefore has limited remaining capacity for growth.
+
+The source journal stopped at `0013_auth_identity_uniqueness`, although later
+feature objects already existed. The privacy migration now preserves existing
+tables/indexes and checks enum definitions before accepting an existing type.
+The Signal prekey migration checks the columns of an existing uniqueness
+constraint before accepting it. Regression tests cover manually applied legacy
+DDL, reject incompatible definitions, and verify fresh upgrades and restoration.
+
+Production has not been migrated or redeployed yet. The free Render instance
+still lacks the scanner and independent worker required for the complete release.
