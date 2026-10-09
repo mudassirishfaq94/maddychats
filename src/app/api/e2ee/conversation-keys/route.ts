@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and, sql, isNotNull } from "drizzle-orm";
 import { db } from "@/db";
 import { e2eeConversationKeys, e2eeKeyHistory, e2eeKeys } from "@/db/schema";
 import { getSessionUser } from "@/server/session";
@@ -82,7 +82,7 @@ export async function POST(req: NextRequest) {
   if (!membership) return jsonError(404, "Conversation not found.");
 
   const [senderDevice] = await db.select({ id: e2eeKeys.id }).from(e2eeKeys)
-    .where(and(eq(e2eeKeys.userId, user.id), eq(e2eeKeys.deviceId, senderDeviceId))).limit(1);
+    .where(and(eq(e2eeKeys.userId, user.id), eq(e2eeKeys.deviceId, senderDeviceId), isNotNull(e2eeKeys.trustedAt))).limit(1);
   if (!senderDevice) return jsonError(403, "Unknown sender encryption device.");
 
   // Verify the exact recipient device exists and belongs to the target user.
@@ -90,7 +90,7 @@ export async function POST(req: NextRequest) {
   const [targetKey] = await db
     .select({ id: e2eeKeys.id })
     .from(e2eeKeys)
-    .where(and(eq(e2eeKeys.userId, targetUserId), eq(e2eeKeys.deviceId, recipientDeviceId)))
+    .where(and(eq(e2eeKeys.userId, targetUserId), eq(e2eeKeys.deviceId, recipientDeviceId), isNotNull(e2eeKeys.trustedAt)))
     .limit(1);
 
   if (!targetKey) return jsonError(404, "Target user has no registered device key.");

@@ -21,6 +21,7 @@ import {
   encryptPrivateKeyForStorage,
   decryptPrivateKeyFromStorage,
 } from "@/lib/crypto";
+import { e2eeRequest, awaitE2EERead } from "@/lib/e2ee-request";
 import { mapWithConcurrency } from "@/lib/async";
 import { loadSignalBridge } from "@/lib/e2ee-signal-bridge";
 import { ensureSignalDeviceRegistered, maintainSignalPrekeyReserve } from "@/lib/e2ee-signal-registration";
@@ -101,7 +102,7 @@ export function useE2EE(userId: string | undefined) {
       // to an account. Without this recovery step, changing from Google to
       // password sign-in could overwrite the original keypair and strand the
       // messages encrypted for it.
-      const backupResponse = !stored ? await fetch("/api/e2ee/keys", {
+      const backupResponse = !stored ? await e2eeRequest("/api/e2ee/keys", {
         cache: "no-store",
         signal: AbortSignal.timeout(15000),
       }) : null;
@@ -200,12 +201,23 @@ export function useE2EE(userId: string | undefined) {
         error: null,
       });
 
-      const registration = fetch("/api/e2ee/keys", {
+      const registration = e2eeRequest("/api/e2ee/keys", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ deviceId, publicKey: publicKeyStr, encryptedPrivateKey }),
         signal: AbortSignal.timeout(15000),
-      }).then((response) => response.ok).catch(() => false);
+      }).then(async (response) => {
+        if (!response.ok) {
+          setState(previous => ({ ...previous, error: "Device registration failed. Reload to retry; your keys were preserved." }));
+          return false;
+        }
+        const registration = await response.json() as { pendingApproval?: boolean };
+        if (registration.pendingApproval) {
+          setState(previous => ({ ...previous, error: "This device needs approval. On a trusted device, open Profile > Devices and approve this device before restoring chat keys." }));
+          return false;
+        }
+        return true;
+      }).catch(() => false);
       deviceRegistrationRef.current = registration;
 
       // Register the Signal device directory independently of the legacy
@@ -224,9 +236,11 @@ export function useE2EE(userId: string | undefined) {
 
     }
 
-    init().catch(() => setState((prev) => ({
+    init().catch((cause: unknown) => setState((prev) => ({
       ...prev, initialized: false, loading: false,
-      error: "Encryption could not be initialized on this device. Reload to try again.",
+      error: cause instanceof Error && cause.message === "Device recovery secret is unavailable"
+        ? "Browser storage no longer contains this device's recovery secret. Use a trusted device that can still read your messages to approve and restore a new device."
+        : "Encryption could not be initialized on this device. Reload to try again; existing keys were preserved.",
     })));
   }, [userId]);
 
@@ -236,7 +250,7 @@ export function useE2EE(userId: string | undefined) {
   const fetchSharedKey = useCallback(
     async (conversationId: string): Promise<CryptoKey | null> => {
       try {
-        const res = await fetch(`/api/e2ee/conversation-keys?conversationId=${encodeURIComponent(conversationId)}&deviceId=${encodeURIComponent(state.deviceId)}`);
+        const res = await e2eeRequest(`/api/e2ee/conversation-keys?conversationId=${encodeURIComponent(conversationId)}&deviceId=${encodeURIComponent(state.deviceId)}`);
         if (res.ok) {
           const data = await res.json();
           // Pick the highest keyVersion shared to us: with rotation there can
@@ -378,7 +392,7 @@ export function useE2EE(userId: string | undefined) {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 10000);
         try {
-          const response = await fetch(`/api/e2ee/${endpoint}?conversationId=${encodeURIComponent(conversationId)}&deviceId=${encodeURIComponent(state.deviceId)}`, {
+          const response = await e2eeRequest(`/api/e2ee/${endpoint}?conversationId=${encodeURIComponent(conversationId)}&deviceId=${encodeURIComponent(state.deviceId)}`, {
             cache: "no-store", signal: controller.signal,
           });
           if (!response.ok) return;
@@ -444,13 +458,16 @@ export function useE2EE(userId: string | undefined) {
 
   /** Share a conversation key with one specific recipient device. */
   const shareKey = useCallback(
-    async (conversationId: string, targetUserId: string, targetDeviceId: string, targetPublicKeyBase64: string, keyOverride?: CryptoKey) => {
+    async (conversationId: string, targetUserId: string, targetDeviceId: string, targetPublicKeyBase64: string, keyOverride?: CryptoKey, signal?: AbortSignal) => {
+      signal?.throwIfAborted();
       const key = keyOverride ?? (await getConversationKey(conversationId)).key;
       const targetPublicKey = await importPublicKey(targetPublicKeyBase64);
       const encryptedKey = await encryptKeyForUser(key, targetPublicKey);
       const keyFingerprint = await conversationFingerprint(key);
 
-      const res = await fetch("/api/e2ee/conversation-keys", {
+      signal?.throwIfAborted();
+      const res = await e2eeRequest("/api/e2ee/conversation-keys", {
+        signal,
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -475,7 +492,7 @@ export function useE2EE(userId: string | undefined) {
   const checkRotationNeeded = useCallback(
     async (conversationId: string): Promise<{ needed: boolean; reason: string | null }> => {
       try {
-        const res = await fetch(`/api/e2ee/key-rotation/status?conversationId=${encodeURIComponent(conversationId)}&deviceId=${encodeURIComponent(state.deviceId)}`);
+        const res = await e2eeRequest(`/api/e2ee/key-rotation/status?conversationId=${encodeURIComponent(conversationId)}&deviceId=${encodeURIComponent(state.deviceId)}`);
         if (res.ok) {
           const data = await res.json();
           return {
@@ -492,7 +509,7 @@ export function useE2EE(userId: string | undefined) {
   /** Publish a new sending key only after every recipient share succeeds. */
   const rotateConversationKey = useCallback(async (conversationId: string): Promise<boolean> => {
     try {
-      const response = await fetch(`/api/e2ee/peers?conversationId=${encodeURIComponent(conversationId)}&deviceId=${encodeURIComponent(state.deviceId)}`);
+      const response = await e2eeRequest(`/api/e2ee/peers?conversationId=${encodeURIComponent(conversationId)}&deviceId=${encodeURIComponent(state.deviceId)}`);
       if (!response.ok) return false;
       const { peers } = await response.json() as { peers: Peer[] };
       if (peers.some(peer => peer.userId !== userId && peer.devices.length === 0)) return false;
@@ -538,7 +555,7 @@ export function useE2EE(userId: string | undefined) {
       encryptedKey: await encryptKeyForUser(candidate, await importPublicKey(target.publicKey)),
       keyFingerprint,
     }));
-    const response = await fetch("/api/e2ee/bootstrap", {
+    const response = await e2eeRequest("/api/e2ee/bootstrap", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ conversationId, deviceId: state.deviceId, shares }),
@@ -574,7 +591,7 @@ export function useE2EE(userId: string | undefined) {
         .catch(() => null);
       let peers: Peer[] = [];
       try {
-        const res = await fetch(`/api/e2ee/peers?conversationId=${encodeURIComponent(conversationId)}&deviceId=${encodeURIComponent(state.deviceId)}`);
+        const res = await e2eeRequest(`/api/e2ee/peers?conversationId=${encodeURIComponent(conversationId)}&deviceId=${encodeURIComponent(state.deviceId)}`);
         if (!res.ok) return { ready: false, fingerprint: null };
         if (res.ok) {
           const data = (await res.json()) as { peers?: Peer[] };
@@ -721,65 +738,67 @@ export function useE2EE(userId: string | undefined) {
    * copy for a new Android device by itself. An already-authorized device
    * must wrap its key to the new device's public key.
    */
-  const syncKnownConversations = useCallback(async (priorityConversationId?: string) => {
-    if (!state.initialized || typeof window === "undefined") return;
+  const syncKnownConversations = useCallback(async (conversationId?: string): Promise<string> => {
+    if (!state.initialized || !userId || !state.publicKey) throw new Error("Device keys are not ready. Use a trusted device that can already read this chat.");
+    if (!conversationId) throw new Error("Open the chat you want to restore first.");
+    // Recovery shares existing keys only, and never creates a replacement key.
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30000);
+    const signal = controller.signal;
     try {
-      const response = await fetch("/api/conversations", { cache: "no-store" });
-      if (!response.ok) return;
-      const data = await response.json() as { conversations?: Array<{ id?: string }> };
-      const listedIds = (data.conversations ?? [])
-        .map((conversation) => conversation.id)
-        .filter((id): id is string => Boolean(id))
-      // A user-triggered recovery must repair the chat they are currently
-      // viewing, even when an account has more than one page of conversations.
-      const ids = [...new Set([
-        ...(priorityConversationId ? [priorityConversationId] : []),
-        ...listedIds,
-      ])].slice(0, 50);
-      await mapWithConcurrency(ids, 2, async (conversationId) => {
-        await prepareConversation(conversationId);
-
-        // Backfill every key this device can already decrypt to the owner's
-        // other registered devices. A conversation can have historical keys
-        // from either participant, so re-sharing only the current sending key
-        // leaves a newly linked phone with locked message bubbles.
-        const peersResponse = await fetch(
-          `/api/e2ee/peers?conversationId=${encodeURIComponent(conversationId)}&deviceId=${encodeURIComponent(state.deviceId)}`,
-          { cache: "no-store" },
-        );
-        if (!peersResponse.ok || !userId || !state.publicKey) return;
-        const peerData = await peersResponse.json() as { peers?: Peer[] };
-        const ownDevices = (peerData.peers ?? [])
-          .filter((peer) => peer.userId === userId)
-          .flatMap((peer) => peer.devices);
-        if (ownDevices.length === 0) return;
-
-        const available = await loadDecryptionKeys(conversationId);
-        const current = conversationKeysRef.current.get(conversationId);
-        const ordered = current ? [...available, current] : available;
-        const unique = new Map<string, CryptoKey>();
-        for (const key of ordered) {
-          try { unique.set(await conversationFingerprint(key), key); } catch { /* Ignore an unusable local key. */ }
+      const response = await e2eeRequest(
+        `/api/e2ee/peers?conversationId=${encodeURIComponent(conversationId)}&deviceId=${encodeURIComponent(state.deviceId)}`,
+        { cache: "no-store", signal },
+      );
+      if (!response.ok) throw new Error("Unable to check trusted devices. Please retry.");
+      const data = await response.json() as { peers?: Peer[] };
+      const devices = (data.peers ?? []).filter(peer => peer.userId === userId).flatMap(peer => peer.devices);
+      if (!devices.length) return "No other trusted devices found. Approve your new device in Profile > Devices first.";
+      const available = await awaitE2EERead(loadDecryptionKeys(conversationId), signal);
+      signal.throwIfAborted();
+      const current = conversationKeysRef.current.get(conversationId);
+      const unique = new Map<string, CryptoKey>();
+      for (const key of current ? [...available, current] : available) {
+        signal.throwIfAborted();
+        unique.set(await conversationFingerprint(key), key);
+      }
+      if (!unique.size) throw new Error("This device has no recoverable keys. Restore from a device that can already read these messages.");
+      const currentFingerprint = current ? await conversationFingerprint(current) : null;
+      const keys = [...unique.entries()].sort(([a], [b]) => Number(a === currentFingerprint) - Number(b === currentFingerprint)).map(([, key]) => key);
+      // Preserve history order per device; write the active key last.
+      await mapWithConcurrency(devices, 2, async device => {
+        for (const key of keys) {
+          signal.throwIfAborted();
+          if (!await shareKey(conversationId, userId, device.deviceId, device.publicKey, key, signal)) throw new Error("Some keys could not be restored. Please retry from this trusted device.");
         }
-        const currentFingerprint = current ? await conversationFingerprint(current).catch(() => null) : null;
-        const keyEntries = [...unique.entries()];
-        // Write the current key last so it remains the active server copy;
-        // older keys are retained by the API as device-specific history.
-        const keys = [
-          ...keyEntries.filter(([fingerprint]) => fingerprint !== currentFingerprint),
-          ...keyEntries.filter(([fingerprint]) => fingerprint === currentFingerprint),
-        ].map(([, key]) => key);
-        await mapWithConcurrency(ownDevices.flatMap((device) =>
-          keys.map((key) => ({ device, key })),
-        ), 2, async ({ device, key }) => {
-          await shareKey(conversationId, userId, device.deviceId, device.publicKey, key);
-        });
       });
-    } catch {
-      // A later focus/interval retry will resume key distribution after a
-      // transient network failure without affecting message delivery.
-    }
-  }, [loadDecryptionKeys, prepareConversation, shareKey, state.deviceId, state.initialized, state.publicKey, userId]);
+      signal.throwIfAborted();
+      return `Shared ${keys.length} existing key(s) with ${devices.length} trusted device(s). Reopen this chat there.`;
+    } catch (cause) {
+      const timedOut = signal.aborted;
+      controller.abort();
+      if (timedOut) throw new Error("Restoration timed out. Check your connection and retry; existing keys were preserved.");
+      throw cause;
+    } finally { clearTimeout(timeout); }
+  }, [loadDecryptionKeys, shareKey, state.deviceId, state.initialized, state.publicKey, userId]);
+
+  const waitForDeviceRegistration = useCallback(async () => { await deviceRegistrationRef.current; }, []);
+
+  const approveDevice = useCallback(async (targetDeviceId: string, targetFingerprint: string) => {
+    if (!keyPairRef.current || !state.initialized) throw new Error("Trusted device keys are not ready.");
+    const request = async (body: Record<string, string>) => {
+      const response = await e2eeRequest("/api/e2ee/devices/approve", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const data = await response.json() as { token?: string; encryptedChallenge?: string; error?: string };
+      if (!response.ok) throw new Error(data.error ?? "Device approval failed.");
+      return data;
+    };
+    const challenge = await request({ action: "challenge", sourceDeviceId: state.deviceId, targetDeviceId, targetFingerprint });
+    if (!challenge.token || !challenge.encryptedChallenge) throw new Error("Invalid device approval challenge.");
+    const ciphertext = Uint8Array.from(atob(challenge.encryptedChallenge), char => char.charCodeAt(0));
+    const plaintext = await crypto.subtle.decrypt({ name: "RSA-OAEP" }, keyPairRef.current.privateKey, ciphertext);
+    const proof = new TextDecoder().decode(plaintext);
+    await request({ action: "approve", token: challenge.token, proof });
+  }, [state.deviceId, state.initialized]);
 
   // Do not continually re-publish legacy conversation keys. Re-sharing every
   // minute causes avoidable database work and can race with device bootstrap.
@@ -882,6 +901,8 @@ export function useE2EE(userId: string | undefined) {
     getConversationKey,
     prepareConversation,
     syncKnownConversations,
+    approveDevice,
+    waitForDeviceRegistration,
     approvePeerKeyChange,
     encryptBytesForConversation,
     decryptBytesForConversation,

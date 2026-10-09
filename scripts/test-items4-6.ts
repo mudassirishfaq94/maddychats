@@ -6,7 +6,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { resolve, join } from "node:path";
 import { mkdir, writeFile, unlink, rmdir, readdir, cp } from "node:fs/promises";
 import { setTimeout as sleep } from "node:timers/promises";
-import { randomUUID } from "node:crypto";
+import { randomUUID, generateKeyPairSync, createHash, privateDecrypt, constants } from "node:crypto";
 import { watch } from "node:fs";
 import { Pool } from "pg";
 import { drizzle } from "drizzle-orm/node-postgres";
@@ -74,6 +74,36 @@ async function main() {
     const login = async (username: string) => { const res = await api("/api/auth/login", "", "POST", { identifier: username, password }); assert.equal(res.status, 200); return cookies(res); };
     await start();
     let aliceCookie = await login(alice.username); const bobCookie = await login(bob.username);
+    // Device IDs are browser-scoped, so separate accounts may share the ID.
+    await sql.query("insert into e2ee_keys(user_id,device_id,public_key,encrypted_private_key,trusted_at) values($1,'shared-browser','fixture-alice','fixture',now()),($2,'shared-browser','fixture-bob','fixture',now())", [alice.id, bob.id]);
+    const sharedPeers = await (await api(`/api/e2ee/peers?conversationId=${conversation.id}&deviceId=shared-browser`, aliceCookie)).json();
+    assert.equal(sharedPeers.peers.find((peer: { userId: string }) => peer.userId === alice.id).devices.length, 0, "Exclude only the requesting account's own device");
+    assert.equal(sharedPeers.peers.find((peer: { userId: string }) => peer.userId === bob.id).devices[0].deviceId, "shared-browser", "Keep the other account's key on the same browser");
+    await sql.query("delete from e2ee_keys where device_id='shared-browser'");
+    // Real RSA proof: a login cookie and an untrusted device cannot approve keys.
+    const sourcePair = generateKeyPairSync("rsa", { modulusLength: 2048 });
+    const targetPair = generateKeyPairSync("rsa", { modulusLength: 2048 });
+    const sourcePublic = sourcePair.publicKey.export({ type: "spki", format: "der" }).toString("base64");
+    const targetPublic = targetPair.publicKey.export({ type: "spki", format: "der" }).toString("base64");
+    const targetFingerprint = createHash("sha256").update(targetPublic).digest("hex");
+    await sql.query("insert into e2ee_keys(user_id,device_id,public_key,encrypted_private_key,trusted_at) values($1,'approval-source',$3,'fixture',now()),($1,'approval-target',$4,'fixture',null),($2,'approval-foreign',$4,'fixture',null)", [alice.id, bob.id, sourcePublic, targetPublic]);
+    const challengeBody = { action: "challenge", sourceDeviceId: "approval-source", targetDeviceId: "approval-target", targetFingerprint };
+    assert.equal((await api("/api/e2ee/devices/approve", bobCookie, "POST", challengeBody)).status, 403, "Cross-account approval is denied");
+    assert.equal((await api("/api/e2ee/devices/approve", aliceCookie, "POST", { ...challengeBody, sourceDeviceId: "approval-target" })).status, 403, "Pending devices cannot approve themselves");
+    assert.equal((await api("/api/e2ee/devices/approve", aliceCookie, "POST", { ...challengeBody, targetFingerprint: "wrong" })).status, 409, "Bind approval to the fingerprint verified by the user");
+    const challengeResponse = await api("/api/e2ee/devices/approve", aliceCookie, "POST", challengeBody);
+    assert.equal(challengeResponse.status, 200);
+    const challenge = await challengeResponse.json();
+    const proof = privateDecrypt({ key: sourcePair.privateKey, padding: constants.RSA_PKCS1_OAEP_PADDING, oaepHash: "sha256" }, Buffer.from(challenge.encryptedChallenge, "base64")).toString();
+    assert.equal((await api("/api/e2ee/devices/approve", aliceCookie, "POST", { action: "approve", token: challenge.token, proof: "a".repeat(43) })).status, 403, "A cookie alone cannot forge the trusted private-key proof");
+    assert.equal((await api("/api/e2ee/devices/approve", aliceCookie, "POST", { action: "approve", token: challenge.token, proof })).status, 200);
+    assert((await sql.query("select trusted_at from e2ee_keys where user_id=$1 and device_id='approval-target'", [alice.id])).rows[0].trusted_at);
+    assert.equal((await api("/api/e2ee/devices/approve", aliceCookie, "POST", { action: "approve", token: challenge.token, proof })).status, 409, "Approval proofs are single-use");
+    const revokedChallenge = await (await api("/api/e2ee/devices/approve", aliceCookie, "POST", challengeBody)).json();
+    const revokedProof = privateDecrypt({ key: sourcePair.privateKey, padding: constants.RSA_PKCS1_OAEP_PADDING, oaepHash: "sha256" }, Buffer.from(revokedChallenge.encryptedChallenge, "base64")).toString();
+    await sql.query("update e2ee_keys set trusted_at=null where user_id=$1 and device_id='approval-source'", [alice.id]);
+    assert.equal((await api("/api/e2ee/devices/approve", aliceCookie, "POST", { action: "approve", token: revokedChallenge.token, proof: revokedProof })).status, 403, "Recheck source trust when consuming proof");
+    await sql.query("delete from e2ee_keys where device_id like 'approval-%'");
     const png = await sharp({ create: { width: 40, height: 50, channels: 3, background: "blue" } }).png().toBuffer();
     const upload = (bytes: Buffer, cookie = aliceCookie, path = "/api/upload/avatar", fields: Record<string, string> = {}) => {
       const form = new FormData(); form.set("file", new File([new Uint8Array(bytes)], "photo.png", { type: "image/png" })); for (const [key, value] of Object.entries(fields)) form.set(key, value);
@@ -202,6 +232,7 @@ async function main() {
         assert(!requests.some(path => path.startsWith("/api/e2ee/") || path === "/api/realtime/stream"), "Public navigation must not bootstrap private chat services");
         assert.deepEqual(browserErrors, [], "Public theme/login hydration must work");
       } finally { await publicBrowser.close(); }
+      if (process.env.ITEM456_RECOVERY_ONLY !== "1") {
       const { profileMobile } = await import("./profile-mobile.mjs");
       const results = await profileMobile(base, aliceCookie, conversation.id, process.env.ITEM456_BROWSER_QUICK === "1");
       for (const result of results) {
@@ -211,6 +242,19 @@ async function main() {
         for (const metric of ["LCP", "CLS"]) assert(result.samples.some((sample) => sample.kind === "vital" && sample.name === metric), `${metric} captured on ${result.path}`);
         if (process.env.PROFILE_BUILD === "1") assert(result.samples.some((sample) => sample.kind === "react"), `React profiling captured on ${result.path}`);
       }
+      }
+    }
+    if (process.env.ITEM456_BROWSER_TESTS === "1") {
+      const carol = await account("item456_recovery");
+      const carolCookie = await login(carol.username);
+      const recoveryPeer = await account("item456_recovery_peer");
+      const recoveryPeerCookie = await login(recoveryPeer.username);
+      const recoveryConversation = (await sql.query("insert into conversations(type,created_by_id) values('dm',$1) returning id", [carol.id])).rows[0];
+      await sql.query("insert into conversation_members(conversation_id,user_id,accepted_at) values($1,$2,now()),($1,$3,now())", [recoveryConversation.id, carol.id, recoveryPeer.id]);
+      await sql.query("insert into messages(conversation_id,sender_id,text,created_at) select $1,$2,'recovery-history-'||n,now()-n*interval '1 minute' from generate_series(1,500) n", [recoveryConversation.id, carol.id]);
+      assert.equal((await api("/api/e2ee/keys", recoveryPeerCookie, "POST", { deviceId: "recovery-peer", publicKey: targetPublic, encryptedPrivateKey: "test-only-backup" })).status, 200);
+      const { testChatRecovery } = await import("./test-chat-recovery.mjs");
+      await testChatRecovery(base, carolCookie, recoveryConversation.id);
     }
     assert.equal((await api("/api/auth/logout", aliceCookie, "POST")).status, 200); assert.equal((await api("/api/auth/me", aliceCookie)).status, 401);
     console.log("Items 4–6 passed: upload safety, retention retries, rotating device sessions, revocation, CSP, and profiling measurements");

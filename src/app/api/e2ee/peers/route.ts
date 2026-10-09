@@ -71,7 +71,7 @@ export async function GET(req: NextRequest) {
   }
   for (const k of keyRows) {
     const peer = byUser.get(k.userId);
-    if (peer && k.deviceId !== currentDeviceId) peer.devices.push({ deviceId: k.deviceId, publicKey: k.publicKey });
+    if (peer && (k.userId !== user.id || k.deviceId !== currentDeviceId)) peer.devices.push({ deviceId: k.deviceId, publicKey: k.publicKey });
   }
 
   return NextResponse.json({ peers: [...byUser.values()] });

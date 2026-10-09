@@ -70,7 +70,7 @@ The message textarea paints browser input immediately while related React
 updates run as transitions. A synchronous draft reference supplies normal and
 scheduled sends, including a last keystroke before the background render.
 Programmatic draft changes still update the input. Regression probes cover
-immediate Enter, clearing after submit and IME confirmation; any outbound
+immediate Enter, clearing after confirmed delivery and IME confirmation; any outbound
 message observed in those probes must remain encrypted.
 
 Conversation rows are memoized with explicit preview/presence props, so
@@ -88,3 +88,36 @@ component tree stable so encryption and realtime providers do not remount.
 This branch is not the live deployment. The persistent realtime architecture
 still requires the documented always-on host and release QA. A 10/10 live
 rating cannot be claimed until deployment and real-device/field measurement.
+
+
+## Draft and device-recovery follow-up (2026-10-09)
+
+The composer now coalesces derived React updates after 100 ms of input idle
+while retaining the immediate DOM value and draft reference. A send clears
+only the exact submitted draft after server confirmation. Key preflight and
+transport errors preserve it; a later confirmation cannot erase newer input.
+Draft storage errors no longer interrupt input, and pagehide flushes the most
+recent draft. Clearing all browser storage still deletes local drafts and keys.
+
+Encryption HTTP requests bound headers and response bodies to 15 seconds.
+Manual restoration is scoped to the open chat and has a 30-second cancellation
+deadline. It preserves historical key order, shares existing keys only with
+trusted devices, aborts remaining writes on failure, and reports an actionable
+result instead of silently swallowing errors. A browser-wide device ID no
+longer excludes another account's key from peer discovery.
+
+Profile now exposes encryption-device fingerprints and approval. The owner
+must compare the new device fingerprint and approve from a trusted device.
+A two-minute, audience-bound server challenge requires RSA-OAEP decryption
+using that trusted device's private key. The token contains the nonce hash,
+not the plaintext nonce; proof is single-use, rate-limited and bound to both
+immutable public keys and the account. Trust is rechecked when consumed.
+Bootstrap and key sharing reject pending devices. No recovery generates a
+replacement history key or sends plaintext messages.
+
+Regression coverage includes response-body cancellation, shared-browser
+accounts, real RSA approval, forged/replayed/cross-account/revoked-source
+proofs, IME input, delayed-send draft races, failed drafts surviving reload,
+restore errors releasing the spinner, and a real second-device decryption.
+The release must still be promoted and measured on the live runtime before
+claiming its speed; local input-to-frame samples are diagnostic, not field INP.

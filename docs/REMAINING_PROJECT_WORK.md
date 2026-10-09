@@ -129,3 +129,22 @@ cutover. Existing local secrets are not evidence of an available host. Keep
 encrypted-chat flows pass staging tests. Physical Android/iPhone evidence
 cannot be substituted by Chromium emulation. These release checks remain
 open until their environments are available.
+
+
+### Recovery follow-up release prerequisites (2026-10-09)
+
+Source fixes preserve failed drafts, coalesce composer updates, bound key
+requests/restoration, correct shared-browser peer discovery and implement
+private-key-proven encryption-device approval in Profile. Read-only checks
+confirmed the configured remote database currently lacks `device_sessions`,
+`stored_uploads` and `rate_limit_buckets`; migrations must precede promotion.
+The local configuration contains no `HEALTHCHECK_SECRET`, `CRON_SECRET` or
+`CLAMAV_HOST`. GitHub can trigger Vercel preview builds, but the preview is
+protected by Vercel authentication and the workspace has no Vercel CLI token
+or accessible deployment host. A successful preview build alone does not
+verify database, antivirus, worker or LISTEN readiness. Do not promote this
+combined release solely because its build completes. Obtain runtime access,
+configure the required private services, take/verify a database backup, apply
+migrations through 0038, pass private readiness and staging flows, then promote
+and measure the live version. No production schema changes were made during
+this read-only assessment.

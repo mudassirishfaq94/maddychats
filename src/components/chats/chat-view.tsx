@@ -205,13 +205,21 @@ export function ChatView({
   const [nextCursor, setNextCursor] = useState<string | null>(initial.nextCursor);
   const [hasMore, setHasMore] = useState(initial.hasMore);
   const [loadingOlder, setLoadingOlder] = useState(false);
-  const [sendPending, setSendPending] = useState(false);
+  const [sendPending, setSendPendingState] = useState(false);
+  const sendPendingRef = useRef(false);
+  const setSendPending = useCallback((value: boolean) => {
+    sendPendingRef.current = value;
+    setSendPendingState(value);
+  }, []);
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraftState] = useState("");
   const draftRef = useRef("");
   const composerRef = useRef<HTMLTextAreaElement>(null);
+  const draftUpdateTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (draftUpdateTimer.current) clearTimeout(draftUpdateTimer.current); }, []);
   const setDraft = useCallback((next: React.SetStateAction<string>) => {
     const value = typeof next === "function" ? next(draftRef.current) : next;
+    if (draftUpdateTimer.current) clearTimeout(draftUpdateTimer.current);
     draftRef.current = value;
     if (composerRef.current) composerRef.current.value = value;
     setDraftState(value);
@@ -511,19 +519,39 @@ export function ChatView({
   /* --------------------------- persistent drafts -------------------------- */
 
   useEffect(() => {
+    draftStorageReady.current = false;
     const timer = window.setTimeout(() => {
-      const saved = window.localStorage.getItem(draftStorageKey);
-      if (saved) setDraft(saved.slice(0, 2000));
+      try {
+        const saved = window.localStorage.getItem(draftStorageKey);
+        // Do not overwrite input typed before hydration completes.
+        if (saved && !draftRef.current) setDraft(saved.slice(0, 2000));
+      } catch { /* Storage restrictions must not disable the composer. */ }
       draftStorageReady.current = true;
     }, 0);
-    return () => window.clearTimeout(timer);
+    const persist = () => {
+      if (!draftStorageReady.current) return;
+      try {
+        const value = draftRef.current;
+        if (value) window.localStorage.setItem(draftStorageKey, value.slice(0, 2000));
+        else window.localStorage.removeItem(draftStorageKey);
+      } catch { /* Keep the in-memory draft when browser storage is unavailable. */ }
+    };
+    window.addEventListener("pagehide", persist);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener("pagehide", persist);
+      persist();
+    };
   }, [draftStorageKey, setDraft]);
 
   useEffect(() => {
     if (!draftStorageReady.current) return;
     const timer = window.setTimeout(() => {
-      if (draft) window.localStorage.setItem(draftStorageKey, draft.slice(0, 2000));
-      else window.localStorage.removeItem(draftStorageKey);
+      try {
+        const value = draftRef.current;
+        if (value) window.localStorage.setItem(draftStorageKey, value.slice(0, 2000));
+        else window.localStorage.removeItem(draftStorageKey);
+      } catch { /* Storage failure must not interrupt typing. */ }
     }, 180);
     return () => window.clearTimeout(timer);
   }, [draft, draftStorageKey]);
@@ -830,12 +858,13 @@ export function ChatView({
     const sendStarted = performance.now();
     // Read the immediate draft, including a last keystroke whose background
     // UI update has not committed yet. Encryption checks remain below.
-    const text = draftRef.current.trim();
+    const submittedDraft = draftRef.current;
+    const text = submittedDraft.trim();
     if (typingStopTimerRef.current) clearTimeout(typingStopTimerRef.current);
     signalTyping(false);
 
     if (attachments.pending.length > 0) {
-      if (sendPending) return;
+      if (sendPendingRef.current) return;
       setSendPending(true);
       setError(null);
       try {
@@ -855,8 +884,10 @@ export function ChatView({
         setItems((prev) =>
           prev.some((m) => m.id === created.id) ? prev : [...prev, created],
         );
-        setDraft("");
-        setReplyTo(null);
+        if (draftRef.current === submittedDraft) {
+          setDraft("");
+          setReplyTo(null);
+        }
         nearBottomRef.current = true;
         scrollToBottom(true);
       } catch (cause) {
@@ -867,7 +898,7 @@ export function ChatView({
       return;
     }
 
-    if (!text || sendPending) return;
+    if (!text || sendPendingRef.current) return;
     const clientMessageId = crypto.randomUUID();
     const optimisticId = `client:${clientMessageId}`;
     const now = new Date().toISOString();
@@ -908,8 +939,7 @@ export function ChatView({
     setItems((prev) => [...prev, optimistic]);
     chatPerf("send-click-to-optimistic", sendStarted);
     const replyId = replyTo?.id ?? null;
-    setDraft("");
-    setReplyTo(null);
+    // Keep the draft until the server confirms delivery, including key failures.
     nearBottomRef.current = true;
     requestAnimationFrame(() => scrollToBottom(true));
     setSendPending(true);
@@ -949,6 +979,10 @@ export function ChatView({
       }
       const created = data.message;
       chatPerf("send-server-confirmed", sendStarted);
+      if (draftRef.current === submittedDraft) {
+        setDraft("");
+        setReplyTo(null);
+      }
       setDecryptedTexts((prev) => {
         const next = new Map(prev);
         next.delete(optimisticId);
@@ -979,7 +1013,7 @@ export function ChatView({
   }
 
   async function sendVoiceMessage() {
-    if (!recorder.audioBlob || sendPending) return;
+    if (!recorder.audioBlob || sendPendingRef.current) return;
     setSendPending(true);
     setError(null);
     try {
@@ -2434,7 +2468,10 @@ export function ChatView({
                   // mentions/buttons/history is interruptible background work.
                   const value = e.target.value;
                   draftRef.current = value;
-                  startTransition(() => setDraftState(value));
+                  if (draftUpdateTimer.current) clearTimeout(draftUpdateTimer.current);
+                  draftUpdateTimer.current = setTimeout(() => {
+                    startTransition(() => setDraftState(draftRef.current));
+                  }, 100);
                   growComposer();
                   if (e.target.value.trim()) noteTyping();
                   else signalTyping(false);
@@ -2660,11 +2697,12 @@ function EncryptionInfoDialog({
   error: string | null;
   peersMissing: number;
   conversationName: string;
-  onRestoreOtherDevices: () => Promise<void>;
+  onRestoreOtherDevices: () => Promise<string>;
   onClose: () => void;
 }) {
   const [copied, setCopied] = useState(false);
   const [restoring, setRestoring] = useState(false);
+  const [restoreResult, setRestoreResult] = useState<string | null>(null);
   return (
     <div
       className="fixed inset-0 z-[90] flex items-center justify-center bg-black/50 p-4"
@@ -2777,13 +2815,18 @@ function EncryptionInfoDialog({
                   disabled={restoring}
                   onClick={() => {
                     setRestoring(true);
-                    void onRestoreOtherDevices().finally(() => setRestoring(false));
+                    setRestoreResult(null);
+                    void onRestoreOtherDevices()
+                      .then(setRestoreResult)
+                      .catch((cause: unknown) => setRestoreResult(cause instanceof Error ? cause.message : "Device restoration failed. Please retry."))
+                      .finally(() => setRestoring(false));
                   }}
                   className="mt-3 inline-flex min-h-10 items-center gap-2 rounded-xl border border-[var(--border)] px-3 text-xs font-semibold text-[var(--accent-fg)] transition-colors hover:bg-[var(--accent-soft)] disabled:cursor-wait disabled:opacity-60"
                 >
                   {restoring ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="h-3.5 w-3.5" />}
                   {restoring ? "Restoring devices…" : "Restore my other devices"}
                 </button>
+                {restoreResult ? <p role="status" className="mt-2 text-xs text-[var(--muted)]">{restoreResult}</p> : null}
               </div>
             </>
           ) : (
