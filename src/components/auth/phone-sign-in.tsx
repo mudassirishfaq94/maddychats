@@ -16,7 +16,7 @@ export function PhoneSignIn({ next = "/app", signup = false }: { next?: string; 
   const [stage, setStage] = useState<"phone" | "code" | "profile">("phone");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const configured = firebasePhoneAuthConfigured();
+  const configured = process.env.NEXT_PUBLIC_STARTER_MODE !== "1" && firebasePhoneAuthConfigured();
 
   async function sendCode(e: FormEvent) {
     e.preventDefault();

@@ -1,3 +1,4 @@
+import { verificationDeliveryConfigured } from "@/server/email-verification";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import type { Metadata } from "next";
@@ -30,9 +31,9 @@ export default async function SignupPage() {
         </>
       }
     >
-      <RegisterForm />
+      {verificationDeliveryConfigured() ? <RegisterForm /> : <p className="mb-4 text-sm text-[var(--muted)]">Create your account with Google. Email sign-up is currently paused.</p>}
       <GoogleSignIn />
-      <PhoneSignIn signup />
+      {process.env.STARTER_MODE !== "1" ? <PhoneSignIn signup /> : null}
     </AuthLayout>
   );
 }

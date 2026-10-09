@@ -1,10 +1,19 @@
-# Render and Supabase cutover
+# Render starter deployment and future Supabase cutover
 
 The current target is the existing Render `circlo` service at
 https://maddychats.onrender.com. Its production database is still Neon.
 The Supabase project `realtime chat application` (`ewkzodtvduwbjbomxvpu`)
 has been verified active and linked locally. Its existing profile tables and
 `chat media` bucket belong to earlier work and must be preserved.
+
+## Current approved $0 launch
+
+The user approved a limited starter deployment without paid services. The active
+Blueprint now declares only the existing free web service, with STARTER_MODE=1.
+Keep Neon for production data. Pause new uploads/voice, phone sign-in, and
+scheduled delivery. Retain encryption, recovery, drafts, and existing history.
+Google verifies ownership for existing password users through a short-lived
+proof that still requires their password and MFA, without automatic linking.
 
 ## Prepared resources
 
@@ -15,12 +24,12 @@ has been verified active and linked locally. Its existing profile tables and
 - `scripts/certs/supabase-ca.crt` is Supabase's public CA certificate, downloaded
   over verified HTTPS. Set `NODE_EXTRA_CA_CERTS` before starting Node, including
   migration commands. Do not disable certificate verification.
-- `render.yaml` describes the existing web service, a private ClamAV scanner,
-  and a scheduled worker. The scanner image is pinned by registry digest.
+- `render.yaml` describes only the existing free web service. A scanner and
+  scheduled worker are not provisioned in starter mode.
 
 ## Paid infrastructure approval
 
-The proposed Render instances are Standard web (2 GB, $25/month), Standard
+The earlier paid alternative (not authorized) would use Standard web (2 GB, $25/month), Standard
 private scanner (2 GB, $25/month), and Starter worker ($7/month): approximately
 $57/month in compute, before additional usage, tax, and Supabase billing.
 Check current prices at https://render.com/pricing before provisioning.
@@ -85,3 +94,9 @@ DDL, reject incompatible definitions, and verify fresh upgrades and restoration.
 
 Production has not been migrated or redeployed yet. The free Render instance
 still lacks the scanner and independent worker required for the complete release.
+
+## Legacy media preservation check (October 9, 2026)
+
+Before changing the live service, all 25 referenced media paths were checked through the existing authenticated media endpoint. All 25 returned 404 on the original Render deployment. One exact local file was recovered, backed up and copied to the private `maddy-media` bucket; its SHA-256 was verified after download. The other 24 binaries were already unavailable and are not present in the local upload directory or the existing Supabase bucket. Their message/attachment metadata and encryption key history are preserved. A database backup cannot reconstruct those missing binaries; recovering them requires an original file/storage backup. No remaining source files were deleted.
+
+Key history contained 548,650 rows before deployment. Recovery now returns at most 200 keys per page, compacts repeated wraps for known recipient/fingerprint pairs, and retains paginated raw fallback plus all unknown legacy copies. No historical key rows are deleted. Starter housekeeping removes only expired realtime replay events and inactive rate-limit windows while the app is awake; scheduled messages remain paused.

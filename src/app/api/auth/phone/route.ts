@@ -22,6 +22,7 @@ export const dynamic = "force-dynamic";
 export async function POST(req: NextRequest) {
   const blocked = guardSameOrigin(req);
   if (blocked) return blocked;
+  if (process.env.STARTER_MODE === "1") return jsonError(503, "Phone sign-in is paused. Continue with Google or your verified email account.");
   const rl = await rateLimit(`phone-auth:${clientIp(req)}`, AUTH_RATE_LIMIT.limit, AUTH_RATE_LIMIT.windowMs);
   if (!rl.allowed) return jsonError(429, "Too many attempts. Please try again later.");
 

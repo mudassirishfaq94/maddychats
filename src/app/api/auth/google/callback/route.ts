@@ -1,3 +1,5 @@
+import { createGoogleEmailProof, GOOGLE_EMAIL_PROOF_COOKIE, GOOGLE_EMAIL_PROOF_TTL } from "@/server/google-email-proof";
+import { requestIsSecure } from "@/server/http";
 import { beginSignIn } from "@/server/authentication";
 import { randomBytes } from "crypto";
 import { createRemoteJWKSet, jwtVerify } from "jose";
@@ -104,6 +106,16 @@ async function handleGoogleCallback(req: NextRequest) {
   if (!user) {
     const emailTaken = await db.select().from(users).where(sql`lower(${users.email}) = ${claims.email.toLowerCase()}`).limit(1);
     if (emailTaken[0]) {
+      if (process.env.STARTER_MODE === "1" && !emailTaken[0].emailVerifiedAt && !mobile) {
+        const target = new URL("/login", clientUrl());
+        target.searchParams.set("emailProof", "google");
+        if (next.startsWith("/") && !next.startsWith("//")) target.searchParams.set("next", next);
+        const response = NextResponse.redirect(target);
+        response.cookies.set(GOOGLE_EMAIL_PROOF_COOKIE,
+          await createGoogleEmailProof(emailTaken[0].id, claims.email),
+          { httpOnly: true, secure: requestIsSecure(req), sameSite: "lax", path: "/api/auth/login", maxAge: GOOGLE_EMAIL_PROOF_TTL });
+        return finishGoogleOAuth(response);
+      }
       return redirectError("google_link_required");
     }
   }

@@ -21,7 +21,10 @@ const nextConfig: NextConfig = {
   output: "standalone",
   poweredByHeader: false,
   reactProductionProfiling: process.env.PROFILE_BUILD === "1",
-  env: { NEXT_PUBLIC_APP_VERSION: process.env.APP_VERSION ?? "development" },
+  env: {
+    NEXT_PUBLIC_APP_VERSION: process.env.APP_VERSION ?? "development",
+    NEXT_PUBLIC_STARTER_MODE: process.env.STARTER_MODE ?? "0",
+  },
   // Keep Turbopack scoped to this repository when a parent directory also
   // contains a lockfile (common in local preview workspaces).
   turbopack: {

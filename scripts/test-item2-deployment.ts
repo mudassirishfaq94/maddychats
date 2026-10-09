@@ -1,3 +1,6 @@
+import { SignJWT } from "jose";
+import { createHash, randomUUID } from "node:crypto";
+import { hashPassword } from "../src/server/password";
 /** Destructive only to three explicitly named, loopback-only disposable databases. */
 import assert from "node:assert/strict";
 import { spawn, type ChildProcess } from "node:child_process";
@@ -150,6 +153,80 @@ async function main() {
     assert.equal((await restored.query("select count(*)::int as count from drizzle.__drizzle_migrations")).rows[0].count, journal.entries.length);
     await run("scripts/database-backup.mjs", { RESTORE_DATABASE_URL: restoreUrl.toString(), BACKUP_ACTION: "restore", BACKUP_FILE: backupFile }, [], 1);
     console.log("Custom-format backup restoration preserved schema, message data, and migration history");
+    const starterBase = "http://127.0.0.1:3109";
+    const starter = spawn(process.execPath, [resolve(".next/standalone/server.js")], {
+      env: { ...testEnv, PORT: "3109", CLIENT_URL: starterBase, STARTER_MODE: "1", CSP_ENFORCE: "1" }, stdio: "pipe", windowsHide: true,
+    });
+    children.push(starter);
+    let starterReady = false;
+    for (let i = 0; i < 100; i++) {
+      try { starterReady = (await fetch(`${starterBase}/api/health`)).status === 204; } catch { /* startup */ }
+      if (starterReady) break; await sleep(200);
+    }
+    assert(starterReady);
+    for (const path of ["/api/upload/message", "/api/upload/avatar"]) {
+      const response = await fetch(starterBase + path, { method: "POST", headers: { Origin: starterBase }, body: "unparsed" });
+      assert.equal(response.status, 503);
+      assert.match((await response.json()).error, /paused/);
+    }
+    const pending = (await fresh.query("insert into scheduled_messages(conversation_id,sender_id,text,scheduled_for) values($1,$2,'Paused starter delivery',now()-interval '1 minute') returning id", [conversation.id, sender.id])).rows[0];
+    const paused = await fetch(`${starterBase}/api/cron/process-scheduled`, { headers: { authorization: "Bearer test-cron" } });
+    assert.equal(paused.status, 200);
+    assert.equal((await paused.json()).processed, 0);
+    assert.equal((await fresh.query("select sent from scheduled_messages where id=$1", [pending.id])).rows[0].sent, false);
+    console.log("Starter API blocks uploads and preserves paused scheduled messages");
+    const password = "Starter-test-password-2026";
+    const passwordHash = await hashPassword(password);
+    const proofUser = (await fresh.query("insert into users(username,display_name,email,password_hash) values('proof_user','Proof','proof@example.invalid',$1) returning id", [passwordHash])).rows[0];
+    const proof = await new SignJWT({ emailHash: createHash("sha256").update("proof@example.invalid").digest("hex") })
+      .setProtectedHeader({ alg: "HS256", typ: "JWT" }).setSubject(proofUser.id)
+      .setIssuer("maddy-chats").setAudience("maddy-chats-email-verification")
+      .setJti(randomUUID()).setIssuedAt().setExpirationTime("5m")
+      .sign(new TextEncoder().encode(testEnv.JWT_SECRET));
+    const login = (secret: string, cookie = proof) => fetch(`${starterBase}/api/auth/login`, {
+      method: "POST", headers: { Origin: starterBase, "Content-Type": "application/json", Cookie: `maddy_google_email_proof=${cookie}` },
+      body: JSON.stringify({ identifier: "proof_user", password: secret }),
+    });
+    assert.equal((await login("Wrong-password-2026")).status, 401);
+    assert.equal((await fresh.query("select email_verified_at from users where id=$1", [proofUser.id])).rows[0].email_verified_at, null);
+    assert.equal((await login(password, "forged")).status, 403);
+    const verifiedLogin = await login(password);
+    assert.equal(verifiedLogin.status, 200);
+    assert((await fresh.query("select email_verified_at from users where id=$1", [proofUser.id])).rows[0].email_verified_at);
+    assert.equal((await fresh.query("select count(*)::int as count from oauth_accounts where user_id=$1", [proofUser.id])).rows[0].count, 0, "Email proof must not silently link a Google account");
+    const proofCookie = verifiedLogin.headers.getSetCookie().find(value => value.startsWith("maddy_session="))!.split(";")[0];
+    const historyConversation = (await fresh.query("insert into conversations(type,created_by_id) values('dm',$1) returning id", [proofUser.id])).rows[0];
+    await fresh.query("insert into conversation_members(conversation_id,user_id,accepted_at) values($1,$2,now())", [historyConversation.id, proofUser.id]);
+    await fresh.query("insert into e2ee_keys(user_id,device_id,public_key,encrypted_private_key,trusted_at) values($1,'history-device','test-public','test-only-backup',now())", [proofUser.id]);
+    await fresh.query(`insert into e2ee_key_history(conversation_id,user_id,device_id,recipient_device_id,encrypted_key,key_fingerprint,key_version)
+      select $1,$2,'history-source','history-device','wrapped-'||n,'12345 12345 12345 12345 12345 12345',n from generate_series(1,410) n`, [historyConversation.id, proofUser.id]);
+    await fresh.query(`insert into e2ee_key_history(conversation_id,user_id,device_id,recipient_device_id,encrypted_key,key_fingerprint,key_version)
+      select $1,$2,'history-source',null,'legacy-'||n,null,n from generate_series(411,413) n`, [historyConversation.id, proofUser.id]);
+    const historyUrl = `${starterBase}/api/e2ee/key-rotation/history?conversationId=${historyConversation.id}&deviceId=history-device`;
+    const historyRequest = (extra = "") => fetch(historyUrl + extra, { headers: { Origin: starterBase, Cookie: proofCookie } });
+    const compactHistory = await historyRequest("&compact=1");
+    assert.equal(compactHistory.status, 200);
+    const compactBody = await compactHistory.json();
+    assert.equal(compactBody.history.length, 4, "Repeated exact-device fingerprints compact without dropping unknown legacy copies");
+    assert.equal(compactBody.nextCursor, null);
+    assert(compactBody.history.some((row: { keyVersion: number }) => row.keyVersion === 410));
+    const recoveredIds = new Set<string>(); let cursor: string | null = null;
+    do {
+      const response = await historyRequest(cursor ? `&cursor=${encodeURIComponent(cursor)}` : "");
+      assert.equal(response.status, 200);
+      const body = await response.json(); assert(body.history.length <= 200);
+      for (const row of body.history) { assert(!recoveredIds.has(row.id)); recoveredIds.add(row.id); }
+      cursor = body.nextCursor;
+    } while (cursor);
+    assert.equal(recoveredIds.size, 413, "Raw fallback preserves every historical key with no pagination gaps");
+    assert.equal((await historyRequest("&cursor=invalid")).status, 422);
+    assert.equal((await fetch(historyUrl.replace("history-device", "other-device"), { headers: { Origin: starterBase, Cookie: proofCookie } })).status, 403);
+    console.log("Key history bounds responses, compacts repeated wraps, preserves legacy keys and all raw fallback pages");
+    await fresh.query("update users set email_verified_at=null where id=$1", [proofUser.id]);
+    assert.equal((await login(password)).status, 403, "Consumed ownership proof must not replay");
+    console.log("Starter Google email proof requires the password, rejects forgery/replay, and does not auto-link accounts");
+
+
   } finally {
     for (const child of children.reverse()) {
       if (child.exitCode === null && child.signalCode === null) {

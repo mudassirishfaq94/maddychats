@@ -1,3 +1,7 @@
+import { readGoogleEmailProof, GOOGLE_EMAIL_PROOF_COOKIE, GOOGLE_EMAIL_PROOF_TTL } from "@/server/google-email-proof";
+import { db } from "@/db";
+import { users } from "@/db/schema";
+import { eq } from "drizzle-orm";
 import { beginSignIn } from "@/server/authentication";
 import { NextRequest, NextResponse } from "next/server";
 import { fieldErrors, loginSchema } from "@/lib/schemas";
@@ -65,8 +69,19 @@ export async function POST(req: NextRequest) {
     return jsonError(403, "This account is unavailable.");
   }
   if (!user.emailVerifiedAt) {
-    return NextResponse.json({ error: "Verify your email before signing in.", verificationRequired: true }, { status: 403 });
+    const proof = process.env.STARTER_MODE === "1"
+      ? await readGoogleEmailProof(req.cookies.get(GOOGLE_EMAIL_PROOF_COOKIE)?.value, user.id, user.email)
+      : null;
+    if (!proof || !(await rateLimit(`google-email-proof:${proof}`, 1, GOOGLE_EMAIL_PROOF_TTL * 1000)).allowed) {
+      return NextResponse.json({ error: process.env.STARTER_MODE === "1"
+        ? "Verify your email using Google, then enter your existing password."
+        : "Verify your email before signing in.", verificationRequired: true }, { status: 403 });
+    }
+    user.emailVerifiedAt = new Date();
+    await db.update(users).set({ emailVerifiedAt: user.emailVerifiedAt }).where(eq(users.id, user.id));
   }
 
-  return beginSignIn(req, user);
+  const response = await beginSignIn(req, user);
+  response.cookies.set(GOOGLE_EMAIL_PROOF_COOKIE, "", { httpOnly: true, sameSite: "lax", path: "/api/auth/login", maxAge: 0 });
+  return response;
 }

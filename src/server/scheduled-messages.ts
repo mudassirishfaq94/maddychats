@@ -79,6 +79,7 @@ export async function processScheduledMessages(): Promise<{
   processed: number;
   failed: number;
 }> {
+  if (process.env.STARTER_MODE === "1") return { processed: 0, failed: 0 };
   const lockClient = await pool.connect();
   const lock = await lockClient.query<{ locked: boolean }>(
     "select pg_try_advisory_lock($1) as locked",

@@ -45,6 +45,9 @@ export async function POST(
   const membership = await getMembership(id, user.id);
   if (!membership) return jsonError(404, "Conversation not found.");
 
+  if (process.env.STARTER_MODE === "1") {
+    return jsonError(503, "Scheduled sending is paused. You can send messages now.");
+  }
   const body = await readJson(req);
   const data = (body ?? {}) as Record<string, unknown>;
 

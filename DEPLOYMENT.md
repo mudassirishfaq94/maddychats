@@ -1,14 +1,45 @@
-# Production deployment: Render + Supabase
+# Current starter deployment: Render + Neon + Supabase Storage
 
-The selected production target is the existing Render service at
-https://maddychats.onrender.com, with Supabase PostgreSQL and private media
-storage. Production still uses Neon until the verified migration is complete.
-Follow [the Render cutover plan](./docs/RENDER_DEPLOYMENT_CUTOVER.md) and
-`render.yaml`; paid service provisioning requires approval and a payment method.
+The selected target is the existing free Render service at
+https://maddychats.onrender.com, retaining Neon PostgreSQL and using private
+Supabase media storage. Supabase database cutover is deferred under the current
+$0 budget. Follow [the Render release plan](./docs/RENDER_DEPLOYMENT_CUTOVER.md)
+and `render.yaml`; no paid services are authorized.
 
 The Docker VPS procedure below is an alternative deployment option. Free tiers
 can pause or reject traffic after a usage limit, so they cannot meet an
 always-on production requirement.
+
+## Current $0 starter deployment
+
+Use the existing free Render service and retain Neon as the production database.
+Supabase is linked and its separate private storage bucket is prepared; database
+cutover is deferred to avoid crowding its free database allowance.
+
+Set `STARTER_MODE=1` for both the build and runtime. The build exposes only the
+non-secret availability flag. Encrypted text chat, device approval/recovery,
+draft preservation, and recoverable existing media reads remain available.
+The pre-release media inventory and missing-file limits are documented in the release plan. New uploads,
+voice messages, phone sign-in, and scheduled delivery are paused server-side;
+users can still cancel pending scheduled messages. No scanner or worker is
+provisioned and no scan is bypassed.
+
+New users can sign up with the existing Google connection. Email sign-up stays
+paused until email delivery is configured. An existing unverified password user
+can verify email ownership through Google and then enter the existing password.
+The proof is a five-minute HttpOnly cookie, scoped to that user and email,
+redeemed once through the shared rate-limit store. Password verification and
+MFA still apply, and this does not automatically link a Google identity.
+
+Preserve the production JWT and OAuth secrets. Set `REALTIME_DATABASE_URL` to a
+verified direct Neon connection for LISTEN, alongside the pooled `DATABASE_URL`.
+Generate distinct readiness/cron secrets; scheduled processing remains paused.
+The build command in `render.yaml` embeds the actual Git commit as APP_VERSION.
+Update the existing service by ID rather than creating a second web service.
+
+Free hosting can sleep and has quotas. A consistently instant cold start or an
+unlimited production service cannot be promised. Record live speed measurements
+separately from warmed local typing tests.
 
 ## 1. Provision Supabase
 

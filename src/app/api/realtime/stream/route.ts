@@ -9,6 +9,7 @@ import { realtimeListener, type Delivery } from "@/server/realtime-listener";
 import { addConnection, connectionCount, peersOf, presenceSnapshotFor, removeConnection, touch } from "@/server/presence";
 import { markDeliveredFor } from "@/server/chat";
 import { isUuid } from "@/server/users";
+import { startStarterMaintenance } from "@/server/starter-maintenance";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -18,6 +19,7 @@ export async function GET(req: NextRequest) {
   const me = await getSessionUser();
   const token = req.cookies.get(SESSION_COOKIE)?.value;
   if (!me || !token) return jsonError(401, "Not authenticated.");
+  startStarterMaintenance();
   if (connectionCount(me.id) >= 5) return jsonError(429, "Too many realtime connections.");
   const lastId = req.headers.get("last-event-id");
   if (lastId && !isUuid(lastId)) return jsonError(400, "Invalid event cursor.");

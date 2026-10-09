@@ -1,6 +1,8 @@
 "use client";
 
 import Image from "next/image";
+
+const starterMode = process.env.NEXT_PUBLIC_STARTER_MODE === "1";
 import { useHydrated } from "@/hooks/use-hydrated";
 
 import {
@@ -1792,7 +1794,7 @@ export function ChatView({
           e.preventDefault();
           setDragging(false);
           if (e.dataTransfer.files?.length) {
-            attachments.addFiles(e.dataTransfer.files);
+            if (!starterMode) attachments.addFiles(e.dataTransfer.files);
           }
         }}
         className={cn(
@@ -2350,6 +2352,7 @@ export function ChatView({
           </div>
         ) : null}
 
+        {starterMode ? <p className="mb-2 text-xs text-[var(--muted)]">Text chat is available. Uploads, voice messages, and scheduled sending are paused.</p> : null}
         <AttachmentPreviews
           pending={attachments.pending}
           progress={attachments.progress}
@@ -2437,7 +2440,7 @@ export function ChatView({
           <div className="flex items-center gap-2 sm:items-end">
             <AttachButton
               onFiles={(files) => attachments.addFiles(files)}
-              disabled={sendPending || !requestAccepted}
+              disabled={starterMode || sendPending || !requestAccepted}
             />
 
             {/* Emoji button */}
@@ -2497,10 +2500,10 @@ export function ChatView({
                 <button
                   type="button"
                   onClick={() => setShowSchedule(true)}
-                  disabled={sendPending || !requestAccepted}
+                  disabled={starterMode || sendPending || !requestAccepted}
                   aria-label="Schedule message"
                   className="hidden h-9 w-9 min-h-[36px] min-w-[36px] items-center justify-center rounded-full border border-[var(--border)] text-[var(--muted)] transition-colors hover:border-[var(--border-strong)] hover:text-[var(--text)] sm:flex"
-                  title="Schedule message"
+                  title={starterMode ? "Scheduled sending is paused" : "Schedule message"}
                 >
                   <Clock className="h-4 w-4" />
                 </button>
@@ -2520,9 +2523,10 @@ export function ChatView({
             ) : (
               <button
                 type="button"
-                disabled={!requestAccepted}
+                disabled={starterMode || !requestAccepted}
                 onClick={() => void recorder.startRecording()}
                 aria-label="Record voice message"
+                title={starterMode ? "Voice messages are paused" : "Record voice message"}
                 className="flex h-10 w-10 min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-full border border-[var(--border)] text-[var(--muted)] transition-colors hover:border-[var(--border-strong)] hover:text-[var(--text)] disabled:opacity-50"
               >
                 <Mic className="h-4.5 w-4.5" />

@@ -377,8 +377,9 @@ export function useE2EE(userId: string | undefined) {
   /** Load and unwrap every key available to this device once per batch. Initial
    * history decrypts run concurrently; sharing this promise prevents every
    * message from independently repeating the same API and RSA work. */
-  const loadDecryptionKeys = useCallback(async (conversationId: string): Promise<CryptoKey[]> => {
-    const pending = decryptionLoadRef.current.get(conversationId);
+  const loadDecryptionKeys = useCallback(async (conversationId: string, rawHistory = false): Promise<CryptoKey[]> => {
+    const loadId = `${conversationId}:${rawHistory ? "raw" : "compact"}`;
+    const pending = decryptionLoadRef.current.get(loadId);
     if (pending) return pending;
 
     const load = (async () => {
@@ -392,14 +393,24 @@ export function useE2EE(userId: string | undefined) {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 10000);
         try {
-          const response = await e2eeRequest(`/api/e2ee/${endpoint}?conversationId=${encodeURIComponent(conversationId)}&deviceId=${encodeURIComponent(state.deviceId)}`, {
-            cache: "no-store", signal: controller.signal,
-          });
-          if (!response.ok) return;
-          const data = await response.json();
-          for (const row of data.keys ?? data.history ?? []) {
-            if (row.encryptedKey) wrappedKeys.add(row.encryptedKey);
-          }
+          let cursor: string | null = null;
+          const seenCursors = new Set<string>();
+          do {
+            const query = new URLSearchParams({ conversationId, deviceId: state.deviceId });
+            if (endpoint === "key-rotation/history" && !rawHistory) query.set("compact", "1");
+            if (cursor) query.set("cursor", cursor);
+            const response = await e2eeRequest(`/api/e2ee/${endpoint}?${query}`, {
+              cache: "no-store", signal: controller.signal,
+            });
+            if (!response.ok) return;
+            const data = await response.json();
+            for (const row of data.keys ?? data.history ?? []) {
+              if (row.encryptedKey) wrappedKeys.add(row.encryptedKey);
+            }
+            cursor = data.nextCursor ?? null;
+            if (cursor && seenCursors.has(cursor)) break;
+            if (cursor) seenCursors.add(cursor);
+          } while (cursor && !controller.signal.aborted);
         } catch { /* The other endpoint or a later retry may still recover. */ }
         finally { clearTimeout(timeout); }
       }));
@@ -410,7 +421,9 @@ export function useE2EE(userId: string | undefined) {
       for (const key of existing) {
         try { fingerprints.add(await conversationFingerprint(key)); } catch {}
       }
+      let processed = 0;
       for (const wrapped of wrappedKeys) {
+        if (++processed % 25 === 0) await new Promise(resolve => setTimeout(resolve, 0));
         try {
           const key = await decryptKeyFromSender(wrapped, keyPairRef.current.privateKey);
           const fingerprint = await conversationFingerprint(key);
@@ -424,12 +437,12 @@ export function useE2EE(userId: string | undefined) {
       return keys;
     })();
 
-    decryptionLoadRef.current.set(conversationId, load);
+    decryptionLoadRef.current.set(loadId, load);
     try {
       return await load;
     } finally {
-      if (decryptionLoadRef.current.get(conversationId) === load) {
-        decryptionLoadRef.current.delete(conversationId);
+      if (decryptionLoadRef.current.get(loadId) === load) {
+        decryptionLoadRef.current.delete(loadId);
       }
     }
   }, [loadLocalConversationKeys, state.deviceId]);
@@ -451,6 +464,11 @@ export function useE2EE(userId: string | undefined) {
     }
     const loaded = await loadDecryptionKeys(conversationId);
     for (const key of loaded) {
+      try { return await decryptMessage(ciphertext, key); } catch { /* Try the next key. */ }
+    }
+    // A compact copy may belong to a legacy device whose public key changed.
+    // Retry the original wraps without discarding historical recovery data.
+    for (const key of await loadDecryptionKeys(conversationId, true)) {
       try { return await decryptMessage(ciphertext, key); } catch { /* Try the next key. */ }
     }
     throw new Error("This message's key is not available on this device");
