@@ -1,0 +1,80 @@
+# Reference configuration. Adopt the existing circlo service, not a duplicate.
+# Paid resources require approval before provisioning.
+services:
+  - type: web
+    name: circlo
+    runtime: node
+    region: oregon
+    plan: standard
+    numInstances: 1
+    repo: https://github.com/mudassirishfaq94/maddychats
+    branch: main
+    autoDeployTrigger: off
+    buildCommand: npm ci && APP_VERSION=$RENDER_GIT_COMMIT npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: 22.23.3
+      - key: NODE_EXTRA_CA_CERTS
+        value: /opt/render/project/src/scripts/certs/supabase-ca.crt
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: CLIENT_URL
+        value: https://maddychats.onrender.com
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_CALLBACK_URL
+        value: https://maddychats.onrender.com/api/auth/google/callback
+      - key: SUPABASE_URL
+        value: https://ewkzodtvduwbjbomxvpu.supabase.co
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_STORAGE_BUCKET
+        value: maddy-media
+      - key: HEALTHCHECK_SECRET
+        generateValue: true
+      - key: CRON_SECRET
+        generateValue: true
+      - key: CLAMAV_HOST
+        fromService:
+          name: maddy-clamav
+          type: pserv
+          property: host
+      - key: CLAMAV_PORT
+        value: "3310"
+      - key: CSP_ENFORCE
+        value: "0"
+  - type: pserv
+    name: maddy-clamav
+    runtime: image
+    region: oregon
+    plan: standard
+    image:
+      url: docker.io/clamav/clamav@sha256:57deb108fc4c72778aa83eafbca7bb7153e28c3f57c005afd38d31f16da86f23
+  - type: worker
+    name: maddy-scheduled-worker
+    runtime: node
+    region: oregon
+    plan: starter
+    repo: https://github.com/mudassirishfaq94/maddychats
+    branch: main
+    autoDeployTrigger: off
+    buildCommand: node --version
+    startCommand: node scripts/scheduled-worker.mjs
+    envVars:
+      - key: NODE_VERSION
+        value: 22.23.3
+      - key: SCHEDULED_BASE_URL
+        value: https://maddychats.onrender.com
+      - key: SCHEDULED_INTERVAL_MS
+        value: "15000"
+      - key: CRON_SECRET
+        fromService:
+          name: circlo
+          type: web
+          envVarKey: CRON_SECRET

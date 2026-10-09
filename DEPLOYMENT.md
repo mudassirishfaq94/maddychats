@@ -1,10 +1,14 @@
-# Production deployment: Supabase + Docker VPS
+# Production deployment: Render + Supabase
 
-This application no longer depends on Vercel, Neon, or Vercel Blob. It is
-designed to run continuously in a Docker container on a paid VPS, with
-Supabase providing PostgreSQL and private media storage. A paid service is
-intentional: no free tier can guarantee that a production service will never
-pause or reject traffic after a usage limit.
+The selected production target is the existing Render service at
+https://maddychats.onrender.com, with Supabase PostgreSQL and private media
+storage. Production still uses Neon until the verified migration is complete.
+Follow [the Render cutover plan](./docs/RENDER_DEPLOYMENT_CUTOVER.md) and
+`render.yaml`; paid service provisioning requires approval and a payment method.
+
+The Docker VPS procedure below is an alternative deployment option. Free tiers
+can pause or reject traffic after a usage limit, so they cannot meet an
+always-on production requirement.
 
 ## 1. Provision Supabase
 

@@ -73,6 +73,9 @@ public/downloads/
 # local preview tooling and logs
 .freebuff/
 
+# Supabase CLI local project metadata
+/supabase/.temp/
+
 # Android build outputs and local signing material
 /android/build/
 /android/app/build/

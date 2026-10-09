@@ -2,7 +2,7 @@ import { chromium } from "playwright";
 import { mkdir, writeFile } from "node:fs/promises";
 
 const base = new URL(process.env.SPEED_BASE_URL || "https://ziptalks.vercel.app/");
-if (!["ziptalks.vercel.app", "127.0.0.1", "localhost"].includes(base.hostname)) throw new Error("Unexpected measurement host");
+if (!["ziptalks.vercel.app", "maddychats.onrender.com", "127.0.0.1", "localhost"].includes(base.hostname)) throw new Error("Unexpected measurement host");
 const label = process.env.SPEED_LABEL || "live";
 if (!/^[a-z0-9-]+$/.test(label)) throw new Error("Use a simple artifact label");
 const results = [];
