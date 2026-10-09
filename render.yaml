@@ -9,7 +9,7 @@ services:
     numInstances: 1
     repo: https://github.com/mudassirishfaq94/maddychats
     branch: main
-    autoDeployTrigger: off
+    autoDeployTrigger: "off"
     buildCommand: npm ci && APP_VERSION=$RENDER_GIT_COMMIT npm run build
     startCommand: npm start
     healthCheckPath: /api/health
@@ -63,7 +63,7 @@ services:
     plan: starter
     repo: https://github.com/mudassirishfaq94/maddychats
     branch: main
-    autoDeployTrigger: off
+    autoDeployTrigger: "off"
     buildCommand: node --version
     startCommand: node scripts/scheduled-worker.mjs
     envVars:
