@@ -3,6 +3,7 @@ import { chromium } from "playwright";
 import { readFile } from "node:fs/promises";
 import { randomBytes, createHash } from "node:crypto";
 import bcrypt from "bcryptjs";
+import { testMobilePerformance } from "./test-mobile-performance.mjs";
 import { testStatusPhoto } from "./test-status-photo.mjs";
 import { testEncryptionDevices } from "./test-encryption-devices.mjs";
 
@@ -17,7 +18,7 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     const response = await fetch(base + "/api/auth/login", { method: "POST", headers: { Origin: base, "Content-Type": "application/json" }, body: JSON.stringify({ identifier: account.username, password }) });
     assert.equal(response.status, 200);
     const cookies = response.headers.getSetCookie().filter(cookie => /^(maddy_session|maddy_refresh)=/.test(cookie)).map(cookie => cookie.split(";")[0]).join("; ");
-    const context = await browser.newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: "block", permissions: ["microphone"] });
+    const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, serviceWorkers: "block", permissions: ["microphone"] });
     await context.addInitScript(() => { window.__workflowCsp = []; document.addEventListener("securitypolicyviolation", event => window.__workflowCsp.push(event.violatedDirective)); });
     await context.addCookies(cookies.split("; ").map(cookie => { const i = cookie.indexOf("="); return { name: cookie.slice(0, i), value: cookie.slice(i + 1), url: base, httpOnly: true, sameSite: "Lax" }; }));
     const page = await context.newPage(); page.on("pageerror", error => errors.push(error.message)); pages.push(page);
@@ -90,6 +91,7 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     const composer = source.page.getByRole("textbox", { name: "Message text" });
     await composer.fill("Real encrypted delivery baseline"); await composer.press("Enter");
     await recipient.page.getByRole("region", { name: "Conversation", exact: true }).getByText("Real encrypted delivery baseline", { exact: true }).waitFor({ timeout: 30000 });
+    const mobileChecks = await testMobilePerformance(base, pool, source, owner, conversationId);
     const sourceSession = await renewSession(source);
     assert((await pool.query("select trusted_at from e2ee_keys where user_id=$1 and session_id=$2", [owner.id, sourceSession])).rows[0]?.trusted_at, "An existing private key rebinds after sign-in without replacement");
     const target = await login(owner); await chat(target.page);
@@ -221,7 +223,7 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     for (const page of pages.filter(page => !page.isClosed())) assert.deepEqual(await page.evaluate(() => window.__workflowCsp), [], "No CSP violations in the actual workflow");
     assert.deepEqual(errors, []);
     const recovery = jwtSecret ? await testEncryptionDevices(base, pool, owner, peer, password, conversationId, jwtSecret, { device: rejected, contact: recipient }) : {};
-    return { ...recovery, ...statusChecks, tryNow: true, refresh: true, codeApproval: true, rejected: true, expired: true, replay: true, wrongAccount: true, revocation: true, sessionRebinding: true, attachment: true, voicePlayback: true, mediaCapabilityRetry: true, voiceContrast: true, scheduler: true, branding: true, registration: true, verificationTokenAndLogin: true, externalEmailDelivery: false, browserErrors: 0 };
+    return { ...recovery, ...statusChecks, ...mobileChecks, tryNow: true, refresh: true, codeApproval: true, rejected: true, expired: true, replay: true, wrongAccount: true, revocation: true, sessionRebinding: true, attachment: true, voicePlayback: true, mediaCapabilityRetry: true, voiceContrast: true, scheduler: true, branding: true, registration: true, verificationTokenAndLogin: true, externalEmailDelivery: false, browserErrors: 0 };
   } finally {
     await browser.close();
     if (registered) await pool.query("delete from users where id=$1 and username=$2 and username like 'restreg_%'", [registered.id, registered.username]);

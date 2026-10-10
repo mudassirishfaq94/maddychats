@@ -8,18 +8,48 @@ function open(userId: string): Promise<IDBDatabase> {
   let result = databases.get(userId);
   if (!result) {
     result = new Promise((resolve, reject) => {
-      const request = indexedDB.open(`circlo-outbox:${userId}`, 1);
+      const request = indexedDB.open(`circlo-outbox:${userId}`, 2);
       request.onupgradeneeded = () => {
-        request.result.createObjectStore("keys");
-        request.result.createObjectStore("messages");
+        for (const name of ["keys", "messages", "drafts"]) if (!request.result.objectStoreNames.contains(name)) request.result.createObjectStore(name);
       };
-      request.onsuccess = () => resolve(request.result);
+      request.onsuccess = () => {
+        request.result.onversionchange = () => { request.result.close(); databases.delete(userId); };
+        resolve(request.result);
+      };
       request.onerror = () => reject(request.error);
       request.onblocked = () => reject(new Error("Local message storage is blocked by another tab."));
     });
     databases.set(userId, result);
+    void result.catch(() => { if (databases.get(userId) === result) databases.delete(userId); });
   }
   return result;
+}
+
+const draftWrites = new Map<string, Promise<void>>();
+/** Serialize writes so an older encryption task cannot overwrite a newer draft. */
+export function saveChatDraft(userId: string, conversationId: string, plain: string): Promise<void> {
+  const id = `draft:${conversationId}`;
+  const queueId = `${userId}:${id}`;
+  const previous = draftWrites.get(queueId) ?? Promise.resolve();
+  const next = previous.catch(() => {}).then(async () => {
+    const db = await open(userId);
+    if (!plain) { await operation(db, "drafts", "readwrite", store => store.delete(id)); return; }
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const ciphertext = await crypto.subtle.encrypt({ name: "AES-GCM", iv, additionalData: new TextEncoder().encode(id) }, await key(db), new TextEncoder().encode(plain.slice(0, 2000)));
+    await operation(db, "drafts", "readwrite", store => store.put({ id, iv, ciphertext } satisfies Stored, id));
+  });
+  draftWrites.set(queueId, next);
+  void next.finally(() => { if (draftWrites.get(queueId) === next) draftWrites.delete(queueId); }).catch(() => {});
+  return next;
+}
+
+export async function loadChatDraft(userId: string, conversationId: string): Promise<string | null> {
+  const db = await open(userId);
+  const id = `draft:${conversationId}`;
+  const record = await operation<Stored | undefined>(db, "drafts", "readonly", store => store.get(id));
+  if (!record) return null;
+  const bytes = await crypto.subtle.decrypt({ name: "AES-GCM", iv: new Uint8Array(record.iv), additionalData: new TextEncoder().encode(id) }, await key(db), record.ciphertext);
+  return new TextDecoder().decode(bytes).slice(0, 2000);
 }
 function operation<T>(db: IDBDatabase, store: string, mode: IDBTransactionMode, run: (store: IDBObjectStore) => IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {

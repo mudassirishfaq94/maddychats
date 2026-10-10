@@ -42,6 +42,15 @@ export async function testStatusPhoto(base, pool, owner, peer, source, recipient
     await recipient.page.getByRole("button", { name: new RegExp(owner.username) }).click();
     await recipient.page.getByRole("img", { name: "Verified photo status", exact: true }).waitFor();
     await recipient.page.waitForFunction(() => [...document.images].some(image => image.alt === "Verified photo status" && image.complete && image.naturalWidth > 0));
+    await recipient.page.getByRole("button", { name: "Pause status", exact: true }).click();
+    await recipient.page.waitForTimeout(100);
+    const pausedTime = await recipient.page.evaluate(() => document.getAnimations().find(a => a.effect?.target?.hasAttribute("data-status-progress"))?.currentTime);
+    await recipient.page.waitForTimeout(250);
+    const pausedAgain = await recipient.page.evaluate(() => document.getAnimations().find(a => a.effect?.target?.hasAttribute("data-status-progress"))?.currentTime);
+    assert.equal(pausedAgain, pausedTime, "Paused status does not advance");
+    await recipient.page.getByRole("button", { name: "Resume status", exact: true }).click();
+    await recipient.page.waitForTimeout(250);
+    assert(await recipient.page.evaluate(() => document.getAnimations().some(a => a.effect?.target?.hasAttribute("data-status-progress") && a.playState === "running")));
     await pool.query("update statuses set expires_at=now()-interval '1 second' where id=$1 and user_id=$2", [status.id, owner.id]);
     assert.equal((await fetch(base + status.mediaUrl, { headers: { Cookie: recipient.cookies } })).status, 404);
     return { photoStatus: true, statusAudience: true, statusExpiry: true, statusReconstruction: true };

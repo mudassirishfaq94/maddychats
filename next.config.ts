@@ -19,6 +19,10 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  // The isolated photo worker imports ESM and native libraries outside route tracing.
+  outputFileTracingIncludes: {
+    "/api/status": ["scripts/reconstruct-status-photo.mjs", "node_modules/sharp/**/*", "node_modules/@img/**/*"],
+  },
   poweredByHeader: false,
   // Cached compiler output retained old styles/version metadata across releases.
   // Keep development caching, but compile production releases from current source.

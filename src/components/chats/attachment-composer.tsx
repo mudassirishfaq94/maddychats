@@ -24,37 +24,36 @@ export function useAttachmentUpload() {
   const [progress, setProgress] = useState<number | null>(null);
   const xhrRef = useRef<XMLHttpRequest | null>(null);
 
+  const previewUrls = useRef(new Set<string>());
   useEffect(() => {
+    const urls = previewUrls.current;
     return () => {
-      pending.forEach((p) => p.previewUrl && URL.revokeObjectURL(p.previewUrl));
+      for (const url of urls) URL.revokeObjectURL(url);
+      urls.clear();
+      xhrRef.current?.abort();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function addFiles(files: FileList | File[]) {
-    const list = Array.from(files).slice(0, 5 - pending.length);
-    setPending((prev) => [
-      ...prev,
-      ...list.map((file) => ({
-        id: `${file.name}-${file.size}-${Math.random().toString(36).slice(2)}`,
-        file,
-        previewUrl: file.type.startsWith("image/")
-          ? URL.createObjectURL(file)
-          : null,
-      })),
-    ]);
+    const list = Array.from(files).slice(0, 5 - pending.length).map(file => {
+      const previewUrl = file.type.startsWith("image/") ? URL.createObjectURL(file) : null;
+      if (previewUrl) previewUrls.current.add(previewUrl);
+      return { id: `${file.name}-${file.size}-${Math.random().toString(36).slice(2)}`, file, previewUrl };
+    });
+    setPending(prev => [...prev, ...list]);
   }
 
   function removeFile(id: string) {
     setPending((prev) => {
       const target = prev.find((p) => p.id === id);
-      if (target?.previewUrl) URL.revokeObjectURL(target.previewUrl);
+      if (target?.previewUrl) { URL.revokeObjectURL(target.previewUrl); previewUrls.current.delete(target.previewUrl); }
       return prev.filter((p) => p.id !== id);
     });
   }
 
   function clear() {
-    pending.forEach((p) => p.previewUrl && URL.revokeObjectURL(p.previewUrl));
+    for (const url of previewUrls.current) URL.revokeObjectURL(url);
+    previewUrls.current.clear();
     setPending([]);
     setProgress(null);
   }

@@ -378,6 +378,7 @@ html:not(.light) .chat-message-area {
 .circlo-drift { animation: circlo-drift 6s ease-in-out infinite; }
 
 .circlo-shell {
+  height: 100dvh;
   background: radial-gradient(circle at 14% 0%, color-mix(in srgb, var(--accent) 9%, transparent), transparent 20rem), var(--bg);
 }
 
@@ -511,4 +512,11 @@ svg.lucide { stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
 .brand-orbit::after {
   content: ""; position: absolute; width: 9px; height: 9px; border-radius: 50%;
   background: var(--action); top: 14%; right: 14%; box-shadow: 0 0 20px var(--accent-soft);
+}
+
+/* Retain searchable history while skipping offscreen layout and paint. */
+.message-history-row { content-visibility: auto; }
+@media (pointer: coarse) {
+  .chat-composer, .field-input, input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), textarea, select { font-size: 16px; }
+  .dialog-backdrop { padding: .5rem; }
 }

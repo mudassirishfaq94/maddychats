@@ -27,7 +27,9 @@ function normalizedWaveform(channelData: Float32Array): number[] {
     let sum = 0;
     let samples = 0;
     const start = i * blockSize;
-    for (let j = start; j < start + blockSize && j < channelData.length; j++) {
+    // Bound visualization work independently of the recording length.
+    const stride = Math.max(1, Math.ceil(blockSize / 512));
+    for (let j = start; j < start + blockSize && j < channelData.length; j += stride) {
       sum += Math.abs(channelData[j]);
       samples++;
     }

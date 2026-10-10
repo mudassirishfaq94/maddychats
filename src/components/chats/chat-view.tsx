@@ -85,7 +85,7 @@ import {
 } from "@/lib/crypto";
 import { mapWithConcurrency } from "@/lib/async";
 import { chatPerf } from "@/lib/performance";
-import { loadQueuedMessages, removeQueuedMessage, saveQueuedMessage } from "@/lib/chat-outbox";
+import { loadChatDraft, saveChatDraft, loadQueuedMessages, removeQueuedMessage, saveQueuedMessage } from "@/lib/chat-outbox";
 
 class SecureDeliveryWaiting extends Error {}
 
@@ -229,6 +229,7 @@ export function ChatView({
   useEffect(() => () => {
     if (composerResizeFrame.current !== null) cancelAnimationFrame(composerResizeFrame.current);
   }, []);
+  const draftPersistTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const draftUpdateTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (draftUpdateTimer.current) clearTimeout(draftUpdateTimer.current); }, []);
   const setDraft = useCallback((next: React.SetStateAction<string>) => {
@@ -586,43 +587,43 @@ export function ChatView({
 
   /* --------------------------- persistent drafts -------------------------- */
 
+  const persistDraft = useCallback(() => {
+    if (!draftStorageReady.current) return;
+    void saveChatDraft(me.id, conversationId, draftRef.current).catch(() => {});
+  }, [me.id, conversationId]);
+  const queueDraftPersistence = useCallback(() => {
+    if (draftPersistTimer.current) clearTimeout(draftPersistTimer.current);
+    draftPersistTimer.current = setTimeout(persistDraft, 180);
+  }, [persistDraft]);
   useEffect(() => {
     draftStorageReady.current = false;
-    const timer = window.setTimeout(() => {
+    let disposed = false;
+    void (async () => {
       try {
-        const saved = window.localStorage.getItem(draftStorageKey);
-        // Do not overwrite input typed before hydration completes.
-        if (saved && !draftRef.current) setDraft(saved.slice(0, 2000));
-      } catch { /* Storage restrictions must not disable the composer. */ }
-      draftStorageReady.current = true;
-    }, 0);
-    const persist = () => {
-      if (!draftStorageReady.current) return;
-      try {
-        const value = draftRef.current;
-        if (value) window.localStorage.setItem(draftStorageKey, value.slice(0, 2000));
-        else window.localStorage.removeItem(draftStorageKey);
-      } catch { /* Keep the in-memory draft when browser storage is unavailable. */ }
-    };
-    window.addEventListener("pagehide", persist);
+        let saved = await loadChatDraft(me.id, conversationId);
+        const legacy = window.localStorage.getItem(draftStorageKey);
+        if (saved === null && legacy) saved = legacy;
+        if (!disposed && saved && !draftRef.current) setDraft(saved);
+        // Remove the old plaintext entry only after durable encryption succeeds.
+        if (legacy && !disposed) {
+          await saveChatDraft(me.id, conversationId, draftRef.current || saved || "");
+          window.localStorage.removeItem(draftStorageKey);
+        }
+      } catch { /* Keep current input and any unmigrated legacy draft. */ }
+      finally { if (!disposed) { draftStorageReady.current = true; queueDraftPersistence(); } }
+    })();
+    const background = () => { if (document.visibilityState === "hidden") persistDraft(); };
+    window.addEventListener("pagehide", persistDraft);
+    document.addEventListener("visibilitychange", background);
     return () => {
-      window.clearTimeout(timer);
-      window.removeEventListener("pagehide", persist);
-      persist();
+      disposed = true;
+      if (draftPersistTimer.current) clearTimeout(draftPersistTimer.current);
+      window.removeEventListener("pagehide", persistDraft);
+      document.removeEventListener("visibilitychange", background);
+      persistDraft();
     };
-  }, [draftStorageKey, setDraft]);
-
-  useEffect(() => {
-    if (!draftStorageReady.current) return;
-    const timer = window.setTimeout(() => {
-      try {
-        const value = draftRef.current;
-        if (value) window.localStorage.setItem(draftStorageKey, value.slice(0, 2000));
-        else window.localStorage.removeItem(draftStorageKey);
-      } catch { /* Storage failure must not interrupt typing. */ }
-    }, 180);
-    return () => window.clearTimeout(timer);
-  }, [draft, draftStorageKey]);
+  }, [me.id, conversationId, draftStorageKey, setDraft, persistDraft, queueDraftPersistence]);
+  useEffect(() => { queueDraftPersistence(); }, [draft, queueDraftPersistence]);
 
   /* ------------------------------ read receipts ----------------------------- */
 
@@ -2006,6 +2007,8 @@ export function ChatView({
               return (
                 <div
                   key={msg.id}
+                  className="message-history-row"
+                  style={{ containIntrinsicSize: `auto ${msg.attachments.length ? 280 : 80}px` }}
                   ref={(node) => {
                     nodeRefs.current.set(msg.id, node);
                   }}
@@ -2655,8 +2658,13 @@ export function ChatView({
                   draftRef.current = value;
                   if (draftUpdateTimer.current) clearTimeout(draftUpdateTimer.current);
                   draftUpdateTimer.current = setTimeout(() => {
-                    startTransition(() => setDraftState(draftRef.current));
+                    startTransition(() => setDraftState(previous => {
+                      const latest = draftRef.current;
+                      const mention = (text: string) => isGroup ? text.match(/(?:^|\s)@([a-zA-Z0-9_]*)$/)?.[1] ?? null : null;
+                      return Boolean(previous.trim()) !== Boolean(latest.trim()) || mention(previous) !== mention(latest) || showSchedule ? latest : previous;
+                    }));
                   }, 100);
+                  queueDraftPersistence();
                   growComposer();
                   if (e.target.value.trim()) noteTyping();
                   else signalTyping(false);
@@ -2675,7 +2683,7 @@ export function ChatView({
               <div className="flex shrink-0 items-center gap-1">
                 <button
                   type="button"
-                  onClick={() => setShowSchedule(true)}
+                  onClick={() => { setDraftState(draftRef.current); setShowSchedule(true); }}
                   disabled={schedulePaused || sendPending || !canCompose || awaitingApproval}
                   aria-label="Schedule message"
                   className="flex h-9 w-9 min-h-[36px] min-w-[36px] items-center justify-center rounded-full border border-[var(--border)] text-[var(--muted)] transition-colors hover:border-[var(--border-strong)] hover:text-[var(--text)]"
