@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { eq, and, isNotNull, sql } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { e2eeKeys } from "@/db/schema";
+import { e2eeKeys, deviceSessions, users } from "@/db/schema";
 import { getSessionUser, getSessionDeviceId } from "@/server/session";
 import { guardSameOrigin, jsonError, readJson } from "@/server/http";
 import { isUuid } from "@/server/users";
@@ -37,8 +37,12 @@ export async function GET(req: NextRequest) {
       trustedAt: e2eeKeys.trustedAt,
       createdAt: e2eeKeys.createdAt,
       lastUsedAt: e2eeKeys.lastUsedAt,
+      browser: deviceSessions.userAgent,
+      sessionExpiresAt: deviceSessions.expiresAt,
+      sessionRevokedAt: deviceSessions.revokedAt,
     })
     .from(e2eeKeys)
+    .leftJoin(deviceSessions, and(eq(deviceSessions.id, e2eeKeys.sessionId), eq(deviceSessions.userId, e2eeKeys.userId)))
     .where(eq(e2eeKeys.userId, ownerId));
 
   // Private-key backups are only returned to their authenticated owner. A
@@ -49,9 +53,9 @@ export async function GET(req: NextRequest) {
     publicKey: key.publicKey,
     createdAt: key.createdAt,
     lastUsedAt: key.lastUsedAt,
-  } : key);
+  } : { ...key, sessionState: key.sessionRevokedAt ? "revoked" : key.sessionExpiresAt ? (key.sessionExpiresAt.getTime() <= Date.now() ? "expired" : "active") : "unknown" });
 
-  return NextResponse.json({ keys });
+  return NextResponse.json({ keys }, { headers: { "Cache-Control": "no-store" } });
 }
 
 /** Register a new device key */
@@ -102,25 +106,19 @@ export async function POST(req: NextRequest) {
       .set({ encryptedPrivateKey, lastUsedAt: new Date() })
       .where(eq(e2eeKeys.id, existing.id));
   } else {
-    // The first device is the account's trust anchor. Every later device is
-    // intentionally pending until a trusted device approves a QR pairing.
-    const [trustedDevice] = await db
-      .select({ id: e2eeKeys.id })
-      .from(e2eeKeys)
-      .where(and(eq(e2eeKeys.userId, user.id), isNotNull(e2eeKeys.trustedAt)))
-      .limit(1);
-    await db.insert(e2eeKeys).values({
-      userId: user.id,
-      deviceId,
-      publicKey,
-      encryptedPrivateKey,
-      sessionId,
-      trustedAt: trustedDevice ? null : new Date(),
+    // Bootstrap only a genuinely new account. An account with lost/revoked
+    // keys must explicitly recover; an empty trusted set is not permission.
+    // Serialize first registrations so two browsers cannot both bootstrap.
+    await db.transaction(async tx => {
+      await tx.select({ id: users.id }).from(users).where(eq(users.id, user.id)).for("update");
+      const [priorDevice] = await tx.select({ id: e2eeKeys.id }).from(e2eeKeys).where(eq(e2eeKeys.userId, user.id)).limit(1);
+      await tx.insert(e2eeKeys).values({ userId: user.id, deviceId, publicKey, encryptedPrivateKey, sessionId, trustedAt: priorDevice ? null : new Date() }).onConflictDoNothing();
     });
   }
 
-  const [registered] = await db.select({ trustedAt: e2eeKeys.trustedAt, sessionId: e2eeKeys.sessionId }).from(e2eeKeys)
+  const [registered] = await db.select({ publicKey: e2eeKeys.publicKey, trustedAt: e2eeKeys.trustedAt, sessionId: e2eeKeys.sessionId }).from(e2eeKeys)
     .where(and(eq(e2eeKeys.userId, user.id), eq(e2eeKeys.deviceId, deviceId))).limit(1);
+  if (!registered || registered.publicKey !== publicKey) return jsonError(409, "A different encryption key is already registered for this device.");
   if (!existing && registered?.trustedAt) {
     const requests = await db.execute<{ id: string }>(sql`
       select c.id from conversations c join conversation_members p on p.conversation_id=c.id

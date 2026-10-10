@@ -3,9 +3,10 @@ import { chromium } from "playwright";
 import { readFile } from "node:fs/promises";
 import { randomBytes, createHash } from "node:crypto";
 import bcrypt from "bcryptjs";
+import { testEncryptionDevices } from "./test-encryption-devices.mjs";
 
 /** Positive workflows use actual browser keys, recording, storage and database delivery. */
-export async function testRestoredWorkflows(base, pool, owner, peer, password, conversationId, ownedLive = false) {
+export async function testRestoredWorkflows(base, pool, owner, peer, password, conversationId, ownedLive = false, jwtSecret) {
   const hostname = new URL(base).hostname;
   if (!["localhost", "127.0.0.1"].includes(hostname) && !(ownedLive && hostname === "maddychats.onrender.com")) throw new Error("Owned staging fixtures required");
   const browser = await chromium.launch({ args: ["--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream"] });
@@ -193,7 +194,8 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     assert.equal((await pool.query("select trusted_at from e2ee_keys where user_id=$1 and device_id=$2", [owner.id, request.device_id])).rows[0].trusted_at, null);
     for (const page of pages.filter(page => !page.isClosed())) assert.deepEqual(await page.evaluate(() => window.__workflowCsp), [], "No CSP violations in the actual workflow");
     assert.deepEqual(errors, []);
-    return { tryNow: true, refresh: true, codeApproval: true, rejected: true, expired: true, replay: true, wrongAccount: true, revocation: true, sessionRebinding: true, attachment: true, voicePlayback: true, scheduler: true, branding: true, registration: true, verificationTokenAndLogin: true, externalEmailDelivery: false, browserErrors: 0 };
+    const recovery = jwtSecret ? await testEncryptionDevices(base, pool, owner, peer, password, conversationId, jwtSecret, { device: rejected, contact: recipient }) : {};
+    return { ...recovery, tryNow: true, refresh: true, codeApproval: true, rejected: true, expired: true, replay: true, wrongAccount: true, revocation: true, sessionRebinding: true, attachment: true, voicePlayback: true, scheduler: true, branding: true, registration: true, verificationTokenAndLogin: true, externalEmailDelivery: false, browserErrors: 0 };
   } finally {
     await browser.close();
     if (registered) await pool.query("delete from users where id=$1 and username=$2 and username like 'restreg_%'", [registered.id, registered.username]);

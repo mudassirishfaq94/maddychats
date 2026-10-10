@@ -824,9 +824,9 @@ export function useE2EE(userId: string | undefined) {
 
   const waitForDeviceRegistration = useCallback(async () => { await deviceRegistrationRef.current; }, []);
 
-  const approveDevice = useCallback(async (targetDeviceId: string, targetFingerprint: string, link?: { linkId: string; code?: string; decision?: "approve" | "reject" }) => {
+  const approveDevice = useCallback(async (targetDeviceId: string, targetFingerprint: string, link?: { linkId?: string; code?: string; decision?: "approve" | "reject" | "recover"; password?: string; mfaCode?: string; confirmation?: string }) => {
     if (!keyPairRef.current || !state.initialized) throw new Error("Trusted device keys are not ready.");
-    const request = async (body: Record<string, string>) => {
+    const request = async (body: Record<string, unknown>) => {
       const response = await e2eeRequest("/api/e2ee/devices/approve", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const data = await response.json() as { token?: string; encryptedChallenge?: string; error?: string };
       if (!response.ok) throw new Error(data.error ?? "Device approval failed.");

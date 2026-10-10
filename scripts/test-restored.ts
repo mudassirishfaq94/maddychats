@@ -36,7 +36,9 @@ async function main() {
     server = spawn(process.execPath, [resolve(".next/standalone/server.js")], { windowsHide: true, stdio: "pipe", env: { ...process.env, DATABASE_URL: database, REALTIME_DATABASE_URL: database, PORT: "3120", HOSTNAME: "127.0.0.1", CLIENT_URL: base, JWT_SECRET: "disposable-restored-workflows-only-secret-at-least-thirty-two", STARTER_MODE: "1", CHAT_MEDIA_ENABLED: "1", SCHEDULED_MESSAGES_ENABLED: "1", SUPABASE_URL: "", SUPABASE_SERVICE_ROLE_KEY: "", RESEND_API_KEY: "", EMAIL_FROM: "", EMAIL_FROM_ADDRESS: "", CSP_ENFORCE: "1", VAPID_PRIVATE_KEY: "" } });
     let output = ""; server.stdout?.on("data", d => output += d); server.stderr?.on("data", d => output += d);
     for (let i = 0; i < 100; i++) { try { if ((await fetch(base + "/api/health")).status === 204) break; } catch {} await new Promise(r => setTimeout(r, 200)); }
-    try { console.log(await testRestoredWorkflows(base, pool, accounts[0], accounts[1], password, conversation!)); }
+    try {
+      console.log(await testRestoredWorkflows(base, pool, accounts[0], accounts[1], password, conversation!, false, "disposable-restored-workflows-only-secret-at-least-thirty-two"));
+    }
     catch (error) { console.error(output.slice(-5000)); throw error; }
   } finally {
     if (server && server.exitCode === null) { const exited = once(server, "exit"); server.kill(); await exited; }

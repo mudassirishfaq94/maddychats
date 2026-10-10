@@ -9,6 +9,7 @@ import { getSessionUser, getSessionDeviceId } from "@/server/session";
 import { guardSameOrigin, jsonError, readJson } from "@/server/http";
 import { rateLimit } from "@/server/rate-limit";
 import { isUuid } from "@/server/users";
+import { verifyFreshAuthentication } from "@/server/authentication";
 
 export const dynamic = "force-dynamic";
 const digest = (value: string) => createHash("sha256").update(value).digest("hex");
@@ -24,19 +25,27 @@ export async function POST(req: NextRequest) {
   const body = await readJson(req) as Record<string, unknown> | null;
   if (body?.action === "challenge") {
     const binding = body.decision === "bind-session";
-    const sessionId = binding ? await getSessionDeviceId() : undefined;
-    if (binding && !sessionId) return jsonError(409, "Sign in again to register this device session.");
+    const recovery = body.decision === "recover";
+    const selfProof = binding || recovery;
+    const sessionId = selfProof ? await getSessionDeviceId() : undefined;
+    if (selfProof && !sessionId) return jsonError(409, "Sign in again to register this device session.");
+    if (recovery) {
+      if (body.confirmation !== "RESET ENCRYPTION TRUST") return jsonError(422, "Confirm that your old trusted devices are unavailable. Historical keys will not be replaced.");
+      if (!(await rateLimit(`e2ee-recovery:${user.id}`, 5, 600000)).allowed) return jsonError(429, "Too many recovery attempts. Please wait.");
+      if (!(await verifyFreshAuthentication(user.id, body))) return jsonError(403, "Confirm your identity: sign in again, or provide your password and authenticator/recovery code when enabled.");
+    }
     if (typeof body.sourceDeviceId !== "string" || typeof body.targetDeviceId !== "string" || typeof body.targetFingerprint !== "string") return jsonError(422, "Device IDs and verified fingerprint are required.");
-    const [source] = await db.select().from(e2eeKeys).where(and(eq(e2eeKeys.userId, user.id), eq(e2eeKeys.deviceId, body.sourceDeviceId), ...(binding ? [] : [isNotNull(e2eeKeys.trustedAt)]))).limit(1);
+    const [source] = await db.select().from(e2eeKeys).where(and(eq(e2eeKeys.userId, user.id), eq(e2eeKeys.deviceId, body.sourceDeviceId), ...(selfProof ? [] : [isNotNull(e2eeKeys.trustedAt)]))).limit(1);
     const [target] = await db.select().from(e2eeKeys).where(and(eq(e2eeKeys.userId, user.id), eq(e2eeKeys.deviceId, body.targetDeviceId))).limit(1);
-    if (!source || !target || (binding ? source.deviceId !== target.deviceId : source.deviceId === target.deviceId)) return jsonError(403, "Use an existing trusted device to approve your new device.");
+    if (!source || !target || (selfProof ? source.deviceId !== target.deviceId : source.deviceId === target.deviceId)) return jsonError(403, "Use an existing trusted device to approve your new device.");
+    if (recovery && (target.trustedAt || target.sessionId !== sessionId)) return jsonError(409, "Recovery must enroll this browser's pending encryption key. Refresh devices and try again.");
     // Fingerprint is SHA-256 of the encoded public key, exactly as displayed on both devices.
     const targetHash = digest(target.publicKey);
     if (body.targetFingerprint !== targetHash) return jsonError(409, "Device fingerprint changed. Verify it again.");
     let linkId: string | undefined;
     const decision = body.decision === "reject" ? "reject" : "approve";
     if (typeof body.linkId === "string") {
-      if (binding) return jsonError(422, "Session registration cannot approve a linking request.");
+      if (selfProof) return jsonError(422, "Session registration or recovery cannot approve a linking request.");
       if (!isUuid(body.linkId)) return jsonError(422, "Invalid linking request.");
       const [link] = await db.select().from(deviceLinkRequests).where(and(eq(deviceLinkRequests.id, body.linkId), eq(deviceLinkRequests.userId, user.id), eq(deviceLinkRequests.deviceId, target.deviceId), eq(deviceLinkRequests.status, "pending"), gt(deviceLinkRequests.expiresAt, new Date()))).limit(1);
       if (!link || link.fingerprint !== targetHash) return jsonError(409, "Linking request expired or was already used.");
@@ -50,7 +59,7 @@ export async function POST(req: NextRequest) {
       const key = createPublicKey({ key: Buffer.from(source.publicKey, "base64"), type: "spki", format: "der" });
       encryptedChallenge = publicEncrypt({ key, padding: constants.RSA_PKCS1_OAEP_PADDING, oaepHash: "sha256" }, Buffer.from(nonce)).toString("base64");
     } catch { return jsonError(422, "Trusted device key cannot be used for approval."); }
-    const token = await new SignJWT({ source: source.deviceId, sourceHash: digest(source.publicKey), target: target.deviceId, targetHash, nonceHash: digest(nonce), ...(binding ? { decision: "bind-session", sessionId } : linkId ? { linkId, decision } : {}) })
+    const token = await new SignJWT({ source: source.deviceId, sourceHash: digest(source.publicKey), target: target.deviceId, targetHash, nonceHash: digest(nonce), ...(selfProof ? { decision: recovery ? "recover" : "bind-session", sessionId } : linkId ? { linkId, decision } : {}) })
       .setProtectedHeader({ alg: "HS256" }).setSubject(user.id).setAudience(audience).setIssuedAt().setExpirationTime("2m").setJti(randomBytes(16).toString("hex")).sign(jwtSecret());
     return NextResponse.json({ token, encryptedChallenge }, { headers: { "Cache-Control": "no-store" } });
   }
@@ -63,9 +72,11 @@ export async function POST(req: NextRequest) {
     if (!(await rateLimit(`e2ee-approval-proof:${payload.jti}`, 1, 120000)).allowed) return jsonError(409, "This approval proof was already used. Start again.");
     const sourceId = payload.source, targetId = payload.target;
     const binding = payload.decision === "bind-session";
-    if (binding && (payload.sessionId !== await getSessionDeviceId() || sourceId !== targetId || typeof payload.sessionId !== "string")) return jsonError(403, "Session registration does not match this browser.");
+    const recovery = payload.decision === "recover";
+    const selfProof = binding || recovery;
+    if (selfProof && (payload.sessionId !== await getSessionDeviceId() || sourceId !== targetId || typeof payload.sessionId !== "string")) return jsonError(403, "Session registration does not match this browser.");
     const approved = await db.transaction(async tx => {
-      if (binding) {
+      if (selfProof) {
         const [session] = await tx.select().from(deviceSessions).where(and(eq(deviceSessions.id, payload.sessionId as string), eq(deviceSessions.userId, user.id))).for("update");
         if (!session || session.revokedAt || session.expiresAt <= new Date()) return false;
       }
@@ -76,9 +87,19 @@ export async function POST(req: NextRequest) {
         const [session] = await tx.select().from(deviceSessions).where(and(eq(deviceSessions.id, pending.sessionId), eq(deviceSessions.userId, user.id))).for("update");
         if (!session || session.revokedAt || session.expiresAt <= new Date()) return false;
       }
-      const [source] = await tx.select().from(e2eeKeys).where(and(eq(e2eeKeys.userId, user.id), eq(e2eeKeys.deviceId, sourceId))).for("update");
-      const [target] = await tx.select().from(e2eeKeys).where(and(eq(e2eeKeys.userId, user.id), eq(e2eeKeys.deviceId, targetId))).for("update");
-      if (!source || (!binding && !source.trustedAt) || !target || digest(source.publicKey) !== payload.sourceHash || digest(target.publicKey) !== payload.targetHash) return false;
+      // One order for every approval/recovery prevents reciprocal device deadlocks.
+      const keys = await tx.select().from(e2eeKeys).where(eq(e2eeKeys.userId, user.id)).orderBy(e2eeKeys.id).for("update");
+      const source = keys.find(key => key.deviceId === sourceId);
+      const target = keys.find(key => key.deviceId === targetId);
+      if (!source || (!selfProof && !source.trustedAt) || !target || digest(source.publicKey) !== payload.sourceHash || digest(target.publicKey) !== payload.targetHash) return false;
+      if (recovery) {
+        if (target.trustedAt || target.sessionId !== payload.sessionId) return false;
+        // Explicit account recovery replaces trust, never private keys or chat history.
+        await tx.update(e2eeKeys).set({ trustedAt: null }).where(eq(e2eeKeys.userId, user.id));
+        await tx.update(e2eeKeys).set({ trustedAt: new Date() }).where(eq(e2eeKeys.id, target.id));
+        await tx.update(deviceLinkRequests).set({ status: "revoked" }).where(and(eq(deviceLinkRequests.userId, user.id), eq(deviceLinkRequests.status, "pending")));
+        return true;
+      }
       if (binding) {
         // Possession rebinds the same key after sign-in; it never grants or restores trust.
         await tx.update(e2eeKeys).set({ sessionId: payload.sessionId as string }).where(eq(e2eeKeys.id, target.id));
