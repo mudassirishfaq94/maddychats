@@ -38,6 +38,11 @@ export async function testMobilePerformance(base, pool, source, owner, conversat
     await page.reload(); await composer.waitFor();
     await page.waitForFunction(text => document.querySelector('textarea[aria-label="Message text"]')?.value === text, draft, { timeout: 15000 });
     assert.equal(await composer.inputValue(), draft);
+    await composer.fill("Rapid navigation draft");
+    await page.locator('a[href="/app"]:visible').first().click();
+    await page.waitForURL(base + "/app");
+    await page.goBack(); await composer.waitFor();
+    await page.waitForFunction(() => document.querySelector('textarea[aria-label="Message text"]')?.value === "Rapid navigation draft");
     await composer.fill(""); await page.waitForTimeout(800);
     await page.reload(); await composer.waitFor(); await page.waitForTimeout(500);
     assert.equal(await composer.inputValue(), "");

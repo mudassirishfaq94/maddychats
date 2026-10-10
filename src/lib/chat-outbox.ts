@@ -44,8 +44,10 @@ export function saveChatDraft(userId: string, conversationId: string, plain: str
 }
 
 export async function loadChatDraft(userId: string, conversationId: string): Promise<string | null> {
-  const db = await open(userId);
   const id = `draft:${conversationId}`;
+  // Navigation may remount the chat while its final encrypted write is pending.
+  await draftWrites.get(`${userId}:${id}`)?.catch(() => {});
+  const db = await open(userId);
   const record = await operation<Stored | undefined>(db, "drafts", "readonly", store => store.get(id));
   if (!record) return null;
   const bytes = await crypto.subtle.decrypt({ name: "AES-GCM", iv: new Uint8Array(record.iv), additionalData: new TextEncoder().encode(id) }, await key(db), record.ciphertext);
