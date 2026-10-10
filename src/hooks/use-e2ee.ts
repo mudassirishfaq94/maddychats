@@ -599,7 +599,13 @@ export function useE2EE(userId: string | undefined) {
       // Existing history may use local keys immediately, but publishing or
       // sharing a new key must not race device registration.
       if (deviceRegistrationRef.current && !(await deviceRegistrationRef.current)) {
-        return { ready: false, fingerprint: null };
+        // Approval may have happened on a trusted device since initialization.
+        // Re-read the server's trust decision; this never approves a device.
+        const response = await e2eeRequest("/api/e2ee/keys");
+        const data = response.ok ? await response.json() as { keys?: Array<{ deviceId: string; publicKey: string; trustedAt?: string | null }> } : null;
+        if (!data?.keys?.some(device => device.deviceId === state.deviceId && device.publicKey === state.publicKey && device.trustedAt)) return { ready: false, fingerprint: null };
+        deviceRegistrationRef.current = Promise.resolve(true);
+        setState(previous => ({ ...previous, error: null }));
       }
       // Device discovery and this device's existing-key lookup are independent
       // network operations. Starting both together removes one round trip from

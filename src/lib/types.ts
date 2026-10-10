@@ -119,7 +119,8 @@ export interface MessageDTO {
   /** True when text holds E2EE ciphertext — decrypt client-side with the conversation key. */
   encrypted: boolean;
   /** Client-only optimistic state; never persisted. */
-  sendStatus?: "sending" | "sent" | "failed";
+  sendStatus?: "sending" | "sent" | "failed" | "queued";
+  queueReason?: string;
 }
 
 export interface ConversationSummary {

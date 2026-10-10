@@ -67,8 +67,74 @@ export async function testMessageRequests(base, senderCookie, recipientCookie, c
     await recipient.getByRole("textbox", { name: "Message text" }).press("Enter");
     assert.equal((await replied).status(), 201);
     await sender.getByRole("region", { name: "Conversation", exact: true }).getByText(reply, { exact: true }).waitFor({ timeout: 60000 });
+    // Established chats must queue encryption waits calmly and survive reload,
+    // then deliver exactly once using the original id when keys are ready.
+    const peersUrl = `${base}/api/e2ee/peers?**`;
+    await sender.route(peersUrl, async route => {
+      const response = await route.fetch();
+      const data = await response.json();
+      for (const peer of data.peers ?? []) peer.devices = [];
+      await route.fulfill({ response, json: data });
+    });
+    const queuedText = "Queued established chat — preserve my circle securely";
+    await sender.getByRole("textbox", { name: "Message text" }).fill(queuedText);
+    await sender.getByRole("textbox", { name: "Message text" }).press("Enter");
+    await sender.getByLabel("Queued", { exact: true }).waitFor();
+    assert.equal(await sender.getByLabel("Failed to send", { exact: true }).count(), 0);
+    await sender.getByText("Waiting for secure delivery. Your message will send automatically when encryption is ready.", { exact: true }).waitFor();
+    const queuedId = await sender.evaluate(async () => {
+      const names = (await indexedDB.databases()).map(database => database.name).filter(name => name?.startsWith("circlo-outbox:"));
+      const records = await Promise.all(names.map(name => new Promise((resolve, reject) => {
+        const request = indexedDB.open(name);
+        request.onsuccess = () => {
+          const read = request.result.transaction("messages").objectStore("messages").getAll();
+          read.onsuccess = () => { request.result.close(); resolve(read.result); };
+          read.onerror = () => reject(read.error);
+        };
+        request.onerror = () => reject(request.error);
+      })));
+      const entry = records.flat()[0];
+      if (!entry?.ciphertext || entry.plain) throw new Error("Queued text must be encrypted at rest");
+      return entry.id;
+    });
+    await sender.reload();
+    await sender.getByLabel("Queued", { exact: true }).waitFor();
+    assert.equal(await sender.getByRole("region", { name: "Conversation", exact: true }).locator("p").filter({ hasText: queuedText }).count(), 1);
+    const newerDraft = "Keep this newer draft";
+    await sender.getByRole("textbox", { name: "Message text" }).fill(newerDraft);
+    await sender.unroute(peersUrl);
+    const delivered = sender.waitForResponse(response => response.request().method() === "POST" && response.url().endsWith(`/conversations/${conversationId}/messages`), { timeout: 60000 });
+    await sender.evaluate(() => window.dispatchEvent(new Event("focus")));
+    const delivery = await delivered;
+    assert.equal(delivery.status(), 201);
+    assert.equal(delivery.request().postDataJSON().clientMessageId, queuedId.slice(conversationId.length + 1));
+    assert.notEqual(delivery.request().postDataJSON().text, queuedText);
+    await recipient.getByRole("region", { name: "Conversation", exact: true }).getByText(queuedText, { exact: true }).waitFor({ timeout: 60000 });
+    assert.equal(await sender.getByRole("textbox", { name: "Message text" }).inputValue(), newerDraft);
+    assert.equal(await sender.getByLabel("Queued", { exact: true }).count(), 0);
+    // A changed peer device still needs explicit safety verification. Queuing
+    // must never silently approve it or publish to the changed device.
+    await sender.route(peersUrl, async route => {
+      const response = await route.fetch();
+      const data = await response.json();
+      const peer = data.peers?.find(entry => entry.devices.length);
+      if (!peer) throw new Error("A trusted peer fixture is required");
+      peer.devices.push({ ...peer.devices[0], deviceId: "unverified-peer-test-device" });
+      await route.fulfill({ response, json: data });
+    });
+    await sender.getByRole("textbox", { name: "Message text" }).fill("Safety verification must remain required");
+    await sender.getByRole("textbox", { name: "Message text" }).press("Enter");
+    await sender.getByLabel("Queued", { exact: true }).waitFor();
+    await sender.getByText("A participant’s encryption device changed. Verify their safety number before sending.", { exact: true }).waitFor();
+    assert.equal(await sender.getByLabel("Failed to send", { exact: true }).count(), 0);
+    await sender.getByRole("button", { name: "Cancel queued message", exact: true }).click();
+    await sender.getByLabel("Queued", { exact: true }).waitFor({ state: "hidden" });
+    await sender.unroute(peersUrl);
+    await sender.reload();
+    await sender.waitForTimeout(2500);
+    assert.equal(await sender.getByLabel("Queued", { exact: true }).count(), 0, "Cancelled messages must not return after reload");
     assert.deepEqual(errors, [], "First-contact and approval must not produce browser errors");
     await Promise.all([sender, recipient].map(page => page.waitForLoadState("networkidle")));
-    return { encryptedIntroduction: true, durableNotification: true, offlineRecovery: true, approvalAndReply: true, browserErrors: 0 };
+    return { encryptedIntroduction: true, durableNotification: true, offlineRecovery: true, approvalAndReply: true, queuedEstablishedDelivery: true, encryptedOutboxReload: true, browserErrors: 0 };
   } finally { await browser.close(); }
 }

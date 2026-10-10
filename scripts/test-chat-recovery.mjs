@@ -85,6 +85,13 @@ export async function testChatRecovery(base, cookieHeader, conversationId) {
     await target.getByText("This device: Waiting for approval", { exact: true }).waitFor({ timeout: 30000 });
     const targetId = await target.evaluate(() => localStorage.getItem("e2ee_device_id"));
     const targetFingerprint = await target.getByLabel("This device fingerprint").innerText();
+    const pendingText = "A new device waits safely for approval";
+    await target.goto(chatUrl);
+    await target.getByRole("textbox", { name: "Message text" }).fill(pendingText);
+    await target.getByRole("textbox", { name: "Message text" }).press("Enter");
+    await target.getByLabel("Queued", { exact: true }).waitFor();
+    assert.equal(await target.getByLabel("Failed to send", { exact: true }).count(), 0);
+    await target.getByRole("status").filter({ hasText: "This device needs approval" }).waitFor();
     await source.goto(`${base}/app/profile`);
     const pending = source.locator("li").filter({ hasText: `New device: ${targetId}` });
     await pending.waitFor();
@@ -103,8 +110,11 @@ export async function testChatRecovery(base, cookieHeader, conversationId) {
     await source.unroute(peersUrl, unavailablePeers);
     await source.getByRole("button", { name: "Restore my other devices", exact: true }).click();
     await source.getByRole("status").filter({ hasText: "Shared" }).waitFor();
-    await target.goto(chatUrl);
+    // Keep the new device on the same page: approval and key restoration
+    // must release its queued message without reloading or replacing keys.
     await target.getByRole("region", { name: "Conversation", exact: true }).getByText(submitted, { exact: true }).waitFor({ timeout: 30000 });
+    await source.getByRole("region", { name: "Conversation", exact: true }).getByText(pendingText, { exact: true }).waitFor({ timeout: 60000 });
+    assert.equal(await target.getByLabel("Queued", { exact: true }).count(), 0);
     assert.deepEqual(errors, [], "Recovery must not produce browser errors");
     await mkdir(".freebuff/performance", { recursive: true });
     await writeFile(".freebuff/performance/chat-recovery.json", JSON.stringify({ typingConditions: "Chromium, 390px viewport, 4x CPU, real keystrokes at 20ms intervals", inputToFrameMs: typingSamples, verified: ["encrypted sends", "newer drafts preserved", "failed drafts survive reload", "trusted private-key device approval", "existing keys restore on a second device", "failed restore releases spinner"] }, null, 2));

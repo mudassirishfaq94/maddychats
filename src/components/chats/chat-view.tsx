@@ -85,6 +85,9 @@ import {
 } from "@/lib/crypto";
 import { mapWithConcurrency } from "@/lib/async";
 import { chatPerf } from "@/lib/performance";
+import { loadQueuedMessages, removeQueuedMessage, saveQueuedMessage } from "@/lib/chat-outbox";
+
+class SecureDeliveryWaiting extends Error {}
 
 function formatDuration(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -135,6 +138,9 @@ function sameDay(a: string, b: string, hydrated: boolean): boolean {
 
 /** Sent → Delivered → Read, with a WhatsApp-style tick and status label. */
 function ReceiptIcon({ message }: { message: MessageDTO }) {
+  if (message.sendStatus === "queued") {
+    return <span aria-label="Queued" className="inline-flex items-center gap-1 text-[var(--bubble-own-sub)]"><Clock className="h-3 w-3" /><span className="text-[0.6rem]">Queued</span></span>;
+  }
   if (message.sendStatus === "sending") {
     return (
       <span title="Sending" aria-label="Sending" className="inline-flex flex-col items-center leading-none text-[var(--bubble-own-sub)]">
@@ -461,9 +467,9 @@ export function ChatView({
       await new Promise(resolve => setTimeout(resolve, 50));
     }
     const encryption = encryptionRef.current;
-    if (!encryption) throw new Error("Secure messaging is still starting. Your draft is saved; please retry.");
+    if (!encryption) throw new SecureDeliveryWaiting("Waiting for secure messaging to start. Your message will send automatically when ready.");
     if (!encryption.initialized) {
-      throw new Error(encryption.loading
+      throw new SecureDeliveryWaiting(encryption.loading
         ? "Secure messaging is taking longer than expected. Your draft is saved; please retry."
         : encryption.error ?? "Encryption is unavailable on this device.");
     }
@@ -480,9 +486,9 @@ export function ChatView({
       trustChanged: Boolean(prepared.trustChanged),
     }));
     if (!prepared.ready) {
-      throw new Error(prepared.trustChanged
+      throw new SecureDeliveryWaiting(prepared.trustChanged
         ? "A participant’s encryption device changed. Verify their safety number before sending."
-        : "Secure delivery is waiting for the other person’s encryption setup. Your draft is saved.");
+        : encryptionRef.current?.error ?? "Waiting for secure delivery. Your message will send automatically when encryption is ready.");
     }
   }, [conversationId]);
 
@@ -672,6 +678,7 @@ export function ChatView({
         failedDecryptionRef.current.clear();
         setUnavailableMessageIds(new Set());
         setDecryptRetry((value) => value + 1);
+        window.dispatchEvent(new Event("maddy:message-request-keys"));
         return;
       }
       if (event.type === "message:pinned" && event.conversationId === conversationId) {
@@ -935,6 +942,8 @@ export function ChatView({
     }
 
     if (!text || sendPendingRef.current) return;
+    const queued = items.find(message => message.sendStatus === "queued" && decryptedTextsRef.current.get(message.id) === text && message.replyToMessageId === (replyTo?.id ?? null));
+    if (queued) { await retryFailedMessage(queued); return; }
     const clientMessageId = crypto.randomUUID();
     const optimisticId = `client:${clientMessageId}`;
     const now = new Date().toISOString();
@@ -982,6 +991,7 @@ export function ChatView({
     setError(null);
     try {
       // E2EE: plaintext never leaves this device — send AES-GCM ciphertext.
+      await saveQueuedMessage(me.id, { message: { ...optimistic, sendStatus: "queued", queueReason: "Waiting for secure delivery. Your message will send automatically when encryption is ready." }, plain: text }).catch(() => undefined);
       await prepareEncryptedSend(awaitingApproval && !conversation.introductionSent);
       chatPerf("send-key-ready", sendStarted);
       const payload = await e2ee.encrypt(text, conversationId);
@@ -1009,12 +1019,14 @@ export function ChatView({
         error?: string;
       } | null;
       if (!res.ok || !data?.message) {
+        await removeQueuedMessage(me.id, conversationId, clientMessageId).catch(() => undefined);
         setError(data?.error ?? "Message failed to send. Try again.");
         setItems((prev) => prev.map((m) => m.id === optimisticId ? { ...m, sendStatus: "failed" } : m));
         return;
       }
       const created = data.message;
       chatPerf("send-server-confirmed", sendStarted);
+      await removeQueuedMessage(me.id, conversationId, clientMessageId).catch(() => undefined);
       if (draftRef.current === submittedDraft) {
         setDraft("");
         setReplyTo(null);
@@ -1040,8 +1052,13 @@ export function ChatView({
       const ta = composerRef.current;
       if (ta && !draftRef.current) ta.style.height = "auto";
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Network error. Message was not sent.");
-      setItems((prev) => prev.map((m) => m.id === optimisticId ? { ...m, sendStatus: "failed" } : m));
+      const waiting = cause instanceof SecureDeliveryWaiting;
+      if (waiting) await saveQueuedMessage(me.id, { message: { ...optimistic, sendStatus: "queued", queueReason: cause.message }, plain: text }).catch(() => undefined);
+      if (!waiting) {
+        await removeQueuedMessage(me.id, conversationId, clientMessageId).catch(() => undefined);
+        setError(cause instanceof Error ? cause.message : "Network error. Message was not sent.");
+      }
+      setItems((prev) => prev.map((m) => m.id === optimisticId ? { ...m, sendStatus: waiting ? "queued" : "failed", queueReason: waiting ? cause.message : undefined } : m));
     } finally {
       setSendPending(false);
       composerRef.current?.focus();
@@ -1204,16 +1221,17 @@ export function ChatView({
   }
 
   async function retryFailedMessage(message: MessageDTO) {
-    if (message.sendStatus !== "failed" || !message.clientMessageId) return;
+    if (!['failed', 'queued'].includes(message.sendStatus ?? '') || !message.clientMessageId || retryingMessages.current.has(message.clientMessageId) || cancelledMessages.current.has(message.clientMessageId)) return;
     const plain = decryptedTextsRef.current.get(message.id);
     if (!plain) return;
-    setItems((current) => current.map((item) =>
-      item.id === message.id ? { ...item, sendStatus: "sending" } : item,
-    ));
+    retryingMessages.current.add(message.clientMessageId);
     setError(null);
     try {
-      await prepareEncryptedSend();
+      await prepareEncryptedSend(awaitingApproval && !conversation.introductionSent);
+      if (cancelledMessages.current.has(message.clientMessageId)) return;
+      setItems((current) => current.map((item) => item.id === message.id ? { ...item, sendStatus: "sending" } : item));
       const payload = await e2ee.encrypt(plain, conversationId);
+      if (cancelledMessages.current.has(message.clientMessageId)) return;
       const res = await fetch(`/api/conversations/${conversationId}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1227,6 +1245,8 @@ export function ChatView({
       const data = await res.json().catch(() => null) as { message?: MessageDTO; error?: string } | null;
       if (!res.ok || !data?.message) throw new Error(data?.error ?? "Message failed to send.");
       const created = data.message;
+      await removeQueuedMessage(me.id, conversationId, message.clientMessageId).catch(() => undefined);
+      if (draftRef.current.trim() === plain) { setDraft(""); setReplyTo(null); }
       setDecryptedTexts((current) => {
         const next = new Map(current);
         next.delete(message.id);
@@ -1246,12 +1266,65 @@ export function ChatView({
           : [...current, { ...created, sendStatus: "sent" }];
       });
     } catch (cause) {
+      if (cancelledMessages.current.has(message.clientMessageId)) return;
+      const waiting = cause instanceof SecureDeliveryWaiting;
+      if (waiting) await saveQueuedMessage(me.id, { message: { ...message, sendStatus: "queued", queueReason: cause.message }, plain }).catch(() => undefined);
       setItems((current) => current.map((item) =>
-        item.id === message.id ? { ...item, sendStatus: "failed" } : item,
+        item.id === message.id ? { ...item, sendStatus: waiting ? "queued" : "failed", queueReason: waiting ? cause.message : undefined } : item,
       ));
-      setError(cause instanceof Error ? cause.message : "Message failed to send.");
+      if (!waiting) {
+        await removeQueuedMessage(me.id, conversationId, message.clientMessageId).catch(() => undefined);
+        setError(cause instanceof Error ? cause.message : "Message failed to send.");
+      }
+    } finally {
+      retryingMessages.current.delete(message.clientMessageId);
     }
   }
+
+  const retryingMessages = useRef(new Set<string>());
+  const cancelledMessages = useRef(new Set<string>());
+  const queuedRetry = useRef<() => Promise<void>>(async () => undefined);
+  useEffect(() => {
+    queuedRetry.current = async () => {
+      if (sendPendingRef.current || document.visibilityState !== "visible" || !navigator.onLine) return;
+      for (const message of items.filter(item => item.sendStatus === "queued")) await retryFailedMessage(message);
+    };
+  });
+  useEffect(() => {
+    let stopped = false;
+    void loadQueuedMessages(me.id, conversationId).then(entries => {
+      if (stopped) return;
+      const committed = new Set(initial.messages.map(message => message.clientMessageId));
+      const pending = entries.filter(entry => !committed.has(entry.message.clientMessageId));
+      for (const entry of entries.filter(entry => committed.has(entry.message.clientMessageId))) {
+        void removeQueuedMessage(me.id, conversationId, entry.message.clientMessageId!).catch(() => undefined);
+      }
+      setDecryptedTexts(current => {
+        const next = new Map(current);
+        for (const entry of pending) next.set(entry.message.id, entry.plain);
+        return next;
+      });
+      setItems(current => {
+        const known = new Set(current.map(message => message.clientMessageId));
+        return [...current, ...pending.filter(entry => !known.has(entry.message.clientMessageId)).map(entry => ({ ...entry.message, sendStatus: "queued" as const }))];
+      });
+    }).catch(() => undefined);
+    const resume = () => { if (!stopped) void queuedRetry.current(); };
+    const timer = window.setInterval(resume, 30_000);
+    const first = window.setTimeout(resume, 2_000);
+    window.addEventListener("online", resume);
+    window.addEventListener("focus", resume);
+    window.addEventListener("maddy:message-request-keys", resume);
+    document.addEventListener("visibilitychange", resume);
+    return () => {
+      stopped = true;
+      window.clearInterval(timer); window.clearTimeout(first);
+      window.removeEventListener("online", resume);
+      window.removeEventListener("focus", resume);
+      window.removeEventListener("maddy:message-request-keys", resume);
+      document.removeEventListener("visibilitychange", resume);
+    };
+  }, [conversationId, me.id, initial.messages]);
 
   async function scheduleSendMessage() {
     const text = draftRef.current.trim();
@@ -2215,6 +2288,27 @@ export function ChatView({
                             </span>
                           </div>
                           </LongPressTouchable>
+
+                          {own && msg.sendStatus === "queued" ? (
+                            <div role="status" className="mt-2 max-w-sm rounded-xl border border-sky-400/20 bg-sky-400/10 px-3 py-2 text-xs leading-relaxed text-sky-300">
+                              <p>{msg.queueReason ?? "Waiting for secure delivery. Your message will send automatically when encryption is ready."}</p>
+                              <div className="mt-1 flex gap-3">
+                                <button type="button" className="underline" onClick={() => void retryFailedMessage(msg)}>Try now</button>
+                                <button type="button" className="underline" onClick={async () => {
+                                  if (msg.clientMessageId) {
+                                    cancelledMessages.current.add(msg.clientMessageId);
+                                    try {
+                                      await removeQueuedMessage(me.id, conversationId, msg.clientMessageId);
+                                      setItems(current => current.filter(item => item.id !== msg.id));
+                                    } catch {
+                                      cancelledMessages.current.delete(msg.clientMessageId);
+                                      setError("Could not cancel the saved message. Please retry.");
+                                    }
+                                  }
+                                }}>Cancel queued message</button>
+                              </div>
+                            </div>
+                          ) : null}
 
                           {msg.reactions.length > 0 ? (
                             <div

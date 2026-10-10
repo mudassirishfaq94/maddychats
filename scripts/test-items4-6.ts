@@ -320,7 +320,7 @@ async function main() {
       const { testMessageRequests } = await import("./test-message-requests.mjs");
       await testMessageRequests(base, introSenderCookie, introRecipientCookie, introConversation.id);
       const introRows = (await sql.query("select text,encrypted from messages where conversation_id=$1", [introConversation.id])).rows;
-      assert.equal(introRows.length, 2); assert(introRows.every(row => row.encrypted && !row.text.includes("my circle")), "Only ciphertext may be stored");
+      assert.equal(introRows.length, 3); assert(introRows.every(row => row.encrypted && !row.text.includes("my circle")), "Only ciphertext may be stored");
     }
     assert.equal((await api("/api/auth/logout", aliceCookie, "POST")).status, 200); assert.equal((await api("/api/auth/me", aliceCookie)).status, 401);
     console.log("Items 4–6 passed: upload safety, retention retries, rotating device sessions, revocation, CSP, and profiling measurements");
