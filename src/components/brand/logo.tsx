@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 
-/** Circlo brand mark — overlapping conversation circles. */
+/** Circular lock inspired by the supplied Circlo reference, kept vector sharp. */
 export function LogoMark({
   size = 30,
   className,
@@ -12,24 +12,15 @@ export function LogoMark({
     <svg
       width={size}
       height={size}
-      viewBox="0 0 40 40"
+      viewBox="0 0 64 64"
       fill="none"
       className={className}
       role="img"
       aria-label="Circlo"
     >
-      <path
-        d="M20 3.5a16.5 16.5 0 1 0 0 33 16.5 16.5 0 0 0 0-33Z"
-        fill="currentColor"
-      />
-      <path
-        d="M14.3 14.1a6.4 6.4 0 0 1 10.8 2.2 6.4 6.4 0 1 1-1.4 12.6l-3.7 3.1v-3.1a6.4 6.4 0 0 1-5.7-6.3Z"
-        stroke="var(--action-fg)"
-        strokeWidth="2.4"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <circle cx="25.8" cy="13.3" r="3.2" fill="var(--accent)" />
+      <path d="M20 23V17a12 12 0 0 1 24 0v6" stroke="var(--brand-mark, currentColor)" strokeWidth="5.5" strokeLinecap="round" />
+      <path d="M52 30a23 23 0 1 0 0 22" stroke="var(--brand-mark, currentColor)" strokeWidth="7" strokeLinecap="round" />
+      <path d="M36 42a6 6 0 1 0-8 0l-1 9h10l-1-9Z" fill="var(--brand-key, currentColor)" />
     </svg>
   );
 }
@@ -56,7 +47,7 @@ export function LogoWordmark({
           )}
           style={{ fontSize: size * 0.58 }}
         >
-          Circ<span className="text-[var(--accent-fg)]">lo</span>
+          circ<span className="text-[var(--accent-fg)]">lo</span>
         </span>
         {byline ? (
           <span className="mt-0.5 whitespace-nowrap text-[0.5rem] leading-none text-[var(--muted)]">

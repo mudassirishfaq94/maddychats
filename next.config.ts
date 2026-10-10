@@ -20,6 +20,9 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   output: "standalone",
   poweredByHeader: false,
+  // Cached compiler output retained old styles/version metadata across releases.
+  // Keep development caching, but compile production releases from current source.
+  experimental: { turbopackFileSystemCacheForBuild: false },
   reactProductionProfiling: process.env.PROFILE_BUILD === "1",
   env: {
     NEXT_PUBLIC_APP_VERSION: process.env.APP_VERSION ?? "development",

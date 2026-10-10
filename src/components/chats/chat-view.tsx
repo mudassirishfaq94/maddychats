@@ -1953,7 +1953,7 @@ export function ChatView({
                             )}
                             style={
                               own
-                                ? { background: "var(--bubble-own-bg)", ...(bubbleTheme ? { "--muted": "var(--bubble-own-sub)", "--accent-fg": "#ffffff" } : {}) } as React.CSSProperties
+                                ? { background: "var(--bubble-own-bg)", "--muted": "var(--bubble-own-sub)", "--accent-fg": bubbleTheme ? "#ffffff" : "var(--bubble-own-fg)" } as React.CSSProperties
                                 : undefined
                             }
                           >

@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import Script from "next/script";
 import { headers } from "next/headers";
-import { Inter, Space_Grotesk } from "next/font/google";
+import { Inter, Sora } from "next/font/google";
 import { AuthProvider } from "@/components/providers/auth-provider";
 import { HostedAppUpdates } from "@/components/hosted-app-updates";
 import { CapacitorDeepLinks } from "@/components/capacitor-deep-links";
@@ -18,7 +18,7 @@ const inter = Inter({
   display: "optional",
 });
 
-const spaceGrotesk = Space_Grotesk({
+const sora = Sora({
   subsets: ["latin"],
   variable: "--font-display",
   display: "optional",
@@ -28,15 +28,15 @@ export const metadata: Metadata = {
   applicationName: "Circlo",
   manifest: "/manifest.webmanifest",
   icons: {
-    icon: "/icons/ziptalk-192.png",
-    apple: "/icons/ziptalk-192.png",
+    icon: "/icons/circlo-mark.svg",
+    apple: "/icons/circlo-192.png",
   },
   title: {
-    default: "Circlo — Your people, your conversations.",
+    default: "Circlo — Your circle. Your secrets. Sealed.",
     template: "%s · Circlo",
   },
   description:
-    "Circlo is a real-time chat application by Mudassir Ishfaq.",
+    "Your circle. Your secrets. Sealed. Connect through end-to-end encrypted conversations with Circlo.",
   authors: [{ name: "Mudassir Ishfaq" }],
   creator: "Mudassir Ishfaq",
   appleWebApp: { capable: true, title: "Circlo", statusBarStyle: "black-translucent" },
@@ -48,7 +48,7 @@ export const viewport: Viewport = {
   viewportFit: "cover",
   // Keeps the composer visible when the mobile keyboard opens.
   interactiveWidget: "resizes-content",
-  themeColor: "#2563EB",
+  themeColor: "#0B1D26",
 };
 
 export default async function RootLayout({ children }: { children: ReactNode }) {
@@ -57,7 +57,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   return (
     <html
       lang="en"
-      className={`${inter.variable} ${spaceGrotesk.variable}`}
+      className={`${inter.variable} ${sora.variable}`}
       suppressHydrationWarning
     >
       <body>
