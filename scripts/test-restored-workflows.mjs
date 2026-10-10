@@ -182,9 +182,11 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     assert.equal((await pool.query("select status from device_link_requests where id=$1", [rejectRequest.id])).rows[0].status, "rejected");
     const pendingSession = await renewSession(rejected);
     assert.equal((await pool.query("select trusted_at from e2ee_keys where user_id=$1 and session_id=$2", [owner.id, pendingSession])).rows[0].trusted_at, null, "Rebinding an untrusted key never approves it");
+    const renewedLink = rejected.page.waitForResponse(response => response.url().endsWith("/api/e2ee/devices/link") && response.request().method() === "POST");
     await rejected.page.getByRole("button", { name: "Request device linking" }).click();
-    await rejected.page.waitForTimeout(300);
-    const expired = (await pool.query("update device_link_requests set expires_at=now()-interval '1 second' where user_id=$1 and status='pending' returning id,device_id,fingerprint", [owner.id])).rows[0];
+    const renewal = await renewedLink; assert.equal(renewal.status(), 201);
+    const renewedRequest = await renewal.json();
+    const expired = (await pool.query("update device_link_requests set expires_at=now()-interval '1 second' where id=$1 and user_id=$2 and status='pending' returning id,device_id,fingerprint", [renewedRequest.id, owner.id])).rows[0];
     assert(expired); assert.equal((await api("/api/e2ee/devices/approve", source.cookies, { ...challenge, linkId: expired.id, targetDeviceId: expired.device_id, targetFingerprint: expired.fingerprint })).status, 409);
     assert.equal((await api("/api/privacy/devices", source.cookies, { id: request.session_id }, "DELETE")).status, 200);
     assert.equal((await api("/api/auth/me", target.cookies, null, "GET")).status, 401);
