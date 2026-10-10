@@ -57,7 +57,7 @@ export async function profileMobile(base, cookieHeader = "", conversationId, qui
             node.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
           }, immediateDraft);
           await page.getByText(immediateDraft, { exact: true }).first().waitFor({ state: "visible" });
-          await page.getByText("Encryption keys are not ready for every participant yet. No unencrypted message was sent.", { exact: true }).waitFor();
+          await page.getByText(/Secure delivery is waiting.*Your draft is saved\./).waitFor();
           assert.equal(await composer.inputValue(), immediateDraft, "A blocked encrypted send preserves the complete draft");
           await page.waitForTimeout(500);
           for (const body of postedBodies) {
