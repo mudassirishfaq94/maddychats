@@ -111,7 +111,11 @@ async function main() {
     assert.equal(registered.status, 201);
     assert.equal((await registered.json()).verificationRequired, true);
     assert(!registered.cookies.get("maddy_session"));
-    assert(mail.includes("verify-email?token="));
+    const verificationMail = JSON.parse(mail);
+    assert.deepEqual(verificationMail.to,["new@example.invalid"]);
+    assert(/verification code: \d{6}/i.test(verificationMail.text));
+    assert(verificationMail.html.includes("/brand/circlo-email.png"));
+    assert(verificationMail.text.includes("10 minutes"));
     assert.equal((await sql.query("SELECT email_verified_at FROM users WHERE username='item1_new'")).rows[0].email_verified_at, null);
 
     // API cases exercise real Next request/cookie handling against the isolated server.
