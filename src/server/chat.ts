@@ -17,7 +17,7 @@ import {
   type MessageRow,
   type UserRow,
 } from "@/db/schema";
-import { toPublicUser } from "./users";
+import { toPublicUser, toSafeUser } from "./users";
 import type {
   AttachmentDTO,
   ConversationDetail,
@@ -433,6 +433,8 @@ export async function getConversationForUser(
     blocked: other ? await isBlockedBetween(userId, other.id) : false,
     requestPending: conv.type === "dm" && !membership.acceptedAt,
     requestInitiatorId: conv.type === "dm" ? conv.createdById : null,
+    awaitingApproval: conv.type === "dm" && conv.createdById === userId && memberRows.some((row) => row.user.id !== userId && !row.member.acceptedAt),
+    introductionSent: conv.lastMessageAt !== null,
     createdAt: conv.createdAt.toISOString(),
     updatedAt: conv.updatedAt.toISOString(),
     lastMessageAt: conv.lastMessageAt ? conv.lastMessageAt.toISOString() : null,
@@ -707,13 +709,53 @@ export async function createMessage(
     disappearingSeconds?: number;
     deliveredAt?: Date | null;
     sender?: import("@/lib/types").SafeUser;
+    enforceMessageRequest?: boolean;
   },
+  executor: Pick<typeof db, "select" | "execute"> = db,
 ): Promise<{ message: MessageDTO; created: boolean }> {
+  if (options?.enforceMessageRequest) {
+    if (!options.sender) {
+      const [sender] = await db.select().from(users).where(eq(users.id, senderId)).limit(1);
+      if (!sender) throw new Error("MESSAGE_REQUEST_SENDER_NOT_FOUND");
+      options = { ...options, sender: toSafeUser(sender) };
+    }
+    const requestOptions = options;
+    return db.transaction(async (tx) => {
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`message-request:${conversationId}`}, 0))`);
+      const result = await tx.execute<{ pending: boolean; initiator: string; has_message: boolean; retry: boolean }>(sql`
+        select c.created_by_id as initiator,
+          exists(select 1 from conversation_members p where p.conversation_id=c.id and p.user_id<>c.created_by_id and p.accepted_at is null) as pending,
+          exists(select 1 from messages m where m.conversation_id=c.id) as has_message,
+          exists(select 1 from messages m where m.conversation_id=c.id and m.sender_id=${senderId} and m.client_message_id=${requestOptions.clientMessageId ?? null}) as retry
+        from conversations c where c.id=${conversationId} and c.type='dm' and c.deleted_at is null`);
+      const gate = result.rows[0];
+      if (gate?.pending && !gate.retry) {
+        if (gate.initiator !== senderId) throw new Error("MESSAGE_REQUEST_ACCEPT_REQUIRED");
+        if (gate.has_message) throw new Error("MESSAGE_REQUEST_APPROVAL_PENDING");
+      }
+      const resultMessage = await createMessage(conversationId, senderId, text, replyToMessageId, forwarded, encrypted, { ...requestOptions, enforceMessageRequest: false }, tx);
+      if (gate?.pending && resultMessage.created) {
+        // Persist the approval notification atomically with the introduction.
+        // A restart or failed push must never lose it or duplicate it on retry.
+        await tx.execute(sql`
+          insert into notifications(user_id,actor_id,type,data)
+          select m.user_id, ${senderId}, 'message', jsonb_build_object(
+            'conversationId', ${conversationId}::text, 'messageId', ${resultMessage.message.id}::text,
+            'actorName', u.display_name, 'preview', 'Message request — accept to continue the conversation')
+          from conversation_members m join users u on u.id=${senderId}
+          left join notification_preferences p on p.user_id=m.user_id
+          where m.conversation_id=${conversationId} and m.user_id<>${senderId}
+            and m.muted_at is null and m.archived_at is null
+            and coalesce(p.message_notifications,true)`);
+      }
+      return resultMessage;
+    });
+  }
   // A reply target must belong to the same conversation.
   let replyId: string | null = null;
   let replyPreview: ReplyPreview | null = null;
   if (replyToMessageId) {
-    const parent = await db
+    const parent = await executor
       .select({
         id: messages.id,
         text: messages.text,
@@ -751,7 +793,7 @@ export async function createMessage(
   // Insert/idempotency lookup and conversation bump are one atomic statement.
   // On a remote database this removes transaction setup plus a second network
   // round trip from the acknowledgement path.
-  const persisted = await db.execute<PersistedResult>(sql`
+  const persisted = await executor.execute<PersistedResult>(sql`
     with inserted as (
       insert into messages (
         conversation_id, sender_id, client_message_id, text, type,

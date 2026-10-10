@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser } from "@/server/session";
 import { isUuid } from "@/server/users";
-import { getMembership } from "@/server/chat";
+import { getMembership, getConversationForUser } from "@/server/chat";
 import { scheduleMessage, listScheduledMessages, cancelScheduledMessage } from "@/server/scheduled-messages";
 import { guardSameOrigin, jsonError, readJson } from "@/server/http";
 
@@ -48,6 +48,9 @@ export async function POST(
   if (process.env.STARTER_MODE === "1") {
     return jsonError(503, "Scheduled sending is paused. You can send messages now.");
   }
+  const detail = await getConversationForUser(id, user.id);
+  if (!detail) return jsonError(404, "Conversation not found.");
+  if (detail.requestPending || detail.awaitingApproval) return jsonError(403, "Accept the message request before scheduling messages.");
   const body = await readJson(req);
   const data = (body ?? {}) as Record<string, unknown>;
 

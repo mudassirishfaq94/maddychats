@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { eq, and, isNotNull } from "drizzle-orm";
+import { eq, and, isNotNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { e2eeKeys } from "@/db/schema";
 import { getSessionUser } from "@/server/session";
 import { guardSameOrigin, jsonError, readJson } from "@/server/http";
 import { isUuid } from "@/server/users";
+import { publishToConversation } from "@/server/realtime";
 
 export const dynamic = "force-dynamic";
 
@@ -116,5 +117,16 @@ export async function POST(req: NextRequest) {
 
   const [registered] = await db.select({ trustedAt: e2eeKeys.trustedAt }).from(e2eeKeys)
     .where(and(eq(e2eeKeys.userId, user.id), eq(e2eeKeys.deviceId, deviceId))).limit(1);
+  if (!existing && registered?.trustedAt) {
+    const requests = await db.execute<{ id: string }>(sql`
+      select c.id from conversations c join conversation_members p on p.conversation_id=c.id
+      where p.user_id=${user.id} and c.type='dm' and c.created_by_id<>${user.id}
+        and c.deleted_at is null and c.last_message_at is not null
+        and not exists(select 1 from messages m where m.conversation_id=c.id offset 1)
+      limit 100`);
+    await Promise.all(requests.rows.map(row => publishToConversation(row.id, {
+      type: "conversation:encryption-ready", conversationId: row.id, userId: user.id,
+    })));
+  }
   return NextResponse.json({ success: true, pendingApproval: !registered?.trustedAt });
 }

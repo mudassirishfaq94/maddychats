@@ -172,6 +172,9 @@ export interface ConversationDetail {
   blocked: boolean;
   requestPending: boolean;
   requestInitiatorId: string | null;
+  /** Sender-side first-contact gate; recipient consent is independent of encryption. */
+  awaitingApproval?: boolean;
+  introductionSent?: boolean;
   createdAt: string;
   updatedAt: string;
   lastMessageAt: string | null;
@@ -226,6 +229,8 @@ export interface RealtimeConversationEvent {
     | "conversation:new"
     | "conversation:delete"
     | "conversation:accepted"
+    | "conversation:encryption-ready"
+    | "conversation:keys-shared"
     | "group:created"
     | "group:member-added"
     | "group:member-removed"

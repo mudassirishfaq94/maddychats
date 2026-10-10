@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { and, eq, inArray, isNotNull } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { conversationMembers, e2eeKeys, users } from "@/db/schema";
 import { getSessionUser } from "@/server/session";
@@ -74,5 +74,12 @@ export async function GET(req: NextRequest) {
     if (peer && (k.userId !== user.id || k.deviceId !== currentDeviceId)) peer.devices.push({ deviceId: k.deviceId, publicKey: k.publicKey });
   }
 
-  return NextResponse.json({ peers: [...byUser.values()] });
+  const permission = req.nextUrl.searchParams.get("allowMessageRequest") === "1"
+    ? await db.execute<{ allowed: boolean }>(sql`
+    select exists(select 1 from conversations c where c.id=${conversationId}
+      and c.type='dm' and c.created_by_id=${user.id} and c.deleted_at is null
+      and exists(select 1 from conversation_members p where p.conversation_id=c.id and p.user_id<>${user.id} and p.accepted_at is null)
+      and not exists(select 1 from messages m where m.conversation_id=c.id)) as allowed`)
+    : null;
+  return NextResponse.json({ peers: [...byUser.values()], allowInitialRequest: permission?.rows[0]?.allowed === true });
 }

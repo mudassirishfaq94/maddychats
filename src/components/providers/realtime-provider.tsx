@@ -176,6 +176,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     let hadConnection = false;
     es.onopen = () => {
       setConnected(true);
+      window.dispatchEvent(new Event("maddy:message-request-keys"));
       if (hadConnection) router.refresh();
       hadConnection = true;
     };
@@ -191,6 +192,9 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
       let event: RealtimeEvent;
       try {
         event = JSON.parse(e.data) as RealtimeEvent;
+        if (event.type === "conversation:encryption-ready" || event.type === "conversation:accepted") {
+          window.dispatchEvent(new Event("maddy:message-request-keys"));
+        }
       } catch {
         return;
       }

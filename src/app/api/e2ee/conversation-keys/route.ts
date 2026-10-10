@@ -3,6 +3,7 @@ import { eq, and, sql, isNotNull } from "drizzle-orm";
 import { db } from "@/db";
 import { e2eeConversationKeys, e2eeKeyHistory, e2eeKeys } from "@/db/schema";
 import { getSessionUser } from "@/server/session";
+import { publishToConversation } from "@/server/realtime";
 import { getMembership } from "@/server/chat";
 import { guardSameOrigin, jsonError, readJson } from "@/server/http";
 
@@ -100,6 +101,7 @@ export async function POST(req: NextRequest) {
 
   // There is one key copy per sender-device/recipient-device pair. Serialize
   // replacement and preserve the previous copy before updating it.
+  let changed = false;
   const newVersion = await db.transaction(async tx => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${conversationId}:${targetUserId}:${senderDeviceId}:${recipientDeviceId}`}, 0))`);
     const [existing] = await tx.select().from(e2eeConversationKeys).where(and(
@@ -113,6 +115,7 @@ export async function POST(req: NextRequest) {
     // to avoid treating every chat open as a key rotation.
     if (existing?.keyFingerprint === keyFingerprint) return existing.keyVersion;
     const version = (existing?.keyVersion ?? 0) + 1;
+    changed = true;
     if (existing) {
       await tx.insert(e2eeKeyHistory).values({
         conversationId, userId: targetUserId, deviceId: senderDeviceId, recipientDeviceId,
@@ -131,5 +134,6 @@ export async function POST(req: NextRequest) {
     return version;
   });
 
+  if (changed) await publishToConversation(conversationId, { type: "conversation:keys-shared", conversationId });
   return NextResponse.json({ success: true, keyVersion: newVersion });
 }

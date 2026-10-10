@@ -111,6 +111,12 @@ export async function processScheduledMessages(): Promise<{
     try {
       // 1. Create the actual message
       const message = await db.transaction(async (tx) => {
+        const pending = await tx.execute<{ pending: boolean }>(sql`
+          select exists(select 1 from conversations c
+            join conversation_members m on m.conversation_id=c.id
+            where c.id=${scheduled.conversationId} and c.type='dm'
+              and m.accepted_at is null) as pending`);
+        if (pending.rows[0]?.pending) return null;
         const [created] = await tx.insert(messages).values({
           conversationId: scheduled.conversationId,
           senderId: scheduled.senderId,
@@ -126,6 +132,7 @@ export async function processScheduledMessages(): Promise<{
           .where(eq(conversations.id, scheduled.conversationId));
         return created;
       });
+      if (!message) continue;
 
       // 3. Build full message DTO for real-time delivery
       const messageDto = await getMessageDTO(message.id, scheduled.senderId);

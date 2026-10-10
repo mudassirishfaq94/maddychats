@@ -27,7 +27,7 @@ import { isSpammingMessages, isDuplicateMessage } from "@/server/spam-detection"
 export const dynamic = "force-dynamic";
 
 /**
- * Paginated history — newest page first, `cursor` walks backwards through
+ * Paginated history â€” newest page first, `cursor` walks backwards through
  * older messages. Members only, always bounded (default 30, max 50).
  */
 export async function GET(
@@ -117,6 +117,7 @@ export async function POST(
     disappearing_seconds: number;
     member_ids: string[];
     blocked: boolean;
+    request_pending: boolean;
   };
   const [spamCheck, isDupe, contextResult] = await Promise.all([
     isSpammingMessages(me.id),
@@ -127,6 +128,7 @@ export async function POST(
       select c.type, mine.role,
         c.admin_only_messaging, c.slow_mode_seconds, c.last_message_at,
         c.deleted_at, c.disappearing_seconds,
+        bool_or(members.accepted_at is null) as request_pending,
         array_agg(members.user_id order by members.joined_at) as member_ids,
         exists (
           select 1 from blocks b
@@ -166,7 +168,7 @@ export async function POST(
     }
   }
 
-  // Blocking is enforced here on the server — never in the UI alone.
+  // Blocking is enforced here on the server â€” never in the UI alone.
   if (detail.type === "dm" && detail.blocked) {
     return jsonError(403, "You cannot send messages in this conversation.");
   }
@@ -186,8 +188,13 @@ export async function POST(
         ? new Date()
         : null,
       sender: me,
+      enforceMessageRequest: detail.type === "dm" && detail.request_pending,
     },
-  );
+  ).catch((cause: unknown) => {
+    if (cause instanceof Error && cause.message.startsWith("MESSAGE_REQUEST_")) return null;
+    throw cause;
+  });
+  if (!createdResult) return jsonError(403, "Your message request is waiting for approval. You can send more messages after it is accepted.");
   const message = createdResult.message;
   const persistedAt = performance.now();
 
@@ -208,13 +215,16 @@ export async function POST(
   const publishedAt = performance.now();
   // Persist the message and realtime event before acknowledging it. Push
   // services and notification fan-out continue in Next's managed after task.
-  after(async () => {
+  const notify = async () => {
     await notifyNewMessage({
       conversationId: id,
       messageId: message.id,
       actorId: me.id,
       actorName: me.displayName,
-      preview: isEncrypted
+      persistedRequest: detail.type === "dm" && detail.request_pending,
+      preview: detail.type === "dm" && detail.request_pending
+        ? "Message request â€” accept to continue the conversation"
+        : isEncrypted
         ? "New message"
         : parsed.data.text,
     });
@@ -227,7 +237,10 @@ export async function POST(
         preview: parsed.data.text.slice(0, 140),
       }, me.id)));
     }
-  });
+  };
+  // Request notifications are already committed in the introduction's
+  // transaction. Realtime notification delivery and push stay off the ack path.
+  after(notify);
   return NextResponse.json({ message }, {
     status: 201,
     headers: {

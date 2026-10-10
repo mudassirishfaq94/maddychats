@@ -15,6 +15,7 @@ import { publishToUsers } from "@/server/realtime";
 import { onlineMembersOf } from "@/server/presence";
 import {
   getMembership,
+  getConversationForUser,
   getMessageDTO,
   markMessageDelivered,
   memberIdsOf,
@@ -68,6 +69,10 @@ export async function POST(req: NextRequest) {
   if (!membership) return jsonError(404, "Conversation not found.");
   const [conversation] = await db.select().from(conversations).where(eq(conversations.id, conversationId));
   if (!conversation || conversation.deletedAt) return jsonError(404, "Conversation not found.");
+  if (conversation.type === "dm") {
+    const detail = await getConversationForUser(conversationId, me.id);
+    if (detail?.requestPending || detail?.awaitingApproval) return jsonError(403, "Send one text introduction, then wait for approval before sharing attachments.");
+  }
   if (conversation.adminOnlyMessaging && !["owner", "admin"].includes(membership.role)) return jsonError(403, "Only group admins can send messages.");
 
   // Blocking is enforced server-side, never in the UI alone.

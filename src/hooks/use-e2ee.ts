@@ -591,11 +591,11 @@ export function useE2EE(userId: string | undefined) {
    * Prepare a conversation for E2EE: fetch-or-create its symmetric key, share
    * it to every device of every peer, and return the verification fingerprint.
    *
-   * ready=false means at least one peer has no registered device key yet. The
+   * A first message request may queue ciphertext for a peer without a key. The
    * caller must wait or fail closed; plaintext fallback is not permitted.
    */
   const prepareConversation = useCallback(
-    async (conversationId: string, { forceReshare = false }: { forceReshare?: boolean } = {}): Promise<{ ready: boolean; fingerprint: string | null; trustChanged?: boolean; missingPeers?: number }> => {
+    async (conversationId: string, { forceReshare = false, allowMessageRequest = false }: { forceReshare?: boolean; allowMessageRequest?: boolean } = {}): Promise<{ ready: boolean; fingerprint: string | null; trustChanged?: boolean; missingPeers?: number }> => {
       // Existing history may use local keys immediately, but publishing or
       // sharing a new key must not race device registration.
       if (deviceRegistrationRef.current && !(await deviceRegistrationRef.current)) {
@@ -608,12 +608,14 @@ export function useE2EE(userId: string | undefined) {
         .then(({ key }) => key)
         .catch(() => null);
       let peers: Peer[] = [];
+      let introductionAllowed = false;
       try {
-        const res = await e2eeRequest(`/api/e2ee/peers?conversationId=${encodeURIComponent(conversationId)}&deviceId=${encodeURIComponent(state.deviceId)}`);
+        const res = await e2eeRequest(`/api/e2ee/peers?conversationId=${encodeURIComponent(conversationId)}&deviceId=${encodeURIComponent(state.deviceId)}${allowMessageRequest ? "&allowMessageRequest=1" : ""}`);
         if (!res.ok) return { ready: false, fingerprint: null };
         if (res.ok) {
-          const data = (await res.json()) as { peers?: Peer[] };
+          const data = (await res.json()) as { peers?: Peer[]; allowInitialRequest?: boolean };
           peers = data.peers ?? [];
+          introductionAllowed = allowMessageRequest && data.allowInitialRequest === true;
         }
       } catch {
         return { ready: false, fingerprint: null };
@@ -624,6 +626,9 @@ export function useE2EE(userId: string | undefined) {
       let ready = Boolean(userId && state.publicKey) &&
         peers.every((p) => p.userId === userId || p.devices.length > 0);
       const missingPeers = peers.filter((peer) => peer.userId !== userId && peer.devices.length === 0).length;
+      // Only a server-authorized first-contact introduction can be queued with
+      // sender-only key wraps. Message content remains AES-GCM ciphertext.
+      if (introductionAllowed && userId && state.publicKey) ready = true;
       const targets = ready
         ? [
             { userId: userId!, deviceId: state.deviceId, publicKey: state.publicKey! },
@@ -678,7 +683,7 @@ export function useE2EE(userId: string | undefined) {
         pendingTrustRef.current.set(conversationId, trustSignature);
         return { ready: false, fingerprint: null, trustChanged: true };
       }
-      if (ready && !trusted && typeof localStorage !== "undefined") {
+      if (ready && !trusted && trustSignature && typeof localStorage !== "undefined") {
         localStorage.setItem(trustKey, trustSignature);
       }
       let fingerprint: string | null = null;

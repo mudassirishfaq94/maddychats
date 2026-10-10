@@ -74,6 +74,41 @@ async function main() {
     const login = async (username: string) => { const res = await api("/api/auth/login", "", "POST", { identifier: username, password }); assert.equal(res.status, 200); return cookies(res); };
     await start();
     let aliceCookie = await login(alice.username); const bobCookie = await login(bob.username);
+    // A first contact gets exactly one encrypted introduction and a durable
+    // approval notification; server consent survives retries and concurrency.
+    const requestSender = await account("item456_request_sender");
+    const requestRecipient = await account("item456_request_recipient");
+    const senderCookie = await login(requestSender.username), recipientCookie = await login(requestRecipient.username);
+    const requestResponse = await api("/api/conversations", senderCookie, "POST", { userId: requestRecipient.id });
+    assert.equal(requestResponse.status, 201);
+    const requestConversation = (await requestResponse.json()).conversation;
+    assert.equal(requestConversation.awaitingApproval, true);
+    const requestPath = `/api/conversations/${requestConversation.id}`;
+    const permissions = await (await api(`/api/e2ee/peers?conversationId=${requestConversation.id}&allowMessageRequest=1`, senderCookie)).json();
+    assert.equal(permissions.allowInitialRequest, true);
+    assert.equal((await api(`${requestPath}/messages`, senderCookie, "POST", { text: "never plaintext" })).status, 422);
+    assert.equal((await api(`${requestPath}/messages`, recipientCookie, "POST", { text: "ciphertext-recipient", encrypted: true })).status, 403);
+    const candidates = [randomUUID(), randomUUID()];
+    const attempts = await Promise.all(candidates.map(clientMessageId => api(`${requestPath}/messages`, senderCookie, "POST", { text: `ciphertext-${clientMessageId}`, encrypted: true, clientMessageId })));
+    assert.deepEqual(attempts.map(response => response.status).sort(), [201, 403]);
+    const winningIndex = attempts.findIndex(response => response.status === 201);
+    const introduction = (await attempts[winningIndex].json()).message;
+    assert.equal(introduction.encrypted, true);
+    const retry = await api(`${requestPath}/messages`, senderCookie, "POST", { text: `ciphertext-${candidates[winningIndex]}`, encrypted: true, clientMessageId: candidates[winningIndex] });
+    assert.equal(retry.status, 200); assert.equal((await retry.json()).message.id, introduction.id);
+    assert.equal((await sql.query("select count(*)::int as n from messages where conversation_id=$1", [requestConversation.id])).rows[0].n, 1);
+    const requestNotifications = (await sql.query("select data from notifications where user_id=$1 and data->>'messageId'=$2", [requestRecipient.id, introduction.id])).rows;
+    assert.equal(requestNotifications.length, 1); assert.match(requestNotifications[0].data.preview, /Message request/);
+    const inbox = await (await api("/api/conversations", recipientCookie)).json();
+    assert.equal(inbox.conversations.find((entry: { id: string }) => entry.id === requestConversation.id).requestPending, true);
+    assert.equal((await (await api(`${requestPath}/messages`, recipientCookie)).json()).messages[0].id, introduction.id);
+    await api(`${requestPath}/read`, recipientCookie, "POST");
+    assert.equal((await sql.query("select count(*)::int as n from message_reads where message_id=$1", [introduction.id])).rows[0].n, 0);
+    assert.equal((await api(`${requestPath}/scheduled`, senderCookie, "POST", { text: "ciphertext", encrypted: true, scheduledFor: new Date(Date.now()+60000).toISOString() })).status, 403);
+    const pendingUpload = new FormData(); pendingUpload.set("conversationId", requestConversation.id); pendingUpload.set("encrypted", "true"); pendingUpload.set("files", new File(["ciphertext"], "encrypted.bin"));
+    assert.equal((await fetch(`${base}/api/upload/message`, { method: "POST", headers: { cookie: senderCookie, origin: base }, body: pendingUpload })).status, 403);
+    assert.equal((await api(`${requestPath}/accept`, recipientCookie, "POST")).status, 200);
+    for (const cookie of [senderCookie, recipientCookie]) assert.equal((await api(`${requestPath}/messages`, cookie, "POST", { text: `ciphertext-${randomUUID()}`, encrypted: true, clientMessageId: randomUUID() })).status, 201);
     // Device IDs are browser-scoped, so separate accounts may share the ID.
     await sql.query("insert into e2ee_keys(user_id,device_id,public_key,encrypted_private_key,trusted_at) values($1,'shared-browser','fixture-alice','fixture',now()),($2,'shared-browser','fixture-bob','fixture',now())", [alice.id, bob.id]);
     const sharedPeers = await (await api(`/api/e2ee/peers?conversationId=${conversation.id}&deviceId=shared-browser`, aliceCookie)).json();
@@ -255,6 +290,14 @@ async function main() {
       assert.equal((await api("/api/e2ee/keys", recoveryPeerCookie, "POST", { deviceId: "recovery-peer", publicKey: targetPublic, encryptedPrivateKey: "test-only-backup" })).status, 200);
       const { testChatRecovery } = await import("./test-chat-recovery.mjs");
       await testChatRecovery(base, carolCookie, recoveryConversation.id);
+      const introSender = await account("item456_browser_request_sender");
+      const introRecipient = await account("item456_browser_request_recipient");
+      const introSenderCookie = await login(introSender.username), introRecipientCookie = await login(introRecipient.username);
+      const introConversation = (await (await api("/api/conversations", introSenderCookie, "POST", { userId: introRecipient.id })).json()).conversation;
+      const { testMessageRequests } = await import("./test-message-requests.mjs");
+      await testMessageRequests(base, introSenderCookie, introRecipientCookie, introConversation.id);
+      const introRows = (await sql.query("select text,encrypted from messages where conversation_id=$1", [introConversation.id])).rows;
+      assert.equal(introRows.length, 2); assert(introRows.every(row => row.encrypted && !row.text.includes("my circle")), "Only ciphertext may be stored");
     }
     assert.equal((await api("/api/auth/logout", aliceCookie, "POST")).status, 200); assert.equal((await api("/api/auth/me", aliceCookie)).status, 401);
     console.log("Items 4–6 passed: upload safety, retention retries, rotating device sessions, revocation, CSP, and profiling measurements");
