@@ -734,9 +734,11 @@ export async function createMessage(
         if (gate.has_message) throw new Error("MESSAGE_REQUEST_APPROVAL_PENDING");
       }
       const resultMessage = await createMessage(conversationId, senderId, text, replyToMessageId, forwarded, encrypted, { ...requestOptions, enforceMessageRequest: false }, tx);
-      if (gate?.pending && resultMessage.created) {
+      if (resultMessage.created) {
         // Persist the approval notification atomically with the introduction.
         // A restart or failed push must never lose it or duplicate it on retry.
+        // Acceptance can race this transaction after the route read pending;
+        // still persist the notification expected by that request's fan-out.
         await tx.execute(sql`
           insert into notifications(user_id,actor_id,type,data)
           select m.user_id, ${senderId}, 'message', jsonb_build_object(

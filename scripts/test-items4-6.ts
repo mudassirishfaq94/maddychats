@@ -109,6 +109,29 @@ async function main() {
     assert.equal((await fetch(`${base}/api/upload/message`, { method: "POST", headers: { cookie: senderCookie, origin: base }, body: pendingUpload })).status, 403);
     assert.equal((await api(`${requestPath}/accept`, recipientCookie, "POST")).status, 200);
     for (const cookie of [senderCookie, recipientCookie]) assert.equal((await api(`${requestPath}/messages`, cookie, "POST", { text: `ciphertext-${randomUUID()}`, encrypted: true, clientMessageId: randomUUID() })).status, 201);
+    // Acceptance between the route's pending snapshot and its transaction
+    // must not lose the introduction notification.
+    const raceConversation = (await (await api("/api/conversations", senderCookie, "POST", { userId: bob.id })).json()).conversation;
+    const gateConnection = await sql.connect();
+    const gateName = `message-request:${raceConversation.id}`;
+    let racingSend: Promise<Response>;
+    await gateConnection.query("select pg_advisory_lock(hashtextextended($1,0))", [gateName]);
+    try {
+      racingSend = api(`/api/conversations/${raceConversation.id}/messages`, senderCookie, "POST", { text: "ciphertext-acceptance-race", encrypted: true, clientMessageId: randomUUID() });
+      let waiting = false;
+      for (let i=0;i<40;i++) {
+        waiting = (await gateConnection.query("select exists(select 1 from pg_locks where locktype='advisory' and not granted and database=(select oid from pg_database where datname=current_database())) as waiting")).rows[0].waiting;
+        if (waiting) break; await sleep(50);
+      }
+      assert(waiting, "The send must reach the consent transaction before acceptance");
+      assert.equal((await api(`/api/conversations/${raceConversation.id}/accept`, bobCookie, "POST")).status, 200);
+    } finally {
+      await gateConnection.query("select pg_advisory_unlock(hashtextextended($1,0))", [gateName]);
+      gateConnection.release();
+    }
+    const racedResponse = await racingSend!; assert.equal(racedResponse.status, 201);
+    const racedMessage = (await racedResponse.json()).message;
+    assert.equal((await sql.query("select count(*)::int as n from notifications where user_id=$1 and data->>'messageId'=$2", [bob.id,racedMessage.id])).rows[0].n, 1, "Acceptance racing the introduction must retain its notification");
     // Device IDs are browser-scoped, so separate accounts may share the ID.
     await sql.query("insert into e2ee_keys(user_id,device_id,public_key,encrypted_private_key,trusted_at) values($1,'shared-browser','fixture-alice','fixture',now()),($2,'shared-browser','fixture-bob','fixture',now())", [alice.id, bob.id]);
     const sharedPeers = await (await api(`/api/e2ee/peers?conversationId=${conversation.id}&deviceId=shared-browser`, aliceCookie)).json();
