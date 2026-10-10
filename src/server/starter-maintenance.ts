@@ -1,4 +1,5 @@
 import { cleanupRealtimeEvents } from "./realtime";
+import { cleanupUploads } from "./upload-retention";
 import { cleanupRateLimits } from "./rate-limit";
 
 import { processScheduledMessages } from "./scheduled-messages";
@@ -33,6 +34,7 @@ export function startStarterMaintenance() {
     try {
       await cleanupRealtimeEvents();
       await cleanupRateLimits();
+      await cleanupUploads();
       await db.delete(deviceLinkRequests).where(lt(deviceLinkRequests.expiresAt, new Date(Date.now() - 86400000)));
     } catch { console.error("[maintenance] Cleanup unavailable; retrying later."); }
     finally { running = false; }

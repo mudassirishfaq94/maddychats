@@ -22,7 +22,15 @@ draft preservation, and recoverable existing media reads remain available.
 Set `CHAT_MEDIA_ENABLED=1` to enable encrypted attachments and voice using the existing
 private Supabase bucket. Ciphertext is opaque to the server; size, file metadata,
 membership, consent and storage-budget checks remain enforced. Readable uploads
-still require the scanner and remain paused in starter mode. Set
+still require the scanner, except photo statuses: the starter accepts static JPG,
+PNG and WebP up to 3 MB/12 megapixels through a separate short-lived renderer.
+Only newly encoded WebP pixels are stored; original bytes and metadata are discarded.
+The renderer has no application secrets, JavaScript filesystem permissions restricted
+ to its script/dependencies, one concurrent job and a ten-second deadline. Native
+addons are necessary for Sharp; this is process isolation, not an OS sandbox or an
+antivirus guarantee. If a scanner is configured, scanning remains mandatory.
+Video statuses still require scanning. Status storage is capped at 50 tracked files
+(150 MB maximum); expired files use the existing retention processor. Set
 `CHAT_STORAGE_BUDGET_MB=400` to retain headroom in the free storage allowance.
 Phone sign-in and experimental Signal provisioning remain paused.
 

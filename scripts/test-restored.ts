@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { resolve } from "node:path";
-import { cp, unlink } from "node:fs/promises";
+import { cp, mkdir, unlink } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
 import { Pool } from "pg";
 import { drizzle } from "drizzle-orm/node-postgres";
@@ -28,6 +28,8 @@ async function main() {
     await pool.query("drop schema if exists drizzle cascade; drop schema public cascade; create schema public;");
     await migrate(drizzle(pool), { migrationsFolder: "drizzle" });
     await cp(resolve(".next/static"), resolve(".next/standalone/.next/static"), { recursive: true });
+    await mkdir(resolve(".next/standalone/scripts"), { recursive: true });
+    await cp(resolve("scripts/reconstruct-status-photo.mjs"), resolve(".next/standalone/scripts/reconstruct-status-photo.mjs"));
     await cp(resolve("public"), resolve(".next/standalone/public"), { recursive: true });
     const password = "Aa1" + randomBytes(20).toString("base64url"), hash = await bcrypt.hash(password, 12), tag = randomBytes(6).toString("hex");
     for (const suffix of ["a", "b"]) accounts.push((await pool.query("insert into users(username,display_name,email,password_hash,email_verified_at) values($1,$1,$2,$3,now()) returning id,username", [`restored_${tag}${suffix}`, `restored_${tag}${suffix}@example.invalid`, hash])).rows[0]);
