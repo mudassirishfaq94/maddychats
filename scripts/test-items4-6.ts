@@ -252,7 +252,10 @@ async function main() {
     const activeClaims = JSON.parse(Buffer.from(part(aliceCookie, "maddy_session").split("=")[1].split(".")[1], "base64url").toString());
     const oldAccess = `maddy_session=${await signSessionToken(alice.id, alice.username, Date.now() - 360000, 0, activeClaims.sid)}`;
     assert.equal((await api("/api/privacy/devices", oldAccess, "DELETE", { allOthers: true })).status, 403, "Old authentication must be reconfirmed");
-    const renewedOld = cookies(await api("/api/auth/me", oldAccess));
+    const identity = await api("/api/auth/me", oldAccess);
+    assert.equal(identity.status, 200);
+    assert.equal(identity.headers.getSetCookie().length, 0, "Valid identity reads do not replace session cookies");
+    const renewedOld = oldAccess;
     assert.equal((await api("/api/privacy/devices", renewedOld, "DELETE", { allOthers: true })).status, 403, "Cookie renewal does not satisfy fresh authentication");
     const page1 = await api("/login"), page2 = await api("/login"); const report1 = page1.headers.get("content-security-policy-report-only")!;
     assert(report1.includes("'strict-dynamic'")); assert.notEqual(report1, page2.headers.get("content-security-policy-report-only"));

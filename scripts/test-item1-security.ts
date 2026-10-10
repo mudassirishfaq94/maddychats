@@ -151,8 +151,9 @@ async function main() {
     const oldBobCookie = await cookie(bob, false);
     const oldAuthTime = (await verifySessionToken(oldBobCookie.slice("maddy_session=".length)))!.authTime;
     const renewed = await api("/api/auth/me", undefined, oldBobCookie, "GET");
-    const renewedJwt = renewed.response.headers.getSetCookie().find((v) => v.startsWith("maddy_session="))!.split(";")[0].slice("maddy_session=".length);
-    assert.equal((await verifySessionToken(renewedJwt))!.authTime, oldAuthTime, "Renewal cannot create fresh authentication");
+    assert.equal(renewed.response.status, 200);
+    assert.equal(renewed.response.headers.getSetCookie().length, 0, "An identity read cannot overwrite a newer login cookie");
+    assert.equal((await verifySessionToken(oldBobCookie.slice("maddy_session=".length)))!.authTime, oldAuthTime, "Identity reads cannot create fresh authentication");
     assert.equal((await api("/api/privacy/2fa/setup", {}, oldBobCookie)).response.status, 403);
     assert.equal((await api("/api/privacy/2fa/setup", { password: "wrong" }, oldBobCookie)).response.status, 403);
     const setup = await api("/api/privacy/2fa/setup", { password }, oldBobCookie);

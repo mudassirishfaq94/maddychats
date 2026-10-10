@@ -28,10 +28,40 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
   const profile = async page => { await page.goto(base + "/app/profile"); await page.getByLabel("This device fingerprint").waitFor({ timeout: 30000 }); };
   const chat = async page => { await page.goto(base + "/app/chats/" + conversationId); await page.getByRole("textbox", { name: "Message text" }).waitFor(); };
   const refresh = async page => { await page.getByRole("button", { name: "Refresh encryption devices", exact: true }).click(); await page.getByText("Encryption devices refreshed.", { exact: true }).waitFor(); };
+  let sessionRaceChecked = false;
   const renewSession = async device => {
+    let releaseIdentity; let identityDone; let oldIdentity;
+    if (!sessionRaceChecked) {
+      sessionRaceChecked = true;
+      let ready;
+      const prepared = new Promise(resolve => { ready = resolve; });
+      const release = new Promise(resolve => { releaseIdentity = resolve; });
+      let finished;
+      identityDone = new Promise(resolve => { finished = resolve; });
+      let intercepted = false;
+      await device.page.route("**/api/auth/me", async route => {
+        if (intercepted) return route.continue();
+        intercepted = true;
+        const identity = await route.fetch();
+        ready(); await release;
+        await route.fulfill({ response: identity }); finished();
+      });
+      oldIdentity = device.page.evaluate(() => fetch("/api/auth/me", { cache: "no-store" }).then(r => r.status));
+      await prepared;
+    }
     const response = await api("/api/auth/login", "", { identifier: owner.username, password }); assert.equal(response.status, 200);
     device.cookies = response.headers.getSetCookie().filter(cookie => /^(maddy_session|maddy_refresh)=/.test(cookie)).map(cookie => cookie.split(";")[0]).join("; ");
     await device.page.context().addCookies(device.cookies.split("; ").map(cookie => { const i = cookie.indexOf("="); return { name: cookie.slice(0, i), value: cookie.slice(i + 1), url: base, httpOnly: true, sameSite: "Lax" }; }));
+    if (releaseIdentity) {
+      releaseIdentity(); await identityDone; await oldIdentity;
+      await device.page.unroute("**/api/auth/me");
+      const identity = await device.page.request.get(base + "/api/auth/me");
+      assert.equal(identity.status(), 200);
+      assert.equal(identity.headers()["set-cookie"], undefined, "Valid identity responses cannot overwrite a newer login");
+      const desired = JSON.parse(Buffer.from(device.cookies.match(/maddy_session=([^;]+)/)[1].split(".")[1], "base64url")).sid;
+      const actual = await device.page.request.get(base + "/api/privacy/devices");
+      assert.equal((await actual.json()).devices.find(row => row.current)?.id, desired, "A delayed identity response preserves the newer browser session");
+    }
     await profile(device.page);
     const sessions = await (await api("/api/privacy/devices", device.cookies, null, "GET")).json();
     const current = sessions.devices.find(session => session.current); assert(current);

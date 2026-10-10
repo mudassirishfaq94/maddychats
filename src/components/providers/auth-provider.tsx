@@ -51,7 +51,7 @@ function secureContextHeader(): Record<string, string> {
 
 export function AuthProvider({ children, initialUser }: { children: ReactNode; initialUser?: SafeUser | null }) {
   // This snapshot comes from the same server-side eligibility check used by
-  // protected pages. Still revalidate/rotate through /me on mount and focus.
+  // protected pages. Still revalidate through /me on mount and focus; proxy renews expired access.
   const [status, setStatus] = useState<AuthStatus>(initialUser === undefined ? "loading" : initialUser ? "authenticated" : "unauthenticated");
   const [user, setUser] = useState<SafeUser | null>(initialUser ?? null);
   const router = useRouter();
