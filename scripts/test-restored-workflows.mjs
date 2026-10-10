@@ -144,6 +144,17 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     const voiceUpload = source.page.waitForResponse(response => response.url().endsWith("/api/upload/message") && response.request().method() === "POST");
     await source.page.getByRole("button", { name: "Send voice message", exact: true }).click();
     assert.equal((await voiceUpload).status(), 201);
+    const ownVoice = source.page.getByRole("button", { name: "Play voice message", exact: true }).first();
+    await ownVoice.waitFor();
+    const contrast = await ownVoice.evaluate(button => {
+      const bubble = button.parentElement;
+      const rgb = value => value.match(/[\d.]+/g).slice(0, 3).map(Number);
+      const luminance = value => rgb(value).map(v => v / 255).map(v => v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4).reduce((sum, v, i) => sum + v * [0.2126, 0.7152, 0.0722][i], 0);
+      const foreground = luminance(getComputedStyle(button).color);
+      const background = luminance(getComputedStyle(bubble).backgroundColor);
+      return (Math.max(foreground, background) + 0.05) / (Math.min(foreground, background) + 0.05);
+    });
+    assert(contrast >= 4.5, "Voice controls must have readable contrast on their bubble");
     await recipient.page.getByRole("button", { name: "Play voice message", exact: true }).click();
     await recipient.page.getByRole("button", { name: "Pause voice message", exact: true }).waitFor();
     await recipient.page.waitForFunction(() => Array.from(document.querySelectorAll('[aria-valuenow]')).some(waveform => Number(waveform.getAttribute("aria-valuenow")) > 0));
@@ -206,7 +217,7 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     for (const page of pages.filter(page => !page.isClosed())) assert.deepEqual(await page.evaluate(() => window.__workflowCsp), [], "No CSP violations in the actual workflow");
     assert.deepEqual(errors, []);
     const recovery = jwtSecret ? await testEncryptionDevices(base, pool, owner, peer, password, conversationId, jwtSecret, { device: rejected, contact: recipient }) : {};
-    return { ...recovery, tryNow: true, refresh: true, codeApproval: true, rejected: true, expired: true, replay: true, wrongAccount: true, revocation: true, sessionRebinding: true, attachment: true, voicePlayback: true, mediaCapabilityRetry: true, scheduler: true, branding: true, registration: true, verificationTokenAndLogin: true, externalEmailDelivery: false, browserErrors: 0 };
+    return { ...recovery, tryNow: true, refresh: true, codeApproval: true, rejected: true, expired: true, replay: true, wrongAccount: true, revocation: true, sessionRebinding: true, attachment: true, voicePlayback: true, mediaCapabilityRetry: true, voiceContrast: true, scheduler: true, branding: true, registration: true, verificationTokenAndLogin: true, externalEmailDelivery: false, browserErrors: 0 };
   } finally {
     await browser.close();
     if (registered) await pool.query("delete from users where id=$1 and username=$2 and username like 'restreg_%'", [registered.id, registered.username]);
