@@ -94,6 +94,10 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     await recipient.page.getByRole("region", { name: "Conversation", exact: true }).getByText("Real encrypted delivery baseline", { exact: true }).waitFor({ timeout: 30000 });
     const mobileChecks = await testMobilePerformance(base, pool, source, owner, conversationId);
     const sourceSession = await renewSession(source);
+    for (let attempt = 0; attempt < 50; attempt++) {
+      if ((await pool.query("select trusted_at from e2ee_keys where user_id=$1 and session_id=$2", [owner.id, sourceSession])).rows[0]?.trusted_at) break;
+      await source.page.waitForTimeout(200);
+    }
     assert((await pool.query("select trusted_at from e2ee_keys where user_id=$1 and session_id=$2", [owner.id, sourceSession])).rows[0]?.trusted_at, "An existing private key rebinds after sign-in without replacement");
     const target = await login(owner); await chat(target.page);
     await target.page.getByRole("textbox", { name: "Message text" }).fill("Queued new device delivery");

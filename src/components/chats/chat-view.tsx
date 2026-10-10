@@ -411,6 +411,13 @@ export function ChatView({
     let alive = true;
     (async () => {
       let hadFailure = false;
+      const textBatch = new Map<string, string>();
+      const replyBatch = new Map<string, string>();
+      const flushText = () => {
+        if (!alive || textBatch.size === 0) return;
+        const ready = new Map(textBatch); textBatch.clear();
+        startTransition(() => setDecryptedTexts(current => new Map([...current, ...ready])));
+      };
       pending.forEach((m) => decryptingRef.current.add(m.id));
       pendingReplies.forEach((m) => decryptingRepliesRef.current.add(m.replyTo!.id));
       // RSA/AES work is CPU-heavy. Keep history rendering responsive instead
@@ -429,7 +436,8 @@ export function ChatView({
             arrivalTimesRef.current.delete(m.id);
           }
           cacheDecryptedMessage(conversationId, m.id, m.text, plain);
-          if (alive) setDecryptedTexts((current) => new Map(current).set(m.id, plain));
+          textBatch.set(m.id, plain);
+          if (textBatch.size >= 12) flushText();
         } catch {
           // A peer can still publish a just-created key, but retries must be
           // bounded so one legacy message never burns CPU forever.
@@ -441,11 +449,12 @@ export function ChatView({
           decryptingRef.current.delete(m.id);
         }
       });
+      flushText();
       await mapWithConcurrency(pendingReplies, 4, async (m) => {
         const reply = m.replyTo!;
         try {
           const plain = await decrypt(reply.text, conversationId);
-          if (alive) setDecryptedReplies((current) => new Map(current).set(reply.id, plain));
+          replyBatch.set(reply.id, plain);
         } catch {
           hadFailure = true;
         } finally {
@@ -453,6 +462,7 @@ export function ChatView({
         }
       });
       if (!alive) return;
+      if (replyBatch.size) startTransition(() => setDecryptedReplies(current => new Map([...current, ...replyBatch])));
       // Retry once for a key that may still be in flight, then surface a
       // concise per-message fallback without blocking the rest of the chat.
       if (hadFailure && alive) {
