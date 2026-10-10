@@ -33,7 +33,7 @@ required. Google/phone users can sign in again through the existing login flow.
 Recovery is explicit account enrollment, separate from trusted-device approval.
 It verifies possession of the pending browser's private key and its active
 authenticated session using a short-lived, single-use challenge. In one
-transaction it removes older encryption trust, trusts only the proven browser
+transaction it signs out other browsers, removes older encryption trust, trusts only the proven browser
 and revokes pending linking requests. Authentication and MFA remain enabled.
 
 Recovery does not delete messages, replace conversation keys, or decrypt lost

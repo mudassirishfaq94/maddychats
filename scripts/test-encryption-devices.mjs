@@ -56,6 +56,7 @@ export async function testEncryptionDevices(base, pool, owner, peer, password, c
     await pool.query("insert into user_2fa(user_id,secret,enabled,enabled_at) values($1,$2,true,$3)", [owner.id, factor.base32, new Date(enabledAt)]);
     const token = async authTime => new SignJWT({ usr: owner.username, iatMs: Date.now(), authTime, mfaTime: enabledAt + 1, sid: target.session_id }).setProtectedHeader({ alg: "HS256", typ: "JWT" }).setSubject(owner.id).setIssuer("maddy-chats").setAudience("maddy-chats-web").setIssuedAt().setExpirationTime("15m").sign(new TextEncoder().encode(jwtSecret));
     const staleToken = await token(Date.now() - 10 * 60000);
+    const legacyToken = await new SignJWT({ usr: owner.username, iatMs: Date.now(), authTime: Date.now() - 10 * 60000, mfaTime: enabledAt + 1 }).setProtectedHeader({ alg: "HS256", typ: "JWT" }).setSubject(owner.id).setIssuer("maddy-chats").setAudience("maddy-chats-web").setIssuedAt().setExpirationTime("15m").sign(new TextEncoder().encode(jwtSecret));
     device.cookies = "maddy_session=" + staleToken;
     await device.page.context().addCookies([{ name: "maddy_session", value: staleToken, url: base, httpOnly: true, sameSite: "Lax" }]);
     assert.equal((await api(device.cookies, recovery)).status, 403, "Old cookies cannot recover trust");
@@ -73,10 +74,14 @@ export async function testEncryptionDevices(base, pool, owner, peer, password, c
     await section.getByRole("button", { name: "Recover encryption on this browser", exact: true }).click();
     const approved = await proofResponse; assert.equal(approved.status(), 200);
     const proof = approved.request().postDataJSON();
+    device.cookies = (await device.page.context().cookies()).filter(cookie => /^(maddy_session|maddy_refresh)$/.test(cookie.name)).map(cookie => `${cookie.name}=${cookie.value}`).join("; ");
     assert.equal((await api(device.cookies, { ...proof, proof: "A".repeat(43) })).status, 403, "A cookie cannot substitute for private-key proof");
     await section.getByText("This device: Trusted", { exact: true }).waitFor();
     const trusted = (await pool.query("select device_id from e2ee_keys where user_id=$1 and trusted_at is not null", [owner.id])).rows;
     assert.deepEqual(trusted.map(k => k.device_id), [target.device_id], "Only the proven recovery key is enrolled");
+    const activeSessions = (await pool.query("select id from device_sessions where user_id=$1 and revoked_at is null and expires_at>now()", [owner.id])).rows;
+    assert.deepEqual(activeSessions.map(session => session.id), [target.session_id], "Older browser sessions cannot retain cached authorization after recovery");
+    for (const revoked of [staleToken, legacyToken]) assert.equal((await fetch(base + "/api/auth/me", { headers: { Cookie: "maddy_session=" + revoked } })).status, 401, "Recovery revokes older session cookies, including legacy cookies without a session ID");
     assert.equal((await api(device.cookies, proof)).status, 409);
     assert.deepEqual((await pool.query("select id,text,encrypted from messages where conversation_id=$1 order by id", [conversationId])).rows, before, "Recovery never rewrites history");
     assert.equal((await pool.query("select count(*)::int as n from e2ee_conversation_keys where conversation_id=$1", [conversationId])).rows[0].n, wrapsBefore, "Recovery never replaces conversation keys");
@@ -114,6 +119,6 @@ export async function testEncryptionDevices(base, pool, owner, peer, password, c
     await device.page.getByText("This device: Trusted", { exact: true }).waitFor();
     assert.equal(await device.page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
     assert.deepEqual(errors, []);
-    return { lostTrustedBrowserRecovery: true, noTrustedDeviceRecovery: true, privateKeyProof: true, staleSessionRejected: true, wrongPasswordRejected: true, mfaRequired: true, crossAccountRejected: true, replayRejected: true, historyPreserved: true, encryptedDelivery: true, mobileOverflow: false, browserErrors: 0 };
+    return { olderSessionsAndLegacyCookiesRevoked: true, lostTrustedBrowserRecovery: true, noTrustedDeviceRecovery: true, privateKeyProof: true, staleSessionRejected: true, wrongPasswordRejected: true, mfaRequired: true, crossAccountRejected: true, replayRejected: true, historyPreserved: true, encryptedDelivery: true, mobileOverflow: false, browserErrors: 0 };
   } finally { await browser.close(); }
 }

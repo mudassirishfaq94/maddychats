@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createHash, createPublicKey, publicEncrypt, constants, randomBytes, timingSafeEqual } from "node:crypto";
 import { SignJWT, jwtVerify } from "jose";
-import { and, eq, isNotNull, gt, isNull } from "drizzle-orm";
+import { and, eq, isNotNull, gt, isNull, ne } from "drizzle-orm";
 import { db } from "@/db";
-import { e2eeKeys, deviceLinkRequests, deviceSessions } from "@/db/schema";
-import { jwtSecret } from "@/server/config";
-import { getSessionUser, getSessionDeviceId } from "@/server/session";
-import { guardSameOrigin, jsonError, readJson } from "@/server/http";
+import { e2eeKeys, deviceLinkRequests, deviceSessions, users } from "@/db/schema";
+import { jwtSecret, SESSION_COOKIE } from "@/server/config";
+import { getSessionUser, getSessionDeviceId, getSessionAuthTime, getSessionMfaTime, createSessionToken, sessionCookieOptions } from "@/server/session";
+import { guardSameOrigin, jsonError, readJson, requestIsSecure } from "@/server/http";
 import { rateLimit } from "@/server/rate-limit";
 import { isUuid } from "@/server/users";
 import { verifyFreshAuthentication } from "@/server/authentication";
@@ -76,7 +76,15 @@ export async function POST(req: NextRequest) {
     const selfProof = binding || recovery;
     if (selfProof && (payload.sessionId !== await getSessionDeviceId() || sourceId !== targetId || typeof payload.sessionId !== "string")) return jsonError(403, "Session registration does not match this browser.");
     const approved = await db.transaction(async tx => {
-      if (selfProof) {
+      if (recovery) {
+        // Account -> sessions -> keys also matches global sign-out/registration.
+        await tx.select({ id: users.id }).from(users).where(eq(users.id, user.id)).for("update");
+        // Lock sessions before keys, in stable order. Older browsers must not
+        // keep using cached authorization after the explicit recovery reset.
+        const sessions = await tx.select().from(deviceSessions).where(eq(deviceSessions.userId, user.id)).orderBy(deviceSessions.id).for("update");
+        const session = sessions.find(row => row.id === payload.sessionId);
+        if (!session || session.revokedAt || session.expiresAt <= new Date()) return false;
+      } else if (selfProof) {
         const [session] = await tx.select().from(deviceSessions).where(and(eq(deviceSessions.id, payload.sessionId as string), eq(deviceSessions.userId, user.id))).for("update");
         if (!session || session.revokedAt || session.expiresAt <= new Date()) return false;
       }
@@ -95,6 +103,9 @@ export async function POST(req: NextRequest) {
       if (recovery) {
         if (target.trustedAt || target.sessionId !== payload.sessionId) return false;
         // Explicit account recovery replaces trust, never private keys or chat history.
+        await tx.update(deviceSessions).set({ revokedAt: new Date() }).where(and(eq(deviceSessions.userId, user.id), ne(deviceSessions.id, payload.sessionId as string), isNull(deviceSessions.revokedAt)));
+        // Legacy cookies have no session ID, so revoke their older issuance too.
+        await tx.update(users).set({ tokenInvalidBeforeAt: new Date() }).where(eq(users.id, user.id));
         await tx.update(e2eeKeys).set({ trustedAt: null }).where(eq(e2eeKeys.userId, user.id));
         await tx.update(e2eeKeys).set({ trustedAt: new Date() }).where(eq(e2eeKeys.id, target.id));
         await tx.update(deviceLinkRequests).set({ status: "revoked" }).where(and(eq(deviceLinkRequests.userId, user.id), eq(deviceLinkRequests.status, "pending")));
@@ -114,6 +125,12 @@ export async function POST(req: NextRequest) {
       await tx.update(e2eeKeys).set({ trustedAt: new Date() }).where(eq(e2eeKeys.id, target.id));
       return true;
     });
-    return approved ? NextResponse.json({ success: true }, { headers: { "Cache-Control": "no-store" } }) : jsonError(403, "Device trust changed. Verify the devices again.");
+    if (!approved) return jsonError(403, "Device trust changed. Verify the devices again.");
+    const response = NextResponse.json({ success: true }, { headers: { "Cache-Control": "no-store" } });
+    if (recovery) {
+      // Preserve the proven current session and its authentication/MFA times.
+      response.cookies.set(SESSION_COOKIE, await createSessionToken(user.id, user.username, await getSessionAuthTime(), await getSessionMfaTime(), payload.sessionId as string), sessionCookieOptions(requestIsSecure(req)));
+    }
+    return response;
   } catch { return jsonError(403, "Approval expired or could not be verified. Start again."); }
 }

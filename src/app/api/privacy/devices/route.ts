@@ -27,6 +27,7 @@ export async function DELETE(req: NextRequest) {
   const outcome = await db.transaction(async tx => {
   if (body.allOthers === true) {
     if (!current) return jsonError(409, "Sign in again to manage this device.");
+    await tx.select({ id: deviceSessions.id }).from(deviceSessions).where(eq(deviceSessions.userId, user.id)).orderBy(deviceSessions.id).for("update");
     const revoked = await tx.update(deviceSessions).set({ revokedAt: new Date() }).where(and(eq(deviceSessions.userId, user.id), ne(deviceSessions.id, current))).returning({ id: deviceSessions.id });
     if (revoked.length) { await tx.update(e2eeKeys).set({ trustedAt: null }).where(and(eq(e2eeKeys.userId, user.id), inArray(e2eeKeys.sessionId, revoked.map(row => row.id)))); await tx.update(deviceLinkRequests).set({ status: "revoked" }).where(and(eq(deviceLinkRequests.userId, user.id), inArray(deviceLinkRequests.sessionId, revoked.map(row => row.id)))); }
   } else {
