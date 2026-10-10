@@ -803,12 +803,16 @@ export function ChatView({
   }, [items, scrollToBottom, searchParams]);
 
   const lastIdRef = useRef<string | null>(null);
+  const lastSendStateRef = useRef<string | undefined>(undefined);
   useEffect(() => {
     const last = items[items.length - 1];
-    if (!last || last.id === lastIdRef.current) return;
+    if (!last) return;
+    const isNewMessage = last.id !== lastIdRef.current;
+    if (!isNewMessage && last.sendStatus === lastSendStateRef.current) return;
     lastIdRef.current = last.id;
-    if (last.senderId === me.id || nearBottomRef.current) {
-      scrollToBottom(true);
+    lastSendStateRef.current = last.sendStatus;
+    if ((isNewMessage && last.senderId === me.id) || nearBottomRef.current) {
+      requestAnimationFrame(() => scrollToBottom(true));
     }
   }, [items, me.id, scrollToBottom]);
 

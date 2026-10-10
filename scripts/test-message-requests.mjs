@@ -82,6 +82,10 @@ export async function testMessageRequests(base, senderCookie, recipientCookie, c
     await sender.getByLabel("Queued", { exact: true }).waitFor();
     assert.equal(await sender.getByLabel("Failed to send", { exact: true }).count(), 0);
     await sender.getByText("Waiting for secure delivery. Your message will send automatically when encryption is ready.", { exact: true }).waitFor();
+    await sender.waitForTimeout(500);
+    const hint = await sender.getByRole("status").filter({ hasText: "Waiting for secure delivery." }).boundingBox();
+    const input = await sender.getByRole("textbox", { name: "Message text" }).boundingBox();
+    assert(hint && input && hint.y + hint.height <= input.y + 2, "Queued status and its actions must remain visible above the composer");
     const queuedId = await sender.evaluate(async () => {
       const names = (await indexedDB.databases()).map(database => database.name).filter(name => name?.startsWith("circlo-outbox:"));
       const records = await Promise.all(names.map(name => new Promise((resolve, reject) => {
