@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 
 /** Uses only the caller's owned conversation and removes the seeded history. */
 export async function testMobilePerformance(base, pool, source, owner, conversationId) {
+  assert(/^(restored_|releaseqa_wf_)/.test(owner.username), "Only disposable fixture accounts may run the mobile stress test");
   const page = source.page;
   const ids = (await pool.query("insert into messages(conversation_id,sender_id,text,type,encrypted,created_at) select m.conversation_id,m.sender_id,m.text,m.type,m.encrypted,now()-n*interval '1 minute' from messages m cross join generate_series(1,150) n where m.id=(select id from messages where conversation_id=$1 order by created_at limit 1) returning id", [conversationId])).rows.map(row => row.id);
   assert.equal(ids.length, 150);
@@ -65,5 +66,8 @@ export async function testMobilePerformance(base, pool, source, owner, conversat
     await pool.query("delete from messages where id=any($1::uuid[]) and conversation_id=$2", [ids, conversationId]);
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(base + "/app/chats/" + conversationId);
+    // Hard reload stress is a separate fixture workload from approval tests.
+    // Reset only this disposable user's registration bucket; production limits stay enforced.
+    await pool.query("delete from rate_limit_buckets where key=$1", [`device-registration:${owner.id}`]);
   }
 }

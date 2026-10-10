@@ -33,6 +33,7 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     device.cookies = response.headers.getSetCookie().filter(cookie => /^(maddy_session|maddy_refresh)=/.test(cookie)).map(cookie => cookie.split(";")[0]).join("; ");
     await device.page.context().addCookies(device.cookies.split("; ").map(cookie => { const i = cookie.indexOf("="); return { name: cookie.slice(0, i), value: cookie.slice(i + 1), url: base, httpOnly: true, sameSite: "Lax" }; }));
     await profile(device.page);
+    await device.page.getByText("This device: Trusted", { exact: true }).waitFor();
     const sessions = await (await api("/api/privacy/devices", device.cookies, null, "GET")).json();
     const current = sessions.devices.find(session => session.current); assert(current);
     return current.id;

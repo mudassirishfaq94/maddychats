@@ -1,1 +1,1 @@
-export function testMobilePerformance(base: string, pool: import("pg").Pool, source: { page: import("playwright").Page }, owner: { id: string }, conversationId: string): Promise<{ mobileWidths: number[]; encryptedDraftReload: boolean; longHistoryTyping: boolean }>;
+export function testMobilePerformance(base: string, pool: import("pg").Pool, source: { page: import("playwright").Page }, owner: { id: string; username: string }, conversationId: string): Promise<{ mobileWidths: number[]; encryptedDraftReload: boolean; longHistoryTyping: boolean }>;
