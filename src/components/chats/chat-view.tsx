@@ -133,7 +133,7 @@ function sameDay(a: string, b: string, hydrated: boolean): boolean {
   );
 }
 
-/** Sent â†’ Delivered â†’ Read, with a WhatsApp-style tick and status label. */
+/** Sent → Delivered → Read, with a WhatsApp-style tick and status label. */
 function ReceiptIcon({ message }: { message: MessageDTO }) {
   if (message.sendStatus === "sending") {
     return (
@@ -320,7 +320,7 @@ export function ChatView({
 
   // Decrypt any encrypted message text (initial history, older pages, and
   // realtime arrivals all flow through `items`).
-  // Failed decryptions are retried after a short delay â€” the peer's key
+  // Failed decryptions are retried after a short delay — the peer's key
   // may still be in flight when the message first arrives.
   const failedDecryptionRef = useRef<Map<string, number>>(new Map());
   const [unavailableMessageIds, setUnavailableMessageIds] = useState<Set<string>>(() => new Set());
@@ -425,12 +425,12 @@ export function ChatView({
   /** Plaintext for a message: decrypted locally, or raw when not encrypted. */
   const textOf = useCallback((m: { encrypted: boolean; text: string; id: string }) => {
     if (!m.encrypted) return m.text;
-    if (m.text === "signal:v2") return "ðŸ”’ Waiting for this deviceâ€™s secure messageâ€¦";
+    if (m.text === "signal:v2") return "🔒 Waiting for this device’s secure message…";
     return decryptedTexts.get(m.id)
       ?? (conversation.type === "dm" && conversation.requestInitiatorId !== me.id && items.length === 1
         ? "Encrypted introduction — waiting for secure delivery" : undefined)
       ?? (unavailableMessageIds.has(m.id)
-        ? "ðŸ”’ Message unavailable on this device"
+        ? "🔒 Message unavailable on this device"
         : "");
   }, [decryptedTexts, unavailableMessageIds, conversation.type, conversation.requestInitiatorId, me.id, items.length]);
 
@@ -481,8 +481,8 @@ export function ChatView({
     }));
     if (!prepared.ready) {
       throw new Error(prepared.trustChanged
-        ? "A participantâ€™s encryption device changed. Verify their safety number before sending."
-        : "Secure delivery is waiting for the other personâ€™s encryption setup. Your draft is saved.");
+        ? "A participant’s encryption device changed. Verify their safety number before sending."
+        : "Secure delivery is waiting for the other person’s encryption setup. Your draft is saved.");
     }
   }, [conversationId]);
 
@@ -817,7 +817,7 @@ export function ChatView({
   function jumpTo(messageId: string) {
     const node = nodeRefs.current.get(messageId);
     if (!node) {
-      setError("That message is further back â€” load older messages to see it.");
+      setError("That message is further back — load older messages to see it.");
       return;
     }
     node.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -981,7 +981,7 @@ export function ChatView({
     setSendPending(true);
     setError(null);
     try {
-      // E2EE: plaintext never leaves this device â€” send AES-GCM ciphertext.
+      // E2EE: plaintext never leaves this device — send AES-GCM ciphertext.
       await prepareEncryptedSend(awaitingApproval && !conversation.introductionSent);
       chatPerf("send-key-ready", sendStarted);
       const payload = await e2ee.encrypt(text, conversationId);
@@ -1638,7 +1638,7 @@ export function ChatView({
           }
           title={
             e2eeState.checking
-              ? "Checking encryptionâ€¦"
+              ? "Checking encryption…"
               : e2eeState.ready
                 ? "End-to-end encrypted"
                 : e2eeState.peersMissingKeys > 0
@@ -1660,7 +1660,7 @@ export function ChatView({
             <ShieldCheck className="h-4 w-4" />
           )}
           <span className="hidden text-[0.62rem] font-bold uppercase tracking-wide md:inline">
-            {e2eeState.ready ? (e2eeState.needsRotation ? "E2E ðŸ”„" : "E2E") : "Sec"}
+            {e2eeState.ready ? (e2eeState.needsRotation ? "E2E 🔄" : "E2E") : "Sec"}
           </span>
         </button>
 
@@ -1675,7 +1675,7 @@ export function ChatView({
 
       </header>
 
-      {/* E2EE status banner â€” visible proof chats are encrypted */}
+      {/* E2EE status banner — visible proof chats are encrypted */}
       {e2eeState.trustChanged ? (
         <button
           type="button"
@@ -1701,7 +1701,7 @@ export function ChatView({
         >
           <Lock className="h-3 w-3 shrink-0 text-[var(--accent-fg)]" />
           <span className="min-w-0 flex-1 truncate text-[0.7rem] text-[var(--muted)]">
-            Messages are end-to-end encrypted â€” only you and the recipient(s) can read them.
+            Messages are end-to-end encrypted — only you and the recipient(s) can read them.
           </span>
           <span className="shrink-0 text-[0.62rem] font-bold uppercase tracking-wide text-[var(--accent-fg)]">
             Learn more
@@ -1715,7 +1715,7 @@ export function ChatView({
         >
           <ShieldCheck className="h-3 w-3 shrink-0 text-amber-500" />
           <span className="min-w-0 flex-1 truncate text-[0.7rem] text-[var(--muted)]">
-            Encryption is being set up â€” ask the other person to open Circlo once.
+            Encryption is being set up — ask the other person to open Circlo once.
           </span>
           <span className="shrink-0 text-[0.62rem] font-bold uppercase tracking-wide text-amber-600">
             Details
@@ -1725,7 +1725,7 @@ export function ChatView({
 
       {awaitingApproval ? (
         <div role="status" className="border-b border-[var(--border)] bg-[var(--accent-soft)] px-4 py-3">
-          <p className="text-sm font-semibold">{requestSent ? "Message request sent" : "Start with a message request"}</p>
+          <p className="text-sm font-semibold">{sendPending ? "Sending message request" : requestSent ? "Message request sent" : "Start with a message request"}</p>
           <p className="mt-1 text-xs text-[var(--muted)]">{requestSent
             ? "The other person has been notified. You can send more messages after they accept. Secure delivery may wait for their encryption setup and your trusted device to reconnect."
             : "You can send one encrypted introduction. The other person will receive an approval request before you can send more."}</p>
@@ -1750,7 +1750,7 @@ export function ChatView({
       {isGroup && conversation.announcements ? (
         <div className="mx-4 mt-3 rounded-xl border border-[color-mix(in_srgb,var(--accent)_30%,transparent)] bg-[color-mix(in_srgb,var(--accent)_8%,transparent)] px-4 py-3">
           <div className="flex items-center gap-2 text-xs font-semibold text-[var(--accent-fg)]">
-            <span>ðŸ“¢</span>
+            <span>📢</span>
             <span>Announcement</span>
           </div>
           <p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">{conversation.announcements}</p>
@@ -1761,7 +1761,7 @@ export function ChatView({
       {isGroup && conversation.rules ? (
         <div className="mx-4 mt-2 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3">
           <div className="flex items-center gap-2 text-xs font-semibold text-[var(--muted)]">
-            <span>ðŸ“‹</span>
+            <span>📋</span>
             <span>Group Rules</span>
           </div>
           <p className="mt-1 whitespace-pre-wrap text-xs leading-relaxed text-[var(--muted)]">{conversation.rules}</p>
@@ -1786,7 +1786,7 @@ export function ChatView({
           <Pin className="h-3.5 w-3.5 shrink-0" />
           <span className="min-w-0 truncate">
             {pinnedCount === 1
-              ? `Pinned message â€” ${
+              ? `Pinned message — ${
                   (firstPinned.encrypted
                     ? textOf(firstPinned) || "\u{1F512} Encrypted message"
                     : firstPinned.text
@@ -1859,7 +1859,7 @@ export function ChatView({
               ) : (
                 <ArrowUp className="h-3.5 w-3.5" />
               )}
-              {loadingOlder ? "Loadingâ€¦" : "Load older messages"}
+              {loadingOlder ? "Loading…" : "Load older messages"}
             </button>
           </div>
         ) : items.length > 0 ? (
@@ -2079,7 +2079,7 @@ export function ChatView({
                                         ) : msg.replyTo.encrypted && decryptedReplies.get(msg.replyTo.id) === undefined ? (
                                           <span className="flex items-center gap-1 opacity-70">
                                             <Lock className="inline h-3 w-3" />
-                                            â€¦
+                                            …
                                           </span>
                                         ) : (
                                           <>
@@ -2375,7 +2375,7 @@ export function ChatView({
                 {replyTo.deletedAt
                   ? "Message deleted"
                   : isPendingDecrypt(replyTo)
-                    ? "\u{1F512} Decryptingâ€¦"
+                    ? "\u{1F512} Decrypting…"
                     : copyableText(replyTo)}
               </span>
             </span>
@@ -2440,7 +2440,7 @@ export function ChatView({
               </>
             ) : (
               <>
-                {/* Recorded â€” preview */}
+                {/* Recorded — preview */}
                 {recorder.audioUrl ? (
                   <div className="min-w-0 flex-1">
                     <AudioMessage
@@ -2526,7 +2526,7 @@ export function ChatView({
                 }}
                 onBlur={() => signalTyping(false)}
                 onKeyDown={onComposerKey}
-                placeholder={requestAccepted ? "Messageâ€¦" : "Accept this request to reply"}
+                placeholder={requestAccepted ? "Message…" : "Accept this request to reply"}
                 disabled={!canCompose}
                 aria-label="Message text"
                 rows={1}
@@ -2786,7 +2786,7 @@ function EncryptionInfoDialog({
           {checking ? (
             <div className="flex items-center gap-2 py-6 text-sm text-[var(--muted)]">
               <Loader2 className="h-4 w-4 animate-spin" />
-              Checking encryption keysâ€¦
+              Checking encryption keys…
             </div>
           ) : error ? (
             <p role="alert" className="py-6 text-sm text-[var(--muted)]">{error}</p>
@@ -2795,7 +2795,7 @@ function EncryptionInfoDialog({
               <div className="flex items-center gap-2 rounded-xl border border-[color-mix(in_srgb,var(--accent)_25%,transparent)] bg-[color-mix(in_srgb,var(--accent)_7%,transparent)] px-3.5 py-2.5">
                 <Lock className="h-4 w-4 shrink-0 text-[var(--accent-fg)]" />
                 <p className="text-xs leading-relaxed">
-                  Messages in this chat are <b>end-to-end encrypted</b>. Circlo and its servers cannot read them â€” only the devices in
+                  Messages in this chat are <b>end-to-end encrypted</b>. Circlo and its servers cannot read them — only the devices in
                   this conversation hold the keys.
                 </p>
               </div>
@@ -2844,7 +2844,7 @@ function EncryptionInfoDialog({
                 </li>
                 <li className="flex items-start gap-2 text-xs text-[var(--muted)]">
                   <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--accent-fg)]" />
-                  No one in between â€” not even Circlo â€” can read the contents.
+                  No one in between — not even Circlo — can read the contents.
                 </li>
                 <li className="flex items-start gap-2 text-xs text-[var(--muted)]">
                   <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--accent-fg)]" />
@@ -2873,7 +2873,7 @@ function EncryptionInfoDialog({
                   className="mt-3 inline-flex min-h-10 items-center gap-2 rounded-xl border border-[var(--border)] px-3 text-xs font-semibold text-[var(--accent-fg)] transition-colors hover:bg-[var(--accent-soft)] disabled:cursor-wait disabled:opacity-60"
                 >
                   {restoring ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="h-3.5 w-3.5" />}
-                  {restoring ? "Restoring devicesâ€¦" : "Restore my other devices"}
+                  {restoring ? "Restoring devices…" : "Restore my other devices"}
                 </button>
                 {restoreResult ? <p role="status" className="mt-2 text-xs text-[var(--muted)]">{restoreResult}</p> : null}
               </div>
@@ -2888,7 +2888,7 @@ function EncryptionInfoDialog({
               </p>
               <p className="text-xs leading-relaxed text-[var(--muted)]">
                 As soon as everyone&apos;s key is ready, all new messages in
-                this chat are automatically end-to-end encrypted â€” you&apos;ll see
+                this chat are automatically end-to-end encrypted — you&apos;ll see
                 the lock appear on every message.
               </p>
             </div>

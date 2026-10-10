@@ -27,7 +27,7 @@ import { isSpammingMessages, isDuplicateMessage } from "@/server/spam-detection"
 export const dynamic = "force-dynamic";
 
 /**
- * Paginated history â€” newest page first, `cursor` walks backwards through
+ * Paginated history — newest page first, `cursor` walks backwards through
  * older messages. Members only, always bounded (default 30, max 50).
  */
 export async function GET(
@@ -168,7 +168,7 @@ export async function POST(
     }
   }
 
-  // Blocking is enforced here on the server â€” never in the UI alone.
+  // Blocking is enforced here on the server — never in the UI alone.
   if (detail.type === "dm" && detail.blocked) {
     return jsonError(403, "You cannot send messages in this conversation.");
   }
@@ -223,7 +223,7 @@ export async function POST(
       actorName: me.displayName,
       persistedRequest: detail.type === "dm" && detail.request_pending,
       preview: detail.type === "dm" && detail.request_pending
-        ? "Message request â€” accept to continue the conversation"
+        ? "Message request — accept to continue the conversation"
         : isEncrypted
         ? "New message"
         : parsed.data.text,
