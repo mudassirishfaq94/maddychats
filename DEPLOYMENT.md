@@ -281,3 +281,9 @@ and nullability, reruns, pending-device preservation, private readiness and
 liveness during schema degradation, independent delivery, worker heartbeats,
 and real backup restoration of messages and migration history. It leaves test
 databases and a temporary dump available for inspection.
+
+## Email verification codes
+
+Configure `RESEND_API_KEY` and either `EMAIL_FROM_ADDRESS` (with `EMAIL_FROM_NAME=Circlo`) or `EMAIL_FROM` using a sender/domain verified by Resend. Password registration and unverified password sign-in issue six-digit, ten-minute codes. Already verified accounts do not receive a new code on each sign-in. OAuth ownership checks and MFA remain separate. Codes are HMAC-bound to their account, single-use, limited to five verification attempts per ten minutes, and replaced on resend after a one-minute cooldown. The resend endpoint has an additional shared IP limit. Existing outstanding verification links remain supported.
+
+Registration reports whether the provider accepted the email; an unavailable provider leaves the account unverified. Resend uses a generic conditional response to avoid disclosing account existence and does not guarantee inbox delivery. The branded template includes both HTML and plain text and uses `/brand/circlo-email.png`. Do not log codes or add credentials to the repository. `npm run test:verification` tests the provider transport contract with interception, not real inbox delivery; `npm run test:verification-template` checks the mobile/desktop HTML preview.

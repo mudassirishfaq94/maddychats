@@ -1,3 +1,4 @@
+import { issueEmailVerification, verificationDeliveryConfigured } from "@/server/email-verification";
 import { readGoogleEmailProof, GOOGLE_EMAIL_PROOF_COOKIE, GOOGLE_EMAIL_PROOF_TTL } from "@/server/google-email-proof";
 import { db } from "@/db";
 import { users } from "@/db/schema";
@@ -73,7 +74,8 @@ export async function POST(req: NextRequest) {
       ? await readGoogleEmailProof(req.cookies.get(GOOGLE_EMAIL_PROOF_COOKIE)?.value, user.id, user.email)
       : null;
     if (!proof || !(await rateLimit(`google-email-proof:${proof}`, 1, GOOGLE_EMAIL_PROOF_TTL * 1000)).allowed) {
-      return NextResponse.json({ error: process.env.STARTER_MODE === "1"
+      if (verificationDeliveryConfigured()) await issueEmailVerification(user);
+      return NextResponse.json({ error: process.env.STARTER_MODE === "1" && !verificationDeliveryConfigured()
         ? "Verify your email using Google, then enter your existing password."
         : "Verify your email before signing in.", verificationRequired: true }, { status: 403 });
     }

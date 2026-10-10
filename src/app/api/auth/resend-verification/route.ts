@@ -15,5 +15,5 @@ export async function POST(req: NextRequest) {
     const user = await findUserByEmail(email);
     if (user && !user.emailVerifiedAt) await issueEmailVerification(user);
   }
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, message: "Request processed. If your account needs verification and delivery succeeds, check your inbox. Wait at least one minute before resending." });
 }

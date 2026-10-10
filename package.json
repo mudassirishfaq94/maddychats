@@ -23,7 +23,10 @@
     "test:items4-6": "tsx scripts/test-items4-6.ts",
     "profile:mobile": "node scripts/profile-mobile.mjs",
     "test:scanner": "tsx scripts/test-clamav.ts",
-    "test:restored": "tsx scripts/test-restored.ts"
+    "test:restored": "tsx scripts/test-restored.ts",
+    "test:verification": "tsx scripts/test-verification-codes.ts",
+    "test:send": "tsx scripts/test-send-commit.ts",
+    "test:verification-template": "tsx scripts/test-verification-template.ts"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.1",

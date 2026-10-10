@@ -11,7 +11,6 @@ import {
 } from "@/server/http";
 import { getSessionUser } from "@/server/session";
 import { isUuid } from "@/server/users";
-import { publishToUsers } from "@/server/realtime";
 import { isOnline } from "@/server/presence";
 import {
   createMessage,
@@ -73,16 +72,12 @@ export async function POST(
   const blocked = guardSameOrigin(req);
   if (blocked) return blocked;
 
-  const rl = await rateLimit(
-    `msg-send:${clientIp(req)}`,
-    AUTH_RATE_LIMIT.limit * 4,
-    AUTH_RATE_LIMIT.windowMs,
-  );
-  if (!rl.allowed) {
-    return jsonError(429, "You are sending messages too quickly.");
-  }
-
-  const me = await getSessionUser();
+  // Revocation/MFA reads and the shared rate counter are independent.
+  const [rl, me] = await Promise.all([
+    rateLimit(`msg-send:${clientIp(req)}`, AUTH_RATE_LIMIT.limit * 4, AUTH_RATE_LIMIT.windowMs),
+    getSessionUser(),
+  ]);
+  if (!rl.allowed) return jsonError(429, "You are sending messages too quickly.");
   if (!me) return jsonError(401, "Not authenticated.");
 
   const { id } = await ctx.params;
@@ -188,6 +183,7 @@ export async function POST(
         ? new Date()
         : null,
       sender: me,
+      realtimeRecipients: members,
       enforceMessageRequest: detail.type === "dm" && detail.request_pending,
     },
   ).catch((cause: unknown) => {
@@ -207,11 +203,9 @@ export async function POST(
     });
   }
 
-  await publishToUsers(members, {
-    type: "message:new",
-    conversationId: id,
-    message,
-  });
+  // The durable realtime event now commits in the message statement. LISTEN
+  // wakes recipients immediately; a failed event write cannot acknowledge a
+  // message that would be invisible to the realtime stream.
   const publishedAt = performance.now();
   // Persist the message and realtime event before acknowledging it. Push
   // services and notification fan-out continue in Next's managed after task.

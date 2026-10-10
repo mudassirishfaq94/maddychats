@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { chromium } from "playwright";
 import { readFile } from "node:fs/promises";
-import { randomBytes, createHash } from "node:crypto";
+import { randomBytes, createHash, createHmac } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { testMobilePerformance } from "./test-mobile-performance.mjs";
 import { testStatusPhoto } from "./test-status-photo.mjs";
@@ -88,6 +88,21 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     assert.equal((await api("/api/auth/register", "", { ...registration, email: "invalid" })).status, 422);
     assert.equal((await api("/api/auth/login", "", { identifier: registerName, password })).status, 403);
     // Owned verification-token fixture tests consumption and login, not unavailable external mail delivery.
+    const verificationCode = "827194";
+    const verificationHash = createHmac("sha256", jwtSecret ?? "disposable-restored-workflows-only-secret-at-least-thirty-two").update(`email-verification:${registered.id}:${verificationCode}`).digest("hex");
+    await pool.query("insert into email_verification_tokens(user_id,token_hash,expires_at) values($1,$2,now()-interval '1 second')",[registered.id,verificationHash]);
+    assert.equal((await api("/api/auth/verify-email","",{email:registered.email,code:"111111"})).status,400);
+    assert.equal((await api("/api/auth/verify-email","",{email:registered.email,code:verificationCode})).status,400);
+    await pool.query("update email_verification_tokens set expires_at=now()+interval '10 minutes' where token_hash=$1",[verificationHash]);
+    await registrationPage.goto(base+"/verify-email");
+    await registrationPage.getByLabel("Email address",{exact:true}).fill(registered.email);
+    await registrationPage.getByLabel("Verification code",{exact:true}).fill(verificationCode);
+    await registrationPage.getByRole("button",{name:"Verify email",exact:true}).click();
+    await registrationPage.getByRole("heading",{name:"Email Verified!",exact:true}).waitFor();
+    assert.equal((await registrationPage.context().cookies()).some(cookie=>cookie.name==="maddy_session"),false,"Verification must not grant a session");
+    assert.equal((await api("/api/auth/verify-email","",{email:registered.email,code:verificationCode})).status,400);
+    // Restore only this owned fixture to test compatibility with existing links.
+    await pool.query("update users set email_verified_at=null where id=$1",[registered.id]);
     const verificationToken = randomBytes(32).toString("base64url");
     await pool.query("insert into email_verification_tokens(user_id,token_hash,expires_at) values($1,$2,now()+interval '1 hour')", [registered.id, createHash("sha256").update(verificationToken).digest("hex")]);
     await registrationPage.goto(base + "/verify-email?token=" + verificationToken);
@@ -119,8 +134,31 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     assert(capabilityFailures >= 2, "Media capability request recovers after a transient failure");
     await source.page.unroute("**/api/chat-capabilities");
     const composer = source.page.getByRole("textbox", { name: "Message text" });
+    let sendAttempts = 0;
+    const clientIds = new Set();
+    await source.page.route("**/api/conversations/*/messages", async route => {
+      if (route.request().method() !== "POST") return route.continue();
+      const packet=route.request().postDataJSON(); clientIds.add(packet.clientMessageId); sendAttempts++;
+      if(sendAttempts===1) {
+        await new Promise(resolve=>setTimeout(resolve,300));
+        return route.fulfill({status:503,contentType:"application/json",body:JSON.stringify({error:"Disposable test send failure"})});
+      }
+      if(sendAttempts===2) {const accepted=await route.fetch();if(!accepted.ok()){console.log("Retry acceptance:",accepted.status(),await accepted.text());return route.fulfill({response:accepted});}return route.abort("failed");}
+      return route.continue();
+    });
     await composer.fill("Real encrypted delivery baseline"); await composer.press("Enter");
+    await source.page.locator("p").filter({hasText:"Real encrypted delivery baseline"}).waitFor();
+    await source.page.getByRole("button",{name:"Retry failed message",exact:true}).click();
+
     await recipient.page.getByRole("region", { name: "Conversation", exact: true }).getByText("Real encrypted delivery baseline", { exact: true }).waitFor({ timeout: 30000 });
+    await source.page.waitForFunction(()=>!document.querySelector('button[aria-label="Retry failed message"]'));
+    await source.page.unroute("**/api/conversations/*/messages");
+    assert.equal(clientIds.size,1,"Failed/lost-response retries preserve identity");
+    for(let attempt=0;attempt<30 && sendAttempts<3;attempt++)await source.page.waitForTimeout(100);
+    assert.equal(sendAttempts,3);
+    const committed=(await pool.query("select id from messages where conversation_id=$1",[conversationId])).rows;
+    assert.equal(committed.length,1,"Retries persist one message");
+    assert.equal((await pool.query("select count(*)::int as count from realtime_events where payload->>'type'='message:new' and payload->'message'->>'id'=$1",[committed[0].id])).rows[0].count,2,"Each member receives exactly one durable new-message event");
     const mobileChecks = await testMobilePerformance(base, pool, source, owner, conversationId);
     const sourceSession = await renewSession(source);
     for (let attempt = 0; attempt < 50; attempt++) {
@@ -257,7 +295,7 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     for (const page of pages.filter(page => !page.isClosed())) assert.deepEqual(await page.evaluate(() => window.__workflowCsp), [], "No CSP violations in the actual workflow");
     assert.deepEqual(errors, []);
     const recovery = jwtSecret ? await testEncryptionDevices(base, pool, owner, peer, password, conversationId, jwtSecret, { device: rejected, contact: recipient }) : {};
-    return { ...recovery, ...statusChecks, ...mobileChecks, tryNow: true, refresh: true, codeApproval: true, rejected: true, expired: true, replay: true, wrongAccount: true, revocation: true, sessionRebinding: true, attachment: true, voicePlayback: true, mediaCapabilityRetry: true, voiceContrast: true, scheduler: true, branding: true, registration: true, verificationTokenAndLogin: true, externalEmailDelivery: false, browserErrors: 0 };
+    return { ...recovery, ...statusChecks, ...mobileChecks, tryNow: true, refresh: true, codeApproval: true, rejected: true, expired: true, replay: true, wrongAccount: true, revocation: true, sessionRebinding: true, attachment: true, voicePlayback: true, mediaCapabilityRetry: true, voiceContrast: true, scheduler: true, branding: true, registration: true, verificationTokenAndLogin: true, verificationCodeUI: true, failedSendAndLostResponseRetry: true, externalEmailDelivery: false, browserErrors: 0 };
   } finally {
     await browser.close();
     if (registered) await pool.query("delete from users where id=$1 and username=$2 and username like 'restreg_%'", [registered.id, registered.username]);

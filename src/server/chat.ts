@@ -710,6 +710,7 @@ export async function createMessage(
     deliveredAt?: Date | null;
     sender?: import("@/lib/types").SafeUser;
     enforceMessageRequest?: boolean;
+    realtimeRecipients?: string[];
   },
   executor: Pick<typeof db, "select" | "execute"> = db,
 ): Promise<{ message: MessageDTO; created: boolean }> {
@@ -791,6 +792,11 @@ export async function createMessage(
   const now = new Date();
   const seconds = options?.disappearingSeconds ?? 0;
   const expiresAt = seconds > 0 ? new Date(now.getTime() + seconds * 1000) : null;
+  const eventDefaults = options?.sender ? {
+    sender: {id:options.sender.id,username:options.sender.username,displayName:options.sender.displayName,avatarUrl:options.sender.avatarUrl,bio:options.sender.bio,createdAt:options.sender.createdAt,lastSeenAt:options.sender.lastSeenAt},
+    replyTo:replyPreview,reactions:[],readBy:[],attachments:[],starred:false,deletedForMe:false,pinned:false,
+  } : null;
+  if (options?.realtimeRecipients?.length && !eventDefaults) throw new Error("Realtime message sender required.");
   type PersistedResult = MessageRow & { wasCreated: boolean };
   // Insert/idempotency lookup and conversation bump are one atomic statement.
   // On a remote database this removes transaction setup plus a second network
@@ -815,6 +821,14 @@ export async function createMessage(
       update conversations set last_message_at = ${now}, updated_at = ${now}
       where id = ${conversationId} and exists (select 1 from inserted)
       returning id
+    ), published as (
+      insert into realtime_events(user_id,payload)
+      select recipient::uuid, jsonb_build_object(
+        'type','message:new','conversationId',${conversationId}::text,
+        'message',to_jsonb(inserted) || ${JSON.stringify(eventDefaults)}::jsonb
+      )
+      from inserted cross join jsonb_array_elements_text(${JSON.stringify([...new Set(options?.realtimeRecipients ?? [])])}::jsonb) as recipients(recipient)
+      returning id
     )
     select inserted.*, true as "wasCreated" from inserted
     union all
@@ -828,8 +842,18 @@ export async function createMessage(
       and not exists (select 1 from inserted)
     limit 1
   `);
-  const row = persisted.rows[0];
+  let row = persisted.rows[0];
+  // Concurrent inserts can wait for a unique conflict whose winner is not
+  // visible in the statement snapshot. Read the committed winner once.
+  if (!row && options?.clientMessageId) {
+    const [winner] = await executor.select().from(messages).where(and(eq(messages.senderId,senderId),eq(messages.clientMessageId,options.clientMessageId))).limit(1);
+    if (winner) row = {...winner, wasCreated:false};
+  }
   if (!row) throw new Error("Message insert failed.");
+  if (row.conversationId !== conversationId) throw new Error("Client message ID belongs to another conversation.");
+  // Retry responses retain actual read/delivery/edit state rather than
+  // synthesizing a fresh-message DTO that erases acknowledged receipts.
+  if (!row.wasCreated) return {created:false,message:(await getMessageDTO(row.id,senderId))!};
 
   // New plain text messages have no reactions, reads, attachments, stars,
   // deletions or pins. Avoid the seven-query generic hydration path.

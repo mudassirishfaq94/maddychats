@@ -1045,13 +1045,16 @@ export function ChatView({
     setError(null);
     try {
       // E2EE: plaintext never leaves this device — send AES-GCM ciphertext.
-      await saveQueuedMessage(me.id, { message: { ...optimistic, sendStatus: "queued", queueReason: "Waiting for secure delivery. Your message will send automatically when encryption is ready." }, plain: text }).catch(() => undefined);
-      await prepareEncryptedSend(awaitingApproval && !conversation.introductionSent);
+      await Promise.all([
+        saveQueuedMessage(me.id, { message: { ...optimistic, sendStatus: "queued", queueReason: "Waiting for secure delivery. Your message will send automatically when encryption is ready." }, plain: text }).catch(() => undefined),
+        prepareEncryptedSend(awaitingApproval && !conversation.introductionSent),
+      ]);
       chatPerf("send-key-ready", sendStarted);
       const payload = await e2ee.encrypt(text, conversationId);
       chatPerf("send-encrypted", sendStarted);
       const request = () => fetch(`/api/conversations/${conversationId}/messages`, {
         method: "POST",
+        signal: AbortSignal.timeout(30000),
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           clientMessageId,
@@ -1080,7 +1083,7 @@ export function ChatView({
       }
       const created = data.message;
       chatPerf("send-server-confirmed", sendStarted);
-      await removeQueuedMessage(me.id, conversationId, clientMessageId).catch(() => undefined);
+      void removeQueuedMessage(me.id, conversationId, clientMessageId).catch(() => undefined);
       if (draftRef.current === submittedDraft) {
         setDraft("");
         setReplyTo(null);
@@ -1286,8 +1289,9 @@ export function ChatView({
       setItems((current) => current.map((item) => item.id === message.id ? { ...item, sendStatus: "sending" } : item));
       const payload = await e2ee.encrypt(plain, conversationId);
       if (cancelledMessages.current.has(message.clientMessageId)) return;
-      const res = await fetch(`/api/conversations/${conversationId}/messages`, {
+      const request = () => fetch(`/api/conversations/${conversationId}/messages`, {
         method: "POST",
+        signal: AbortSignal.timeout(30000),
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           clientMessageId: message.clientMessageId,
@@ -1296,6 +1300,8 @@ export function ChatView({
           encrypted: true,
         }),
       });
+      let res: Response;
+      try { res = await request(); } catch { res = await request(); }
       const data = await res.json().catch(() => null) as { message?: MessageDTO; error?: string } | null;
       if (!res.ok || !data?.message) throw new Error(data?.error ?? "Message failed to send.");
       const created = data.message;

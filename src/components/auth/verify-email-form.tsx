@@ -1,11 +1,15 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
+import { LogoWordmark } from "@/components/brand/logo";
 import { GoogleSignIn } from "./google-sign-in";
 
 export function VerifyEmailForm({ token, deliveryUnavailable = false, googleVerification = false }: { token: string | null; deliveryUnavailable?: boolean; googleVerification?: boolean }) {
   const [state, setState] = useState<"checking"|"verified"|"invalid"|"idle"|"sent"|"error">(token ? "checking" : "idle");
   const [email, setEmail] = useState("");
+  const [code, setCode] = useState("");
+  const [feedback, setFeedback] = useState("");
+  const [busy, setBusy] = useState(false);
   // Strict Mode may subscribe twice; share one token-consumption request.
   const verification = useRef<{ token: string; promise: Promise<boolean> } | null>(null);
   useEffect(() => {
@@ -17,12 +21,40 @@ export function VerifyEmailForm({ token, deliveryUnavailable = false, googleVeri
     verification.current.promise.then((ok) => { if (active) setState(ok ? "verified" : "invalid"); }).catch(() => { if (active) setState("error"); });
     return () => { active = false; };
   }, [token]);
-  async function resend() {
-    setState("checking");
+  async function verifyCode(event: FormEvent) {
+    event.preventDefault(); setBusy(true); setFeedback("");
     try {
-    const r = await fetch("/api/auth/resend-verification", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email }) });
-    setState(r.ok ? "sent" : "error");
-    } catch { setState("error"); }
+      const response = await fetch("/api/auth/verify-email", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email,code})});
+      const data = await response.json();
+      if (response.ok) setState("verified"); else setFeedback(data.error ?? "We couldn't verify that code.");
+    } catch { setFeedback("Connection interrupted. Please try again."); }
+    finally { setBusy(false); }
   }
-  return <main className="mx-auto flex min-h-screen max-w-md items-center p-6"><section className="w-full rounded-3xl border border-[var(--border)] bg-[var(--card)] p-8 text-center"><p className="text-2xl font-black text-[var(--accent)]">Circlo</p>{state === "checking" ? <p className="mt-5">Checking your verification link…</p> : state === "verified" ? <><h1 className="mt-5 text-2xl font-bold">Email Verified!</h1><p className="mt-2 text-[var(--muted)]">Your Circlo account has been successfully verified.</p><Link className="btn btn-primary mt-6" href="/login">Continue to Circlo</Link></> : <><h1 className="mt-5 text-2xl font-bold">{state === "invalid" ? "Verification Link Expired" : "Check your inbox"}</h1><p className="mt-2 text-[var(--muted)]">{deliveryUnavailable ? "Your account was created, but the verification email could not be sent. Your account stays protected until you verify your email. " : ""}Enter your email to receive a new Circlo verification link.</p>{deliveryUnavailable && googleVerification ? <><p className="mt-3 text-sm text-[var(--muted)]">If this email belongs to your Google account, verify with that same account, then enter your Circlo password.</p><GoogleSignIn next="/app" /></> : null}<input className="field-input mt-5 w-full" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com"/><button className="btn btn-primary mt-3 w-full" onClick={resend}>Resend Verification Email</button>{state === "sent" ? <p className="mt-3 text-sm text-[var(--success)]">If an account needs verification, an email is on its way.</p> : null}{state === "error" ? <p className="mt-3 text-sm text-[var(--danger)]">We couldn’t send that right now. Please try again shortly.</p> : null}<Link className="mt-5 block text-sm text-[var(--accent)]" href="/login">Back to login</Link></>}</section></main>;
+  async function resend() {
+    setBusy(true); setFeedback("");
+    try {
+      const response = await fetch("/api/auth/resend-verification", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email})});
+      const data = await response.json();
+      setFeedback(response.ok ? data.message : data.error ?? "We couldn't request a code right now.");
+    } catch { setFeedback("Connection interrupted. Please try again."); }
+    finally { setBusy(false); }
+  }
+  return <main className="mx-auto flex min-h-screen max-w-md items-center p-6"><section className="w-full rounded-3xl border border-[var(--border)] bg-[var(--card)] p-6 sm:p-8">
+    <LogoWordmark size={40} />
+    {state === "checking" ? <p className="mt-5" role="status">Checking your verification link…</p> : state === "verified" ? <><h1 className="mt-5 text-2xl font-bold">Email Verified!</h1><p className="mt-2 text-[var(--muted)]">Your email is verified. Sign in to continue; your existing security settings still apply.</p><Link className="btn btn-primary mt-6" href="/login">Continue to Circlo</Link></> : <>
+      <h1 className="mt-5 text-2xl font-bold">Verify your email</h1>
+      <p className="mt-2 text-[var(--muted)]">Enter the six-digit code from Circlo. Codes expire after 10 minutes.</p>
+      {deliveryUnavailable ? <p className="mt-3" role="status">Your account was created, but the verification email could not be sent. Your account stays protected until you verify your email.</p> : null}
+      {state === "invalid" ? <p className="mt-3" role="status">That verification link is invalid or expired. Request a new code below.</p> : null}
+      <form onSubmit={verifyCode} className="mt-5 space-y-4">
+        <label className="block">Email address<input className="field-input mt-2 w-full" type="email" required autoComplete="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@example.com" /></label>
+        <label className="block">Verification code<input className="field-input mt-2 w-full text-center text-xl tracking-[0.3em]" type="text" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} required autoComplete="one-time-code" value={code} onChange={e=>setCode(e.target.value.replace(/\D/g,""))} placeholder="000000" /></label>
+        <button className="btn btn-primary w-full" disabled={busy}>{busy ? "Please wait…" : "Verify email"}</button>
+      </form>
+      <button className="btn mt-3 w-full" type="button" disabled={busy || !email.trim()} onClick={resend}>Resend verification code</button>
+      {feedback ? <p className="mt-3 text-sm text-[var(--muted)]" role="status">{feedback}</p> : null}
+      {deliveryUnavailable && googleVerification ? <><p className="mt-4 text-sm text-[var(--muted)]">You can also verify with the same Google account, then enter your Circlo password.</p><GoogleSignIn next="/app" /></> : null}
+      <Link className="mt-5 block text-sm text-[var(--accent)]" href="/login">Back to login</Link>
+    </>}
+  </section></main>;
 }

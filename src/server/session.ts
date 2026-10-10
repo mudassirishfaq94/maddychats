@@ -87,8 +87,10 @@ export async function resolveSessionToken(token: string): Promise<SafeUser | nul
   const claims = await verifySessionToken(token);
   if (!claims) return null;
   return retryDatabaseRead(async () => {
-  if (!(await activeDevice(claims))) return null;
-  const user = await findUserById(claims.sub);
+  const [deviceActive, user, enabledSince] = await Promise.all([
+    activeDevice(claims), findUserById(claims.sub), enabledMfaSince(claims.sub),
+  ]);
+  if (!deviceActive) return null;
   if (!user) return null;
   if (
     user.suspendedAt &&
@@ -105,7 +107,6 @@ export async function resolveSessionToken(token: string): Promise<SafeUser | nul
   ) {
     return null;
   }
-  const enabledSince = await enabledMfaSince(user.id);
   if (enabledSince && claims.mfaTime < enabledSince.getTime()) return null;
   return toSafeUser(user);
   });
