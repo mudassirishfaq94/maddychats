@@ -23,7 +23,10 @@ export async function testEncryptionDevices(base, pool, owner, peer, password, c
   };
   try {
     let device, contact;
-    if (existing) ({ device, contact } = existing);
+    if (existing) {
+      ({ device, contact } = existing);
+      for (const client of [device, contact]) client.page.on("pageerror", e => errors.push(e.message));
+    }
     else {
       const original = await login(owner); contact = await login(peer);
       for (const client of [original, contact]) { await client.page.goto(base + "/app/profile"); await client.page.getByText("This device: Trusted", { exact: true }).waitFor(); }
@@ -87,6 +90,11 @@ export async function testEncryptionDevices(base, pool, owner, peer, password, c
     await device.page.goto(base + "/app/chats/" + conversationId);
     await device.page.getByRole("region", { name: "Conversation", exact: true }).getByText("Encrypted recovery verification", { exact: true }).waitFor({ timeout: 45000 });
     assert((await pool.query("select encrypted,text from messages where conversation_id=$1 and sender_id=$2 order by created_at desc limit 1", [conversationId, peer.id])).rows[0].encrypted);
+    await device.page.getByRole("textbox", { name: "Message text" }).fill("Recovered browser encrypted reply");
+    await device.page.getByRole("textbox", { name: "Message text" }).press("Enter");
+    await contact.page.getByRole("region", { name: "Conversation", exact: true }).getByText("Recovered browser encrypted reply", { exact: true }).waitFor({ timeout: 45000 });
+    const sent = (await pool.query("select encrypted,text from messages where conversation_id=$1 and sender_id=$2 order by created_at desc limit 1", [conversationId, owner.id])).rows[0];
+    assert(sent.encrypted); assert(!sent.text.includes("Recovered browser encrypted reply"));
     // Zero trusted rows must also provide an authenticated path, not a dead end.
     await pool.query("update e2ee_keys set trusted_at=null where user_id=$1", [owner.id]);
     const freshToken = await token(Date.now()); device.cookies = "maddy_session=" + freshToken;
