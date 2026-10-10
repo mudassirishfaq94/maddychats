@@ -36,7 +36,7 @@ export default async function LandingPage() {
           <p className="mt-6 max-w-md text-base leading-7 text-[var(--muted)] sm:text-lg">Less noise. More you. A private place for your people, with end-to-end encrypted conversations from the first hello.</p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Link href="/signup" className="btn btn-primary min-h-12! px-6!">Find your circle <ArrowUpRight className="h-4 w-4" /></Link>
-            <Link href="/login" className="btn btn-secondary min-h-12! px-6!">I’m already here</Link>
+            <Link href="/login" className="btn btn-secondary min-h-12! px-6!">Log in</Link>
           </div>
           <p className="mt-5 flex items-center gap-2 text-xs text-[var(--muted)]"><ShieldCheck className="h-4 w-4 text-[var(--accent-fg)]" /> Encrypted messages. Thoughtful connections.</p>
           <Link href="#privacy" className="mt-10 inline-flex items-center gap-2 text-xs text-[var(--muted)]"><ArrowDown className="h-3.5 w-3.5" /> Meet your quieter corner of the internet</Link>
