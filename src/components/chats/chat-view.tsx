@@ -2294,7 +2294,7 @@ export function ChatView({
                           </LongPressTouchable>
 
                           {own && msg.sendStatus === "queued" ? (
-                            <div role="status" className="mt-2 max-w-sm rounded-xl border border-sky-400/20 bg-sky-400/10 px-3 py-2 text-xs leading-relaxed text-sky-300">
+                            <div role="status" className="mt-2 max-w-sm rounded-xl border border-sky-400/20 bg-sky-400/10 px-3 py-2 text-xs leading-relaxed text-[var(--text)]">
                               <p>{msg.queueReason ?? "Waiting for secure delivery. Your message will send automatically when encryption is ready."}</p>
                               <div className="mt-1 flex gap-3">
                                 <button type="button" className="underline" onClick={() => void retryFailedMessage(msg)}>Try now</button>
