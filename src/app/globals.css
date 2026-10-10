@@ -27,6 +27,7 @@
   --shadow-lg: 0 18px 50px -25px rgba(11, 29, 38, 0.22);
   --bubble-other-bg: #ffffff;
   --bubble-own-bg: #c0f7e9;
+  --voice-own-bg: #b1e7d8;
   --bubble-own-fg: #0B1D26;
   --bubble-own-sub: #28594e;
   --grad-send: #00FFC6;
@@ -56,6 +57,7 @@ html:not(.light) {
   --shadow-lg: 0 24px 60px -25px rgba(0, 0, 0, 0.5);
   --bubble-other-bg: #16343e;
   --bubble-own-bg: #00FFC6;
+  --voice-own-bg: #61d6bb;
   --bubble-own-fg: #0B1D26;
   --bubble-own-sub: #174f46;
   --grad-send: #00FFC6;

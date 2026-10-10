@@ -71,7 +71,18 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     await source.page.setViewportSize({ width: 1440, height: 1000 });
     assert.equal(await source.page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
     await source.page.setViewportSize({ width: 390, height: 844 });
+    let capabilityFailures = 0;
+    await source.page.route("**/api/chat-capabilities", async route => {
+      if (capabilityFailures++ === 0) await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "Temporary interruption" }) });
+      else await route.continue();
+    });
     await chat(source.page); await chat(recipient.page);
+    await source.page.waitForFunction(() => {
+      const button = document.querySelector('button[title="Record voice message"]');
+      return button instanceof HTMLButtonElement && !button.disabled;
+    });
+    assert(capabilityFailures >= 2, "Media capability request recovers after a transient failure");
+    await source.page.unroute("**/api/chat-capabilities");
     const composer = source.page.getByRole("textbox", { name: "Message text" });
     await composer.fill("Real encrypted delivery baseline"); await composer.press("Enter");
     await recipient.page.getByRole("region", { name: "Conversation", exact: true }).getByText("Real encrypted delivery baseline", { exact: true }).waitFor({ timeout: 30000 });
@@ -195,7 +206,7 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     for (const page of pages.filter(page => !page.isClosed())) assert.deepEqual(await page.evaluate(() => window.__workflowCsp), [], "No CSP violations in the actual workflow");
     assert.deepEqual(errors, []);
     const recovery = jwtSecret ? await testEncryptionDevices(base, pool, owner, peer, password, conversationId, jwtSecret, { device: rejected, contact: recipient }) : {};
-    return { ...recovery, tryNow: true, refresh: true, codeApproval: true, rejected: true, expired: true, replay: true, wrongAccount: true, revocation: true, sessionRebinding: true, attachment: true, voicePlayback: true, scheduler: true, branding: true, registration: true, verificationTokenAndLogin: true, externalEmailDelivery: false, browserErrors: 0 };
+    return { ...recovery, tryNow: true, refresh: true, codeApproval: true, rejected: true, expired: true, replay: true, wrongAccount: true, revocation: true, sessionRebinding: true, attachment: true, voicePlayback: true, mediaCapabilityRetry: true, scheduler: true, branding: true, registration: true, verificationTokenAndLogin: true, externalEmailDelivery: false, browserErrors: 0 };
   } finally {
     await browser.close();
     if (registered) await pool.query("delete from users where id=$1 and username=$2 and username like 'restreg_%'", [registered.id, registered.username]);

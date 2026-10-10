@@ -259,12 +259,40 @@ export function ChatView({
   const [schedulePaused, setSchedulePaused] = useState(starterMode);
   useEffect(() => {
     const controller = new AbortController();
-    void fetch("/api/chat-capabilities", { signal: controller.signal }).then(async response => {
-      if (!response.ok) return;
-      const capabilities = await response.json();
-      setMediaPaused(!capabilities.media); setSchedulePaused(!capabilities.scheduled);
-    }).catch(() => {});
-    return () => controller.abort();
+    let retry: ReturnType<typeof setTimeout> | undefined;
+    let failures = 0;
+    let fetching = false;
+    const refresh = async () => {
+      if (fetching || controller.signal.aborted) return;
+      fetching = true;
+      clearTimeout(retry);
+      try {
+        const response = await fetch("/api/chat-capabilities", { signal: controller.signal, cache: "no-store" });
+        if (!response.ok) throw new Error("Capabilities unavailable");
+        const capabilities = await response.json();
+        if (typeof capabilities.media !== "boolean" || typeof capabilities.scheduled !== "boolean") throw new Error("Invalid capabilities");
+        if (!controller.signal.aborted) {
+          setMediaPaused(!capabilities.media);
+          setSchedulePaused(!capabilities.scheduled);
+          failures = 0;
+        }
+      } catch {
+        if (!controller.signal.aborted && failures < 3) {
+          failures += 1;
+          retry = setTimeout(() => void refresh(), failures * 1000);
+        }
+      } finally { fetching = false; }
+    };
+    const resume = () => { if (document.visibilityState === "visible") void refresh(); };
+    void refresh();
+    window.addEventListener("online", resume);
+    document.addEventListener("visibilitychange", resume);
+    return () => {
+      controller.abort();
+      clearTimeout(retry);
+      window.removeEventListener("online", resume);
+      document.removeEventListener("visibilitychange", resume);
+    };
   }, []);
   const canCompose = requestAccepted && !requestSent;
   const [acceptingRequest, setAcceptingRequest] = useState(false);
