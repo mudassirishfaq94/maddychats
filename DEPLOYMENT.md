@@ -174,8 +174,9 @@ Compose runs `scripts/readiness.mjs` automatically.
 The independent worker calls the authenticated cron endpoint every 15 seconds,
 retries failures, and records a heartbeat only after a successful batch.
 Its health check detects stale successes. No browser needs to remain open.
-Use a direct or session-pooler DB connection: processing uses a session-scoped
-advisory lock to prevent overlapping batches. Due messages beyond the batch
+Processing claims each job with a transaction-scoped `FOR UPDATE SKIP LOCKED`
+row lock, which supports transaction poolers and prevents duplicate delivery.
+Due messages beyond the batch
 limit of 50 are handled on subsequent intervals.
 
 ## Migration compatibility

@@ -4,9 +4,6 @@ import { conversations, scheduledMessages, messages, users } from "@/db/schema";
 import { publishToConversation } from "@/server/realtime";
 import { notifyNewMessage } from "@/server/notifications";
 import { getMessageDTO } from "@/server/chat";
-import { pool } from "@/db";
-
-const SCHEDULED_PROCESSOR_LOCK = 847_221_903;
 
 /** Schedule a message for later delivery */
 export async function scheduleMessage(input: {
@@ -82,17 +79,6 @@ export async function processScheduledMessages(): Promise<{
   failed: number;
 }> {
   if (process.env.STARTER_MODE === "1" && process.env.SCHEDULED_MESSAGES_ENABLED !== "1") return { processed: 0, failed: 0 };
-  const lockClient = await pool.connect();
-  const lock = await lockClient.query<{ locked: boolean }>(
-    "select pg_try_advisory_lock($1) as locked",
-    [SCHEDULED_PROCESSOR_LOCK],
-  );
-  if (!lock.rows[0]?.locked) {
-    lockClient.release();
-    return { processed: 0, failed: 0 };
-  }
-
-  try {
   const now = new Date();
 
   const dueMessages = await db
@@ -124,7 +110,9 @@ export async function processScheduledMessages(): Promise<{
       // 1. Create the actual message
       const message = await db.transaction(async (tx) => {
         // Re-check permissions at delivery, not just when the job was created.
-        const [job] = await tx.select().from(scheduledMessages).where(and(eq(scheduledMessages.id, scheduled.id), eq(scheduledMessages.sent, false))).for("update");
+        // Transaction-scoped row claims work with transaction poolers. Session
+        // advisory locks can remain on a different pooled backend after unlock.
+        const [job] = await tx.select().from(scheduledMessages).where(and(eq(scheduledMessages.id, scheduled.id), eq(scheduledMessages.sent, false))).for("update", { skipLocked: true });
         if (!job) return null;
         const allowed = await tx.execute<{ allowed: boolean }>(sql`
           select exists(select 1 from conversations c
@@ -207,8 +195,4 @@ export async function processScheduledMessages(): Promise<{
   }
 
   return { processed, failed };
-  } finally {
-    await lockClient.query("select pg_advisory_unlock($1)", [SCHEDULED_PROCESSOR_LOCK]).catch(() => undefined);
-    lockClient.release();
-  }
 }

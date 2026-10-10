@@ -149,10 +149,20 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     const sourceContext = source.page.context(), recipientContext = recipient.page.context();
     for (const page of [source.page, recipient.page, target.page]) { assert.deepEqual(await page.evaluate(() => window.__workflowCsp), []); await page.close(); }
     let completed;
-    for (let attempt = 0; attempt < 90; attempt++) {
-      completed = (await pool.query("select sent,sent_message_id from scheduled_messages where id=$1", [job.id])).rows[0];
-      if (completed?.sent) break;
-      await new Promise(resolve => setTimeout(resolve, 500));
+    // A session lock left on a pooled backend must not stall delivery.
+    // This fixture holds and releases the legacy lock on its own connection.
+    const legacyLock = await pool.connect();
+    let legacyLocked = false;
+    try {
+      legacyLocked = (await legacyLock.query("select pg_try_advisory_lock(847221903) as locked")).rows[0].locked;
+      for (let attempt = 0; attempt < 90; attempt++) {
+        completed = (await pool.query("select sent,sent_message_id from scheduled_messages where id=$1", [job.id])).rows[0];
+        if (completed?.sent) break;
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+    } finally {
+      if (legacyLocked) await legacyLock.query("select pg_advisory_unlock(847221903)");
+      legacyLock.release();
     }
     assert(completed?.sent, "The server delivers the scheduled job with every chat browser closed");
     source.page = await sourceContext.newPage(); recipient.page = await recipientContext.newPage();
