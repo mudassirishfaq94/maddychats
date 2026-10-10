@@ -201,17 +201,28 @@ export function useE2EE(userId: string | undefined) {
         error: null,
       });
 
+      const registrationSignal = AbortSignal.timeout(15000);
       const registration = e2eeRequest("/api/e2ee/keys", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ deviceId, publicKey: publicKeyStr, encryptedPrivateKey }),
-        signal: AbortSignal.timeout(15000),
+        signal: registrationSignal,
       }).then(async (response) => {
         if (!response.ok) {
           setState(previous => ({ ...previous, error: "Device registration failed. Reload to retry; your keys were preserved." }));
           return false;
         }
-        const registration = await response.json() as { pendingApproval?: boolean };
+        const registration = await response.json() as { pendingApproval?: boolean; needsSessionBinding?: boolean };
+        if (registration.needsSessionBinding) {
+          const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(publicKeyStr));
+          const targetFingerprint = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("");
+          const challengeResponse = await e2eeRequest("/api/e2ee/devices/approve", { method: "POST", signal: registrationSignal, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "challenge", decision: "bind-session", sourceDeviceId: deviceId, targetDeviceId: deviceId, targetFingerprint }) });
+          if (!challengeResponse.ok) throw new Error("Unable to register this encryption session.");
+          const challenge = await challengeResponse.json() as { token: string; encryptedChallenge: string };
+          const nonce = await crypto.subtle.decrypt({ name: "RSA-OAEP" }, keyPair.privateKey, Uint8Array.from(atob(challenge.encryptedChallenge), char => char.charCodeAt(0)));
+          const proofResponse = await e2eeRequest("/api/e2ee/devices/approve", { method: "POST", signal: registrationSignal, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "approve", token: challenge.token, proof: new TextDecoder().decode(nonce) }) });
+          if (!proofResponse.ok) throw new Error("Unable to register this encryption session.");
+        }
         if (registration.pendingApproval) {
           setState(previous => ({ ...previous, error: "This device needs approval. On a trusted device, open Profile > Devices and approve this device before restoring chat keys." }));
           return false;
@@ -813,7 +824,7 @@ export function useE2EE(userId: string | undefined) {
 
   const waitForDeviceRegistration = useCallback(async () => { await deviceRegistrationRef.current; }, []);
 
-  const approveDevice = useCallback(async (targetDeviceId: string, targetFingerprint: string) => {
+  const approveDevice = useCallback(async (targetDeviceId: string, targetFingerprint: string, link?: { linkId: string; code?: string; decision?: "approve" | "reject" }) => {
     if (!keyPairRef.current || !state.initialized) throw new Error("Trusted device keys are not ready.");
     const request = async (body: Record<string, string>) => {
       const response = await e2eeRequest("/api/e2ee/devices/approve", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -821,7 +832,7 @@ export function useE2EE(userId: string | undefined) {
       if (!response.ok) throw new Error(data.error ?? "Device approval failed.");
       return data;
     };
-    const challenge = await request({ action: "challenge", sourceDeviceId: state.deviceId, targetDeviceId, targetFingerprint });
+    const challenge = await request({ action: "challenge", sourceDeviceId: state.deviceId, targetDeviceId, targetFingerprint, ...(link ?? {}) });
     if (!challenge.token || !challenge.encryptedChallenge) throw new Error("Invalid device approval challenge.");
     const ciphertext = Uint8Array.from(atob(challenge.encryptedChallenge), char => char.charCodeAt(0));
     const plaintext = await crypto.subtle.decrypt({ name: "RSA-OAEP" }, keyPairRef.current.privateKey, ciphertext);

@@ -68,8 +68,8 @@ export async function readJson(
  * 4 MB (including form overhead); larger direct-to-storage uploads can be
  * added later without changing the private media-serving contract.
  */
-export function guardUploadSize(req: NextRequest): NextResponse | null {
-  if (process.env.STARTER_MODE === "1") {
+export function guardUploadSize(req: NextRequest, encryptedChat = false): NextResponse | null {
+  if (process.env.STARTER_MODE === "1" && !(encryptedChat && process.env.CHAT_MEDIA_ENABLED === "1")) {
     return jsonError(503, "Uploads and voice messages are paused. Text chat is available.");
   }
   const length = Number(req.headers.get("content-length"));

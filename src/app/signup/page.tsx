@@ -31,7 +31,8 @@ export default async function SignupPage() {
         </>
       }
     >
-      {verificationDeliveryConfigured() ? <RegisterForm /> : <p className="mb-4 text-sm text-[var(--muted)]">Create your account with Google. Email sign-up is currently paused.</p>}
+      {!verificationDeliveryConfigured() && <p className="mb-4 text-sm text-[var(--muted)]">Email accounts need verification before sign-in. Email delivery is currently unavailable; Google sign-in is also available.</p>}
+      <RegisterForm />
       <GoogleSignIn />
       {process.env.STARTER_MODE !== "1" ? <PhoneSignIn signup /> : null}
     </AuthLayout>

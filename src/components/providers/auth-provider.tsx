@@ -18,6 +18,7 @@ export interface AuthResult {
   ok: boolean;
   mfaRequired?: boolean;
   verificationRequired?: boolean;
+  emailSent?: boolean;
   error?: string;
   fields?: Record<string, string>;
 }
@@ -121,6 +122,7 @@ export function AuthProvider({ children, initialUser }: { children: ReactNode; i
         const data = (await res.json().catch(() => null)) as {
           mfaRequired?: boolean;
           verificationRequired?: boolean;
+          emailSent?: boolean;
           user?: SafeUser;
           error?: string;
           fields?: Record<string, string>;
@@ -133,7 +135,7 @@ export function AuthProvider({ children, initialUser }: { children: ReactNode; i
             verificationRequired: data?.verificationRequired,
           };
         }
-        if (data?.mfaRequired || data?.verificationRequired) return { ok: true, mfaRequired: data.mfaRequired, verificationRequired: data.verificationRequired };
+        if (data?.mfaRequired || data?.verificationRequired) return { ok: true, mfaRequired: data.mfaRequired, verificationRequired: data.verificationRequired, emailSent: data.emailSent };
         if (data?.user) {
           setUser(data.user);
           setStatus("authenticated");
@@ -161,6 +163,7 @@ export function AuthProvider({ children, initialUser }: { children: ReactNode; i
         const data = (await res.json().catch(() => null)) as {
           mfaRequired?: boolean;
           verificationRequired?: boolean;
+          emailSent?: boolean;
           user?: SafeUser;
           error?: string;
           fields?: Record<string, string>;
@@ -173,7 +176,7 @@ export function AuthProvider({ children, initialUser }: { children: ReactNode; i
             verificationRequired: data?.verificationRequired,
           };
         }
-        if (data?.mfaRequired || data?.verificationRequired) return { ok: true, mfaRequired: data.mfaRequired, verificationRequired: data.verificationRequired };
+        if (data?.mfaRequired || data?.verificationRequired) return { ok: true, mfaRequired: data.mfaRequired, verificationRequired: data.verificationRequired, emailSent: data.emailSent };
         if (data?.user) {
           setUser(data.user);
           setStatus("authenticated");

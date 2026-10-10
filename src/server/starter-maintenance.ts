@@ -1,12 +1,30 @@
 import { cleanupRealtimeEvents } from "./realtime";
 import { cleanupRateLimits } from "./rate-limit";
 
+import { processScheduledMessages } from "./scheduled-messages";
+import { db } from "@/db";
+import { deviceLinkRequests } from "@/db/schema";
+import { lt } from "drizzle-orm";
+
 const state = globalThis as typeof globalThis & {
+  __scheduledMaintenance?: ReturnType<typeof setInterval>;
   __starterMaintenance?: ReturnType<typeof setInterval>;
 };
 
-/** Bounded housekeeping while the free app is awake; never sends queued messages. */
+/** Existing processors share their database lock; the free host catches up after waking. */
 export function startStarterMaintenance() {
+  if (process.env.SCHEDULED_MESSAGES_ENABLED === "1" && !state.__scheduledMaintenance) {
+    let processing = false;
+    const deliver = async () => {
+      if (processing) return;
+      processing = true;
+      try { await processScheduledMessages(); }
+      catch { console.error("[scheduled] Delivery unavailable; retrying later."); }
+      finally { processing = false; }
+    };
+    state.__scheduledMaintenance = setInterval(() => { void deliver(); }, 10000);
+    state.__scheduledMaintenance.unref(); void deliver();
+  }
   if (process.env.STARTER_MODE !== "1" || state.__starterMaintenance) return;
   let running = false;
   const clean = async () => {
@@ -15,6 +33,7 @@ export function startStarterMaintenance() {
     try {
       await cleanupRealtimeEvents();
       await cleanupRateLimits();
+      await db.delete(deviceLinkRequests).where(lt(deviceLinkRequests.expiresAt, new Date(Date.now() - 86400000)));
     } catch { console.error("[maintenance] Cleanup unavailable; retrying later."); }
     finally { running = false; }
   };

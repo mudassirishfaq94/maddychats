@@ -29,12 +29,10 @@ export function LogoWordmark({
   size = 30,
   className,
   textClassName,
-  byline = false,
 }: {
   size?: number;
   className?: string;
   textClassName?: string;
-  byline?: boolean;
 }) {
   return (
     <span className={cn("inline-flex items-center gap-2.5", className)}>
@@ -49,11 +47,7 @@ export function LogoWordmark({
         >
           circ<span className="text-[var(--accent-fg)]">lo</span>
         </span>
-        {byline ? (
-          <span className="mt-0.5 whitespace-nowrap text-[0.5rem] leading-none text-[var(--muted)]">
-            App by Mudassir Ishfaq
-          </span>
-        ) : null}
+
       </span>
     </span>
   );

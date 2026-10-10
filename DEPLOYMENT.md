@@ -19,21 +19,35 @@ cutover is deferred to avoid crowding its free database allowance.
 Set `STARTER_MODE=1` for both the build and runtime. The build exposes only the
 non-secret availability flag. Encrypted text chat, device approval/recovery,
 draft preservation, and recoverable existing media reads remain available.
-The pre-release media inventory and missing-file limits are documented in the release plan. New uploads,
-voice messages, phone sign-in, experimental Signal provisioning, and scheduled delivery are paused server-side;
-users can still cancel pending scheduled messages. No scanner or worker is
-provisioned and no scan is bypassed.
+Set `CHAT_MEDIA_ENABLED=1` to enable encrypted attachments and voice using the existing
+private Supabase bucket. Ciphertext is opaque to the server; size, file metadata,
+membership, consent and storage-budget checks remain enforced. Readable uploads
+still require the scanner and remain paused in starter mode. Set
+`CHAT_STORAGE_BUDGET_MB=400` to retain headroom in the free storage allowance.
+Phone sign-in and experimental Signal provisioning remain paused.
 
-New users can sign up with the existing Google connection. Email sign-up stays
-paused until email delivery is configured. An existing unverified password user
-can verify email ownership through Google and then enter the existing password.
+Set `SCHEDULED_MESSAGES_ENABLED=1` to run the existing, database-locked processor
+in the Node web process every ten seconds, independent of browser activity.
+Persisted jobs catch up after a server restart. Free Render can sleep: delivery
+while the host is asleep cannot be guaranteed; an always-on host or independent
+caller of the existing authenticated cron endpoint is required for that guarantee.
+No paid worker is provisioned. Historical missing media cannot be reconstructed.
+
+Email/password registration creates a protected pending account. Login requires
+verification. Configure a valid `RESEND_API_KEY` and verified sender for real email
+delivery; the UI reports unavailable delivery honestly. An unverified password user
+with a matching Google-owned address can verify ownership through Google and enter
+the existing Circlo password.
 The proof is a five-minute HttpOnly cookie, scoped to that user and email,
 redeemed once through the shared rate-limit store. Password verification and
 MFA still apply, and this does not automatically link a Google identity.
 
 Preserve the production JWT and OAuth secrets. Set `REALTIME_DATABASE_URL` to a
 verified direct Neon connection for LISTEN, alongside the pooled `DATABASE_URL`.
-Generate distinct readiness/cron secrets; scheduled processing remains paused.
+Generate distinct readiness/cron secrets. Device linking uses a five-minute code,
+trusted-key approval proof and single-use persisted requests. Removing a linked
+session revokes its encryption trust atomically. After signing in again, proof
+of possession binds the existing key to the new session without approving it.
 The build command in `render.yaml` embeds the actual Git commit as APP_VERSION.
 Update the existing service by ID rather than creating a second web service.
 

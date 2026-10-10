@@ -16,13 +16,14 @@ export async function GET(req: NextRequest) {
     // Check the release's repair migration and representative runtime columns,
     // rather than treating an empty but reachable database as ready.
     const query = {
-      text: `select (select count(*)=6 from drizzle.__drizzle_migrations
-               where created_at in (1791590400000,1791676800000,1791763200000,1791849600000,1791936000000,1792022400000)) as migrated,
+      text: `select (select count(*)=7 from drizzle.__drizzle_migrations
+               where created_at in (1791590400000,1791676800000,1791763200000,1791849600000,1791936000000,1792022400000,1792108800000)) as migrated,
              (select count(*) from stored_uploads where false) as uploads,
              (select count(*) from device_sessions where false) as sessions,
              (select count(*) from users where false) as users,
              (select count(*) from e2ee_key_history where false) as history,
-             (select count(trusted_at) from e2ee_keys where false) as devices,
+             (select count(session_id) from e2ee_keys where false) as devices,
+             (select count(*) from device_link_requests where false) as links,
              (select count(encrypted) from scheduled_messages where false) as scheduled`,
       query_timeout: 5000,
     };

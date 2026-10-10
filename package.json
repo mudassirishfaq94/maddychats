@@ -18,11 +18,12 @@
     "audit:dependencies": "tsx scripts/audit-dependencies.ts",
     "test:unit": "tsx --test tests/*.test.ts",
     "test:item3": "tsx scripts/test-item3-authorization.ts",
-    "test": "npm run test:unit && npm run test:item1 && npm run test:item2 && npm run test:item3 && npm run test:items4-6 && npm run test:remaining",
+    "test": "npm run test:unit && npm run test:item1 && npm run test:item2 && npm run test:item3 && npm run test:items4-6 && npm run test:remaining && npm run test:restored",
     "test:remaining": "tsx scripts/test-remaining-hardening.ts",
     "test:items4-6": "tsx scripts/test-items4-6.ts",
     "profile:mobile": "node scripts/profile-mobile.mjs",
-    "test:scanner": "tsx scripts/test-clamav.ts"
+    "test:scanner": "tsx scripts/test-clamav.ts",
+    "test:restored": "tsx scripts/test-restored.ts"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.1",

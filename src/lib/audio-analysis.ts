@@ -9,6 +9,16 @@ export interface AudioAnalysis {
 }
 
 const analysisCache = new Map<string, Promise<AudioAnalysis>>();
+const localAudio = new Map<string, Blob>();
+
+/** Use decrypted browser bytes directly; CSP intentionally forbids fetching blob URLs. */
+export function registerLocalAudio(src: string, blob: Blob) {
+  if (localAudio.size >= MAX_CACHE_ENTRIES) localAudio.delete(localAudio.keys().next().value as string);
+  localAudio.set(src, blob);
+}
+export function forgetLocalAudio(src: string) {
+  localAudio.delete(src); analysisCache.delete(src);
+}
 
 function normalizedWaveform(channelData: Float32Array): number[] {
   const blockSize = Math.max(1, Math.floor(channelData.length / BAR_COUNT));
@@ -52,12 +62,15 @@ export function analyzeAudioUrl(src: string): Promise<AudioAnalysis> {
   if (analysisCache.size >= MAX_CACHE_ENTRIES) {
     analysisCache.delete(analysisCache.keys().next().value as string);
   }
-  const analysis = fetch(src)
+  const local = localAudio.get(src);
+  const bytes = local ? local.arrayBuffer() : src.startsWith("blob:")
+    ? Promise.reject(new Error("Local audio bytes are no longer available"))
+    : fetch(src)
     .then((response) => {
       if (!response.ok) throw new Error("Audio could not be loaded");
       return response.arrayBuffer();
-    })
-    .then(analyzeBuffer)
+    });
+  const analysis = bytes.then(analyzeBuffer)
     .catch((error) => {
       analysisCache.delete(src);
       throw error;

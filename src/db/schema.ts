@@ -1217,6 +1217,7 @@ export const e2eeKeys = pgTable(
     id: uuid("id").defaultRandom().primaryKey(),
     userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
     deviceId: text("device_id").notNull(),
+    sessionId: uuid("session_id").references(() => deviceSessions.id, { onDelete: "set null" }),
     publicKey: text("public_key").notNull(),
     encryptedPrivateKey: text("encrypted_private_key").notNull(),
     /** Only an explicitly approved device may receive conversation keys. */
@@ -1362,3 +1363,16 @@ export const mfaChallenges = pgTable("mfa_challenges", {
   createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
   expiresAt: timestamp("expires_at", { withTimezone: true, mode: "date" }).notNull(),
 }, (table) => [index("mfa_challenges_expires_idx").on(table.expiresAt)]);
+
+/** Short-lived pairing requests contain a hash, never the displayed code. */
+export const deviceLinkRequests = pgTable("device_link_requests", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  sessionId: uuid("session_id").notNull().references(() => deviceSessions.id, { onDelete: "cascade" }),
+  deviceId: text("device_id").notNull(),
+  fingerprint: text("fingerprint").notNull(),
+  codeHash: text("code_hash").notNull(),
+  status: text("status").notNull().default("pending"),
+  expiresAt: timestamp("expires_at", { withTimezone: true, mode: "date" }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+}, table => [index("device_link_owner_idx").on(table.userId, table.expiresAt)]);

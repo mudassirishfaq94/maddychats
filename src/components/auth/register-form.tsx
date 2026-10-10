@@ -73,7 +73,7 @@ export function RegisterForm() {
       if (result.fields) setErrors(result.fields);
       return;
     }
-    navigateWithReload("/verify-email");
+    navigateWithReload(result.emailSent ? "/verify-email" : "/verify-email?delivery=unavailable");
   }
 
   return (

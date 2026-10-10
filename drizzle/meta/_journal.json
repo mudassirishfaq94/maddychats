@@ -281,6 +281,13 @@
       "when": 1792022400000,
       "tag": "0039_signal_prekey_uint32",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1792108800000,
+      "tag": "0040_device_link_requests",
+      "breakpoints": true
     }
   ]
 }

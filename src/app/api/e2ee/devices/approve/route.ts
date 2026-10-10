@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createHash, createPublicKey, publicEncrypt, constants, randomBytes, timingSafeEqual } from "node:crypto";
 import { SignJWT, jwtVerify } from "jose";
-import { and, eq, isNotNull } from "drizzle-orm";
+import { and, eq, isNotNull, gt, isNull } from "drizzle-orm";
 import { db } from "@/db";
-import { e2eeKeys } from "@/db/schema";
+import { e2eeKeys, deviceLinkRequests, deviceSessions } from "@/db/schema";
 import { jwtSecret } from "@/server/config";
-import { getSessionUser } from "@/server/session";
+import { getSessionUser, getSessionDeviceId } from "@/server/session";
 import { guardSameOrigin, jsonError, readJson } from "@/server/http";
 import { rateLimit } from "@/server/rate-limit";
+import { isUuid } from "@/server/users";
 
 export const dynamic = "force-dynamic";
 const digest = (value: string) => createHash("sha256").update(value).digest("hex");
@@ -22,20 +23,34 @@ export async function POST(req: NextRequest) {
   if (!(await rateLimit(`e2ee-approval:${user.id}`, 20, 60000)).allowed) return jsonError(429, "Too many approval attempts. Please wait.");
   const body = await readJson(req) as Record<string, unknown> | null;
   if (body?.action === "challenge") {
+    const binding = body.decision === "bind-session";
+    const sessionId = binding ? await getSessionDeviceId() : undefined;
+    if (binding && !sessionId) return jsonError(409, "Sign in again to register this device session.");
     if (typeof body.sourceDeviceId !== "string" || typeof body.targetDeviceId !== "string" || typeof body.targetFingerprint !== "string") return jsonError(422, "Device IDs and verified fingerprint are required.");
-    const [source] = await db.select().from(e2eeKeys).where(and(eq(e2eeKeys.userId, user.id), eq(e2eeKeys.deviceId, body.sourceDeviceId), isNotNull(e2eeKeys.trustedAt))).limit(1);
+    const [source] = await db.select().from(e2eeKeys).where(and(eq(e2eeKeys.userId, user.id), eq(e2eeKeys.deviceId, body.sourceDeviceId), ...(binding ? [] : [isNotNull(e2eeKeys.trustedAt)]))).limit(1);
     const [target] = await db.select().from(e2eeKeys).where(and(eq(e2eeKeys.userId, user.id), eq(e2eeKeys.deviceId, body.targetDeviceId))).limit(1);
-    if (!source || !target || source.deviceId === target.deviceId) return jsonError(403, "Use an existing trusted device to approve your new device.");
+    if (!source || !target || (binding ? source.deviceId !== target.deviceId : source.deviceId === target.deviceId)) return jsonError(403, "Use an existing trusted device to approve your new device.");
     // Fingerprint is SHA-256 of the encoded public key, exactly as displayed on both devices.
     const targetHash = digest(target.publicKey);
     if (body.targetFingerprint !== targetHash) return jsonError(409, "Device fingerprint changed. Verify it again.");
+    let linkId: string | undefined;
+    const decision = body.decision === "reject" ? "reject" : "approve";
+    if (typeof body.linkId === "string") {
+      if (binding) return jsonError(422, "Session registration cannot approve a linking request.");
+      if (!isUuid(body.linkId)) return jsonError(422, "Invalid linking request.");
+      const [link] = await db.select().from(deviceLinkRequests).where(and(eq(deviceLinkRequests.id, body.linkId), eq(deviceLinkRequests.userId, user.id), eq(deviceLinkRequests.deviceId, target.deviceId), eq(deviceLinkRequests.status, "pending"), gt(deviceLinkRequests.expiresAt, new Date()))).limit(1);
+      if (!link || link.fingerprint !== targetHash) return jsonError(409, "Linking request expired or was already used.");
+      const [session] = await db.select({ id: deviceSessions.id }).from(deviceSessions).where(and(eq(deviceSessions.id, link.sessionId), eq(deviceSessions.userId, user.id), isNull(deviceSessions.revokedAt), gt(deviceSessions.expiresAt, new Date()))).limit(1);
+      if (!session || (decision === "approve" && (typeof body.code !== "string" || digest(body.code.replace(/\s|-/g, "").toUpperCase()) !== link.codeHash))) return jsonError(403, "Linking code does not match this device.");
+      linkId = link.id;
+    } else if (decision === "reject") return jsonError(422, "A linking request is required.");
     const nonce = randomBytes(32).toString("base64url");
     let encryptedChallenge: string;
     try {
       const key = createPublicKey({ key: Buffer.from(source.publicKey, "base64"), type: "spki", format: "der" });
       encryptedChallenge = publicEncrypt({ key, padding: constants.RSA_PKCS1_OAEP_PADDING, oaepHash: "sha256" }, Buffer.from(nonce)).toString("base64");
     } catch { return jsonError(422, "Trusted device key cannot be used for approval."); }
-    const token = await new SignJWT({ source: source.deviceId, sourceHash: digest(source.publicKey), target: target.deviceId, targetHash, nonceHash: digest(nonce) })
+    const token = await new SignJWT({ source: source.deviceId, sourceHash: digest(source.publicKey), target: target.deviceId, targetHash, nonceHash: digest(nonce), ...(binding ? { decision: "bind-session", sessionId } : linkId ? { linkId, decision } : {}) })
       .setProtectedHeader({ alg: "HS256" }).setSubject(user.id).setAudience(audience).setIssuedAt().setExpirationTime("2m").setJti(randomBytes(16).toString("hex")).sign(jwtSecret());
     return NextResponse.json({ token, encryptedChallenge }, { headers: { "Cache-Control": "no-store" } });
   }
@@ -47,10 +62,34 @@ export async function POST(req: NextRequest) {
     if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) return jsonError(403, "Trusted device proof is invalid.");
     if (!(await rateLimit(`e2ee-approval-proof:${payload.jti}`, 1, 120000)).allowed) return jsonError(409, "This approval proof was already used. Start again.");
     const sourceId = payload.source, targetId = payload.target;
+    const binding = payload.decision === "bind-session";
+    if (binding && (payload.sessionId !== await getSessionDeviceId() || sourceId !== targetId || typeof payload.sessionId !== "string")) return jsonError(403, "Session registration does not match this browser.");
     const approved = await db.transaction(async tx => {
+      if (binding) {
+        const [session] = await tx.select().from(deviceSessions).where(and(eq(deviceSessions.id, payload.sessionId as string), eq(deviceSessions.userId, user.id))).for("update");
+        if (!session || session.revokedAt || session.expiresAt <= new Date()) return false;
+      }
+      // Match revocation's session -> key -> request lock order.
+      if (typeof payload.linkId === "string") {
+        const [pending] = await tx.select().from(deviceLinkRequests).where(and(eq(deviceLinkRequests.id, payload.linkId), eq(deviceLinkRequests.userId, user.id)));
+        if (!pending) return false;
+        const [session] = await tx.select().from(deviceSessions).where(and(eq(deviceSessions.id, pending.sessionId), eq(deviceSessions.userId, user.id))).for("update");
+        if (!session || session.revokedAt || session.expiresAt <= new Date()) return false;
+      }
       const [source] = await tx.select().from(e2eeKeys).where(and(eq(e2eeKeys.userId, user.id), eq(e2eeKeys.deviceId, sourceId))).for("update");
       const [target] = await tx.select().from(e2eeKeys).where(and(eq(e2eeKeys.userId, user.id), eq(e2eeKeys.deviceId, targetId))).for("update");
-      if (!source?.trustedAt || !target || digest(source.publicKey) !== payload.sourceHash || digest(target.publicKey) !== payload.targetHash) return false;
+      if (!source || (!binding && !source.trustedAt) || !target || digest(source.publicKey) !== payload.sourceHash || digest(target.publicKey) !== payload.targetHash) return false;
+      if (binding) {
+        // Possession rebinds the same key after sign-in; it never grants or restores trust.
+        await tx.update(e2eeKeys).set({ sessionId: payload.sessionId as string }).where(eq(e2eeKeys.id, target.id));
+        return true;
+      }
+      if (typeof payload.linkId === "string") {
+        const [link] = await tx.select().from(deviceLinkRequests).where(and(eq(deviceLinkRequests.id, payload.linkId), eq(deviceLinkRequests.userId, user.id))).for("update");
+        if (!link || link.status !== "pending" || link.expiresAt <= new Date() || link.deviceId !== targetId || link.fingerprint !== payload.targetHash) return false;
+        await tx.update(deviceLinkRequests).set({ status: payload.decision === "reject" ? "rejected" : "approved" }).where(eq(deviceLinkRequests.id, link.id));
+        if (payload.decision === "reject") return true;
+      }
       await tx.update(e2eeKeys).set({ trustedAt: new Date() }).where(eq(e2eeKeys.id, target.id));
       return true;
     });

@@ -120,7 +120,7 @@ export function AuthLayout({
         </div>
 
         <p className="text-center text-xs text-[var(--muted)] opacity-70">
-          App by Mudassir Ishfaq Â· <span className="inline-flex items-center gap-1"><Lock className="h-2.5 w-2.5" />End-to-end encrypted</span>
+          <span className="inline-flex items-center gap-1"><Lock className="h-2.5 w-2.5" />End-to-end encrypted</span>
         </p>
       </section>
     </main>

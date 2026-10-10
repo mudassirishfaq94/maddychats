@@ -2,10 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { eq, and, isNotNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { e2eeKeys } from "@/db/schema";
-import { getSessionUser } from "@/server/session";
+import { getSessionUser, getSessionDeviceId } from "@/server/session";
 import { guardSameOrigin, jsonError, readJson } from "@/server/http";
 import { isUuid } from "@/server/users";
 import { publishToConversation } from "@/server/realtime";
+import { rateLimit } from "@/server/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -60,6 +61,7 @@ export async function POST(req: NextRequest) {
 
   const user = await getSessionUser();
   if (!user) return jsonError(401, "Not authenticated.");
+  if (!(await rateLimit(`device-registration:${user.id}`, 20, 60000)).allowed) return jsonError(429, "Too many device registrations. Please wait.");
 
   const body = await readJson(req);
   const data = (body ?? {}) as Record<string, unknown>;
@@ -68,10 +70,11 @@ export async function POST(req: NextRequest) {
   const publicKey = data.publicKey ? String(data.publicKey) : null;
   const encryptedPrivateKey = data.encryptedPrivateKey ? String(data.encryptedPrivateKey) : null;
 
-  if (!deviceId || !publicKey || !encryptedPrivateKey) {
+  if (!deviceId || !publicKey || !encryptedPrivateKey || deviceId.length > 100 || publicKey.length > 8192 || encryptedPrivateKey.length > 16384) {
     return jsonError(422, "deviceId, publicKey, and encryptedPrivateKey are required.");
   }
 
+  const sessionId = await getSessionDeviceId();
   // Upsert: update if device already registered, insert otherwise
   const [existing] = await db
     .select({ id: e2eeKeys.id })
@@ -111,11 +114,12 @@ export async function POST(req: NextRequest) {
       deviceId,
       publicKey,
       encryptedPrivateKey,
+      sessionId,
       trustedAt: trustedDevice ? null : new Date(),
     });
   }
 
-  const [registered] = await db.select({ trustedAt: e2eeKeys.trustedAt }).from(e2eeKeys)
+  const [registered] = await db.select({ trustedAt: e2eeKeys.trustedAt, sessionId: e2eeKeys.sessionId }).from(e2eeKeys)
     .where(and(eq(e2eeKeys.userId, user.id), eq(e2eeKeys.deviceId, deviceId))).limit(1);
   if (!existing && registered?.trustedAt) {
     const requests = await db.execute<{ id: string }>(sql`
@@ -128,5 +132,5 @@ export async function POST(req: NextRequest) {
       type: "conversation:encryption-ready", conversationId: row.id, userId: user.id,
     })));
   }
-  return NextResponse.json({ success: true, pendingApproval: !registered?.trustedAt });
+  return NextResponse.json({ success: true, pendingApproval: !registered?.trustedAt, needsSessionBinding: Boolean(sessionId && registered?.sessionId !== sessionId) });
 }

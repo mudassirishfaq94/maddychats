@@ -1,4 +1,4 @@
-import { issueEmailVerification, verificationDeliveryConfigured } from "@/server/email-verification";
+import { issueEmailVerification } from "@/server/email-verification";
 import { NextRequest, NextResponse } from "next/server";
 import { fieldErrors, registerSchema } from "@/lib/schemas";
 import { hashPassword } from "@/server/password";
@@ -55,8 +55,6 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  if (!verificationDeliveryConfigured()) return jsonError(503, "Email registration is unavailable until verification email delivery is configured.");
-
   const passwordHash = await hashPassword(password);
 
   let user;
@@ -64,8 +62,9 @@ export async function POST(req: NextRequest) {
     user = await createUser({ displayName, username, email, passwordHash });
   } catch (err) {
     // Unique-constraint race safety net (concurrent registrations).
-    const code = (err as { code?: string })?.code;
-    const constraint = String((err as { constraint?: string })?.constraint ?? "");
+    const failure = err as { code?: string; constraint?: string; cause?: { code?: string; constraint?: string } };
+    const code = failure.code ?? failure.cause?.code;
+    const constraint = String(failure.constraint ?? failure.cause?.constraint ?? "");
     if (code === "23505") {
       if (constraint.includes("email")) {
         return jsonError(409, "An account with this email already exists.", {

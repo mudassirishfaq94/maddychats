@@ -255,6 +255,17 @@ export function ChatView({
   const [requestAccepted, setRequestAccepted] = useState(!conversation.requestPending);
   const [awaitingApproval, setAwaitingApproval] = useState(Boolean(conversation.awaitingApproval));
   const requestSent = awaitingApproval && (conversation.introductionSent || items.some((message) => message.senderId === me.id && message.sendStatus !== "failed"));
+  const [mediaPaused, setMediaPaused] = useState(starterMode);
+  const [schedulePaused, setSchedulePaused] = useState(starterMode);
+  useEffect(() => {
+    const controller = new AbortController();
+    void fetch("/api/chat-capabilities", { signal: controller.signal }).then(async response => {
+      if (!response.ok) return;
+      const capabilities = await response.json();
+      setMediaPaused(!capabilities.media); setSchedulePaused(!capabilities.scheduled);
+    }).catch(() => {});
+    return () => controller.abort();
+  }, []);
   const canCompose = requestAccepted && !requestSent;
   const [acceptingRequest, setAcceptingRequest] = useState(false);
   const attachments = useAttachmentUpload();
@@ -1074,7 +1085,7 @@ export function ChatView({
     setSendPending(true);
     setError(null);
     try {
-      const ext = recorder.audioBlob.type.includes("webm") ? ".webm" : ".ogg";
+      const ext = recorder.audioBlob.type.includes("webm") ? ".webm" : recorder.audioBlob.type.includes("mp4") ? ".m4a" : ".ogg";
       const file = new File([recorder.audioBlob], `voice${ext}`, {
         type: recorder.audioBlob.type,
       });
@@ -1332,7 +1343,7 @@ export function ChatView({
 
   async function scheduleSendMessage() {
     const text = draftRef.current.trim();
-    if (!text || !scheduledTime) return;
+    if (!text || !scheduledTime || sendPendingRef.current) return;
     const scheduledFor = new Date(scheduledTime);
     if (scheduledFor <= new Date()) {
       setError("Scheduled time must be in the future.");
@@ -1909,7 +1920,7 @@ export function ChatView({
           e.preventDefault();
           setDragging(false);
           if (e.dataTransfer.files?.length) {
-            if (!starterMode) attachments.addFiles(e.dataTransfer.files);
+            if (!mediaPaused) attachments.addFiles(e.dataTransfer.files);
           }
         }}
         className={cn(
@@ -2297,7 +2308,7 @@ export function ChatView({
                             <div role="status" className="mt-2 max-w-sm rounded-xl border border-sky-400/20 bg-sky-400/10 px-3 py-2 text-xs leading-relaxed text-[var(--text)]">
                               <p>{msg.queueReason ?? "Waiting for secure delivery. Your message will send automatically when encryption is ready."}</p>
                               <div className="mt-1 flex gap-3">
-                                <button type="button" className="underline" onClick={() => void retryFailedMessage(msg)}>Try now</button>
+                                <button type="button" className="underline" onClick={() => { if (msg.queueReason?.includes("This device needs approval")) router.push("/app/profile#encryption-devices"); else void retryFailedMessage(msg); }}>Try now</button>
                                 <button type="button" className="underline" onClick={async () => {
                                   if (msg.clientMessageId) {
                                     cancelledMessages.current.add(msg.clientMessageId);
@@ -2488,7 +2499,7 @@ export function ChatView({
           </div>
         ) : null}
 
-        {starterMode ? <p className="mb-2 text-xs text-[var(--muted)]">Text chat is available. Uploads, voice messages, and scheduled sending are paused.</p> : null}
+        {mediaPaused || schedulePaused ? <p className="mb-2 text-xs text-[var(--muted)]">{mediaPaused ? "Uploads and voice messages are unavailable. " : ""}{schedulePaused ? "Scheduled sending is unavailable." : ""}</p> : null}
         <AttachmentPreviews
           pending={attachments.pending}
           progress={attachments.progress}
@@ -2576,7 +2587,7 @@ export function ChatView({
           <div className="flex items-center gap-2 sm:items-end">
             <AttachButton
               onFiles={(files) => attachments.addFiles(files)}
-              disabled={starterMode || sendPending || !canCompose || awaitingApproval}
+              disabled={mediaPaused || sendPending || !canCompose || awaitingApproval}
             />
 
             {/* Emoji button */}
@@ -2637,10 +2648,10 @@ export function ChatView({
                 <button
                   type="button"
                   onClick={() => setShowSchedule(true)}
-                  disabled={starterMode || sendPending || !canCompose || awaitingApproval}
+                  disabled={schedulePaused || sendPending || !canCompose || awaitingApproval}
                   aria-label="Schedule message"
-                  className="hidden h-9 w-9 min-h-[36px] min-w-[36px] items-center justify-center rounded-full border border-[var(--border)] text-[var(--muted)] transition-colors hover:border-[var(--border-strong)] hover:text-[var(--text)] sm:flex"
-                  title={starterMode ? "Scheduled sending is paused" : "Schedule message"}
+                  className="flex h-9 w-9 min-h-[36px] min-w-[36px] items-center justify-center rounded-full border border-[var(--border)] text-[var(--muted)] transition-colors hover:border-[var(--border-strong)] hover:text-[var(--text)]"
+                  title={schedulePaused ? "Scheduled sending is paused" : "Schedule message"}
                 >
                   <Clock className="h-4 w-4" />
                 </button>
@@ -2660,10 +2671,10 @@ export function ChatView({
             ) : (
               <button
                 type="button"
-                disabled={starterMode || !canCompose || awaitingApproval}
+                disabled={mediaPaused || !canCompose || awaitingApproval}
                 onClick={() => void recorder.startRecording()}
                 aria-label="Record voice message"
-                title={starterMode ? "Voice messages are paused" : "Record voice message"}
+                title={mediaPaused ? "Voice messages are paused" : "Record voice message"}
                 className="flex h-10 w-10 min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-full border border-[var(--border)] text-[var(--muted)] transition-colors hover:border-[var(--border-strong)] hover:text-[var(--text)] disabled:opacity-50"
               >
                 <Mic className="h-4.5 w-4.5" />
@@ -2782,9 +2793,11 @@ export function ChatView({
             <div className="mt-4">
               <input
                 type="datetime-local"
+                aria-label="Scheduled delivery time"
+                step="1"
                 value={scheduledTime}
                 onChange={(e) => setScheduledTime(e.target.value)}
-                min={new Date().toISOString().slice(0, 16)}
+                min={new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 19)}
                 className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2.5 text-sm text-[var(--text)] focus:border-[var(--accent)] focus:outline-none"
               />
             </div>

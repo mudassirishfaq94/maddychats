@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { findUserByEmail } from "@/server/users";
-import { issueEmailVerification } from "@/server/email-verification";
+import { issueEmailVerification, verificationDeliveryConfigured } from "@/server/email-verification";
 import { guardSameOrigin, jsonError, readJson, clientIp } from "@/server/http";
 import { rateLimit } from "@/server/rate-limit";
 
@@ -8,6 +8,7 @@ export async function POST(req: NextRequest) {
   const blocked = guardSameOrigin(req); if (blocked) return blocked;
   const rl = await rateLimit(`verify-resend:${clientIp(req)}`, 3, 15 * 60 * 1000);
   if (!rl.allowed) return jsonError(429, "Please wait before requesting another verification email.");
+  if (!verificationDeliveryConfigured()) return jsonError(503, "Verification email delivery is not configured. Your account remains unverified.");
   const body = await readJson(req);
   const email = typeof body?.email === "string" ? body.email.trim().toLowerCase() : "";
   if (email && /^\S+@\S+\.\S+$/.test(email)) {
