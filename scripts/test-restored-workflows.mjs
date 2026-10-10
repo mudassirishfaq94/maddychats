@@ -76,7 +76,9 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
       if (capabilityFailures++ === 0) await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "Temporary interruption" }) });
       else await route.continue();
     });
+    const capabilityRecovery = source.page.waitForResponse(response => response.url().endsWith("/api/chat-capabilities") && response.status() === 200);
     await chat(source.page); await chat(recipient.page);
+    await capabilityRecovery;
     await source.page.waitForFunction(() => {
       const button = document.querySelector('button[title="Record voice message"]');
       return button instanceof HTMLButtonElement && !button.disabled;
