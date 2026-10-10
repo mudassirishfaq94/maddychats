@@ -36,7 +36,7 @@ export async function testMessageRequests(base, senderCookie, recipientCookie, c
     assert.equal(sentResponse.status(), 201);
     await sender.getByText("Message request sent", { exact: true }).waitFor();
     assert.equal(await composer.isDisabled(), true);
-    assert.equal(await sender.getByText(introduction, { exact: true }).count(), 1);
+    assert.equal(await sender.getByRole("region", { name: "Conversation", exact: true }).getByText(introduction, { exact: true }).count(), 1);
     assert.equal(await sender.getByText("Encryption keys are not ready", { exact: false }).count(), 0);
     // Retain the device key, but take the sender offline before the recipient
     // registers. The ciphertext must remain queued and recover on reconnect.
@@ -55,7 +55,7 @@ export async function testMessageRequests(base, senderCookie, recipientCookie, c
     // Reconnect the same trusted sender on another app route: key delivery
     // must work even when the sender does not reopen this specific chat.
     await sender.goto(`${base}/app/profile`);
-    await recipient.getByText(introduction, { exact: true }).waitFor({ timeout: 60000 });
+    await recipient.getByRole("region", { name: "Conversation", exact: true }).getByText(introduction, { exact: true }).waitFor({ timeout: 60000 });
     await recipient.getByRole("button", { name: "Accept", exact: true }).click();
     await recipient.getByRole("textbox", { name: "Message text" }).waitFor();
     await recipient.waitForFunction(() => !document.querySelector('textarea[aria-label="Message text"]')?.disabled);
@@ -66,7 +66,7 @@ export async function testMessageRequests(base, senderCookie, recipientCookie, c
     const replied = recipient.waitForResponse(response => response.request().method() === "POST" && response.url().endsWith(`/conversations/${conversationId}/messages`), { timeout: 60000 });
     await recipient.getByRole("textbox", { name: "Message text" }).press("Enter");
     assert.equal((await replied).status(), 201);
-    await sender.getByText(reply, { exact: true }).waitFor({ timeout: 60000 });
+    await sender.getByRole("region", { name: "Conversation", exact: true }).getByText(reply, { exact: true }).waitFor({ timeout: 60000 });
     assert.deepEqual(errors, [], "First-contact and approval must not produce browser errors");
     await Promise.all([sender, recipient].map(page => page.waitForLoadState("networkidle")));
     return { encryptedIntroduction: true, durableNotification: true, offlineRecovery: true, approvalAndReply: true, browserErrors: 0 };
