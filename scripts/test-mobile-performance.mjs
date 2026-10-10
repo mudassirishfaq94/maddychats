@@ -8,7 +8,15 @@ export async function testMobilePerformance(base, pool, source, owner, conversat
   assert.equal(ids.length, 150);
   const composer = page.getByRole("textbox", { name: "Message text" });
   let cdp;
+  const heldTab = await page.context().newPage();
   try {
+    await heldTab.goto(base + "/api/app-version");
+    await heldTab.evaluate(async userId => {
+      window.__heldOutbox = await new Promise((resolve, reject) => {
+        const request = indexedDB.open(`circlo-outbox:${userId}`);
+        request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error);
+      });
+    }, owner.id);
     await page.reload(); await composer.waitFor();
     for (let i = 0; i < 6; i++) {
       const load = page.getByRole("button", { name: "Load older messages", exact: true });
@@ -31,7 +39,7 @@ export async function testMobilePerformance(base, pool, source, owner, conversat
     await page.waitForTimeout(800);
     const stored = await page.evaluate(async ({ userId, conversationId }) => {
       const db = await new Promise((resolve, reject) => { const r = indexedDB.open(`circlo-outbox:${userId}`); r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error); });
-      const record = await new Promise((resolve, reject) => { const r = db.transaction("drafts").objectStore("drafts").get(`draft:${conversationId}`); r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error); });
+      const record = await new Promise((resolve, reject) => { const r = db.transaction("messages").objectStore("messages").get(`draft:${conversationId}`); r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error); });
       db.close();
       return { encrypted: record?.ciphertext instanceof ArrayBuffer && record.ciphertext.byteLength > 0, plain: record?.plain, legacy: localStorage.getItem(`ziptalk:draft:${userId}:${conversationId}`) };
     }, { userId: owner.id, conversationId });
@@ -62,6 +70,7 @@ export async function testMobilePerformance(base, pool, source, owner, conversat
     }
     return { mobileWidths: [320, 360, 390, 412], encryptedDraftReload: true, longHistoryTyping: true };
   } finally {
+    await heldTab.close();
     if (cdp) await cdp.send("Emulation.setCPUThrottlingRate", { rate: 1 }).catch(() => {});
     await pool.query("delete from messages where id=any($1::uuid[]) and conversation_id=$2", [ids, conversationId]);
     await page.setViewportSize({ width: 390, height: 844 });
