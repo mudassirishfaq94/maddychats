@@ -105,11 +105,28 @@ export async function testMessageRequests(base, senderCookie, recipientCookie, c
     await sender.getByLabel("Queued", { exact: true }).waitFor();
     assert.equal(await sender.getByRole("region", { name: "Conversation", exact: true }).locator("p").filter({ hasText: queuedText }).count(), 1);
     const newerDraft = "Keep this newer draft";
-    await sender.getByRole("textbox", { name: "Message text" }).fill(newerDraft);
+    let releaseRetry, retryPosted;
+    const retryGate = new Promise(resolve => { releaseRetry = resolve; });
+    const retryStarted = new Promise(resolve => { retryPosted = resolve; });
+    const retryBodies = [];
+    const messagesUrl = `${base}/api/conversations/${conversationId}/messages`;
+    await sender.route(messagesUrl, async route => {
+      if (route.request().method() !== "POST") return route.continue();
+      retryBodies.push(route.request().postDataJSON());
+      retryPosted(); await retryGate; await route.continue();
+    });
     await sender.unroute(peersUrl);
     const delivered = sender.waitForResponse(response => response.request().method() === "POST" && response.url().endsWith(`/conversations/${conversationId}/messages`), { timeout: 60000 });
     await sender.evaluate(() => window.dispatchEvent(new Event("focus")));
+    await Promise.race([retryStarted, sender.waitForTimeout(30000).then(() => { throw new Error("Queued retry did not reach the test transport"); })]);
+    // Repeated Enter during the automatic retry must reuse the waiting send,
+    // rather than create a second id for the still-visible draft.
+    await sender.getByRole("textbox", { name: "Message text" }).press("Enter");
+    await sender.getByRole("textbox", { name: "Message text" }).fill(newerDraft);
+    releaseRetry();
     const delivery = await delivered;
+    await sender.unroute(messagesUrl);
+    assert.equal(retryBodies.length, 1, "Repeated send during queue delivery must not create duplicate messages");
     assert.equal(delivery.status(), 201);
     assert.equal(delivery.request().postDataJSON().clientMessageId, queuedId.slice(conversationId.length + 1));
     assert.notEqual(delivery.request().postDataJSON().text, queuedText);

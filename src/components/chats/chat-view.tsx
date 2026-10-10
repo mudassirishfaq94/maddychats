@@ -946,7 +946,7 @@ export function ChatView({
     }
 
     if (!text || sendPendingRef.current) return;
-    const queued = items.find(message => message.sendStatus === "queued" && decryptedTextsRef.current.get(message.id) === text && message.replyToMessageId === (replyTo?.id ?? null));
+    const queued = items.find(message => (message.sendStatus === "queued" || message.sendStatus === "sending") && decryptedTextsRef.current.get(message.id) === text && message.replyToMessageId === (replyTo?.id ?? null));
     if (queued) { await retryFailedMessage(queued); return; }
     const clientMessageId = crypto.randomUUID();
     const optimisticId = `client:${clientMessageId}`;
