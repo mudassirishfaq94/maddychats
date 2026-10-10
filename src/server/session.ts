@@ -11,6 +11,7 @@ import { is2FAEnabled, enabledMfaSince } from "./two-factor";
 import type { UserRow } from "@/db/schema";
 import type { SafeUser } from "@/lib/types";
 import { activeDevice } from "./device-sessions";
+import { retryDatabaseRead } from "./database-read-retry";
 
 /** Attributes applied to the session cookie (matches NextResponse cookie API). */
 export interface SessionCookieOptions {
@@ -85,6 +86,7 @@ export const getSessionUser = cache(async (): Promise<SafeUser | null> => {
 export async function resolveSessionToken(token: string): Promise<SafeUser | null> {
   const claims = await verifySessionToken(token);
   if (!claims) return null;
+  return retryDatabaseRead(async () => {
   if (!(await activeDevice(claims))) return null;
   const user = await findUserById(claims.sub);
   if (!user) return null;
@@ -106,6 +108,7 @@ export async function resolveSessionToken(token: string): Promise<SafeUser | nul
   const enabledSince = await enabledMfaSince(user.id);
   if (enabledSince && claims.mfaTime < enabledSince.getTime()) return null;
   return toSafeUser(user);
+  });
 }
 
 /**
