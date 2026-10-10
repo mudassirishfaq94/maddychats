@@ -148,14 +148,14 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     assert.equal((await voiceUpload).status(), 201);
     const ownVoice = source.page.getByRole("button", { name: "Play voice message", exact: true }).first();
     await ownVoice.waitFor();
-    const contrast = await ownVoice.evaluate(button => {
+    const contrast = await ownVoice.evaluate(new Function("button", String.raw`
       const bubble = button.parentElement;
       const rgb = value => value.match(/[\d.]+/g).slice(0, 3).map(Number);
       const luminance = value => rgb(value).map(v => v / 255).map(v => v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4).reduce((sum, v, i) => sum + v * [0.2126, 0.7152, 0.0722][i], 0);
       const foreground = luminance(getComputedStyle(button).color);
       const background = luminance(getComputedStyle(bubble).backgroundColor);
       return (Math.max(foreground, background) + 0.05) / (Math.min(foreground, background) + 0.05);
-    });
+    `));
     assert(contrast >= 4.5, "Voice controls must have readable contrast on their bubble");
     await recipient.page.getByRole("button", { name: "Play voice message", exact: true }).click();
     await recipient.page.getByRole("button", { name: "Pause voice message", exact: true }).waitFor();
