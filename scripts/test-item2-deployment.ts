@@ -125,17 +125,27 @@ async function main() {
     const conversation = (await fresh.query("insert into conversations(type,created_by_id) values('dm',$1) returning id", [sender.id])).rows[0];
     await fresh.query("insert into conversation_members(conversation_id,user_id) values($1,$2)", [conversation.id, sender.id]);
     await fresh.query("insert into scheduled_messages(conversation_id,sender_id,text,scheduled_for) values($1,$2,'Independent delivery',now()-interval '1 minute')", [conversation.id, sender.id]);
+    const recipient = (await fresh.query("insert into users(username,display_name,email,password_hash) values('worker_recipient','Recipient','worker_recipient@example.invalid','test-hash') returning id")).rows[0];
+    const pendingConversation = (await fresh.query("insert into conversations(type,created_by_id) values('dm',$1) returning id", [sender.id])).rows[0];
+    await fresh.query("insert into conversation_members(conversation_id,user_id,accepted_at) values($1,$2,now()),($1,$3,null)", [pendingConversation.id,sender.id,recipient.id]);
+    await fresh.query("insert into scheduled_messages(conversation_id,sender_id,text,encrypted,scheduled_for) values($1,$2,'ciphertext-pending-introduction',true,now()-interval '1 minute')", [pendingConversation.id,sender.id]);
     const heartbeat = join(temp, "heartbeat");
     const workerEnv = { ...testEnv, SCHEDULED_BASE_URL: base, SCHEDULED_INTERVAL_MS: "1000", WORKER_HEARTBEAT_FILE: heartbeat };
     const worker = spawn(process.execPath, ["scripts/scheduled-worker.mjs"], { env: workerEnv, stdio: "pipe", windowsHide: true }); children.push(worker);
     let sent = false;
     for (let i = 0; i < 100; i++) {
-      sent = (await fresh.query("select sent from scheduled_messages")).rows[0]?.sent;
+      sent = (await fresh.query("select sent from scheduled_messages where conversation_id=$1", [conversation.id])).rows[0]?.sent;
       if (sent) break; await sleep(200);
     }
     assert(sent, "Worker must deliver without a logged-in client");
     await sleep(2200);
     assert.equal((await fresh.query("select count(*)::int as count from messages where text='Independent delivery'")).rows[0].count, 1);
+    assert.equal((await fresh.query("select sent from scheduled_messages where conversation_id=$1", [pendingConversation.id])).rows[0].sent, false, "Worker must retain a pending request without sending it");
+    assert.equal((await fresh.query("select count(*)::int as n from messages where conversation_id=$1", [pendingConversation.id])).rows[0].n, 0);
+    await fresh.query("update conversation_members set accepted_at=now() where conversation_id=$1 and user_id=$2", [pendingConversation.id,recipient.id]);
+    let approvedSent = false;
+    for (let i=0;i<50;i++) { approvedSent = (await fresh.query("select sent from scheduled_messages where conversation_id=$1", [pendingConversation.id])).rows[0].sent; if (approvedSent) break; await sleep(200); }
+    assert(approvedSent, "Worker must resume the retained message after approval");
     const workerStopped = once(worker, "exit");
     worker.kill();
     await workerStopped;

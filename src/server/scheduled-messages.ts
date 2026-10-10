@@ -115,7 +115,7 @@ export async function processScheduledMessages(): Promise<{
           select exists(select 1 from conversations c
             join conversation_members m on m.conversation_id=c.id
             where c.id=${scheduled.conversationId} and c.type='dm'
-              and m.accepted_at is null) as pending`);
+              and m.user_id<>c.created_by_id and m.accepted_at is null) as pending`);
         if (pending.rows[0]?.pending) return null;
         const [created] = await tx.insert(messages).values({
           conversationId: scheduled.conversationId,
