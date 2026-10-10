@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start",
+    "start": "npm run db:migrate && next start",
     "lint": "eslint . --max-warnings=0",
     "typecheck": "tsc --noEmit",
     "db:migrate": "drizzle-kit migrate",

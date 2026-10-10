@@ -49,7 +49,10 @@ trusted-key approval proof and single-use persisted requests. Removing a linked
 session revokes its encryption trust atomically. After signing in again, proof
 of possession binds the existing key to the new session without approving it.
 The build command in `render.yaml` embeds the actual Git commit as APP_VERSION.
-Update the existing service by ID rather than creating a second web service.
+`npm start` applies additive Drizzle migrations before starting Next.js.
+The reference Blueprint follows the current release branch; change it to main
+only after the reviewed release is merged. Update the existing service by ID
+rather than creating a second web service.
 
 Free hosting can sleep and has quotas. A consistently instant cold start or an
 unlimited production service cannot be promised. Record live speed measurements
