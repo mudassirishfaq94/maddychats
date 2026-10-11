@@ -37,7 +37,10 @@ export async function testMobilePerformance(base, pool, source, owner, conversat
     const draft = "Mobile typing must remain complete with no lost characters with no lost characters ";
     await composer.pressSequentially(draft, { delay: 35, timeout: 90000 });
     assert.equal(await composer.inputValue(), draft);
-    const storedHandle = await page.waitForFunction(async ({ userId, conversationId, draft }) => {
+    let stored;
+    const deadline = Date.now() + 15000;
+    while (!stored && Date.now() < deadline) {
+      stored = await page.evaluate(async ({ userId, conversationId, draft }) => {
       const db = await new Promise((resolve, reject) => { const r = indexedDB.open(`circlo-outbox:${userId}`); r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error); });
       try {
         const record = await new Promise((resolve, reject) => { const r = db.transaction("messages").objectStore("messages").get(`draft:${conversationId}`); r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error); });
@@ -47,9 +50,10 @@ export async function testMobilePerformance(base, pool, source, owner, conversat
         if (new TextDecoder().decode(bytes) !== draft) return null;
         return { encrypted: true, plain: record.plain, legacy: localStorage.getItem(`ziptalk:draft:${userId}:${conversationId}`) };
       } finally { db.close(); }
-    }, { userId: owner.id, conversationId, draft }, { timeout: 15000 });
-    const stored = await storedHandle.jsonValue();
-    await storedHandle.dispose();
+      }, { userId: owner.id, conversationId, draft });
+      if (!stored) await page.waitForTimeout(100);
+    }
+    assert(stored, "The complete draft must be durably encrypted within 15 seconds");
     assert.equal(stored.encrypted, true); assert.equal(stored.plain, undefined); assert.equal(stored.legacy, null);
     await page.reload(); await composer.waitFor();
     await page.waitForFunction(text => document.querySelector('textarea[aria-label="Message text"]')?.value === text, draft, { timeout: 15000 });
