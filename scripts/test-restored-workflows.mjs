@@ -156,6 +156,22 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     assert.equal(clientIds.size,1,"Failed/lost-response retries preserve identity");
     for(let attempt=0;attempt<30 && sendAttempts<3;attempt++)await source.page.waitForTimeout(100);
     assert.equal(sendAttempts,3);
+    // Recipient delivery can precede the sender's retry acknowledgement. Wait
+    // for that acknowledgement and its durable draft clear before reloading.
+    await source.page.waitForFunction(() => document.querySelector('textarea[aria-label="Message text"]')?.value === "");
+    await source.page.waitForFunction(async ({ userId, conversationId }) => {
+      const db = await new Promise((resolve, reject) => {
+        const request = indexedDB.open(`circlo-outbox:${userId}`);
+        request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error);
+      });
+      try {
+        const record = await new Promise((resolve, reject) => {
+          const request = db.transaction("messages").objectStore("messages").get(`draft:${conversationId}`);
+          request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error);
+        });
+        return record === undefined;
+      } finally { db.close(); }
+    }, { userId: owner.id, conversationId });
     const committed=(await pool.query("select id from messages where conversation_id=$1",[conversationId])).rows;
     assert.equal(committed.length,1,"Retries persist one message");
     assert.equal((await pool.query("select count(*)::int as count from realtime_events where payload->>'type'='message:new' and payload->'message'->>'id'=$1",[committed[0].id])).rows[0].count,2,"Each member receives exactly one durable new-message event");
