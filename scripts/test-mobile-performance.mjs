@@ -17,6 +17,7 @@ export async function testMobilePerformance(base, pool, source, owner, conversat
         request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error);
       });
     }, owner.id);
+    await page.bringToFront();
     await page.reload(); await composer.waitFor();
     for (let i = 0; i < 6; i++) {
       const load = page.getByRole("button", { name: "Load older messages", exact: true });
@@ -36,7 +37,13 @@ export async function testMobilePerformance(base, pool, source, owner, conversat
     const draft = "Mobile typing must remain complete with no lost characters with no lost characters ";
     await composer.pressSequentially(draft, { delay: 35, timeout: 90000 });
     assert.equal(await composer.inputValue(), draft);
-    await page.waitForTimeout(800);
+    await page.waitForFunction(async ({ userId, conversationId }) => {
+      const db = await new Promise((resolve, reject) => { const r = indexedDB.open(`circlo-outbox:${userId}`); r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error); });
+      try {
+        const record = await new Promise((resolve, reject) => { const r = db.transaction("messages").objectStore("messages").get(`draft:${conversationId}`); r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error); });
+        return record?.ciphertext instanceof ArrayBuffer && record.ciphertext.byteLength > 0;
+      } finally { db.close(); }
+    }, { userId: owner.id, conversationId }, { timeout: 15000 });
     const stored = await page.evaluate(async ({ userId, conversationId }) => {
       const db = await new Promise((resolve, reject) => { const r = indexedDB.open(`circlo-outbox:${userId}`); r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error); });
       const record = await new Promise((resolve, reject) => { const r = db.transaction("messages").objectStore("messages").get(`draft:${conversationId}`); r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error); });
