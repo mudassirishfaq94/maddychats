@@ -2274,6 +2274,7 @@ export function ChatView({
                                     failed={unavailableMessageIds.has(msg.id)}
                                     missingKey={missingMessageKeys.current.has(msg.id)}
                                     deviceError={Boolean(e2ee.error)} signal={msg.text === "signal:v2"}
+                                    introduction={!requestAccepted && conversation.requestInitiatorId !== me.id}
                                     onRetry={() => {
                                       failedDecryptionRef.current.delete(msg.id);
                                       setUnavailableMessageIds(current => { const next = new Set(current); next.delete(msg.id); return next; });

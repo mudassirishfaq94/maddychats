@@ -4,8 +4,9 @@ import { Loader2, Lock } from "lucide-react";
 import { useEffect, useState } from "react";
 
 /** Only recovery guidance is rendered here, never ciphertext or raw errors. */
-export function EncryptedMessageState({ failed, missingKey, deviceError, signal, onRetry, onSecurity }: {
+export function EncryptedMessageState({ failed, missingKey, deviceError, signal, introduction = false, onRetry, onSecurity }: {
   failed: boolean; missingKey: boolean; deviceError: boolean; signal: boolean;
+  introduction?: boolean;
   onRetry: () => void; onSecurity: () => void;
 }) {
   const [slow, setSlow] = useState(false);
@@ -20,11 +21,12 @@ export function EncryptedMessageState({ failed, missingKey, deviceError, signal,
     <div className="max-w-xs space-y-2 py-1 text-sm" role="status" aria-live="polite" aria-busy={!unavailable}>
       <div className="flex items-center gap-2 font-medium">
         {unavailable ? <Lock className="h-4 w-4 shrink-0" aria-hidden="true" /> : <Loader2 className="h-4 w-4 shrink-0 animate-spin motion-reduce:animate-none" aria-hidden="true" />}
-        {unavailable ? "Message not available yet" : "Loading your message, please wait…"}
+        {introduction && !deviceError ? "Waiting for secure delivery" : unavailable ? "Message not available yet" : "Loading your message, please wait…"}
       </div>
       {unavailable ? <>
         <p className="text-xs leading-relaxed opacity-90">
           {deviceError ? "This device’s encryption setup needs attention. Open device settings to check approval or recovery."
+            : introduction ? "The message request arrived. The sender’s device still needs to share its encryption key. The message will appear automatically when secure delivery completes. You can accept or decline the request above."
             : signal ? "This device has not received its secure copy. Check device approval, then ask the sender to resend if needed."
             : missingKey ? "The key for this message is not available on this device. On a trusted device that can read this chat, open Security and use Restore my other devices. If no device retains the key, this message cannot be recovered."
             : "Secure loading was interrupted. Check your connection and try again. If it continues, check your device’s encryption settings."}

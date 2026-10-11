@@ -20,4 +20,6 @@ test("encrypted placeholders explain loading and actionable failure states", () 
   assert.match(key, /cannot be recovered/);
   assert.match(render({ deviceError: true }), /Device settings/);
   assert.match(render({ signal: true }), /ask the sender to resend/);
+  assert.match(render({ failed: true, introduction: true }), /sender’s device still needs/);
+  assert.match(render({ introduction: true }), /Waiting for secure delivery/);
 });

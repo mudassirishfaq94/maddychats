@@ -34,3 +34,5 @@ Color calculations: outgoing message text 10.61:1, secondary outgoing text
 5.43:1, copper button labels 7.79:1. Browser voice-control contrast remains tested
 against its actual bubble. These tests are Chromium lab checks, not certification
 on every physical mobile device.
+
+First-contact requests use the recipient acceptance state, separate from the sender awaiting-approval state. The production-browser request test passed: offline sender waiting explanation, automatic decryption after real key delivery, approval/reply, queued reload/recovery and exactly three encrypted messages persisted. The expected placeholder assertion was updated to the new copy; existing privacy/delivery assertions remain.
