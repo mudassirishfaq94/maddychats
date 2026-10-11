@@ -6,6 +6,8 @@ import bcrypt from "bcryptjs";
 import { testMobilePerformance } from "./test-mobile-performance.mjs";
 import { testStatusPhoto } from "./test-status-photo.mjs";
 import { testEncryptionDevices } from "./test-encryption-devices.mjs";
+import { testImageViewer } from "./test-image-viewer.mjs";
+import sharp from "sharp";
 
 /** Positive workflows use actual browser keys, recording, storage and database delivery. */
 export async function testRestoredWorkflows(base, pool, owner, peer, password, conversationId, ownedLive = false, jwtSecret) {
@@ -245,6 +247,13 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     const authorizedMedia = await fetch(base + "/api/media/" + stored, { headers: { Cookie: recipient.cookies } }); assert.equal(authorizedMedia.status, 200);
     assert(!Buffer.from(await authorizedMedia.arrayBuffer()).includes(Buffer.from(fileContent)), "The server and storage return ciphertext, not readable file bytes");
     assert.equal((await fetch(base + "/api/media/" + stored, { headers: { Cookie: unrelatedCookie } })).status, 404);
+    // A decrypted photo must open outside message-row containment and fit every viewport.
+    const photo = await sharp({ create: { width: 1200, height: 900, channels: 3, background: "#343042" } }).png().toBuffer();
+    await source.page.locator('input[type="file"]').first().setInputFiles({ name: "viewer-check.png", mimeType: "image/png", buffer: photo });
+    const photoUpload = source.page.waitForResponse(response => response.url().endsWith("/api/upload/message") && response.request().method() === "POST");
+    await source.page.getByRole("button", { name: "Send message", exact: true }).click();
+    assert.equal((await photoUpload).status(), 201);
+    await testImageViewer(recipient.page, "viewer-check.png");
     // Chromium generates a microphone stream; the application's MediaRecorder performs real recording.
     await source.page.getByRole("button", { name: "Record voice message", exact: true }).click();
     await source.page.getByRole("button", { name: "Stop recording", exact: true }).waitFor();
