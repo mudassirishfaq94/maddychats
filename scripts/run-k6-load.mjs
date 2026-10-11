@@ -19,7 +19,13 @@ const parsed = new URL(adminUrl);
 assert.equal(parsed.hostname, '127.0.0.1', 'Only a loopback database is permitted.');
 assert.equal(parsed.pathname, '/postgres', 'Use the local postgres admin database; the runner creates its own isolated DB.');
 const profile = process.env.LOAD_PROFILE || 'full';
-assert(['full', 'smoke', 'steady'].includes(profile));
+assert(['full', 'smoke', 'steady', 'login-tuning'].includes(profile));
+const label = process.env.LOAD_RESULT_LABEL || profile;
+assert(/^[a-z0-9-]{1,60}$/.test(label), 'Use a simple report label.');
+const passwordConcurrency = process.env.LOAD_PASSWORD_CONCURRENCY || '2';
+assert(['1', '2', '3'].includes(passwordConcurrency));
+const threadpoolSize = process.env.LOAD_UV_THREADPOOL_SIZE || '4';
+assert(['2', '4', '6', '8'].includes(threadpoolSize));
 const k6Candidates = [process.env.K6_BINARY, 'k6', 'C:/Program Files/k6/k6.exe', resolve('.freebuff/tools/k6/k6-v2.2.0-windows-amd64/k6.exe')].filter(Boolean);
 const k6 = k6Candidates.find(bin => spawnSync(bin, ['version'], { windowsHide: true }).status === 0);
 assert(k6, 'Install k6: winget install --id GrafanaLabs.k6 --exact --source winget');
@@ -37,7 +43,7 @@ const runId = randomBytes(8).toString('hex');
 const dbName = 'circlo_k6_' + runId + '_test';
 const directory = resolve('.freebuff/k6/' + runId);
 await mkdir(directory, { recursive: true });
-const output = resolve('docs/performance/k6-' + profile + '-results.json');
+const output = resolve('docs/performance/k6-' + label + '-results.json');
 const baseUrl = 'http://127.0.0.1:3190';
 const dbParsed = new URL(adminUrl); dbParsed.pathname = '/' + dbName;
 const databaseUrl = dbParsed.toString();
@@ -94,6 +100,8 @@ try {
     GOOGLE_CLIENT_SECRET: '', GOOGLE_CLIENT_ID: '', SUPABASE_SERVICE_ROLE_KEY: '', SUPABASE_URL: '',
     OPENAI_API_KEY: '', STRIPE_SECRET_KEY: '', CSP_ENFORCE: '1',
     STARTER_MODE: '1', SCHEDULED_MESSAGES_ENABLED: '1', DATABASE_POOL_MAX: '5',
+    PASSWORD_CONCURRENCY: passwordConcurrency, UV_THREADPOOL_SIZE: threadpoolSize,
+    LOGIN_PERFORMANCE_DIAGNOSTICS: process.env.LOAD_TEST_LOGIN_TIMINGS === '1' ? '1' : '0',
     NODE_OPTIONS: '',
   };
   server = spawn(process.execPath, ['--require', resolve('scripts/load-test-network-guard.cjs'), resolve('.next/standalone/server.js')], { windowsHide: true, stdio: 'pipe', env });
@@ -204,10 +212,13 @@ try {
     return result;
   });
   const summary = JSON.parse(await readFile(summaryFile, 'utf8'));
+  const loginTimings = appLog.split(/\r?\n/).filter(line => line.startsWith('[login-performance] '))
+    .map(line => JSON.parse(line.slice('[login-performance] '.length)));
   const result = { timestamp: new Date().toISOString(), profile, target: baseUrl, environment: 'local production standalone build; generator and database on same machine',
     hardware: { platform: platform(), logicalCpus: cpuBefore.length, totalMemoryMiB: totalmem()/1048576 },
     fixture: { users: 200, conversations: 1000, messages: 50000, publicCommunities: 1000, bcryptCost: 12, appPoolMax: 5 },
     thirdPartyConnectionsBlocked: externalBlocked, k6Version: spawnSync(k6, ['version'], { encoding: 'utf8', windowsHide: true }).stdout.trim(),
+    passwordConcurrency: Number(passwordConcurrency), threadpoolSize: Number(threadpoolSize), loginTimings,
     thresholdsPassed: exitCode === 0, exitCode, measurements, summary, databaseSamples: samples,
     serverErrorLines: appLog.split(/\r?\n/).filter(line => /error|blocked|failed|timeout/i.test(line)).slice(0,30),
   };

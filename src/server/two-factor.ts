@@ -4,7 +4,7 @@
  */
 
 import { createHmac, createHash, randomBytes, timingSafeEqual } from "crypto";
-import { and, eq, isNull, lt, or } from "drizzle-orm";
+import { and, eq, isNull, lt, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { user2fa, users } from "@/db/schema";
 
@@ -171,11 +171,11 @@ export async function replaceRecoveryCodes(userId: string) {
 }
 
 /** Check if a user has 2FA enabled */
+const enabledFactor = db.select({ enabled: user2fa.enabled }).from(user2fa)
+  .where(eq(user2fa.userId, sql.placeholder("userId"))).prepare("");
+
 export async function is2FAEnabled(userId: string): Promise<boolean> {
-  const [record] = await db
-    .select({ enabled: user2fa.enabled })
-    .from(user2fa)
-    .where(eq(user2fa.userId, userId));
+  const [record] = await enabledFactor.execute({ userId });
 
   return record?.enabled ?? false;
 }

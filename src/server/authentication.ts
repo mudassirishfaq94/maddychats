@@ -12,6 +12,7 @@ import { issueDeviceSession, setDeviceCookies } from "./device-sessions";
 import { consumeSecondFactor, is2FAEnabled, verifyTOTPLogin } from "./two-factor";
 import { findUserById, toSafeUser } from "./users";
 import { verifyPassword } from "./password";
+import { measureLoginStage } from "./login-performance";
 
 export const MFA_COOKIE = "maddy_mfa_challenge";
 const CHALLENGE_MS = 5 * 60 * 1000;
@@ -33,7 +34,7 @@ export async function beginSignIn(req: NextRequest, user: UserRow, redirectTo?: 
   // Reverse proxies expose an internal req.url; redirect browsers to the public origin.
   const destination = redirectTo ? new URL(sameOriginDestination(redirectTo, clientUrl())) : undefined;
   const returnPath = destination ? destination.pathname + destination.search + destination.hash : undefined;
-  const blocked = await newSessionBlockReason(user);
+  const blocked = await measureLoginStage("eligibility", () => newSessionBlockReason(user));
   if (blocked === "suspended") return jsonError(403, "This account is unavailable.");
   if (blocked === "mfa_required") {
     const token = randomBytes(32).toString("base64url");

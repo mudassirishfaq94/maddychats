@@ -1,4 +1,6 @@
 import bcrypt from "bcrypt";
+import { measureLoginStage, recordLoginQueue } from "./login-performance";
+import { passwordConcurrency } from "./password-concurrency";
 
 // Native async bcrypt runs in libuv workers, never on the request event loop.
 // Leave two of the default four workers available for other server work.
@@ -6,11 +8,14 @@ const state = globalThis as typeof globalThis & {
   __passwordWork?: { active: number; waiting: (() => void)[] };
 };
 const work = state.__passwordWork ??= { active: 0, waiting: [] };
+// Bounded tuning; keep at least one libuv worker available for filesystem/DNS.
+const capacity = passwordConcurrency(process.env.PASSWORD_CONCURRENCY, process.env.UV_THREADPOOL_SIZE);
 export class PasswordBusyError extends Error {
   constructor() { super("Password verification is busy. Please retry shortly."); }
 }
 async function bounded<T>(operation: () => Promise<T>): Promise<T> {
-  if (work.active >= 2) {
+  const start = performance.now();
+  if (work.active >= capacity) {
     if (work.waiting.length >= 4) throw new PasswordBusyError();
     await new Promise<void>((resolve, reject) => {
       const ready = () => { clearTimeout(timer); resolve(); };
@@ -22,7 +27,8 @@ async function bounded<T>(operation: () => Promise<T>): Promise<T> {
       work.waiting.push(ready);
     });
   } else work.active++;
-  try { return await operation(); }
+  recordLoginQueue(performance.now() - start);
+  try { return await measureLoginStage("password_work", operation); }
   finally {
     const next = work.waiting.shift();
     if (next) next(); // Transfer the occupied slot directly to the waiter.

@@ -22,6 +22,11 @@ const fullStages = [
 ];
 const stages = __ENV.LOAD_PROFILE === 'smoke'
   ? [{ duration: '5s', target: 2 }, { duration: '15s', target: 2 }, { duration: '5s', target: 0 }]
+  : __ENV.LOAD_PROFILE === 'login-tuning'
+    // Short configuration comparison only. The full profile certifies sustained load.
+    ? [{ duration: '30s', target: 20 }, { duration: '15s', target: 20 },
+      { duration: '30s', target: 50 }, { duration: '15s', target: 50 },
+      { duration: '30s', target: 100 }, { duration: '15s', target: 100 }, { duration: '15s', target: 0 }]
   : __ENV.LOAD_PROFILE === 'steady'
     ? [{ duration: '30s', target: 100 }, { duration: '3m', target: 100 }, { duration: '30s', target: 0 }]
     : fullStages;

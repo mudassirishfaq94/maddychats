@@ -17,18 +17,23 @@ import {
 } from "@/server/http";
 import { newSessionBlockReason } from "@/server/session";
 import { recordLoginAttempt } from "@/server/privacy";
+import { measureLoginStage, withLoginTimings } from "@/server/login-performance";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
+  return withLoginTimings(() => login(req), req);
+}
+
+async function login(req: NextRequest) {
   const blocked = guardSameOrigin(req);
   if (blocked) return blocked;
 
-  const rl = await rateLimit(
+  const rl = await measureLoginStage("rate_limit", () => rateLimit(
     `login:${clientIp(req)}`,
     AUTH_RATE_LIMIT.limit,
     AUTH_RATE_LIMIT.windowMs,
-  );
+  ));
   if (!rl.allowed) {
     const response = jsonError(429, "Too many attempts. Please try again later.");
     response.headers.set("Retry-After", String(rl.retryAfterSeconds));
@@ -54,7 +59,7 @@ export async function POST(req: NextRequest) {
 
   // Generic error message on both unknown user and wrong password,
   // so the endpoint cannot be used to enumerate accounts.
-  const user = await findUserByIdentifier(identifier);
+  const user = await measureLoginStage("lookup", () => findUserByIdentifier(identifier));
   let valid = false;
   try { valid = user ? await verifyPassword(password, user.passwordHash) : false; }
   catch (error) {
@@ -76,11 +81,11 @@ export async function POST(req: NextRequest) {
     return jsonError(401, "Incorrect email, username, or password.");
   }
 
-  const sessionBlock = await newSessionBlockReason(user);
-  if (sessionBlock === "suspended") {
-    return jsonError(403, "This account is unavailable.");
-  }
   if (!user.emailVerifiedAt) {
+    // Unverified accounts must not trigger proof/email work when suspended.
+    // Verified accounts get the same fresh check in beginSignIn, once.
+    const sessionBlock = await measureLoginStage("eligibility_precheck", () => newSessionBlockReason(user));
+    if (sessionBlock === "suspended") return jsonError(403, "This account is unavailable.");
     const proof = process.env.STARTER_MODE === "1"
       ? await readGoogleEmailProof(req.cookies.get(GOOGLE_EMAIL_PROOF_COOKIE)?.value, user.id, user.email)
       : null;
@@ -94,7 +99,7 @@ export async function POST(req: NextRequest) {
     await db.update(users).set({ emailVerifiedAt: user.emailVerifiedAt }).where(eq(users.id, user.id));
   }
 
-  const response = await beginSignIn(req, user);
+  const response = await measureLoginStage("session_setup", () => beginSignIn(req, user));
   response.cookies.set(GOOGLE_EMAIL_PROOF_COOKIE, "", { httpOnly: true, sameSite: "lax", path: "/api/auth/login", maxAge: 0 });
   return response;
 }
