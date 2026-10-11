@@ -169,7 +169,18 @@ async function main() {
     const state=globalThis as typeof globalThis & { __scheduledMaintenance?:ReturnType<typeof setInterval>; __starterMaintenance?:ReturnType<typeof setInterval> };
     clearInterval(state.__scheduledMaintenance); clearInterval(state.__starterMaintenance);
     await appPool?.end(); await local?.end();
-    if(created) await admin.query(`DROP DATABASE "${name}" WITH (FORCE)`);
+    if (created) {
+      // Pool.end resolves before PostgreSQL necessarily observes every socket
+      // closing. Do not FORCE-drop and terminate those retiring connections.
+      let connections = 0;
+      for (let attempt = 0; attempt < 100; attempt++) {
+        connections = (await admin.query<{ n: number }>("SELECT count(*)::int AS n FROM pg_stat_activity WHERE datname=$1", [name])).rows[0].n;
+        if (connections === 0) break;
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+      assert.equal(connections, 0, "All fixture connections close before database removal");
+      await admin.query(`DROP DATABASE "${name}"`);
+    }
     await admin.end();
   }
 }
