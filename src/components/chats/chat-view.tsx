@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { EncryptedMessageState } from "./encrypted-message-state";
 
 const starterMode = process.env.NEXT_PUBLIC_STARTER_MODE === "1";
 import { useHydrated } from "@/hooks/use-hydrated";
@@ -370,6 +371,7 @@ export function ChatView({
   // may still be in flight when the message first arrives.
   const failedDecryptionRef = useRef<Map<string, number>>(new Map());
   const [unavailableMessageIds, setUnavailableMessageIds] = useState<Set<string>>(() => new Set());
+  const missingMessageKeys = useRef(new Set<string>());
   const arrivalTimesRef = useRef<Map<string, number>>(new Map());
   const decryptingRef = useRef<Set<string>>(new Set());
   const decryptingRepliesRef = useRef<Set<string>>(new Set());
@@ -399,11 +401,13 @@ export function ChatView({
         m.encrypted &&
         m.text &&
         m.text !== "signal:v2" &&
+        (failedDecryptionRef.current.get(m.id) ?? 0) < 2 &&
         !decryptedTextsRef.current.has(m.id) &&
         !decryptingRef.current.has(m.id),
     );
     const pendingReplies = items.filter((m) =>
       m.replyTo?.encrypted && m.replyTo.text &&
+      (failedDecryptionRef.current.get(`reply:${m.replyTo.id}`) ?? 0) < 2 &&
       !decryptedRepliesRef.current.has(m.replyTo.id) &&
       !decryptingRepliesRef.current.has(m.replyTo.id),
     );
@@ -426,6 +430,7 @@ export function ChatView({
         try {
           const plain = await decrypt(m.text, conversationId);
           failedDecryptionRef.current.delete(m.id);
+          missingMessageKeys.current.delete(m.id);
           if (alive) setUnavailableMessageIds((current) => {
             if (!current.has(m.id)) return current;
             const next = new Set(current); next.delete(m.id); return next;
@@ -438,11 +443,13 @@ export function ChatView({
           cacheDecryptedMessage(conversationId, m.id, m.text, plain);
           textBatch.set(m.id, plain);
           if (textBatch.size >= 12) flushText();
-        } catch {
+        } catch (cause) {
           // A peer can still publish a just-created key, but retries must be
           // bounded so one legacy message never burns CPU forever.
           const attempts = (failedDecryptionRef.current.get(m.id) ?? 0) + 1;
           failedDecryptionRef.current.set(m.id, attempts);
+          if (cause instanceof Error && cause.message === "This message's key is not available on this device") missingMessageKeys.current.add(m.id);
+          else missingMessageKeys.current.delete(m.id);
           if (alive && attempts >= 2) setUnavailableMessageIds((current) => new Set(current).add(m.id));
           hadFailure ||= attempts < 2;
         } finally {
@@ -454,9 +461,14 @@ export function ChatView({
         const reply = m.replyTo!;
         try {
           const plain = await decrypt(reply.text, conversationId);
+          failedDecryptionRef.current.delete(`reply:${reply.id}`);
           replyBatch.set(reply.id, plain);
         } catch {
-          hadFailure = true;
+          const key = `reply:${reply.id}`;
+          const attempts = (failedDecryptionRef.current.get(key) ?? 0) + 1;
+          failedDecryptionRef.current.set(key, attempts);
+          hadFailure ||= attempts < 2;
+          if (alive && attempts >= 2) setUnavailableMessageIds(current => new Set(current).add(key));
         } finally {
           decryptingRepliesRef.current.delete(reply.id);
         }
@@ -2213,7 +2225,7 @@ export function ChatView({
                                           </span>
                                         ) : msg.replyTo.encrypted && decryptedReplies.get(msg.replyTo.id) === undefined ? (
                                           <span className="flex items-center gap-1 opacity-70">
-                                            <Lock className="inline h-3 w-3" />
+                                            {unavailableMessageIds.has(`reply:${msg.replyTo.id}`) ? "Reply unavailable on this device. Check Security & recovery." : "Loading replied message…"}
                                             …
                                           </span>
                                         ) : (
@@ -2257,10 +2269,18 @@ export function ChatView({
                                     />
                                   </div>
                                 ) : null}
-                                {msg.encrypted && isPendingDecrypt(msg) && !(conversation.type === "dm" && conversation.requestInitiatorId !== me.id && items.length === 1) ? (
-                                  <span aria-label="Encrypted message" className="inline-flex min-h-4 items-center text-[var(--muted)]">
-                                    <Lock className="h-3 w-3" />
-                                  </span>
+                                {msg.encrypted && Boolean(msg.text) && decryptedTexts.get(msg.id) === undefined ? (
+                                  <EncryptedMessageState
+                                    failed={unavailableMessageIds.has(msg.id)}
+                                    missingKey={missingMessageKeys.current.has(msg.id)}
+                                    deviceError={Boolean(e2ee.error)} signal={msg.text === "signal:v2"}
+                                    onRetry={() => {
+                                      failedDecryptionRef.current.delete(msg.id);
+                                      setUnavailableMessageIds(current => { const next = new Set(current); next.delete(msg.id); return next; });
+                                      setDecryptRetry(value => value + 1);
+                                    }}
+                                    onSecurity={() => { if (e2ee.error || msg.text === "signal:v2") router.push("/app/profile#encryption-devices"); else setShowEncryptionInfo(true); }}
+                                  />
                                 ) : textOf(msg) ? (
                                   (() => {
                                     const parsed = parseStatusReply(textOf(msg));

@@ -129,7 +129,7 @@ export function AudioMessage({
             "flex h-10 w-10 shrink-0 items-center justify-center rounded-full shadow-sm transition-all active:scale-95",
             own
               ? "bg-[var(--bubble-own-fg)]/10 text-[var(--bubble-own-fg)] hover:bg-[var(--bubble-own-fg)]/20"
-              : "bg-[var(--accent)] text-[var(--bubble-own-fg)] hover:brightness-110",
+              : "bg-[var(--action)] text-[var(--action-fg)] hover:brightness-110",
           )}
         >
           {loading ? (

@@ -133,6 +133,20 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     });
     assert(capabilityFailures >= 2, "Media capability request recovers after a transient failure");
     await source.page.unroute("**/api/chat-capabilities");
+    // An unreadable encrypted fixture must explain recovery rather than render
+    // an empty lock bubble. Removal is restricted to this owned conversation.
+    const unreadable = (await pool.query("insert into messages(conversation_id,sender_id,text,type,encrypted) values($1,$2,'unreadable-owned-fixture','text',true) returning id", [conversationId, peer.id])).rows[0].id;
+    try {
+      await source.page.reload();
+      await source.page.getByText("Message not available yet", { exact: true }).waitFor({ timeout: 45000 });
+      await source.page.getByRole("button", { name: "Try loading again", exact: true }).click();
+      await source.page.getByText("Message not available yet", { exact: true }).waitFor({ timeout: 45000 });
+      assert.equal(await source.page.getByRole("button", { name: "Security & recovery", exact: true }).count(), 1);
+      assert.equal(await source.page.getByText("unreadable-owned-fixture", { exact: true }).count(), 0, "Ciphertext is never displayed");
+    } finally {
+      await pool.query("delete from messages where id=$1 and conversation_id=$2", [unreadable, conversationId]);
+      await source.page.reload();
+    }
     const composer = source.page.getByRole("textbox", { name: "Message text" });
     let sendAttempts = 0;
     const clientIds = new Set();

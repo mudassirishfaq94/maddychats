@@ -15,8 +15,8 @@ export default function manifest(): MetadataRoute.Manifest {
       { name: "Chats", url: "/app/chats", icons: [{ src: "/icons/circlo-192.png", sizes: "192x192" }] },
       { name: "People", url: "/app/people", icons: [{ src: "/icons/circlo-192.png", sizes: "192x192" }] },
     ],
-    background_color: "#0B1D26",
-    theme_color: "#0B1D26",
+    background_color: "#151719",
+    theme_color: "#151719",
     icons: [
       { src: "/icons/circlo-192.png", sizes: "192x192", type: "image/png" },
       { src: "/icons/circlo-512.png", sizes: "512x512", type: "image/png" },
