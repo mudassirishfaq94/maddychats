@@ -34,19 +34,55 @@ import type {
 export const MESSAGE_PAGE_SIZE = 30;
 const MAX_PAGE_SIZE = 50;
 
+// Reuse compiled SQL, not results. All IDs, viewer identity and timestamps
+// remain request parameters; empty names work without pooler statement state.
+const membershipQuery = db.select().from(conversationMembers).where(and(
+  eq(conversationMembers.conversationId, sql.placeholder("conversationId")),
+  eq(conversationMembers.userId, sql.placeholder("userId")),
+)).limit(1).prepare("");
+const reactionQuery = db.select({ messageId: messageReactions.messageId,
+  userId: messageReactions.userId, emoji: messageReactions.emoji }).from(messageReactions)
+  .where(sql`${messageReactions.messageId}=any(${sql.placeholder("ids")}::uuid[])`).prepare("");
+const readQuery = db.select({ messageId: messageReads.messageId,
+  userId: messageReads.userId, readAt: messageReads.readAt }).from(messageReads)
+  .where(sql`${messageReads.messageId}=any(${sql.placeholder("ids")}::uuid[])`).prepare("");
+const attachmentQuery = db.select().from(messageAttachments)
+  .where(sql`${messageAttachments.messageId}=any(${sql.placeholder("ids")}::uuid[])`).prepare("");
+const parentQuery = db.select({ message: messages, sender: users }).from(messages)
+  .innerJoin(users, eq(messages.senderId, users.id))
+  .where(sql`${messages.id}=any(${sql.placeholder("ids")}::uuid[])`).prepare("");
+const viewerQuery = db.select({ id: messages.id, star: messageStars.id,
+  deletion: messageDeletions.id, pin: pinnedMessages.id }).from(messages)
+  .leftJoin(messageStars, and(eq(messageStars.messageId, messages.id), eq(messageStars.userId, sql.placeholder("viewerId"))))
+  .leftJoin(messageDeletions, and(eq(messageDeletions.messageId, messages.id), eq(messageDeletions.userId, sql.placeholder("viewerId"))))
+  .leftJoin(pinnedMessages, and(eq(pinnedMessages.messageId, messages.id), eq(pinnedMessages.conversationId, messages.conversationId)))
+  .where(sql`${messages.id}=any(${sql.placeholder("ids")}::uuid[])`).prepare("");
+const expireQuery = db.update(messages).set({ deletedAt: sql`${sql.placeholder("now")}::timestamptz`, updatedAt: sql`${sql.placeholder("now")}::timestamptz` })
+  .where(and(eq(messages.conversationId, sql.placeholder("conversationId")), isNull(messages.deletedAt), lte(messages.expiresAt, sql.placeholder("now")))).prepare("");
+const cursorTimestamp = sql<string>`to_char(${messages.createdAt} at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`;
+const newestQuery = db.select({ message: messages, sender: users, cursorTimestamp }).from(messages)
+  .innerJoin(users, eq(messages.senderId, users.id)).where(eq(messages.conversationId, sql.placeholder("conversationId")))
+  .orderBy(desc(messages.createdAt), desc(messages.id)).limit(sql.placeholder("limit")).prepare("");
+const olderQuery = db.select({ message: messages, sender: users, cursorTimestamp }).from(messages)
+  .innerJoin(users, eq(messages.senderId, users.id)).where(and(eq(messages.conversationId, sql.placeholder("conversationId")),
+    or(lt(messages.createdAt, sql.placeholder("createdAt")), and(eq(messages.createdAt, sql.placeholder("createdAt")), lt(messages.id, sql.placeholder("id"))))))
+  .orderBy(desc(messages.createdAt), desc(messages.id)).limit(sql.placeholder("limit")).prepare("");
+const membershipsQuery = db.select().from(conversationMembers)
+  .where(eq(conversationMembers.userId, sql.placeholder("userId"))).prepare("");
+const conversationListQuery = db.select().from(conversations)
+  .where(and(sql`${conversations.id}=any(${sql.placeholder("ids")}::uuid[])`, isNull(conversations.deletedAt))).prepare("");
+const conversationMembersQuery = db.select({ member: conversationMembers, user: users }).from(conversationMembers)
+  .innerJoin(users, eq(conversationMembers.userId, users.id))
+  .where(sql`${conversationMembers.conversationId}=any(${sql.placeholder("ids")}::uuid[])`).prepare("");
+const pinnedConversationsQuery = db.selectDistinct({ conversationId: pinnedMessages.conversationId }).from(pinnedMessages)
+  .where(sql`${pinnedMessages.conversationId}=any(${sql.placeholder("ids")}::uuid[])`).prepare("");
+const blocksQuery = db.select({ blockerId: blocks.blockerId, blockedId: blocks.blockedId }).from(blocks)
+  .where(or(eq(blocks.blockerId, sql.placeholder("userId")), eq(blocks.blockedId, sql.placeholder("userId")))).prepare("");
+
 /* ------------------------------- membership ------------------------------- */
 
 export async function getMembership(conversationId: string, userId: string) {
-  const rows = await db
-    .select()
-    .from(conversationMembers)
-    .where(
-      and(
-        eq(conversationMembers.conversationId, conversationId),
-        eq(conversationMembers.userId, userId),
-      ),
-    )
-    .limit(1);
+  const rows = await membershipQuery.execute({ conversationId, userId });
   return rows[0] ?? null;
 }
 
@@ -167,36 +203,16 @@ export async function hydrateMessages(
 
   const ids = dtos.map((d) => d.id);
   const replyIds = [...new Set(dtos.map((d) => d.replyToMessageId).filter((v): v is string => typeof v === "string"))];
-  const convIds = [...new Set(dtos.map((d) => d.conversationId))];
-
-  const [reactionRows, readRows, attachmentRows, parents, starSet, deletionSet, pinnedSets] = await Promise.all([
-    db
-      .select({
-        messageId: messageReactions.messageId,
-        userId: messageReactions.userId,
-        emoji: messageReactions.emoji,
-      })
-      .from(messageReactions)
-      .where(inArray(messageReactions.messageId, ids)),
-    db
-      .select({
-        messageId: messageReads.messageId,
-        userId: messageReads.userId,
-        readAt: messageReads.readAt,
-      })
-      .from(messageReads)
-      .where(inArray(messageReads.messageId, ids)),
-    db
-      .select()
-      .from(messageAttachments)
-      .where(inArray(messageAttachments.messageId, ids)),
+  const [reactionRows, readRows, attachmentRows, parents, viewerRows] = await Promise.all([
+    reactionQuery.execute({ ids }),
+    readQuery.execute({ ids }),
+    attachmentQuery.execute({ ids }),
     replyIds.length > 0
-      ? db.select({ message: messages, sender: users }).from(messages)
-        .innerJoin(users, eq(messages.senderId, users.id)).where(inArray(messages.id, replyIds))
+      ? parentQuery.execute({ ids: replyIds })
       : Promise.resolve([]),
-    getMyStars(ids, viewerId),
-    getMyDeletions(ids, viewerId),
-    Promise.all(convIds.map(async (conversationId) => [conversationId, await getPinnedIds(ids, conversationId)] as const)),
+    // Unique constraints make each join at most one row per message. Read
+    // viewer flags together instead of taking three more pool connections.
+    viewerQuery.execute({ ids, viewerId }),
   ]);
 
   const replyMap = new Map<string, ReplyPreview>();
@@ -242,7 +258,7 @@ export async function hydrateMessages(
     attachmentsByMessage.set(a.messageId, list);
   }
 
-  const pinnedIdsPerConv = new Map(pinnedSets);
+  const flags = new Map(viewerRows.map(row => [row.id, row]));
 
   for (const dto of dtos) {
     dto.reactions = reactionsByMessage.get(dto.id) ?? [];
@@ -258,9 +274,9 @@ export async function hydrateMessages(
       ? []
       : attachmentsByMessage.get(dto.id) ?? [];
     // Per-viewer per-message state.
-    dto.starred = starSet.has(dto.id);
-    dto.deletedForMe = deletionSet.has(dto.id);
-    dto.pinned = pinnedIdsPerConv.get(dto.conversationId)?.has(dto.id) ?? false;
+    dto.starred = Boolean(flags.get(dto.id)?.star);
+    dto.deletedForMe = Boolean(flags.get(dto.id)?.deletion);
+    dto.pinned = Boolean(flags.get(dto.id)?.pin);
   }
   return dtos;
 }
@@ -302,32 +318,29 @@ export async function findDirectConversation(
 export async function listConversationsFor(
   userId: string,
 ): Promise<ConversationSummary[]> {
-  const memberships = await db
-    .select()
-    .from(conversationMembers)
-    .where(eq(conversationMembers.userId, userId));
+  const memberships = await membershipsQuery.execute({ userId });
   if (memberships.length === 0) return [];
 
   const convIds = memberships.map((m) => m.conversationId);
   // Once ids are known these reads are independent. Batch them so hosted
   // database latency does not delay the chat shell by several round-trips.
   const [convs, allMembers, latest, unread, pinnedConvs, blockRows] = await Promise.all([
-    db.select().from(conversations).where(and(inArray(conversations.id, convIds), isNull(conversations.deletedAt))),
-    db.select({ member: conversationMembers, user: users }).from(conversationMembers).innerJoin(users, eq(conversationMembers.userId, users.id)).where(inArray(conversationMembers.conversationId, convIds)),
+    conversationListQuery.execute({ ids: convIds }),
+    conversationMembersQuery.execute({ ids: convIds }),
     db.execute<{ id: string; conversation_id: string; sender_id: string; text: string; type: string; created_at: string; deleted_at: string | null; encrypted: boolean }>(sql`
       SELECT DISTINCT ON (conversation_id) id, conversation_id, sender_id, text, type, created_at, deleted_at, encrypted
-      FROM messages WHERE conversation_id IN (${sql.join(convIds.map((id) => sql`${id}`), sql`, `)})
+      FROM messages WHERE conversation_id = any(${sql.param(convIds)}::uuid[])
       ORDER BY conversation_id, created_at DESC
     `),
     db.execute<{ conversation_id: string; count: string }>(sql`
       SELECT m.conversation_id, count(*)::text AS count FROM messages m
       LEFT JOIN message_reads r ON r.message_id = m.id AND r.user_id = ${userId}
-      WHERE m.conversation_id IN (${sql.join(convIds.map((id) => sql`${id}`), sql`, `)})
+      WHERE m.conversation_id = any(${sql.param(convIds)}::uuid[])
         AND m.sender_id <> ${userId} AND m.deleted_at IS NULL AND r.id IS NULL
       GROUP BY m.conversation_id
     `),
-    db.selectDistinct({ conversationId: pinnedMessages.conversationId }).from(pinnedMessages).where(inArray(pinnedMessages.conversationId, convIds)),
-    db.select({ blockerId: blocks.blockerId, blockedId: blocks.blockedId }).from(blocks).where(or(eq(blocks.blockerId, userId), eq(blocks.blockedId, userId))),
+    pinnedConversationsQuery.execute({ ids: convIds }),
+    blocksQuery.execute({ userId }),
   ]);
   if (convs.length === 0) return [];
   const lastByConv = new Map(latest.rows.map((m) => [m.conversation_id, m]));
@@ -629,11 +642,12 @@ export async function deleteConversation(
 
 interface Cursor {
   createdAt: Date;
+  createdAtExact?: string;
   id: string;
 }
 
 export function encodeCursor(c: Cursor): string {
-  return `${c.createdAt.toISOString()}|${c.id}`;
+  return `${c.createdAtExact ?? c.createdAt.toISOString()}|${c.id}`;
 }
 
 export function decodeCursor(raw: string | null): Cursor | null {
@@ -643,7 +657,7 @@ export function decodeCursor(raw: string | null): Cursor | null {
   const ts = new Date(raw.slice(0, idx));
   const id = raw.slice(idx + 1);
   if (Number.isNaN(ts.getTime()) || !id) return null;
-  return { createdAt: ts, id };
+  return { createdAt: ts, createdAtExact: raw.slice(0, idx), id };
 }
 
 export async function listMessages(
@@ -654,30 +668,13 @@ export async function listMessages(
 ): Promise<MessagePage> {
   // Expiry is enforced server-side, including for inactive clients returning
   // long after the selected duration elapsed.
-  await db.update(messages).set({ deletedAt: new Date(), updatedAt: new Date() })
-    .where(and(eq(messages.conversationId, conversationId), isNull(messages.deletedAt), lte(messages.expiresAt, new Date())));
+  await expireQuery.execute({ conversationId, now: new Date() });
   const pageSize = Math.min(Math.max(1, limit), MAX_PAGE_SIZE);
 
-  const where = cursor
-    ? and(
-        eq(messages.conversationId, conversationId),
-        or(
-          lt(messages.createdAt, cursor.createdAt),
-          and(
-            eq(messages.createdAt, cursor.createdAt),
-            lt(messages.id, cursor.id),
-          ),
-        ),
-      )
-    : eq(messages.conversationId, conversationId);
-
-  const rows = await db
-    .select({ message: messages, sender: users })
-    .from(messages)
-    .innerJoin(users, eq(messages.senderId, users.id))
-    .where(where)
-    .orderBy(desc(messages.createdAt), desc(messages.id))
-    .limit(pageSize + 1);
+  const parameters = { conversationId, limit: pageSize + 1 };
+  const rows = cursor
+    ? await olderQuery.execute({ ...parameters, createdAt: cursor.createdAtExact ?? cursor.createdAt.toISOString(), id: cursor.id })
+    : await newestQuery.execute(parameters);
 
   const hasMore = rows.length > pageSize;
   const page = rows.slice(0, pageSize);
@@ -690,6 +687,7 @@ export async function listMessages(
       hasMore && oldest
         ? encodeCursor({
             createdAt: oldest.message.createdAt,
+            createdAtExact: oldest.cursorTimestamp,
             id: oldest.message.id,
           })
         : null,

@@ -1,3 +1,5 @@
+import { revalidateTag } from "next/cache";
+import { PUBLIC_COMMUNITIES_CACHE_TAG } from "@/server/communities";
 import { authorizeAdminMutation, adminActionError } from "@/server/admin-authentication";
 import { z } from "zod";
 import { isUuid } from "@/server/users";
@@ -7,7 +9,7 @@ import { db } from "@/db";
 import { users, messages, conversationMembers, adminAuditLog } from "@/db/schema";
 import { requireAdmin, lockAdminSubjects } from "@/server/admin";
 import { guardSameOrigin, jsonError, readJson } from "@/server/http";
-import bcrypt from "bcryptjs";
+import { hashPassword } from "@/server/password";
 
 async function checkAdmin() {
   try {
@@ -113,7 +115,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const parsed = editSchema.safeParse(body);
     if (!parsed.success || !Object.keys(parsed.data).length) return jsonError(422, "Invalid user changes.");
     const { newPassword, ban, ...changes } = parsed.data;
-    const hash = newPassword ? await bcrypt.hash(newPassword, 12) : undefined;
+    const hash = newPassword ? await hashPassword(newPassword) : undefined;
     await db.transaction(async (tx) => {
       const { actor, target } = await lockAdminSubjects(tx, me.id, id);
       if (actor?.role !== "admin") throw new Error("FORBIDDEN");
@@ -146,6 +148,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
       await tx.insert(adminAuditLog).values({ adminId: me.id, action: "user_deleted", targetUserId: id, details: { actorUserId: me.id, deletedUserId: id } });
       await tx.delete(users).where(eq(users.id, id));
     });
+    revalidateTag(PUBLIC_COMMUNITIES_CACHE_TAG, { expire: 0 });
     return NextResponse.json({ ok: true });
   } catch (error) { return adminActionError(error); }
 }

@@ -56,6 +56,7 @@ export function AuthProvider({ children, initialUser }: { children: ReactNode; i
   const [user, setUser] = useState<SafeUser | null>(initialUser ?? null);
   const router = useRouter();
   const mounted = useRef(true);
+  const loginRetryAt = useRef(0);
 
   useEffect(() => {
     mounted.current = true;
@@ -110,6 +111,9 @@ export function AuthProvider({ children, initialUser }: { children: ReactNode; i
 
   const signIn = useCallback(
     async (input: LoginInput): Promise<AuthResult> => {
+      if (Date.now() < loginRetryAt.current) return {
+        ok: false, error: `Please retry sign-in in ${Math.ceil((loginRetryAt.current - Date.now()) / 1000)} seconds.`,
+      };
       try {
         const res = await fetch("/api/auth/login", {
           method: "POST",
@@ -128,6 +132,10 @@ export function AuthProvider({ children, initialUser }: { children: ReactNode; i
           fields?: Record<string, string>;
         } | null;
         if (!res.ok) {
+          if (res.status === 503 || res.status === 429) {
+            const seconds = Number(res.headers.get("Retry-After") ?? 5);
+            loginRetryAt.current = Date.now() + Math.min(60, Math.max(1, Number.isFinite(seconds) ? seconds : 5)) * 1000;
+          }
           return {
             ok: false,
             error: data?.error ?? "Something went wrong. Please try again.",

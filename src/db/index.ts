@@ -32,9 +32,9 @@ export const pool =
       : undefined,
   });
 
-if (process.env.NODE_ENV !== "production") {
-  globalForDb.__arenaNextJsPostgresqlPool = pool;
-}
+// Next evaluates separately bundled routes and instrumentation in production.
+// Share the resource as well as in development; keep the configured cap global.
+globalForDb.__arenaNextJsPostgresqlPool = pool;
 
 export const db = drizzle(pool);
 

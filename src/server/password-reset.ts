@@ -31,11 +31,17 @@ export async function issuePasswordReset(user: UserRow): Promise<boolean> {
 }
 
 export async function consumePasswordReset(token: string, password: string): Promise<boolean> {
+  const [eligible] = await db.select({ id: passwordResetTokens.id }).from(passwordResetTokens)
+    .where(and(eq(passwordResetTokens.tokenHash, hashToken(token)), isNull(passwordResetTokens.usedAt), gt(passwordResetTokens.expiresAt, new Date()))).limit(1);
+  if (!eligible) return false;
+  // CPU work must not reserve a transaction connection or token row lock.
+  // The atomic UPDATE below still rechecks expiry and single-use after hashing.
+  const passwordHash = await hashPassword(password);
   const now = new Date();
   return db.transaction(async (tx) => {
     const consumed = await tx.update(passwordResetTokens).set({ usedAt: now }).where(and(eq(passwordResetTokens.tokenHash, hashToken(token)), isNull(passwordResetTokens.usedAt), gt(passwordResetTokens.expiresAt, now))).returning({ userId: passwordResetTokens.userId });
     if (!consumed[0]) return false;
-    await tx.update(users).set({ passwordHash: await hashPassword(password), tokenInvalidBeforeAt: now, updatedAt: now }).where(eq(users.id, consumed[0].userId));
+    await tx.update(users).set({ passwordHash, tokenInvalidBeforeAt: now, updatedAt: now }).where(eq(users.id, consumed[0].userId));
     await tx.delete(passwordResetTokens).where(eq(passwordResetTokens.userId, consumed[0].userId));
     return true;
   });

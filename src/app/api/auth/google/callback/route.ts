@@ -1,3 +1,4 @@
+import { withPasswordCapacity } from "@/server/password-capacity";
 import { createGoogleEmailProof, GOOGLE_EMAIL_PROOF_COOKIE, GOOGLE_EMAIL_PROOF_TTL } from "@/server/google-email-proof";
 import { requestIsSecure } from "@/server/http";
 import { beginSignIn } from "@/server/authentication";
@@ -148,7 +149,7 @@ async function handleGoogleCallback(req: NextRequest) {
   return finishGoogleOAuth(await beginSignIn(req, user, next.startsWith("/") && !next.startsWith("//") ? next : "/app"));
 }
 
-export async function GET(req: NextRequest) {
+async function handleGET(req: NextRequest) {
   try {
     return await handleGoogleCallback(req);
   } catch (error) {
@@ -156,3 +157,5 @@ export async function GET(req: NextRequest) {
     return redirectError("google_failed");
   }
 }
+
+export const GET = withPasswordCapacity(handleGET);

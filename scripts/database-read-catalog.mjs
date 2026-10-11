@@ -1,0 +1,93 @@
+/** Read-only query shapes from the main screens. Bindings never enter reports. */
+export function mainScreenReads(p) {
+  const reads=[];
+  const add=(id,screen,source,sql,params=[])=>reads.push({id,screen,source,sql,params});
+  const u=p.userId,c=p.conversationId,ids=p.conversationIds,mids=p.messageIds,stamp=p.now;
+  add('session-user','All authenticated screens','src/server/users.ts:findUserById','select * from users where id=$1 limit 1',[u]);
+  add('session-device','All authenticated screens','src/server/device-sessions.ts:activeDevice','select id from device_sessions where id=$1 and user_id=$2 and revoked_at is null and expires_at>$3',[p.sessionId,u,stamp]);
+  add('session-mfa','All authenticated screens','src/server/two-factor.ts:enabledMfaSince','select * from user_2fa where user_id=$1',[u]);
+  add('memberships','Chats','src/server/chat.ts:listConversationsFor','select * from conversation_members where user_id=$1',[u]);
+  add('conversation-list','Chats','src/server/chat.ts:listConversationsFor','select * from conversations where id=any($1::uuid[]) and deleted_at is null',[ids]);
+  add('conversation-members','Chats / conversation details','src/server/chat.ts:listConversationsFor','select cm.*,u.* from conversation_members cm join users u on u.id=cm.user_id where cm.conversation_id=any($1::uuid[])',[ids]);
+  add('latest-messages','Chats','src/server/chat.ts:listConversationsFor','select distinct on (conversation_id) id,conversation_id,sender_id,text,type,created_at,deleted_at,encrypted from messages where conversation_id=any($1::uuid[]) order by conversation_id,created_at desc',[ids]);
+  add('unread-counts','Chats','src/server/chat.ts:listConversationsFor','select m.conversation_id,count(*)::text count from messages m left join message_reads r on r.message_id=m.id and r.user_id=$1 where m.conversation_id=any($2::uuid[]) and m.sender_id<>$1 and m.deleted_at is null and r.id is null group by m.conversation_id',[u,ids]);
+  add('pinned-conversations','Chats','src/server/chat.ts:listConversationsFor','select distinct conversation_id from pinned_messages where conversation_id=any($1::uuid[])',[ids]);
+  add('blocks','Chats / status','src/server/chat.ts:isBlockedBetween / listConversationsFor','select blocker_id,blocked_id from blocks where blocker_id=$1 or blocked_id=$1',[u]);
+  add('membership','Chat / encryption','src/server/chat.ts:getMembership','select * from conversation_members where conversation_id=$1 and user_id=$2 limit 1',[c,u]);
+  add('conversation-detail','Chat','src/server/chat.ts:getConversationForUser','select * from conversations where id=$1 limit 1',[c]);
+  add('chat-members','Chat','src/server/chat.ts:getConversationForUser','select u.*,cm.* from conversation_members cm join users u on u.id=cm.user_id where cm.conversation_id=$1',[c]);
+  add('message-page','Chat','src/server/chat.ts:listMessages','select m.*,u.* from messages m join users u on m.sender_id=u.id where m.conversation_id=$1 order by m.created_at desc,m.id desc limit 51',[c]);
+  add('message-older-page','Chat','src/server/chat.ts:listMessages','select m.*,u.* from messages m join users u on m.sender_id=u.id where m.conversation_id=$1 and (m.created_at<$2 or (m.created_at=$2 and m.id<$3)) order by m.created_at desc,m.id desc limit 51',[c,p.cursorTime,p.cursorId]);
+  for(const [id,table,select,extra] of [['message-reactions','message_reactions','*',''],['message-read-receipts','message_reads','*',''],['message-attachments','message_attachments','*',''],['message-deletions','message_deletions','message_id',' and user_id=$2'],['message-stars','message_stars','message_id',' and user_id=$2']]) add(id,'Chat hydration','src/server/chat.ts:hydrateMessages',`select ${select} from ${table} where message_id=any($1::uuid[])${extra}`,extra?[mids,u]:[mids]);
+  add('reply-messages','Chat hydration','src/server/chat.ts:hydrateMessages','select m.*,u.* from messages m join users u on u.id=m.sender_id where m.id=any($1::uuid[])',[mids]);
+  add('pins','Chat','src/server/chat.ts:listPinnedMessages','select p.*,m.*,u.* from pinned_messages p join messages m on m.id=p.message_id join users u on u.id=m.sender_id where p.conversation_id=$1 order by p.created_at desc',[c]);
+  add('scheduled-list','Chat','src/server/scheduled-messages.ts:listScheduledMessages','select * from scheduled_messages where conversation_id=$1 and sender_id=$2 and sent=false order by scheduled_for asc',[c,u]);
+  add('mark-read-selection','Chat (read portion only)','src/server/chat.ts:markConversationRead','select m.id from messages m left join message_reads r on r.message_id=m.id and r.user_id=$2 where m.conversation_id=$1 and m.sender_id<>$2 and m.deleted_at is null and r.id is null',[c,u]);
+  add('delivery-selection','Realtime connect (read portion only)','src/server/chat.ts:markDeliveredFor','select m.id,m.conversation_id from messages m join conversation_members cm on cm.conversation_id=m.conversation_id and cm.user_id=$1 where m.sender_id<>$1 and m.delivered_at is null',[u]);
+  add('realtime-replay','All authenticated screens','src/server/realtime.ts:eventsForUser','select id,payload,created_at from realtime_events where user_id=$1 and created_at>=$2 order by created_at asc limit 200',[u,p.since]);
+  add('people-recent','People / new chat','src/server/users.ts:searchUsers','select * from users where id<>$1 order by created_at desc limit 20',[u]);
+  add('people-search','People / new chat','src/server/users.ts:searchUsers','select * from users where id<>$1 and (display_name ilike $2 or username ilike $2) order by display_name asc limit 20',[u,'%maddy%']);
+  add('user-profile','User profile','src/server/users.ts:findUserById','select * from users where id=$1 limit 1',[u]);
+  add('direct-conversation','User profile / new chat','src/server/chat.ts:findDirectConversation','select * from conversations where dm_key=$1 limit 1',[p.dmKey]);
+  add('starred','Starred','src/server/chat.ts:listStarredMessages','select s.*,m.*,u.*,c.* from message_stars s join messages m on m.id=s.message_id join users u on u.id=m.sender_id join conversations c on c.id=m.conversation_id where s.user_id=$1 order by s.created_at desc',[u]);
+  add('media-deletions','Conversation media/files/links','src/server/chat.ts:listConversationMedia','select d.message_id from message_deletions d join messages m on m.id=d.message_id where d.user_id=$1 and m.conversation_id=$2',[u,c]);
+  for(const [id,condition] of [['media',"a.kind in ('image','video')"],['files',"a.kind='file'"]]) add(id,'Conversation details','src/server/chat.ts:listConversationMedia / listConversationFiles',`select a.*,m.* from message_attachments a join messages m on m.id=a.message_id where m.conversation_id=$1 and m.deleted_at is null and ${condition} order by m.created_at desc`,[c]);
+  add('links','Conversation details','src/server/chat.ts:listConversationLinks',"select m.*,u.* from messages m join users u on u.id=m.sender_id where m.conversation_id=$1 and m.deleted_at is null and m.text ~* 'https?://[^\\s]+' order by m.created_at desc limit 200",[c]);
+  add('message-search','Chat search','src/server/chat.ts:searchMessages','select m.*,u.*,c.*,cm.cleared_at from messages m join conversation_members cm on cm.conversation_id=m.conversation_id and cm.user_id=$1 join users u on u.id=m.sender_id join conversations c on c.id=m.conversation_id where m.deleted_at is null and m.text ilike $2 order by m.created_at desc limit 25',[u,'%test%']);
+  add('status-feed','Status','src/server/status.ts:listVisibleStatuses','select s.*,u.* from statuses s join users u on u.id=s.user_id where s.expires_at>$1 order by s.created_at desc',[stamp]);
+  add('status-recipients','Status','src/server/status.ts:listVisibleStatuses','select status_id from status_recipients where user_id=$1 and status_id=any($2::uuid[])',[u,p.statusIds]);
+  add('status-viewed','Status','src/server/status.ts:listVisibleStatuses','select status_id from status_views where status_id=any($1::uuid[]) and viewer_id=$2',[p.statusIds,u]);
+  add('status-view-counts','Status','src/server/status.ts:listVisibleStatuses','select status_id,count(*)::text from status_views where status_id=any($1::uuid[]) group by status_id',[p.statusIds]);
+  add('status-reactions','Status','src/server/status.ts:listVisibleStatuses','select status_id,user_id,emoji from status_reactions where status_id=any($1::uuid[])',[p.statusIds]);
+  add('status-detail','Status viewer','src/server/status.ts:findVisibleStatus','select s.*,u.* from statuses s join users u on u.id=s.user_id where s.id=$1 limit 1',[p.statusIds[0]]);
+  add('status-viewers','Status viewer','src/server/status.ts:listStatusViewers','select u.*,v.viewed_at from status_views v join users u on u.id=v.viewer_id where v.status_id=$1 order by v.viewed_at desc',[p.statusIds[0]]);
+  add('notifications','Notification menu','src/server/notifications.ts:listNotifications','select * from notifications where user_id=$1 order by created_at desc limit 30',[u]);
+  add('notification-unread','Notification menu','src/server/notifications.ts:listNotifications','select count(*)::text from notifications where user_id=$1 and read_at is null',[u]);
+  add('privacy','Profile / settings','src/server/privacy.ts:getPrivacySettings','select * from privacy_settings where user_id=$1',[u]);
+  add('notification-preferences','Settings','src/server/notifications.ts / preferences route','select * from notification_preferences where user_id=$1',[u]);
+  add('login-history','Profile','src/server/privacy.ts:getLoginHistory','select * from login_history where user_id=$1 order by created_at desc limit 20',[u]);
+  add('device-sessions','Profile','src/app/api/privacy/devices/route.ts','select id,user_agent,created_at,last_seen_at,expires_at from device_sessions where user_id=$1 and revoked_at is null and expires_at>$2 order by last_seen_at desc limit 100',[u,stamp]);
+  add('encryption-devices','Profile / peers','src/app/api/e2ee/keys/route.ts','select * from e2ee_keys where user_id=$1',[u]);
+  add('device-link-requests','Profile','src/app/api/e2ee/devices/link/route.ts','select * from device_link_requests where user_id=$1 and expires_at>$2',[u,stamp]);
+  add('conversation-keys','Chat encryption','src/app/api/e2ee/conversation-keys/route.ts','select * from e2ee_conversation_keys where conversation_id=$1 and user_id=$2',[c,u]);
+  for(const compact of [false,true])add('key-history-'+(compact?'compact':'raw'),'Chat recovery','src/app/api/e2ee/key-rotation/history/route.ts',`with copies as (
+    select id,conversation_id,user_id,encrypted_key,recipient_device_id,device_id,key_version,rotated_at as stamp,key_fingerprint from e2ee_conversation_keys where conversation_id=$1 and user_id=$2 and is_active=false and (recipient_device_id=$3 or recipient_device_id is null)
+    union all select id,conversation_id,user_id,encrypted_key,recipient_device_id,device_id,key_version,created_at as stamp,key_fingerprint from e2ee_key_history where conversation_id=$1 and user_id=$2 and (recipient_device_id=$3 or recipient_device_id is null)
+  ), grouped as (select *,case when $4 and recipient_device_id is not null and key_fingerprint ~ '^[0-9]{5}( [0-9]{5}){5}$' then key_fingerprint else id::text end as identity from copies), retained as (
+    select distinct on (device_id,recipient_device_id,identity) * from grouped order by device_id,recipient_device_id,identity,key_version desc,id desc
+  ) select id,conversation_id,user_id,encrypted_key,recipient_device_id,device_id,key_version,stamp,key_fingerprint from retained where ($5::integer is null or (key_version,id)<($5::integer,$6::uuid)) order by key_version desc,id desc limit 201`,[p.historyConversation,p.historyUser,p.historyDevice,compact,null,null]);
+  add('community-memberships','Communities','src/server/communities.ts:listUserCommunities','select * from community_members where user_id=$1',[u]);
+  add('my-communities','Communities','src/server/communities.ts:listUserCommunities','select * from communities where id=any($1::uuid[])',[p.communityIds]);
+  add('public-communities','Communities','src/server/communities.ts:listPublicCommunities','select * from communities where is_public=true order by created_at desc limit 20');
+  add('community-detail','Community','src/server/communities.ts:getCommunity','select * from communities where id=$1 limit 1',[p.communityIds[0]]);
+  add('community-member-count','Community','src/server/communities.ts:getCommunity','select count(*)::int from community_members where community_id=$1',[p.communityIds[0]]);
+  add('channel-count','Community','src/server/communities.ts:getCommunity','select count(*)::int from channels where community_id=$1',[p.communityIds[0]]);
+  add('channels','Community','src/server/communities.ts:listChannels','select * from channels where community_id=$1 order by created_at asc',[p.communityIds[0]]);
+  add('community-members','Community','src/server/communities.ts:getCommunityMembers',"select cm.*,u.* from community_members cm join users u on u.id=cm.user_id where cm.community_id=$1 order by case cm.role when 'owner' then 0 when 'admin' then 1 else 2 end",[p.communityIds[0]]);
+  add('admin-users','Admin users','src/app/api/admin/users/route.ts','select id,username,display_name,email,role,suspended_at,suspended_until,created_at from users order by created_at desc');
+  add('admin-messages','Admin messages','src/app/api/admin/messages/route.ts','select m.id,m.text,m.created_at,u.username,c.name from messages m join users u on u.id=m.sender_id join conversations c on c.id=m.conversation_id order by m.created_at desc limit 50');
+  add('admin-messages-search','Admin messages','src/app/api/admin/messages/route.ts','select m.id,m.text,m.created_at,u.username,c.name from messages m join users u on u.id=m.sender_id join conversations c on c.id=m.conversation_id where m.text ilike $1 order by m.created_at desc limit 50',['%test%']);
+  add('admin-message-search-count','Admin messages','src/app/api/admin/messages/route.ts','select count(*)::int from messages where text ilike $1',['%test%']);
+  add('reports','Admin reports','src/server/privacy.ts:getReports','select r.*,u.username from reports r left join users u on u.id=r.reporter_id where r.status=$1 order by r.created_at desc limit 50',['pending']);
+  add('audit','Admin audit','src/server/privacy.ts:getAuditLog','select a.*,u.username from admin_audit_log a left join users u on u.id=a.admin_id order by a.created_at desc limit 100');
+  for(const table of ['users','messages','conversations'])add('admin-count-'+table,'Admin overview', 'src/app/api/admin/stats/route.ts',`select count(*)::int from ${table}`);
+  for(const days of [1,7,30])add('admin-active-'+days,'Admin overview','src/app/api/admin/stats/route.ts','select count(*)::int from users where last_seen_at>=$1',[new Date(stamp.getTime()-days*86400000)]);
+  for(const days of [1,7])add('admin-recent-messages-'+days,'Admin overview','src/app/api/admin/stats/route.ts','select count(*)::int from messages where created_at>=$1',[new Date(stamp.getTime()-days*86400000)]);
+  add('admin-banned-count','Admin overview','src/app/api/admin/stats/route.ts','select count(*)::int from users where token_invalid_before_at is not null');
+  add('admin-group-count','Admin overview','src/app/api/admin/stats/route.ts',"select count(*)::int from conversations where type='group'");
+  add('admin-top-users','Admin overview','src/app/api/admin/stats/route.ts','select m.sender_id,u.username,u.display_name,count(*)::int from messages m join users u on u.id=m.sender_id group by m.sender_id,u.username,u.display_name order by count(*) desc limit 10');
+  for(const table of ['users','messages'])add('admin-chart-'+table,'Admin overview','src/app/api/admin/stats/route.ts',`select to_char(created_at::date,'YYYY-MM-DD'),count(*)::int from ${table} where created_at>=$1 group by created_at::date order by created_at::date`,[new Date(stamp.getTime()-7*86400000)]);
+  add('admin-activity-count','Admin activity','src/app/api/admin/activity/route.ts','select count(*)::int from notifications');
+  add('admin-activity','Admin activity','src/app/api/admin/activity/route.ts','select n.*,u.display_name,u.username from notifications n join users u on u.id=n.user_id order by n.created_at desc limit 50 offset 0');
+  add('admin-activity-filter-count','Admin activity','src/app/api/admin/activity/route.ts','select count(*)::int from notifications where type=$1',['message']);
+  add('admin-activity-filter','Admin activity','src/app/api/admin/activity/route.ts','select n.*,u.display_name,u.username from notifications n join users u on u.id=n.user_id where n.type=$1 order by n.created_at desc limit 50 offset 0',['message']);
+  add('admin-storage-total','Admin storage','src/app/api/admin/storage/route.ts','select count(*)::int,coalesce(sum(size),0)::bigint from message_attachments');
+  add('admin-storage-types','Admin storage','src/app/api/admin/storage/route.ts','select kind,count(*)::int,coalesce(sum(size),0)::bigint from message_attachments group by kind');
+  add('admin-storage-uploaders','Admin storage','src/app/api/admin/storage/route.ts','select m.sender_id,u.display_name,count(*)::int,coalesce(sum(a.size),0)::bigint from message_attachments a join messages m on m.id=a.message_id join users u on u.id=m.sender_id group by m.sender_id,u.display_name order by sum(a.size) desc limit 10');
+  add('admin-security-logins','Admin security','src/app/api/admin/security/login-history/route.ts','select * from login_history where created_at>$1 order by created_at desc limit 100',[new Date(stamp.getTime()-86400000)]);
+  for(const days of [90,180])add('retention-messages-'+days,'Admin security','src/app/api/admin/security/retention/route.ts','select count(*)::int from messages where created_at<=$1',[new Date(stamp.getTime()-days*86400000)]);
+  add('retention-attachments','Admin security','src/app/api/admin/security/retention/route.ts','select count(*)::int from message_attachments where created_at<=$1',[new Date(stamp.getTime()-90*86400000)]);
+  add('retention-scheduled','Admin security','src/app/api/admin/security/retention/route.ts','select count(*)::int from scheduled_messages where sent=false');
+  add('retention-audit','Admin security','src/app/api/admin/security/retention/route.ts','select count(*)::int from admin_audit_log where created_at<=$1',[new Date(stamp.getTime()-365*86400000)]);
+  return reads;
+}

@@ -1,3 +1,4 @@
+import { withPasswordCapacity } from "@/server/password-capacity";
 import { issueEmailVerification } from "@/server/email-verification";
 import { NextRequest, NextResponse } from "next/server";
 import { fieldErrors, registerSchema } from "@/lib/schemas";
@@ -17,7 +18,7 @@ import {
 
 export const dynamic = "force-dynamic";
 
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   const blocked = guardSameOrigin(req);
   if (blocked) return blocked;
 
@@ -82,3 +83,5 @@ export async function POST(req: NextRequest) {
   const delivered = await issueEmailVerification(user);
   return NextResponse.json({ verificationRequired: true, emailSent: delivered }, { status: 201 });
 }
+
+export const POST = withPasswordCapacity(handlePOST);

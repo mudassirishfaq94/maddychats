@@ -6,12 +6,26 @@ import {
   cookieSecure,
 } from "./config";
 import { signSessionToken, verifySessionToken } from "./jwt";
-import { findUserById, toSafeUser, touchLastSeen } from "./users";
-import { is2FAEnabled, enabledMfaSince } from "./two-factor";
+import { toSafeUser, touchLastSeen } from "./users";
+import { is2FAEnabled } from "./two-factor";
 import type { UserRow } from "@/db/schema";
 import type { SafeUser } from "@/lib/types";
-import { activeDevice } from "./device-sessions";
+import { db } from "@/db";
+import { users, user2fa, deviceSessions } from "@/db/schema";
+import { eq, sql } from "drizzle-orm";
 import { retryDatabaseRead } from "./database-read-retry";
+
+// Compile the query once, but execute against fresh state for every request.
+// An empty name avoids named prepared-statement requirements on DB poolers.
+const sessionQuery = db.select({ user: users, mfa: user2fa,
+  deviceActive: sql<boolean>`case when ${sql.placeholder("sid")}::uuid is null
+    then ${sql.placeholder("legacy")}::boolean else exists(select 1 from ${deviceSessions}
+    where ${deviceSessions.id}=${sql.placeholder("sid")}::uuid
+      and ${deviceSessions.userId}=${sql.placeholder("userId")}::uuid
+      and ${deviceSessions.revokedAt} is null
+      and ${deviceSessions.expiresAt}>${sql.placeholder("now")}::timestamptz) end`,
+}).from(users).leftJoin(user2fa, eq(user2fa.userId, users.id))
+  .where(eq(users.id, sql.placeholder("userId"))).limit(1).prepare("");
 
 /** Attributes applied to the session cookie (matches NextResponse cookie API). */
 export interface SessionCookieOptions {
@@ -87,9 +101,14 @@ export async function resolveSessionToken(token: string): Promise<SafeUser | nul
   const claims = await verifySessionToken(token);
   if (!claims) return null;
   return retryDatabaseRead(async () => {
-  const [deviceActive, user, enabledSince] = await Promise.all([
-    activeDevice(claims), findUserById(claims.sub), enabledMfaSince(claims.sub),
-  ]);
+  // One fresh database snapshot checks all three conditions. No cross-request
+  // cache: logout, suspension, device revocation and MFA remain immediate.
+  const [record] = await sessionQuery.execute({ userId: claims.sub, sid: claims.sid ?? null,
+    legacy: Date.now() < Date.parse("2026-11-08T00:00:00Z"), now: new Date(),
+  });
+  const user = record?.user;
+  const deviceActive = record?.deviceActive;
+  const enabledSince = record?.mfa?.enabled ? record.mfa.enabledAt ?? record.mfa.createdAt : null;
   if (!deviceActive) return null;
   if (!user) return null;
   if (

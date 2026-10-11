@@ -62,5 +62,5 @@ export async function proxy(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|api/health|api/ready|api/cron|api/security/csp-report|favicon.ico|icons/|signal/|sw.js|manifest.webmanifest|theme-init.js).*)"],
+  matcher: ["/((?!_next/static|_next/image|api/health|api/ready|api/cron|api/security/csp-report|favicon.ico|icons/|brand/|signal/|sw.js|manifest.webmanifest|theme-init.js).*)"],
 };

@@ -1,11 +1,11 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
-import { and, eq, gt, isNull, lt } from "drizzle-orm";
+import { and, eq, gt, isNull, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { deviceSessions, users, user2fa } from "@/db/schema";
 import { ACCESS_TTL_SECONDS, REFRESH_COOKIE, SESSION_COOKIE, SESSION_TTL_SECONDS, jwtSecret } from "./config";
 import { signSessionToken, type SessionClaims } from "./jwt";
-import { requestIsSecure } from "./http";
+import { clientIp, requestIsSecure } from "./http";
 
 const digest = (value: string) => createHash("sha256").update(value).digest("hex");
 const sameHash = (a: string, b: string | null) => Boolean(b && a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b)));
@@ -22,8 +22,22 @@ export async function issueDeviceSession(req: NextRequest, user: { id: string; u
   const secret = randomBytes(32).toString("base64url");
   const authTime = Date.now();
   const expiresAt = new Date(authTime + SESSION_TTL_SECONDS * 1000);
-  await db.delete(deviceSessions).where(lt(deviceSessions.expiresAt, new Date()));
-  const [session] = await db.insert(deviceSessions).values({ userId: user.id, refreshHash: digest(secret), userAgent: (req.headers.get("user-agent") || "Unknown browser").slice(0, 300), authTime, mfaTime, expiresAt }).returning();
+  // Persist audit, presence and credentials atomically in one round trip.
+  // Expired rows are cleaned in bounded maintenance, never by every login.
+  const ua = req.headers.get("user-agent");
+  const result = await db.execute<{ id: string }>(sql`
+    WITH audit AS (
+      INSERT INTO login_history (user_id, identifier, success, ip_address, user_agent)
+      VALUES (${user.id}, ${user.username}, true, ${clientIp(req)}, ${ua})
+    ), presence AS (
+      UPDATE users SET last_seen_at=${new Date(authTime)} WHERE id=${user.id}
+    )
+    INSERT INTO device_sessions (user_id, refresh_hash, user_agent, auth_time, mfa_time, expires_at)
+    VALUES (${user.id}, ${digest(secret)}, ${(ua || "Unknown browser").slice(0, 300)}, ${authTime}, ${mfaTime}, ${expiresAt})
+    RETURNING id
+  `);
+  const session = result.rows[0];
+  if (!session) throw new Error("device_session_not_created");
   return { access: await signSessionToken(user.id, user.username, authTime, mfaTime, session.id), refresh: `${session.id}.${secret}`, expiresAt };
 }
 

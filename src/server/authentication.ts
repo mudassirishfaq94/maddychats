@@ -1,18 +1,16 @@
 import { rateLimit } from "./rate-limit";
 import { createHash, randomBytes } from "crypto";
-import { and, eq, gt, lt } from "drizzle-orm";
+import { and, eq, gt } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { mfaChallenges, users, user2fa, type UserRow } from "@/db/schema";
 import { SESSION_COOKIE, REFRESH_COOKIE, clientUrl } from "./config";
 import { sameOriginDestination } from "../lib/navigation";
-import { jsonError, requestIsSecure, clientIp } from "./http";
+import { jsonError, requestIsSecure } from "./http";
 import { getSessionAuthTime, newSessionBlockReason, sessionCookieOptions } from "./session";
 import { issueDeviceSession, setDeviceCookies } from "./device-sessions";
 import { consumeSecondFactor, is2FAEnabled, verifyTOTPLogin } from "./two-factor";
 import { findUserById, toSafeUser } from "./users";
-import { recordLoginAttempt } from "./privacy";
-import { touchLastSeen } from "./users";
 import { verifyPassword } from "./password";
 
 export const MFA_COOKIE = "maddy_mfa_challenge";
@@ -24,8 +22,6 @@ export function recentlyAuthenticated(authTime: number, now = Date.now()) {
 }
 
 export async function setAuthenticatedSession(response: NextResponse, req: NextRequest, user: Pick<UserRow, "id" | "username">, mfaTime = 0) {
-  await recordLoginAttempt({ userId: user.id, identifier: user.username, success: true, ipAddress: clientIp(req), userAgent: req.headers.get("user-agent") ?? undefined });
-  await touchLastSeen(user.id);
   setDeviceCookies(response, req, await issueDeviceSession(req, user, mfaTime));
   response.cookies.set(MFA_COOKIE, "", { ...sessionCookieOptions(requestIsSecure(req)), maxAge: 0 });
   response.headers.set("Cache-Control", "no-store");
@@ -42,7 +38,6 @@ export async function beginSignIn(req: NextRequest, user: UserRow, redirectTo?: 
   if (blocked === "mfa_required") {
     const token = randomBytes(32).toString("base64url");
     const now = new Date();
-    await db.delete(mfaChallenges).where(lt(mfaChallenges.expiresAt, now));
     await db.insert(mfaChallenges).values({ tokenHash: digest(token), userId: user.id, expiresAt: new Date(now.getTime() + CHALLENGE_MS) });
     const response = redirectTo
       ? NextResponse.redirect(new URL(`/login?mfa=1&next=${encodeURIComponent(returnPath!)}`, clientUrl()))

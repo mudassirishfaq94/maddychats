@@ -1,3 +1,4 @@
+import { withPasswordCapacity } from "@/server/password-capacity";
 import { rateLimit } from "@/server/rate-limit";
 import { beginSignIn } from "@/server/authentication";
 import { randomBytes } from "crypto";
@@ -21,7 +22,7 @@ const googleKeys = createRemoteJWKSet(new URL("https://www.googleapis.com/oauth2
  * Google ID token; this endpoint verifies it server-side and issues the same
  * HttpOnly ZipTalk session cookie as the web OAuth callback.
  */
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   const blocked = guardSameOrigin(req);
   if (blocked) return blocked;
   if (!(await rateLimit(`google-native:${clientIp(req)}`, 25, 10 * 60 * 1000)).allowed) return jsonError(429, "Too many sign-in attempts.");
@@ -78,11 +79,12 @@ export async function POST(req: NextRequest) {
       if (!taken) break;
       username = `${base.slice(0, 14)}${randomBytes(3).toString("hex")}`;
     }
+    const passwordHash = await hashPassword(randomBytes(32).toString("base64url"));
     user = await db.transaction(async (tx) => {
       const [created] = await tx.insert(users).values({
         displayName: typeof claims.name === "string" ? claims.name.slice(0, 50) : username,
         username, email: claims.email!.toLowerCase(), emailVerifiedAt: new Date(),
-        passwordHash: await hashPassword(randomBytes(32).toString("base64url")),
+        passwordHash,
         avatarUrl: typeof claims.picture === "string" ? claims.picture : null,
       }).returning();
       await tx.insert(notificationPreferences).values({ userId: created.id });
@@ -103,3 +105,5 @@ export async function GET() {
   if (!clientId) return jsonError(503, "Google sign-in is not configured.");
   return NextResponse.json({ clientId });
 }
+
+export const POST = withPasswordCapacity(handlePOST);

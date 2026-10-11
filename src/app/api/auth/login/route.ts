@@ -6,7 +6,7 @@ import { eq } from "drizzle-orm";
 import { beginSignIn } from "@/server/authentication";
 import { NextRequest, NextResponse } from "next/server";
 import { fieldErrors, loginSchema } from "@/lib/schemas";
-import { verifyPassword } from "@/server/password";
+import { verifyPassword, PasswordBusyError } from "@/server/password";
 import { findUserByIdentifier } from "@/server/users";
 import { AUTH_RATE_LIMIT, rateLimit } from "@/server/rate-limit";
 import {
@@ -30,7 +30,10 @@ export async function POST(req: NextRequest) {
     AUTH_RATE_LIMIT.windowMs,
   );
   if (!rl.allowed) {
-    return jsonError(429, "Too many attempts. Please try again later.");
+    const response = jsonError(429, "Too many attempts. Please try again later.");
+    response.headers.set("Retry-After", String(rl.retryAfterSeconds));
+    response.headers.set("Cache-Control", "no-store");
+    return response;
   }
 
   const body = await readJson(req);
@@ -52,7 +55,15 @@ export async function POST(req: NextRequest) {
   // Generic error message on both unknown user and wrong password,
   // so the endpoint cannot be used to enumerate accounts.
   const user = await findUserByIdentifier(identifier);
-  const valid = user ? await verifyPassword(password, user.passwordHash) : false;
+  let valid = false;
+  try { valid = user ? await verifyPassword(password, user.passwordHash) : false; }
+  catch (error) {
+    if (!(error instanceof PasswordBusyError)) throw error;
+    const response = jsonError(503, "Sign-in is busy. Please try again in a few seconds.");
+    response.headers.set("Retry-After", "5");
+    response.headers.set("Cache-Control", "no-store");
+    return response;
+  }
   if (!user || !valid) {
     // Record failed attempt
     await recordLoginAttempt({

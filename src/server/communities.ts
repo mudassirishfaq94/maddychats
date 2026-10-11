@@ -1,4 +1,5 @@
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and, sql, inArray } from "drizzle-orm";
+import { unstable_cache } from "next/cache";
 import { db } from "@/db";
 import { communities, communityMembers, channels, users, conversations, conversationMembers } from "@/db/schema";
 
@@ -77,7 +78,7 @@ export async function listUserCommunities(userId: string) {
   const communityList = await db
     .select()
     .from(communities)
-    .where(sql`${communities.id} IN ${communityIds}`);
+    .where(inArray(communities.id, communityIds));
 
   const communityMap = new Map(communityList.map((c) => [c.id, c]));
 
@@ -89,7 +90,11 @@ export async function listUserCommunities(userId: string) {
 }
 
 /** List public communities */
-export async function listPublicCommunities(limit = 20) {
+export const PUBLIC_COMMUNITIES_CACHE_TAG = "public-communities-v1";
+
+// Only the public projection is shared. Memberships and authorization stay fresh.
+// Arguments (including limit) form part of Next's cache key.
+async function readPublicCommunities(limit: number) {
   return db
     .select({
       id: communities.id,
@@ -103,6 +108,23 @@ export async function listPublicCommunities(limit = 20) {
     .where(eq(communities.isPublic, true))
     .orderBy(sql`${communities.createdAt} DESC`)
     .limit(limit);
+}
+
+const cachedPublicCommunities = unstable_cache(async (limit: number) => ({
+  rows: await readPublicCommunities(limit),
+  expiresAt: Date.now() + 60_000,
+}), [PUBLIC_COMMUNITIES_CACHE_TAG], {
+  tags: [PUBLIC_COMMUNITIES_CACHE_TAG],
+  revalidate: 60,
+});
+
+export async function listPublicCommunities(limit = 20) {
+  const snapshot = await cachedPublicCommunities(limit);
+  // Next can serve stale data while revalidating. Never return a directory
+  // older than our TTL, even when an external SQL edit bypasses invalidation.
+  const rows = Date.now() < snapshot.expiresAt ? snapshot.rows : await readPublicCommunities(limit);
+  // Next serializes cached values; retain the existing server Date contract.
+  return rows.map(row => ({ ...row, createdAt: new Date(row.createdAt) }));
 }
 
 /** Join a community */

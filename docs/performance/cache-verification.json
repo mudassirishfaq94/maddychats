@@ -1,0 +1,43 @@
+{
+  "dataset": "100,000 synthetic public communities; local production server",
+  "checks": [
+    "Actual mobile Communities screen opened twice; cached and uncached response data identical.",
+    "Next persisted the public-only directory in its real framework data cache.",
+    "Two real device sessions: private memberships isolated; public cache shared without private rows.",
+    "Creation invalidation: other account sees new public community on its very next request.",
+    "Direct database edit visible on first request after TTL; stale-while-revalidate never exceeds our age limit.",
+    "Account deletion immediately invalidates cached creator IDs after the foreign-key update.",
+    "Warm cache cannot bypass authentication: anonymous and revoked device denied.",
+    "Public brand asset has one-hour HTTP caching; private combined API remains no-store."
+  ],
+  "timings": {
+    "coldScreenMs": 2082.5873999999994,
+    "warmScreenMs": 980.9097000000002,
+    "coldApiMs": 790.9680000000001,
+    "warmApiMs": 194.17600000000002,
+    "medianMissMs": 151.15589999999975,
+    "medianHitMs": 37.64079999999922
+  },
+  "warmedProcessPairs": [
+    {
+      "missMs": 253.1934999999994,
+      "hitMs": 64.6260999999995
+    },
+    {
+      "missMs": 151.15589999999975,
+      "hitMs": 37.64079999999922
+    },
+    {
+      "missMs": 160.14140000000043,
+      "hitMs": 39.210800000000745
+    },
+    {
+      "missMs": 150.22000000000116,
+      "hitMs": 36.40550000000076
+    },
+    {
+      "missMs": 143.08560000000034,
+      "hitMs": 36.067300000000614
+    }
+  ]
+}

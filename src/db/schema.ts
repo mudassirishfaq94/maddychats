@@ -326,6 +326,9 @@ export const messages = pgTable(
       table.clientMessageId,
     ),
     index("messages_expires_idx").on(table.expiresAt),
+    // Online migration 0041: only realtime deliveries still awaiting a recipient.
+    index("messages_undelivered_conversation_idx").on(table.conversationId, table.senderId)
+      .where(sql`${table.deliveredAt} IS NULL`),
   ],
 );
 

@@ -1,3 +1,4 @@
+import { withPasswordCapacity } from "@/server/password-capacity";
 import { beginSignIn } from "@/server/authentication";
 import { randomBytes } from "crypto";
 import { and, eq } from "drizzle-orm";
@@ -6,6 +7,7 @@ import { z } from "zod";
 import { db } from "@/db";
 import { notificationPreferences, oauthAccounts, users } from "@/db/schema";
 import { hashPassword } from "@/server/password";
+import { passwordBusyResponse } from "@/server/password-capacity";
 import { getFirebaseAdmin } from "@/server/firebase-admin";
 import { findUserByUsername } from "@/server/users";
 import { AUTH_RATE_LIMIT, rateLimit } from "@/server/rate-limit";
@@ -19,7 +21,7 @@ const phoneAuthSchema = z.object({
 
 export const dynamic = "force-dynamic";
 
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   const blocked = guardSameOrigin(req);
   if (blocked) return blocked;
   if (process.env.STARTER_MODE === "1") return jsonError(503, "Phone sign-in is paused. Continue with Google or your verified email account.");
@@ -60,12 +62,13 @@ export async function POST(req: NextRequest) {
     // non-deliverable placeholder; Firebase remains the credential authority.
     const placeholderEmail = `phone-${decoded.uid}@auth.maddychats.invalid`;
     try {
+      const passwordHash = await hashPassword(randomBytes(32).toString("base64url"));
       user = await db.transaction(async (tx) => {
         const created = await tx.insert(users).values({
           displayName,
           username,
           email: placeholderEmail,
-          passwordHash: await hashPassword(randomBytes(32).toString("base64url")),
+          passwordHash,
         }).returning();
         await tx.insert(notificationPreferences).values({ userId: created[0].id });
         await tx.insert(oauthAccounts).values({
@@ -76,6 +79,7 @@ export async function POST(req: NextRequest) {
         return created[0];
       });
     } catch (error) {
+      const busy = passwordBusyResponse(error); if (busy) return busy;
       const code = (error as { code?: string }).code;
       if (code === "23505") return jsonError(409, "This username is taken.", { username: "This username is taken" });
       console.error("[auth] phone account creation failed:", error);
@@ -85,3 +89,5 @@ export async function POST(req: NextRequest) {
 
   return beginSignIn(req, user);
 }
+
+export const POST = withPasswordCapacity(handlePOST);

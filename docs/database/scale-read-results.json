@@ -1,0 +1,917 @@
+{
+  "synthetic": true,
+  "users": 10000,
+  "messages": 500000,
+  "comparisons": [
+    {
+      "id": "session-user",
+      "before": 0.067,
+      "after": 0.072,
+      "sameRows": true
+    },
+    {
+      "id": "session-device",
+      "before": 0.022,
+      "after": 0.048,
+      "sameRows": true
+    },
+    {
+      "id": "session-mfa",
+      "before": 0.033,
+      "after": 0.041,
+      "sameRows": true
+    },
+    {
+      "id": "memberships",
+      "before": 0.035,
+      "after": 0.063,
+      "sameRows": true
+    },
+    {
+      "id": "conversation-list",
+      "before": 0.118,
+      "after": 0.145,
+      "sameRows": true
+    },
+    {
+      "id": "conversation-members",
+      "before": 0.174,
+      "after": 0.36,
+      "sameRows": true
+    },
+    {
+      "id": "latest-messages",
+      "before": 26.229,
+      "after": 42.776,
+      "sameRows": true
+    },
+    {
+      "id": "unread-counts",
+      "before": 14.591,
+      "after": 29.059,
+      "sameRows": true
+    },
+    {
+      "id": "pinned-conversations",
+      "before": 0.036,
+      "after": 0.08,
+      "sameRows": true
+    },
+    {
+      "id": "blocks",
+      "before": 0.027,
+      "after": 0.061,
+      "sameRows": true
+    },
+    {
+      "id": "membership",
+      "before": 0.041,
+      "after": 0.095,
+      "sameRows": true
+    },
+    {
+      "id": "conversation-detail",
+      "before": 0.049,
+      "after": 0.107,
+      "sameRows": true
+    },
+    {
+      "id": "chat-members",
+      "before": 0.152,
+      "after": 0.341,
+      "sameRows": true
+    },
+    {
+      "id": "message-page",
+      "before": 0.216,
+      "after": 0.533,
+      "sameRows": true
+    },
+    {
+      "id": "message-older-page",
+      "before": 0.287,
+      "after": 0.726,
+      "sameRows": true
+    },
+    {
+      "id": "message-reactions",
+      "before": 0.03,
+      "after": 0.054,
+      "sameRows": true
+    },
+    {
+      "id": "message-read-receipts",
+      "before": 0.026,
+      "after": 0.067,
+      "sameRows": true
+    },
+    {
+      "id": "message-attachments",
+      "before": 0.029,
+      "after": 0.049,
+      "sameRows": true
+    },
+    {
+      "id": "message-deletions",
+      "before": 0.024,
+      "after": 0.048,
+      "sameRows": true
+    },
+    {
+      "id": "message-stars",
+      "before": 0.023,
+      "after": 0.046,
+      "sameRows": true
+    },
+    {
+      "id": "reply-messages",
+      "before": 0.424,
+      "after": 0.983,
+      "sameRows": true
+    },
+    {
+      "id": "pins",
+      "before": 0.107,
+      "after": 0.144,
+      "sameRows": true
+    },
+    {
+      "id": "scheduled-list",
+      "before": 0.046,
+      "after": 0.071,
+      "sameRows": true
+    },
+    {
+      "id": "mark-read-selection",
+      "before": 1.461,
+      "after": 2.067,
+      "sameRows": true
+    },
+    {
+      "id": "delivery-selection",
+      "before": 183.906,
+      "after": 0.1,
+      "sameRows": true
+    },
+    {
+      "id": "realtime-replay",
+      "before": 0.079,
+      "after": 0.077,
+      "sameRows": true
+    },
+    {
+      "id": "people-recent",
+      "before": 18.591,
+      "after": 18.005,
+      "sameRows": true
+    },
+    {
+      "id": "people-search",
+      "before": 14.182,
+      "after": 0.144,
+      "sameRows": true
+    },
+    {
+      "id": "user-profile",
+      "before": 0.071,
+      "after": 0.073,
+      "sameRows": true
+    },
+    {
+      "id": "direct-conversation",
+      "before": 0.066,
+      "after": 0.063,
+      "sameRows": true
+    },
+    {
+      "id": "starred",
+      "before": 0.184,
+      "after": 0.193,
+      "sameRows": true
+    },
+    {
+      "id": "media-deletions",
+      "before": 0.075,
+      "after": 0.064,
+      "sameRows": true
+    },
+    {
+      "id": "media",
+      "before": 0.091,
+      "after": 0.101,
+      "sameRows": true
+    },
+    {
+      "id": "files",
+      "before": 0.095,
+      "after": 0.165,
+      "sameRows": true
+    },
+    {
+      "id": "links",
+      "before": 3.681,
+      "after": 3.634,
+      "sameRows": true
+    },
+    {
+      "id": "message-search",
+      "before": 16.02,
+      "after": 16.902,
+      "sameRows": true
+    },
+    {
+      "id": "status-feed",
+      "before": 0.093,
+      "after": 0.099,
+      "sameRows": true
+    },
+    {
+      "id": "status-recipients",
+      "before": 0.041,
+      "after": 0.046,
+      "sameRows": true
+    },
+    {
+      "id": "status-viewed",
+      "before": 0.043,
+      "after": 0.05,
+      "sameRows": true
+    },
+    {
+      "id": "status-view-counts",
+      "before": 0.093,
+      "after": 0.082,
+      "sameRows": true
+    },
+    {
+      "id": "status-reactions",
+      "before": 0.044,
+      "after": 0.044,
+      "sameRows": true
+    },
+    {
+      "id": "status-detail",
+      "before": 0.089,
+      "after": 0.106,
+      "sameRows": true
+    },
+    {
+      "id": "status-viewers",
+      "before": 0.094,
+      "after": 0.108,
+      "sameRows": true
+    },
+    {
+      "id": "notifications",
+      "before": 0.064,
+      "after": 0.057,
+      "sameRows": true
+    },
+    {
+      "id": "notification-unread",
+      "before": 0.068,
+      "after": 0.07,
+      "sameRows": true
+    },
+    {
+      "id": "privacy",
+      "before": 0.044,
+      "after": 0.047,
+      "sameRows": true
+    },
+    {
+      "id": "notification-preferences",
+      "before": 0.04,
+      "after": 0.049,
+      "sameRows": true
+    },
+    {
+      "id": "login-history",
+      "before": 0.059,
+      "after": 0.058,
+      "sameRows": true
+    },
+    {
+      "id": "device-sessions",
+      "before": 0.072,
+      "after": 0.06,
+      "sameRows": true
+    },
+    {
+      "id": "encryption-devices",
+      "before": 0.042,
+      "after": 0.045,
+      "sameRows": true
+    },
+    {
+      "id": "device-link-requests",
+      "before": 0.046,
+      "after": 0.044,
+      "sameRows": true
+    },
+    {
+      "id": "conversation-keys",
+      "before": 0.046,
+      "after": 0.049,
+      "sameRows": true
+    },
+    {
+      "id": "key-history-raw",
+      "before": 0.155,
+      "after": 0.155,
+      "sameRows": true
+    },
+    {
+      "id": "key-history-compact",
+      "before": 0.151,
+      "after": 0.184,
+      "sameRows": true
+    },
+    {
+      "id": "community-memberships",
+      "before": 0.043,
+      "after": 0.049,
+      "sameRows": true
+    },
+    {
+      "id": "my-communities",
+      "before": 0.044,
+      "after": 0.039,
+      "sameRows": true
+    },
+    {
+      "id": "public-communities",
+      "before": 0.056,
+      "after": 0.065,
+      "sameRows": true
+    },
+    {
+      "id": "community-detail",
+      "before": 0.045,
+      "after": 0.047,
+      "sameRows": true
+    },
+    {
+      "id": "community-member-count",
+      "before": 0.07,
+      "after": 0.061,
+      "sameRows": true
+    },
+    {
+      "id": "channel-count",
+      "before": 0.065,
+      "after": 0.069,
+      "sameRows": true
+    },
+    {
+      "id": "channels",
+      "before": 0.057,
+      "after": 0.058,
+      "sameRows": true
+    },
+    {
+      "id": "community-members",
+      "before": 0.11,
+      "after": 0.11,
+      "sameRows": true
+    },
+    {
+      "id": "admin-users",
+      "before": 19.299,
+      "after": 19.732,
+      "sameRows": true
+    },
+    {
+      "id": "admin-messages",
+      "before": 544.569,
+      "after": 583.724,
+      "sameRows": true
+    },
+    {
+      "id": "admin-messages-search",
+      "before": 325.568,
+      "after": 313.144,
+      "sameRows": true
+    },
+    {
+      "id": "admin-message-search-count",
+      "before": 300.009,
+      "after": 313.965,
+      "sameRows": true
+    },
+    {
+      "id": "reports",
+      "before": 0.1,
+      "after": 0.099,
+      "sameRows": true
+    },
+    {
+      "id": "audit",
+      "before": 0.092,
+      "after": 0.082,
+      "sameRows": true
+    },
+    {
+      "id": "admin-count-users",
+      "before": 4.17,
+      "after": 4.084,
+      "sameRows": true
+    },
+    {
+      "id": "admin-count-messages",
+      "before": 202.337,
+      "after": 201.425,
+      "sameRows": true
+    },
+    {
+      "id": "admin-count-conversations",
+      "before": 0.528,
+      "after": 0.478,
+      "sameRows": true
+    },
+    {
+      "id": "admin-active-1",
+      "before": 3.772,
+      "after": 3.731,
+      "sameRows": true
+    },
+    {
+      "id": "admin-active-7",
+      "before": 3.493,
+      "after": 4.182,
+      "sameRows": true
+    },
+    {
+      "id": "admin-active-30",
+      "before": 3.367,
+      "after": 3.411,
+      "sameRows": true
+    },
+    {
+      "id": "admin-recent-messages-1",
+      "before": 0.112,
+      "after": 0.113,
+      "sameRows": true
+    },
+    {
+      "id": "admin-recent-messages-7",
+      "before": 0.087,
+      "after": 0.084,
+      "sameRows": true
+    },
+    {
+      "id": "admin-banned-count",
+      "before": 3.775,
+      "after": 3.636,
+      "sameRows": true
+    },
+    {
+      "id": "admin-group-count",
+      "before": 0.304,
+      "after": 0.283,
+      "sameRows": true
+    },
+    {
+      "id": "admin-top-users",
+      "before": 383.961,
+      "after": 393.747,
+      "sameRows": true
+    },
+    {
+      "id": "admin-chart-users",
+      "before": 3.058,
+      "after": 3.056,
+      "sameRows": true
+    },
+    {
+      "id": "admin-chart-messages",
+      "before": 0.105,
+      "after": 0.096,
+      "sameRows": true
+    },
+    {
+      "id": "admin-activity-count",
+      "before": 0.055,
+      "after": 0.066,
+      "sameRows": true
+    },
+    {
+      "id": "admin-activity",
+      "before": 0.084,
+      "after": 0.086,
+      "sameRows": true
+    },
+    {
+      "id": "admin-activity-filter-count",
+      "before": 0.067,
+      "after": 0.06,
+      "sameRows": true
+    },
+    {
+      "id": "admin-activity-filter",
+      "before": 0.116,
+      "after": 0.077,
+      "sameRows": true
+    },
+    {
+      "id": "admin-storage-total",
+      "before": 0.067,
+      "after": 0.054,
+      "sameRows": true
+    },
+    {
+      "id": "admin-storage-types",
+      "before": 0.093,
+      "after": 0.075,
+      "sameRows": true
+    },
+    {
+      "id": "admin-storage-uploaders",
+      "before": 0.166,
+      "after": 0.125,
+      "sameRows": true
+    },
+    {
+      "id": "admin-security-logins",
+      "before": 0.127,
+      "after": 0.054,
+      "sameRows": true
+    },
+    {
+      "id": "retention-messages-90",
+      "before": 233.325,
+      "after": 221.162,
+      "sameRows": true
+    },
+    {
+      "id": "retention-messages-180",
+      "before": 231.373,
+      "after": 223.233,
+      "sameRows": true
+    },
+    {
+      "id": "retention-attachments",
+      "before": 0.075,
+      "after": 0.068,
+      "sameRows": true
+    },
+    {
+      "id": "retention-scheduled",
+      "before": 0.081,
+      "after": 0.068,
+      "sameRows": true
+    },
+    {
+      "id": "retention-audit",
+      "before": 0.088,
+      "after": 0.087,
+      "sameRows": true
+    }
+  ],
+  "deliveryAlternatingBenchmark": {
+    "synthetic": true,
+    "messages": 500000,
+    "users": 10000,
+    "rounds": 3,
+    "repeats": 18,
+    "beforeMs": 190.414,
+    "afterMs": 0.106,
+    "samples": {
+      "before": [
+        190.414,
+        186.825,
+        190.614,
+        192.369,
+        195.722,
+        175.509,
+        189.346,
+        196.342,
+        182.367,
+        200.373,
+        181.637,
+        184.704,
+        189.948,
+        198.322,
+        210.433,
+        186.438,
+        193.575,
+        175.889
+      ],
+      "after": [
+        0.124,
+        0.121,
+        0.11,
+        0.106,
+        0.094,
+        0.116,
+        0.094,
+        0.216,
+        0.092,
+        0.1,
+        0.098,
+        0.105,
+        0.112,
+        0.23,
+        0.106,
+        0.087,
+        0.113,
+        0.098
+      ]
+    },
+    "plans": {
+      "before": {
+        "Plan": {
+          "Node Type": "Gather",
+          "Parallel Aware": false,
+          "Async Capable": false,
+          "Startup Cost": 1008.45,
+          "Total Cost": 12703.77,
+          "Plan Rows": 1,
+          "Plan Width": 32,
+          "Actual Startup Time": 159.559,
+          "Actual Total Time": 175.788,
+          "Actual Rows": 0,
+          "Actual Loops": 1,
+          "Disabled": false,
+          "Workers Planned": 2,
+          "Workers Launched": 2,
+          "Single Copy": false,
+          "Shared Hit Blocks": 9093,
+          "Shared Read Blocks": 0,
+          "Shared Dirtied Blocks": 0,
+          "Shared Written Blocks": 0,
+          "Local Hit Blocks": 0,
+          "Local Read Blocks": 0,
+          "Local Dirtied Blocks": 0,
+          "Local Written Blocks": 0,
+          "Temp Read Blocks": 0,
+          "Temp Written Blocks": 0,
+          "Plans": [
+            {
+              "Node Type": "Hash Join",
+              "Parent Relationship": "Outer",
+              "Parallel Aware": false,
+              "Async Capable": false,
+              "Join Type": "Inner",
+              "Startup Cost": 8.45,
+              "Total Cost": 11703.67,
+              "Plan Rows": 1,
+              "Plan Width": 32,
+              "Actual Startup Time": 42.586,
+              "Actual Total Time": 42.589,
+              "Actual Rows": 0,
+              "Actual Loops": 3,
+              "Disabled": false,
+              "Inner Unique": true,
+              "Hash Cond": "(m.conversation_id = cm.conversation_id)",
+              "Shared Hit Blocks": 9093,
+              "Shared Read Blocks": 0,
+              "Shared Dirtied Blocks": 0,
+              "Shared Written Blocks": 0,
+              "Local Hit Blocks": 0,
+              "Local Read Blocks": 0,
+              "Local Dirtied Blocks": 0,
+              "Local Written Blocks": 0,
+              "Temp Read Blocks": 0,
+              "Temp Written Blocks": 0,
+              "Workers": [],
+              "Plans": [
+                {
+                  "Node Type": "Seq Scan",
+                  "Parent Relationship": "Outer",
+                  "Parallel Aware": true,
+                  "Async Capable": false,
+                  "Relation Name": "messages",
+                  "Alias": "m",
+                  "Startup Cost": 0,
+                  "Total Cost": 11695.17,
+                  "Plan Rows": 21,
+                  "Plan Width": 32,
+                  "Actual Startup Time": 0.844,
+                  "Actual Total Time": 42.519,
+                  "Actual Rows": 16.67,
+                  "Actual Loops": 3,
+                  "Disabled": false,
+                  "Filter": "((delivered_at IS NULL) AND (sender_id <> '24c9e15e-52af-c47c-225b-757e7bee1f9d'::uuid))",
+                  "Rows Removed by Filter": 166650,
+                  "Shared Hit Blocks": 9091,
+                  "Shared Read Blocks": 0,
+                  "Shared Dirtied Blocks": 0,
+                  "Shared Written Blocks": 0,
+                  "Local Hit Blocks": 0,
+                  "Local Read Blocks": 0,
+                  "Local Dirtied Blocks": 0,
+                  "Local Written Blocks": 0,
+                  "Temp Read Blocks": 0,
+                  "Temp Written Blocks": 0,
+                  "Workers": []
+                },
+                {
+                  "Node Type": "Hash",
+                  "Parent Relationship": "Inner",
+                  "Parallel Aware": false,
+                  "Async Capable": false,
+                  "Startup Cost": 8.32,
+                  "Total Cost": 8.32,
+                  "Plan Rows": 10,
+                  "Plan Width": 16,
+                  "Actual Startup Time": 0.052,
+                  "Actual Total Time": 0.054,
+                  "Actual Rows": 10,
+                  "Actual Loops": 1,
+                  "Disabled": false,
+                  "Hash Buckets": 1024,
+                  "Original Hash Buckets": 1024,
+                  "Hash Batches": 1,
+                  "Original Hash Batches": 1,
+                  "Peak Memory Usage": 9,
+                  "Shared Hit Blocks": 2,
+                  "Shared Read Blocks": 0,
+                  "Shared Dirtied Blocks": 0,
+                  "Shared Written Blocks": 0,
+                  "Local Hit Blocks": 0,
+                  "Local Read Blocks": 0,
+                  "Local Dirtied Blocks": 0,
+                  "Local Written Blocks": 0,
+                  "Temp Read Blocks": 0,
+                  "Temp Written Blocks": 0,
+                  "Workers": [],
+                  "Plans": [
+                    {
+                      "Node Type": "Index Scan",
+                      "Parent Relationship": "Outer",
+                      "Parallel Aware": false,
+                      "Async Capable": false,
+                      "Scan Direction": "Forward",
+                      "Index Name": "conversation_members_user_idx",
+                      "Relation Name": "conversation_members",
+                      "Alias": "cm",
+                      "Startup Cost": 0.15,
+                      "Total Cost": 8.32,
+                      "Plan Rows": 10,
+                      "Plan Width": 16,
+                      "Actual Startup Time": 0.034,
+                      "Actual Total Time": 0.041,
+                      "Actual Rows": 10,
+                      "Actual Loops": 1,
+                      "Disabled": false,
+                      "Index Cond": "(user_id = '24c9e15e-52af-c47c-225b-757e7bee1f9d'::uuid)",
+                      "Rows Removed by Index Recheck": 0,
+                      "Index Searches": 1,
+                      "Shared Hit Blocks": 2,
+                      "Shared Read Blocks": 0,
+                      "Shared Dirtied Blocks": 0,
+                      "Shared Written Blocks": 0,
+                      "Local Hit Blocks": 0,
+                      "Local Read Blocks": 0,
+                      "Local Dirtied Blocks": 0,
+                      "Local Written Blocks": 0,
+                      "Temp Read Blocks": 0,
+                      "Temp Written Blocks": 0,
+                      "Workers": []
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "Planning": {
+          "Shared Hit Blocks": 14,
+          "Shared Read Blocks": 0,
+          "Shared Dirtied Blocks": 0,
+          "Shared Written Blocks": 0,
+          "Local Hit Blocks": 0,
+          "Local Read Blocks": 0,
+          "Local Dirtied Blocks": 0,
+          "Local Written Blocks": 0,
+          "Temp Read Blocks": 0,
+          "Temp Written Blocks": 0
+        },
+        "Planning Time": 0.853,
+        "Triggers": [],
+        "Execution Time": 175.889
+      },
+      "after": {
+        "Plan": {
+          "Node Type": "Nested Loop",
+          "Parallel Aware": false,
+          "Async Capable": false,
+          "Join Type": "Inner",
+          "Startup Cost": 0.29,
+          "Total Cost": 58.03,
+          "Plan Rows": 1,
+          "Plan Width": 32,
+          "Actual Startup Time": 0.052,
+          "Actual Total Time": 0.053,
+          "Actual Rows": 0,
+          "Actual Loops": 1,
+          "Disabled": false,
+          "Inner Unique": false,
+          "Shared Hit Blocks": 12,
+          "Shared Read Blocks": 0,
+          "Shared Dirtied Blocks": 0,
+          "Shared Written Blocks": 0,
+          "Local Hit Blocks": 0,
+          "Local Read Blocks": 0,
+          "Local Dirtied Blocks": 0,
+          "Local Written Blocks": 0,
+          "Temp Read Blocks": 0,
+          "Temp Written Blocks": 0,
+          "Plans": [
+            {
+              "Node Type": "Index Scan",
+              "Parent Relationship": "Outer",
+              "Parallel Aware": false,
+              "Async Capable": false,
+              "Scan Direction": "Forward",
+              "Index Name": "conversation_members_user_idx",
+              "Relation Name": "conversation_members",
+              "Alias": "cm",
+              "Startup Cost": 0.15,
+              "Total Cost": 8.32,
+              "Plan Rows": 10,
+              "Plan Width": 16,
+              "Actual Startup Time": 0.013,
+              "Actual Total Time": 0.019,
+              "Actual Rows": 10,
+              "Actual Loops": 1,
+              "Disabled": false,
+              "Index Cond": "(user_id = '24c9e15e-52af-c47c-225b-757e7bee1f9d'::uuid)",
+              "Rows Removed by Index Recheck": 0,
+              "Index Searches": 1,
+              "Shared Hit Blocks": 2,
+              "Shared Read Blocks": 0,
+              "Shared Dirtied Blocks": 0,
+              "Shared Written Blocks": 0,
+              "Local Hit Blocks": 0,
+              "Local Read Blocks": 0,
+              "Local Dirtied Blocks": 0,
+              "Local Written Blocks": 0,
+              "Temp Read Blocks": 0,
+              "Temp Written Blocks": 0
+            },
+            {
+              "Node Type": "Index Scan",
+              "Parent Relationship": "Inner",
+              "Parallel Aware": false,
+              "Async Capable": false,
+              "Scan Direction": "Forward",
+              "Index Name": "messages_undelivered_conversation_idx",
+              "Relation Name": "messages",
+              "Alias": "m",
+              "Startup Cost": 0.14,
+              "Total Cost": 4.96,
+              "Plan Rows": 1,
+              "Plan Width": 32,
+              "Actual Startup Time": 0.002,
+              "Actual Total Time": 0.002,
+              "Actual Rows": 0,
+              "Actual Loops": 10,
+              "Disabled": false,
+              "Index Cond": "(conversation_id = cm.conversation_id)",
+              "Rows Removed by Index Recheck": 0,
+              "Filter": "(sender_id <> '24c9e15e-52af-c47c-225b-757e7bee1f9d'::uuid)",
+              "Rows Removed by Filter": 0,
+              "Index Searches": 10,
+              "Shared Hit Blocks": 10,
+              "Shared Read Blocks": 0,
+              "Shared Dirtied Blocks": 0,
+              "Shared Written Blocks": 0,
+              "Local Hit Blocks": 0,
+              "Local Read Blocks": 0,
+              "Local Dirtied Blocks": 0,
+              "Local Written Blocks": 0,
+              "Temp Read Blocks": 0,
+              "Temp Written Blocks": 0
+            }
+          ]
+        },
+        "Planning": {
+          "Shared Hit Blocks": 14,
+          "Shared Read Blocks": 0,
+          "Shared Dirtied Blocks": 0,
+          "Shared Written Blocks": 0,
+          "Local Hit Blocks": 0,
+          "Local Read Blocks": 0,
+          "Local Dirtied Blocks": 0,
+          "Local Written Blocks": 0,
+          "Temp Read Blocks": 0,
+          "Temp Written Blocks": 0
+        },
+        "Planning Time": 0.919,
+        "Triggers": [],
+        "Execution Time": 0.098
+      }
+    },
+    "indexes": [
+      {
+        "indexrelname": "messages_undelivered_conversation_idx",
+        "bytes": "16384"
+      }
+    ],
+    "resultEquality": true
+  },
+  "screenDtoCollectionsUnchanged": 12,
+  "rollbackAndReapply": true
+}

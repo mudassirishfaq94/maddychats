@@ -6,6 +6,7 @@ import { verifyFreshAuthentication } from "./authentication";
 import { is2FAEnabled } from "./two-factor";
 import { rateLimit } from "./rate-limit";
 import { jsonError } from "./http";
+import { passwordBusyResponse } from "./password-capacity";
 
 export class AdminActionError extends Error {
   constructor(readonly status: number, message: string) { super(message); }
@@ -25,6 +26,7 @@ export async function authorizeAdminMutation(req: NextRequest, body: Record<stri
 }
 
 export function adminActionError(error: unknown) {
+  const busy = passwordBusyResponse(error); if (busy) return busy;
   if (error instanceof AdminActionError) return jsonError(error.status, error.message);
   const message = error instanceof Error ? error.message : "";
   if (message === "UNAUTHENTICATED") return jsonError(401, "Not authenticated.");

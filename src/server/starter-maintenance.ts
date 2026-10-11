@@ -1,6 +1,7 @@
 import { cleanupRealtimeEvents } from "./realtime";
 import { cleanupUploads } from "./upload-retention";
 import { cleanupRateLimits } from "./rate-limit";
+import { cleanupExpiredAuthentication } from "./auth-maintenance";
 
 import { processScheduledMessages } from "./scheduled-messages";
 import { db } from "@/db";
@@ -14,7 +15,7 @@ const state = globalThis as typeof globalThis & {
 
 /** Existing processors share their database lock; the free host catches up after waking. */
 export function startStarterMaintenance() {
-  if (process.env.SCHEDULED_MESSAGES_ENABLED === "1" && !state.__scheduledMaintenance) {
+  if ((process.env.STARTER_MODE !== "1" || process.env.SCHEDULED_MESSAGES_ENABLED === "1") && !state.__scheduledMaintenance) {
     let processing = false;
     const deliver = async () => {
       if (processing) return;
@@ -26,12 +27,14 @@ export function startStarterMaintenance() {
     state.__scheduledMaintenance = setInterval(() => { void deliver(); }, 10000);
     state.__scheduledMaintenance.unref(); void deliver();
   }
-  if (process.env.STARTER_MODE !== "1" || state.__starterMaintenance) return;
+  if (state.__starterMaintenance) return;
   let running = false;
   const clean = async () => {
     if (running) return;
     running = true;
     try {
+      await cleanupExpiredAuthentication();
+      if (process.env.STARTER_MODE !== "1") return;
       await cleanupRealtimeEvents();
       await cleanupRateLimits();
       await cleanupUploads();
