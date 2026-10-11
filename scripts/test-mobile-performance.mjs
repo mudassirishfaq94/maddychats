@@ -37,19 +37,19 @@ export async function testMobilePerformance(base, pool, source, owner, conversat
     const draft = "Mobile typing must remain complete with no lost characters with no lost characters ";
     await composer.pressSequentially(draft, { delay: 35, timeout: 90000 });
     assert.equal(await composer.inputValue(), draft);
-    await page.waitForFunction(async ({ userId, conversationId }) => {
+    const storedHandle = await page.waitForFunction(async ({ userId, conversationId, draft }) => {
       const db = await new Promise((resolve, reject) => { const r = indexedDB.open(`circlo-outbox:${userId}`); r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error); });
       try {
         const record = await new Promise((resolve, reject) => { const r = db.transaction("messages").objectStore("messages").get(`draft:${conversationId}`); r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error); });
-        return record?.ciphertext instanceof ArrayBuffer && record.ciphertext.byteLength > 0;
+        if (!record?.ciphertext?.byteLength) return null;
+        const key = await new Promise((resolve, reject) => { const r = db.transaction("keys").objectStore("keys").get("device"); r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error); });
+        const bytes = await crypto.subtle.decrypt({ name: "AES-GCM", iv: record.iv, additionalData: new TextEncoder().encode(`draft:${conversationId}`) }, key, record.ciphertext);
+        if (new TextDecoder().decode(bytes) !== draft) return null;
+        return { encrypted: true, plain: record.plain, legacy: localStorage.getItem(`ziptalk:draft:${userId}:${conversationId}`) };
       } finally { db.close(); }
-    }, { userId: owner.id, conversationId }, { timeout: 15000 });
-    const stored = await page.evaluate(async ({ userId, conversationId }) => {
-      const db = await new Promise((resolve, reject) => { const r = indexedDB.open(`circlo-outbox:${userId}`); r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error); });
-      const record = await new Promise((resolve, reject) => { const r = db.transaction("messages").objectStore("messages").get(`draft:${conversationId}`); r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error); });
-      db.close();
-      return { encrypted: record?.ciphertext instanceof ArrayBuffer && record.ciphertext.byteLength > 0, plain: record?.plain, legacy: localStorage.getItem(`ziptalk:draft:${userId}:${conversationId}`) };
-    }, { userId: owner.id, conversationId });
+    }, { userId: owner.id, conversationId, draft }, { timeout: 15000 });
+    const stored = await storedHandle.jsonValue();
+    await storedHandle.dispose();
     assert.equal(stored.encrypted, true); assert.equal(stored.plain, undefined); assert.equal(stored.legacy, null);
     await page.reload(); await composer.waitFor();
     await page.waitForFunction(text => document.querySelector('textarea[aria-label="Message text"]')?.value === text, draft, { timeout: 15000 });
