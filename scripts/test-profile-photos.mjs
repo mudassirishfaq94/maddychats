@@ -43,6 +43,7 @@ export async function testProfilePhotos(base, pool, owner, peer, source, unrelat
     const page = await source.page.goto(base + screen); assert.equal(page.status(), 200, screen);
     assert(!await source.page.getByText("Application error: a client-side exception has occurred", { exact: false }).count());
     assert(await source.page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `Mobile overflow: ${screen}`);
+    if (screen === "/app/profile") assert(await source.page.locator("h1").evaluate(heading => heading.scrollWidth <= heading.clientWidth + 1), "Long profile names wrap inside their card");
   }
   const failure = route => route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "Temporary fixture failure. Please retry." }) });
   await source.page.route("**/api/users/search?*", failure);
