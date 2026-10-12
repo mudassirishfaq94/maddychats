@@ -19,11 +19,19 @@ export async function testMobilePerformance(base, pool, source, owner, conversat
     }, owner.id);
     await page.bringToFront();
     await page.reload(); await composer.waitFor();
+    await page.getByRole("region", { name: "Messages", exact: true }).getByText("Real encrypted delivery baseline", { exact: true }).last().waitFor();
     for (let i = 0; i < 6; i++) {
-      const load = page.getByRole("button", { name: "Load older messages", exact: true });
+      const load = page.getByRole("button", { name: /^(Load older messages|Loading…)$/ });
       if (!await load.count()) break;
-      await load.click(); await page.waitForTimeout(300);
+      const before = await page.locator(".message-history-row").count();
+      await page.getByRole("region", { name: "Messages", exact: true }).hover();
+      await page.mouse.wheel(0, -50000);
+      // Scrolling triggers automatic pagination. Do not race a button that can
+      // become disabled or disappear when the final older page arrives.
+      await page.waitForFunction(before => document.querySelectorAll(".message-history-row").length > before || !Array.from(document.querySelectorAll("button")).some(button => button.textContent.includes("Load older messages")), before);
+      await page.waitForTimeout(300);
     }
+    assert(await page.locator(".message-history-row").count() >= 150, "The long-history typing check loads the seeded older pages");
     for (const width of [320, 360, 390, 412]) {
       await page.setViewportSize({ width, height: 740 });
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `Chat overflow at ${width}px`);
@@ -67,6 +75,7 @@ export async function testMobilePerformance(base, pool, source, owner, conversat
       crypto.subtle.decrypt = async (...args) => {
         const aad = args[0]?.additionalData;
         if (aad && new TextDecoder().decode(aad).startsWith("draft:")) {
+          crypto.subtle.decrypt = decrypt; // Delay only this cold restoration.
           window.__draftDecryptHeld = true;
           await new Promise(resolve => setTimeout(resolve, 1500));
           const result = await decrypt(...args);
@@ -90,10 +99,26 @@ export async function testMobilePerformance(base, pool, source, owner, conversat
     await page.goBack(); await composer.waitFor();
     await page.waitForFunction(() => document.querySelector('textarea[aria-label="Message text"]')?.value === "Rapid navigation draft");
     await composer.fill(""); await page.waitForTimeout(800);
-    await page.reload(); await composer.waitFor(); await page.waitForTimeout(500);
-    assert.equal(await composer.inputValue(), "");
-    await page.evaluate(({ userId, conversationId }) => localStorage.setItem(`ziptalk:draft:${userId}:${conversationId}`, "Legacy draft migration"), { userId: owner.id, conversationId });
     await page.reload(); await composer.waitFor();
+    await page.getByRole("region", { name: "Messages", exact: true }).getByText("Real encrypted delivery baseline", { exact: true }).last().waitFor();
+    assert.equal(await composer.inputValue(), "");
+    // Cold legacy migration requires no encrypted draft. Retire the current
+    // document and prepare only this disposable conversation's draft record.
+    await page.goto(base + "/app");
+    await heldTab.evaluate(conversationId => new Promise((resolve, reject) => {
+      const transaction = window.__heldOutbox.transaction("messages", "readwrite");
+      transaction.objectStore("messages").delete(`draft:${conversationId}`);
+      transaction.oncomplete = resolve; transaction.onerror = () => reject(transaction.error);
+    }), conversationId);
+    // Install legacy data before the new document mounts, rather than racing
+    // the current document's asynchronous restoration/migration.
+    await page.addInitScript(({ userId, conversationId }) => {
+      if (sessionStorage.getItem("inject-legacy-draft") !== "1") return;
+      sessionStorage.removeItem("inject-legacy-draft");
+      localStorage.setItem(`ziptalk:draft:${userId}:${conversationId}`, "Legacy draft migration");
+    }, { userId: owner.id, conversationId });
+    await page.evaluate(() => sessionStorage.setItem("inject-legacy-draft", "1"));
+    await page.goto(base + "/app/chats/" + conversationId); await composer.waitFor();
     await page.waitForFunction(() => document.querySelector('textarea[aria-label="Message text"]')?.value === "Legacy draft migration");
     await page.waitForFunction(({ userId, conversationId }) => localStorage.getItem(`ziptalk:draft:${userId}:${conversationId}`) === null, { userId: owner.id, conversationId });
     await composer.fill(""); await page.waitForTimeout(800);

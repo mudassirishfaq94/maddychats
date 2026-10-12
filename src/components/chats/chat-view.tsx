@@ -591,6 +591,7 @@ export function ChatView({
   const scrollRef = useRef<HTMLDivElement>(null);
   const messageContentRef = useRef<HTMLDivElement>(null);
   const followLatestRef = useRef(true);
+  const touchScrollY = useRef(0);
   const topSentinelRef = useRef<HTMLDivElement>(null);
   const nearBottomRef = useRef(true);
   const [showScrollDown, setShowScrollDown] = useState(false);
@@ -905,8 +906,9 @@ export function ChatView({
   useEffect(() => {
     const last = items[items.length - 1];
     if (!last || searchParams.get("message")) return;
-    const isNewMessage = last.id !== lastIdRef.current;
-    if (!isNewMessage && last.sendStatus === lastSendStateRef.current) return;
+    const previousId = lastIdRef.current;
+    const isNewMessage = previousId !== null && last.id !== previousId;
+    if (last.id === previousId && last.sendStatus === lastSendStateRef.current) return;
     lastIdRef.current = last.id;
     lastSendStateRef.current = last.sendStatus;
     if ((isNewMessage && last.senderId === me.id) || followLatestRef.current) {
@@ -954,6 +956,7 @@ export function ChatView({
 
   const loadOlder = useCallback(async () => {
     if (!hasMore || loadingOlder || !nextCursor) return;
+    followLatestRef.current = false;
     const el = scrollRef.current;
     const prevHeight = el?.scrollHeight ?? 0;
     const prevTop = el?.scrollTop ?? 0;
@@ -1997,10 +2000,19 @@ export function ChatView({
         role="region"
         aria-label="Messages"
         tabIndex={0}
-        onWheel={() => { followLatestRef.current = false; }}
-        onTouchMove={() => { followLatestRef.current = false; }}
-        onPointerDown={(event) => { if (event.target === event.currentTarget) followLatestRef.current = false; }}
-        onKeyDown={(event) => { if (["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " "].includes(event.key)) followLatestRef.current = false; }}
+        onWheel={(event) => { if (event.deltaY < 0 && event.currentTarget.scrollHeight > event.currentTarget.clientHeight) followLatestRef.current = false; }}
+        onTouchStart={(event) => { touchScrollY.current = event.touches[0]?.clientY ?? 0; }}
+        onTouchMove={(event) => {
+          const nextY = event.touches[0]?.clientY ?? touchScrollY.current;
+          if (nextY > touchScrollY.current && event.currentTarget.scrollHeight > event.currentTarget.clientHeight) followLatestRef.current = false;
+          touchScrollY.current = nextY;
+        }}
+        onPointerDown={(event) => {
+          if (event.target === event.currentTarget && event.currentTarget.scrollHeight > event.currentTarget.clientHeight && event.clientX >= event.currentTarget.getBoundingClientRect().right - 20) followLatestRef.current = false;
+        }}
+        onKeyDown={(event) => {
+          if ((["ArrowUp", "PageUp", "Home"].includes(event.key) || (event.key === " " && event.shiftKey)) && event.currentTarget.scrollHeight > event.currentTarget.clientHeight) followLatestRef.current = false;
+        }}
         onScroll={onScroll}
         onDragOver={(e) => {
           e.preventDefault();
