@@ -1,0 +1,191 @@
+name: Resolve PR6 and validate merge
+
+on:
+  push:
+    branches: ['codex/resolve-pr6-20261013']
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: Lint, types, build, security and integration
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    services:
+      clamav:
+        image: clamav/clamav:1.4
+        ports: ["3310:3310"]
+        options: >-
+          --health-cmd "clamdcheck.sh"
+          --health-interval 20s
+          --health-timeout 10s
+          --health-retries 20
+          --health-start-period 300s
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: circlo_ci
+          POSTGRES_PASSWORD: disposable-ci-database-only
+          POSTGRES_DB: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U circlo_ci -d postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
+      PGHOST: 127.0.0.1
+      PGPORT: "5432"
+      PGUSER: circlo_ci
+      PGPASSWORD: disposable-ci-database-only
+      DATABASE_URL: postgresql://circlo_ci:disposable-ci-database-only@127.0.0.1:5432/item1_security_test
+      ITEM1_TEST_DATABASE_URL: postgresql://circlo_ci:disposable-ci-database-only@127.0.0.1:5432/item1_security_test
+      ITEM2_TEST_DATABASE_URL: postgresql://circlo_ci:disposable-ci-database-only@127.0.0.1:5432/item2_deployment_test
+      ITEM3_TEST_DATABASE_URL: postgresql://circlo_ci:disposable-ci-database-only@127.0.0.1:5432/item3_authorization_test
+      ITEM456_TEST_DATABASE_URL: postgresql://circlo_ci:disposable-ci-database-only@127.0.0.1:5432/items456_quality_test
+      REMAINING_TEST_DATABASE_URL: postgresql://circlo_ci:disposable-ci-database-only@127.0.0.1:5432/remaining_hardening_test
+      REMAINING_BROWSER_TESTS: "1"
+      ITEM456_BROWSER_TESTS: "1"
+      PROFILE_BUILD: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 0d5141fe222481cea2bcfff1b71d2ee3eab6afa0
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Merge pinned main; allow only lockfile conflicts
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "Circlo maintenance"
+          git config user.email "160733241+mudassirishfaq94@users.noreply.github.com"
+          if ! git merge --no-commit --no-ff 46ef1f4624e455f29fd95ee723242dc6e5fcaeae; then
+            test "$(git diff --name-only --diff-filter=U)" = "package-lock.json"
+            git checkout --ours package-lock.json
+          fi
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client-16
+      - name: Regenerate npm lockfile and preserve security updates
+        run: |
+          npm install --package-lock-only --ignore-scripts
+          npm update undici brace-expansion --package-lock-only --ignore-scripts
+          git add package-lock.json
+          git diff --cached --stat
+      - run: npm ci
+      - name: Install mobile lab browser
+        run: npx playwright install --with-deps chromium
+      - name: Dependency audit
+        run: |
+          npm audit --omit=dev --audit-level=high
+          npm run audit:dependencies
+      - name: Real scanner integration
+        env:
+          CLAMAV_HOST: 127.0.0.1
+          CLAMAV_PORT: "3310"
+        run: npm run test:scanner
+      - run: npm run lint
+      - run: npm run typecheck
+      - name: Production build
+        run: npm run build
+      - name: Prepare account-security database
+        run: |
+          createdb item1_security_test
+          npm run db:migrate
+      - name: Unit and isolated integration suites
+        run: npm test
+      - name: Session, password-reset and mobile retry regressions
+        env:
+          LOAD_TEST_ADMIN_URL: postgresql://circlo_ci:disposable-ci-database-only@127.0.0.1:5432/postgres
+        run: |
+          npx tsx scripts/test-session-query.ts
+          node scripts/test-login-backoff.mjs
+      - name: Verification-code security and provider integration
+        run: npm run test:verification && npm run test:verification-template && npm run test:send
+      - name: Landing page regressions
+        run: node scripts/check-landing.mjs
+      - name: Production container build and readiness smoke test
+        shell: bash
+        run: |
+          set -euo pipefail
+          createdb docker_quality_test
+          image_db="postgresql://circlo_ci:disposable-ci-database-only@127.0.0.1:5432/docker_quality_test"
+          DATABASE_URL="$image_db" npm run db:migrate
+          docker build --target runner --tag ziptalk-quality:local .
+          cleanup_image() {
+            if [ "${image_ready:-0}" != "1" ]; then docker logs ziptalk-quality-smoke || true; fi
+            docker rm -f ziptalk-quality-smoke >/dev/null 2>&1 || true
+          }
+          trap cleanup_image EXIT
+          docker run --detach --name ziptalk-quality-smoke --network host \
+            --env DATABASE_URL="$image_db" \
+            --env JWT_SECRET=disposable-container-only-secret-at-least-thirty-two-characters \
+            --env HEALTHCHECK_SECRET=disposable-container-health \
+            --env CRON_SECRET=disposable-container-cron \
+            --env CLIENT_URL=http://127.0.0.1:3000 \
+            --env CLAMAV_HOST=127.0.0.1 --env CLAMAV_PORT=3310 \
+            ziptalk-quality:local
+          for attempt in $(seq 1 60); do
+            if docker exec ziptalk-quality-smoke node scripts/readiness.mjs; then image_ready=1; break; fi
+            sleep 1
+          done
+          test "${image_ready:-0}" = "1"
+          test "$(docker exec ziptalk-quality-smoke id -u)" = "1001"
+          docker exec ziptalk-quality-smoke node -e "const fs=require('fs'); fs.accessSync('/app/server/uploads',fs.constants.W_OK); fs.accessSync('/app/.next/cache',fs.constants.W_OK);"
+      - name: Save local lab measurements
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-and-database-lab
+          path: .freebuff/performance/*.json
+          if-no-files-found: ignore
+
+      - name: Package validated lockfile
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --exit-code
+          mkdir -p /tmp/pr6-result
+          cp package-lock.json /tmp/pr6-result/package-lock.json
+          git write-tree > /tmp/pr6-result/tree-sha.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: validated-pr6-lockfile
+          path: /tmp/pr6-result/
+          if-no-files-found: error
+
+  push-validated-merge:
+    needs: quality
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: codex/audit-remainder-20261009
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          name: validated-pr6-lockfile
+          path: /tmp/pr6-result
+      - name: Push the tested merge to the existing PR branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "0d5141fe222481cea2bcfff1b71d2ee3eab6afa0"
+          test "$(git rev-parse origin/main)" = "46ef1f4624e455f29fd95ee723242dc6e5fcaeae"
+          git config user.name "Circlo maintenance"
+          git config user.email "160733241+mudassirishfaq94@users.noreply.github.com"
+          if ! git merge --no-commit --no-ff 46ef1f4624e455f29fd95ee723242dc6e5fcaeae; then
+            test "$(git diff --name-only --diff-filter=U)" = "package-lock.json"
+          fi
+          cp /tmp/pr6-result/package-lock.json package-lock.json
+          git add package-lock.json
+          test "$(git write-tree)" = "$(cat /tmp/pr6-result/tree-sha.txt)"
+          git commit -m "Merge main into production branch and regenerate npm lockfile"
+          git push origin HEAD:refs/heads/codex/audit-remainder-20261009
