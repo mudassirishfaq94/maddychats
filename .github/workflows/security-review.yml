@@ -21,7 +21,7 @@ jobs:
       - run: npm ci
       - name: Read installed Next.js security guidance
         run: |
-          rg --files node_modules/next/dist/docs | rg '(proxy|headers|server-and-client-components|security|environment-variables)' > /tmp/next-guides.txt
+          find node_modules/next/dist/docs -type f | grep -E '(proxy|headers|server-and-client-components|security|environment-variables)' > /tmp/next-guides.txt
           while IFS= read -r guide; do
             echo "GUIDE: $guide"
             head -n 160 "$guide"
