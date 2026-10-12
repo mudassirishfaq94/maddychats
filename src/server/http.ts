@@ -29,8 +29,8 @@ export async function readBoundedBody(req: Request, limit: number, timeoutMs = 3
   let timer: ReturnType<typeof setTimeout> | undefined;
   const deadline = new Promise<never>((_, reject) => {
     timer = setTimeout(() => {
-      void reader.cancel().catch(() => {});
       reject(new Error("body_read_timeout"));
+      void reader.cancel().catch(() => {});
     }, timeoutMs);
   });
   try {
