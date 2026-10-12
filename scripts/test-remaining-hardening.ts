@@ -128,6 +128,9 @@ async function main() {
     assert.equal(limitedWrite.status, 429, "Account limiter cannot be bypassed with a different claimed IP");
     assert(limitedWrite.headers.get("retry-after"));
     assert.equal((await api("/api/auth/logout", aliceCookie, "POST", {})).status, 200, "Logout remains available under mutation throttling");
+    await sql.query("insert into rate_limit_buckets(key,window_started_at,count) values($1,now(),25) on conflict(key) do update set window_started_at=now(),count=25", [`login-account:${alice.id}`]);
+    assert.equal((await api("/api/auth/login", "", "POST", { identifier: alice.username, password }, { "x-forwarded-for": "198.51.100.56" })).status, 429, "Distributed login attempts share an account budget");
+    await sql.query("delete from rate_limit_buckets where key=$1", [`login-account:${alice.id}`]);
     await sql.query("alter table rate_limit_buckets rename to unavailable_rate_limits");
     try { assert.equal((await api("/api/auth/login", "", "POST", { identifier: alice.username, password })).status, 429, "Shared rate limit outage fails closed"); }
     finally { await sql.query("alter table unavailable_rate_limits rename to rate_limit_buckets"); }

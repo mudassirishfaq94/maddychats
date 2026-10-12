@@ -60,6 +60,16 @@ async function login(req: NextRequest) {
   // Generic error message on both unknown user and wrong password,
   // so the endpoint cannot be used to enumerate accounts.
   const user = await measureLoginStage("lookup", () => findUserByIdentifier(identifier));
+  // Independent account budget prevents distributed password guessing from
+  // bypassing the IP limiter. Unknown accounts still use the same generic errors.
+  if (user) {
+    const accountLimit = await rateLimit(`login-account:${user.id}`, AUTH_RATE_LIMIT.limit, AUTH_RATE_LIMIT.windowMs);
+    if (!accountLimit.allowed) {
+      const response = jsonError(429, "Too many attempts. Please try again later.");
+      response.headers.set("Retry-After", String(accountLimit.retryAfterSeconds));
+      return response;
+    }
+  }
   let valid = false;
   try { valid = user ? await verifyPassword(password, user.passwordHash) : false; }
   catch (error) {

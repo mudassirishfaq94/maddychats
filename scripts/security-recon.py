@@ -10,6 +10,9 @@ for mode,args in [("history",["git",".","--log-opts=--all"]),("current",["dir","
     (out/(mode+"-findings.json")).write_text(json.dumps(safe,indent=2))
     raw.unlink(missing_ok=True)
     print("SECRET_SCAN_"+mode.upper()+"="+json.dumps({"count":len(safe),"rules":dict(Counter(f["RuleID"] for f in safe)),"findings":safe}))
+    reviewed=set(json.loads(pathlib.Path("scripts/security-reviewed-findings.json").read_text())["fingerprints"])
+    unexpected=[f for f in safe if f["Fingerprint"] not in reviewed]
+    if unexpected: raise RuntimeError("Unreviewed secret-scan findings; review redacted metadata before release.")
 routes=[]
 for p in pathlib.Path("src/app/api").rglob("route.ts"):
     s=p.read_text()

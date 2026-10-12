@@ -26,7 +26,7 @@ or a guarantee against every attack.
 | SEC-01 | High | Experimental Signal send path independently inserted messages without enforcing the normal blocked-contact, message-request, deleted-group and group messaging rules. | Quarantined the experimental send endpoint with 503; no deployment toggle can re-enable it. The supported encrypted message endpoint remains available. Regression added. |
 | SEC-02 | High, configuration-dependent | No versioned protection prevented Supabase Data API roles from reaching application tables if provider-default grants existed. Live grants could not be inspected. | Scoped migration enables RLS and revokes PUBLIC/anon/authenticated grants on the 45 application tables. Owner-based server access remains available. Tests simulate anonymous and authenticated Data API roles and an accidental future SELECT grant. Live status remains unverified until migration and runtime-role checks. |
 | SEC-03 | Medium | Origin guard compared hostnames and ports, allowing an HTTP origin for an HTTPS deployment. | Compare complete origins, including scheme, and reject opaque origins, credentials, path/query/hash tricks and suffix domains. |
-| SEC-04 | Medium | Several authenticated mutation endpoints had no route-local limiter. Administrative reads lacked a shared access budget. | Added a PostgreSQL-backed account-bound proxy budget of 240 operations per minute for non-auth mutations and admin reads; route-specific tighter limits remain. Logout is excluded. |
+| SEC-04 | Medium | Several authenticated mutation endpoints had no route-local limiter. Administrative reads lacked a shared access budget. | Added a PostgreSQL-backed account-bound proxy budget of 240 operations per minute for non-auth mutations and admin reads; route-specific tighter limits remain. Logout is excluded. Password login also has an independent 25-attempt/10-minute account budget. |
 | SEC-05 | Medium | Administrative reads allowed privileged accounts that had not enrolled MFA. Administrative layout was only a client-side gate. | Shared admin guards now require enrolled MFA. Server layout gates access before rendering the admin shell. Existing mutation step-up and role locks remain. |
 | SEC-06 | Low | Private admin/API error responses lacked explicit no-store headers. | Added private no-store for admin/privacy APIs and generic error responses. |
 | SEC-07 | Low | Invalid database pool values could become NaN or permit excessive connection capacity. | Validate configuration and cap the pool at 20, with a safe default of 5. |
@@ -64,8 +64,7 @@ or a guarantee against every attack.
 
 React text rendering and server-side validation must remain the default.
 Do not strip arbitrary characters from encrypted payloads: that corrupts
-ciphertext and does not replace context-aware escaping. Review any HTML-rendering
-sink separately; fixed SVG/CSS templates are different from user-controlled HTML.
+ciphertext and does not replace context-aware escaping. The source-sink inventory found no dangerouslySetInnerHTML, innerHTML, eval or new Function sinks in the scanned src files. A browser regression injects an HTML-looking display name and verifies it renders as text without executing. This scan does not replace review of every URL or CSS context.
 Production CSP does not permit general eval or inline scripts. Its inline-style
 exception is retained because the app uses dynamic styles.
 
