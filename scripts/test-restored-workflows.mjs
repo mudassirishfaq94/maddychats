@@ -1,3 +1,4 @@
+import {testChatScroll} from "./test-chat-scroll.mjs";
 import assert from "node:assert/strict";
 import { chromium } from "playwright";
 import { readFile } from "node:fs/promises";
@@ -259,6 +260,7 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     assert.equal((await photoUpload).status(), 201);
     await testImageViewer(recipient.page, "viewer-check.png");
     await testComposerMedia(base, source, recipient, pool, conversationId);
+    await testChatScroll(base, source, recipient, pool, conversationId);
     // Chromium generates a microphone stream; the application's MediaRecorder performs real recording.
     await source.page.getByRole("button", { name: "Record voice message", exact: true }).click();
     await source.page.getByRole("button", { name: "Stop recording", exact: true }).waitFor();

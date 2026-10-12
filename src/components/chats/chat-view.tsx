@@ -9,6 +9,7 @@ import { useHydrated } from "@/hooks/use-hydrated";
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -588,6 +589,8 @@ export function ChatView({
   const [scheduledMessages, setScheduledMessages] = useState<Array<{ id: string; text: string; scheduledFor: string }>>([]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
+  const messageContentRef = useRef<HTMLDivElement>(null);
+  const followLatestRef = useRef(true);
   const topSentinelRef = useRef<HTMLDivElement>(null);
   const nearBottomRef = useRef(true);
   const [showScrollDown, setShowScrollDown] = useState(false);
@@ -862,41 +865,61 @@ export function ChatView({
   const scrollToBottom = useCallback((smooth: boolean) => {
     const el = scrollRef.current;
     if (!el) return;
+    followLatestRef.current = true;
     el.scrollTo({ top: el.scrollHeight, behavior: smooth ? "smooth" : "auto" });
   }, []);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!initialScrollDone.current) {
       initialScrollDone.current = true;
-      scrollToBottom(false);
+      followLatestRef.current = !searchParams.get("message");
+      if (followLatestRef.current) scrollToBottom(false);
     }
-  }, [scrollToBottom]);
+  }, [scrollToBottom, searchParams]);
+
+  const hasMessages = items.length > 0;
+  useEffect(() => {
+    const viewport = scrollRef.current, content = messageContentRef.current;
+    if (!viewport || !content) return;
+    let frame: number | null = null;
+    const observer = new ResizeObserver(() => {
+      if (!followLatestRef.current || frame !== null) return;
+      frame = requestAnimationFrame(() => {
+        frame = null;
+        if (followLatestRef.current) viewport.scrollTo({ top: viewport.scrollHeight, behavior: "auto" });
+      });
+    });
+    // Decryption, images and content-visibility change row heights after mount.
+    observer.observe(content); observer.observe(viewport);
+    return () => { observer.disconnect(); if (frame !== null) cancelAnimationFrame(frame); };
+  }, [conversationId, hasMessages]);
 
   // System-notification taps always arrive at the current end of the chat.
   useEffect(() => {
     if (searchParams.get("latest") !== "1") return;
     requestAnimationFrame(() => scrollToBottom(false));
-  }, [items, scrollToBottom, searchParams]);
+  }, [scrollToBottom, searchParams]);
 
   const lastIdRef = useRef<string | null>(null);
   const lastSendStateRef = useRef<string | undefined>(undefined);
   useEffect(() => {
     const last = items[items.length - 1];
-    if (!last) return;
+    if (!last || searchParams.get("message")) return;
     const isNewMessage = last.id !== lastIdRef.current;
     if (!isNewMessage && last.sendStatus === lastSendStateRef.current) return;
     lastIdRef.current = last.id;
     lastSendStateRef.current = last.sendStatus;
-    if ((isNewMessage && last.senderId === me.id) || nearBottomRef.current) {
-      requestAnimationFrame(() => scrollToBottom(true));
+    if ((isNewMessage && last.senderId === me.id) || followLatestRef.current) {
+      requestAnimationFrame(() => { if ((isNewMessage && last.senderId === me.id) || followLatestRef.current) scrollToBottom(true); });
     }
-  }, [items, me.id, scrollToBottom]);
+  }, [items, me.id, scrollToBottom, searchParams]);
 
   function onScroll() {
     const el = scrollRef.current;
     if (!el) return;
     const isNearBottom =
       el.scrollHeight - el.scrollTop - el.clientHeight < NEAR_BOTTOM_PX;
+    if (el.scrollHeight - el.scrollTop - el.clientHeight <= 2) followLatestRef.current = true;
     nearBottomRef.current = isNearBottom;
     setShowScrollDown(!isNearBottom);
   }
@@ -907,6 +930,7 @@ export function ChatView({
       setError("That message is further back — load older messages to see it.");
       return;
     }
+    followLatestRef.current = false;
     node.scrollIntoView({ behavior: "smooth", block: "center" });
     setHighlightId(messageId);
     setTimeout(() => setHighlightId(null), 1600);
@@ -920,6 +944,7 @@ export function ChatView({
     const node = nodeRefs.current.get(targetMessageId);
     if (!node) return;
     jumpedRef.current = targetMessageId;
+    followLatestRef.current = false;
     node.scrollIntoView({ behavior: "smooth", block: "center" });
     setHighlightId(targetMessageId);
     setTimeout(() => setHighlightId(null), 2200);
@@ -1698,12 +1723,7 @@ export function ChatView({
     [initialUnread, visibleItems],
   );
 
-  useEffect(() => {
-    if (!firstVisibleUnreadId) return;
-    const node = nodeRefs.current.get(firstVisibleUnreadId);
-    if (!node) return;
-    node.scrollIntoView({ behavior: "smooth", block: "center" });
-  }, [firstVisibleUnreadId]);
+  // Keep the unread separator, but ordinary chat entry opens at the latest message.
 
   const firstPinned = useMemo(
     () => visibleItems.find((m) => m.pinned),
@@ -1929,6 +1949,7 @@ export function ChatView({
             // Find the pinned message and scroll to it
             const node = nodeRefs.current.get(firstPinned.id);
             if (node) {
+              followLatestRef.current = false;
               node.scrollIntoView({ behavior: "smooth", block: "center" });
               setHighlightId(firstPinned.id);
               setTimeout(() => setHighlightId(null), 1600);
@@ -1973,6 +1994,13 @@ export function ChatView({
       <div aria-hidden="true" className="chat-message-area pointer-events-none absolute inset-0 -z-10" style={bgStyle} />
       <div
         ref={scrollRef}
+        role="region"
+        aria-label="Messages"
+        tabIndex={0}
+        onWheel={() => { followLatestRef.current = false; }}
+        onTouchMove={() => { followLatestRef.current = false; }}
+        onPointerDown={(event) => { if (event.target === event.currentTarget) followLatestRef.current = false; }}
+        onKeyDown={(event) => { if (["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " "].includes(event.key)) followLatestRef.current = false; }}
         onScroll={onScroll}
         onDragOver={(e) => {
           e.preventDefault();
@@ -2036,7 +2064,7 @@ export function ChatView({
             </div>
           </div>
         ) : (
-          <div className="relative z-10 pb-4">
+          <div ref={messageContentRef} className="relative z-10 pb-4">
             {grouped.map(({ msg, showDate, sameSenderPrev }) => {
               const own = msg.senderId === me.id;
               const deleted = msg.deletedAt !== null;
