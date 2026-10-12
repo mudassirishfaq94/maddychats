@@ -13,6 +13,7 @@ try {
   await client.query("GRANT ALL ON TABLE users TO circlo_boundary_owner, anon, authenticated");
   await client.query("ALTER TABLE users OWNER TO circlo_boundary_owner");
   await client.query(await readFile("drizzle/0042_private_application_tables.sql", "utf8"));
+  await client.query("INSERT INTO users(username,display_name,email,password_hash) VALUES('boundary_fixture','Boundary fixture','boundary@example.invalid','fixture-only-not-a-login-hash')");
   for (const role of ["anon", "authenticated"]) {
     await client.query("SET LOCAL ROLE " + role);
     for (const statement of ["SELECT id FROM users", "INSERT INTO users(username,display_name,email,password_hash) VALUES('probe','probe','probe@example.invalid','fixture')",
@@ -29,7 +30,7 @@ try {
   assert.equal((await client.query("SELECT id FROM users")).rowCount, 0);
   await client.query("RESET ROLE");
   await client.query("SET LOCAL ROLE circlo_boundary_owner");
-  await client.query("SELECT id FROM users LIMIT 1");
+  assert.equal((await client.query("SELECT id FROM users WHERE username='boundary_fixture'")).rowCount, 1);
   await client.query("RESET ROLE");
   await client.query("ROLLBACK");
   console.log("Browser Data API roles denied SELECT/INSERT/UPDATE/DELETE; RLS remains fail-closed after accidental grants; server owner retains access.");
