@@ -648,6 +648,19 @@ export function ChatView({
   }, [me.id, conversationId, draftStorageKey, setDraft, persistDraft, queueDraftPersistence]);
   useEffect(() => { queueDraftPersistence(); }, [draft, queueDraftPersistence]);
 
+  // Retire the encrypted draft before exposing an empty composer. A fast
+  // reload must not read an older save that was still encrypting at delivery.
+  async function clearDeliveredDraft(expected: string, trimmed = false) {
+    if ((trimmed ? draftRef.current.trim() : draftRef.current) !== expected) return;
+    const revision = ++draftRevision.current;
+    draftRef.current = "";
+    if (draftPersistTimer.current) clearTimeout(draftPersistTimer.current);
+    if (draftUpdateTimer.current) clearTimeout(draftUpdateTimer.current);
+    await saveChatDraft(me.id, conversationId, "").catch(() => undefined);
+    // Preserve anything the user typed while IndexedDB was finishing.
+    if (draftRevision.current === revision) { setDraft(""); setReplyTo(null); }
+  }
+
   /* ------------------------------ read receipts ----------------------------- */
 
   const markRead = useCallback(async () => {
@@ -994,10 +1007,7 @@ export function ChatView({
         setItems((prev) =>
           prev.some((m) => m.id === created.id) ? prev : [...prev, created],
         );
-        if (draftRef.current === submittedDraft) {
-          setDraft("");
-          setReplyTo(null);
-        }
+        await clearDeliveredDraft(submittedDraft);
         nearBottomRef.current = true;
         scrollToBottom(true);
       } catch (cause) {
@@ -1097,10 +1107,7 @@ export function ChatView({
       const created = data.message;
       chatPerf("send-server-confirmed", sendStarted);
       void removeQueuedMessage(me.id, conversationId, clientMessageId).catch(() => undefined);
-      if (draftRef.current === submittedDraft) {
-        setDraft("");
-        setReplyTo(null);
-      }
+      await clearDeliveredDraft(submittedDraft);
       setDecryptedTexts((prev) => {
         const next = new Map(prev);
         next.delete(optimisticId);
@@ -1319,7 +1326,7 @@ export function ChatView({
       if (!res.ok || !data?.message) throw new Error(data?.error ?? "Message failed to send.");
       const created = data.message;
       await removeQueuedMessage(me.id, conversationId, message.clientMessageId).catch(() => undefined);
-      if (draftRef.current.trim() === plain) { setDraft(""); setReplyTo(null); }
+      await clearDeliveredDraft(plain, true);
       setDecryptedTexts((current) => {
         const next = new Map(current);
         next.delete(message.id);

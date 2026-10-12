@@ -11,3 +11,5 @@ Tests verify fixed control dimensions with short/long messages at 320/360/390/41
 Draft restoration records the input revision and never applies an older decrypted draft after a user edit, clear or acknowledged send. A delayed-decryption browser regression checks this explicitly; legacy plaintext migration persists the current input rather than resurrecting a cleared value. The login retry fixture closes and waits for all database connections before removing its temporary database, avoiding forced teardown errors.
 
 GIF scene assets and still posters use new v2 URLs, so immutable caches cannot serve the former duplicate artwork. Existing v1 URLs remain available for older clients. Independent catalogs, poster pixels and tab/search results are regression-tested.
+
+Delivery acknowledgement also retires pending encrypted draft writes before exposing an empty composer. Fast reloads after failed/lost-response retries cannot read the old submitted draft; text edited while storage finishes is preserved.
