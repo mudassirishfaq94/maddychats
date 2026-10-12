@@ -156,8 +156,12 @@ export async function testMessageRequests(base, senderCookie, recipientCookie, c
     await sender.waitForTimeout(2500);
     assert.equal(await sender.getByLabel("Queued", { exact: true }).count(), 0, "Cancelled messages must not return after reload");
     assert.deepEqual(errors, [], "First-contact and approval must not produce browser errors");
-    // Chat polling intentionally prevents network idle; assert the actual ready UI.
-    await Promise.all([sender, recipient].map(page => page.getByRole("textbox", { name: "Message text" }).waitFor({ state: "visible" })));
+    // Realtime chat deliberately keeps a stream open. Check the actual UI
+    // readiness instead of waiting for a network-idle state it may never reach.
+    await Promise.all([sender, recipient].map(async page => {
+      await page.waitForLoadState("domcontentloaded");
+      await page.getByRole("textbox", { name: "Message text" }).waitFor();
+    }));
     return { encryptedIntroduction: true, durableNotification: true, offlineRecovery: true, approvalAndReply: true, queuedEstablishedDelivery: true, encryptedOutboxReload: true, browserErrors: 0 };
   } finally { await browser.close(); }
 }

@@ -180,7 +180,10 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     // Recipient delivery can precede the sender's retry acknowledgement. Wait
     // for that acknowledgement and its durable draft clear before reloading.
     await source.page.waitForFunction(() => document.querySelector('textarea[aria-label="Message text"]')?.value === "");
-    await source.page.waitForFunction(async ({ userId, conversationId }) => {
+    let draftCleared = false;
+    const draftDeadline = Date.now() + 15000;
+    while (!draftCleared && Date.now() < draftDeadline) {
+      draftCleared = await source.page.evaluate(async ({ userId, conversationId }) => {
       const db = await new Promise((resolve, reject) => {
         const request = indexedDB.open(`circlo-outbox:${userId}`);
         request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error);
@@ -193,6 +196,9 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
         return record === undefined;
       } finally { db.close(); }
     }, { userId: owner.id, conversationId });
+      if (!draftCleared) await source.page.waitForTimeout(100);
+    }
+    assert(draftCleared, "Acknowledged delivery durably clears the encrypted draft");
     const committed=(await pool.query("select id from messages where conversation_id=$1",[conversationId])).rows;
     assert.equal(committed.length,1,"Retries persist one message");
     assert.equal((await pool.query("select count(*)::int as count from realtime_events where payload->>'type'='message:new' and payload->'message'->>'id'=$1",[committed[0].id])).rows[0].count,2,"Each member receives exactly one durable new-message event");

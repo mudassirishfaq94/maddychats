@@ -98,14 +98,55 @@ export async function testMobilePerformance(base, pool, source, owner, conversat
     await page.waitForURL(base + "/app");
     await page.goBack(); await composer.waitFor();
     await page.waitForFunction(() => document.querySelector('textarea[aria-label="Message text"]')?.value === "Rapid navigation draft");
+    // Poll from Node: Playwright waitForFunction treats a returned Promise as
+    // truthy, so it cannot prove an asynchronous IndexedDB transaction finished.
+    const persistedDraft = () => heldTab.evaluate(async conversationId => {
+      const db = window.__heldOutbox;
+      const read = (store, key) => new Promise((resolve, reject) => {
+        const request = db.transaction(store).objectStore(store).get(key);
+        request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error);
+      });
+      const record = await read("messages", `draft:${conversationId}`);
+      if (!record) return null;
+      const key = await read("keys", "device");
+      const bytes = await crypto.subtle.decrypt({ name: "AES-GCM", iv: record.iv, additionalData: new TextEncoder().encode(`draft:${conversationId}`) }, key, record.ciphertext);
+      return new TextDecoder().decode(bytes);
+    }, conversationId);
+    const waitForPersistedDraft = async expected => {
+      const deadline = Date.now() + 15000;
+      while (Date.now() < deadline) {
+        if (await persistedDraft() === expected) return;
+        await page.waitForTimeout(100);
+      }
+      assert.fail("Encrypted draft did not reach the expected committed state within 15 seconds");
+    };
+    await waitForPersistedDraft("Rapid navigation draft");
+    // Hold an older encryption task until after clearing. A deletion that is
+    // merely queued behind encryption would deadlock this check or resurrect
+    // the old draft once the task finishes.
+    await page.evaluate(() => {
+      const encrypt = crypto.subtle.encrypt.bind(crypto.subtle);
+      crypto.subtle.encrypt = async (...args) => {
+        const aad = args[0]?.additionalData;
+        if (aad && new TextDecoder().decode(aad).startsWith("draft:")) {
+          crypto.subtle.encrypt = encrypt;
+          window.__draftEncryptHeld = true;
+          await new Promise(resolve => { window.__releaseDraftEncrypt = resolve; });
+          const result = await encrypt(...args);
+          window.__draftEncryptReleased = true;
+          return result;
+        }
+        return encrypt(...args);
+      };
+    });
+    await composer.fill("An older encryption task must not resurrect this draft");
+    await page.waitForFunction(() => window.__draftEncryptHeld === true);
     await composer.fill("");
-    // Persistence is asynchronous on the deliberately throttled browser.
-    // Observe the committed deletion rather than relying on a wall-clock sleep.
-    await heldTab.waitForFunction(conversationId => new Promise(resolve => {
-      const transaction = window.__heldOutbox.transaction("messages", "readonly");
-      const request = transaction.objectStore("messages").get(`draft:${conversationId}`);
-      request.onsuccess = () => resolve(!request.result); request.onerror = () => resolve(false);
-    }), conversationId, { timeout: 15000, polling: 100 });
+    await waitForPersistedDraft(null);
+    assert.equal(await page.evaluate(() => window.__draftEncryptReleased === true), false);
+    await page.evaluate(() => window.__releaseDraftEncrypt());
+    await page.waitForFunction(() => window.__draftEncryptReleased === true);
+    await waitForPersistedDraft(null);
     await page.reload(); await composer.waitFor();
     await page.getByRole("region", { name: "Messages", exact: true }).getByText("Real encrypted delivery baseline", { exact: true }).last().waitFor();
     assert.equal(await composer.inputValue(), "");
@@ -139,6 +180,7 @@ export async function testMobilePerformance(base, pool, source, owner, conversat
     }
     return { mobileWidths: [320, 360, 390, 412], encryptedDraftReload: true, longHistoryTyping: true };
   } finally {
+    await page.evaluate(() => window.__releaseDraftEncrypt?.()).catch(() => {});
     await heldTab.close();
     if (cdp) await cdp.send("Emulation.setCPUThrottlingRate", { rate: 1 }).catch(() => {});
     await pool.query("delete from messages where id=any($1::uuid[]) and conversation_id=$2", [ids, conversationId]);

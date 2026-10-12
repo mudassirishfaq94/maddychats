@@ -26,6 +26,7 @@ function open(userId: string): Promise<IDBDatabase> {
 }
 
 const draftWrites = new Map<string, Promise<void>>();
+const draftWork = new Map<string, { epoch: number; pending: number; clear: Promise<void> }>();
 /** Reserved draft: keys cannot overlap UUID-prefixed queue records.
  * Reuse the existing encrypted store without an upgrade blocked by older tabs.
  * Serialize writes so an older encryption task cannot overwrite a newer draft. */
@@ -33,15 +34,30 @@ export function saveChatDraft(userId: string, conversationId: string, plain: str
   const id = `draft:${conversationId}`;
   const queueId = `${userId}:${id}`;
   const previous = draftWrites.get(queueId) ?? Promise.resolve();
-  const next = previous.catch(() => {}).then(async () => {
+  const work = draftWork.get(queueId) ?? { epoch: 0, pending: 0, clear: Promise.resolve() };
+  draftWork.set(queueId, work);
+  work.pending++;
+  const epoch = plain ? work.epoch : ++work.epoch;
+  // Explicit clearing cannot wait behind an older, slow encryption operation.
+  // Invalidate that work before deleting; a transaction already issued runs
+  // before this deletion, while unfinished encryption is forbidden to write.
+  const next = !plain ? (async () => {
     const db = await open(userId);
-    if (!plain) { await operation(db, "messages", "readwrite", store => store.delete(id)); return; }
+    await operation(db, "messages", "readwrite", store => store.delete(id));
+  })() : previous.catch(() => {}).then(async () => {
+    if (epoch !== work.epoch) { await work.clear; return; }
+    const db = await open(userId);
     const iv = crypto.getRandomValues(new Uint8Array(12));
     const ciphertext = await crypto.subtle.encrypt({ name: "AES-GCM", iv, additionalData: new TextEncoder().encode(id) }, await key(db), new TextEncoder().encode(plain.slice(0, 2000)));
+    if (epoch !== work.epoch) { await work.clear; return; }
     await operation(db, "messages", "readwrite", store => store.put({ id, iv, ciphertext } satisfies Stored, id));
   });
+  if (!plain) work.clear = next;
   draftWrites.set(queueId, next);
-  void next.finally(() => { if (draftWrites.get(queueId) === next) draftWrites.delete(queueId); }).catch(() => {});
+  void next.finally(() => {
+    if (draftWrites.get(queueId) === next) draftWrites.delete(queueId);
+    if (--work.pending === 0 && draftWork.get(queueId) === work) draftWork.delete(queueId);
+  }).catch(() => {});
   return next;
 }
 
