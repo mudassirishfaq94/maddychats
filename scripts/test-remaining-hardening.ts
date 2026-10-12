@@ -49,6 +49,10 @@ async function main() {
       const verified = await api("/api/auth/mfa", challenge, "POST", { code: new TOTP({ secret: mfa, algorithm: "SHA1", digits: 6, period: 30 }).generate() }); assert.equal(verified.status, 200, await verified.clone().text()); return sessionCookie(verified);
     };
     const aliceCookie = await login(alice.username), bobCookie = await login(bob.username), noMfaCookie = await login(owner.username);
+    const ownProfile = await api("/api/users/me", aliceCookie);
+    assert.equal(ownProfile.status, 200);
+    assert(ownProfile.headers.get("cache-control")?.includes("no-store"), "Private profile responses cannot be cached");
+
     assert.equal((await api("/api/admin/users", aliceCookie, "PATCH", { userId: target.id, action: "role", role: "admin" })).status, 403);
     assert.equal((await api("/api/admin/stats", noMfaCookie)).status, 403, "Admin reads require MFA enrollment");
     assert.equal((await api("/api/e2ee/signal/send", aliceCookie, "POST", {})).status, 503, "Experimental send cannot bypass production policies");

@@ -52,11 +52,7 @@ const nextConfig: NextConfig = {
         headers: [{ key: "Cache-Control", value: "public, max-age=3600, must-revalidate" }],
       },
       {
-        source: "/api/admin/:path*",
-        headers: [{ key: "Cache-Control", value: "private, no-store" }],
-      },
-      {
-        source: "/api/privacy/:path*",
+        source: "/api/:path*",
         headers: [{ key: "Cache-Control", value: "private, no-store" }],
       },
       { source: "/stickers/:path*", headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }] },
