@@ -6,7 +6,7 @@ import { eq } from "drizzle-orm";
 import { beginSignIn } from "@/server/authentication";
 import { NextRequest, NextResponse } from "next/server";
 import { fieldErrors, loginSchema } from "@/lib/schemas";
-import { verifyPassword, PasswordBusyError } from "@/server/password";
+import { verifyPassword, PasswordBusyError, DUMMY_PASSWORD_HASH } from "@/server/password";
 import { findUserByIdentifier } from "@/server/users";
 import { AUTH_RATE_LIMIT, rateLimit } from "@/server/rate-limit";
 import {
@@ -61,7 +61,9 @@ async function login(req: NextRequest) {
   // so the endpoint cannot be used to enumerate accounts.
   const user = await measureLoginStage("lookup", () => findUserByIdentifier(identifier));
   let valid = false;
-  try { valid = user ? await verifyPassword(password, user.passwordHash) : false; }
+  // Unknown accounts must do the same bounded cost-12 work; generic error
+  // wording alone cannot prevent username discovery through response timing.
+  try { valid = await verifyPassword(password, user?.passwordHash ?? DUMMY_PASSWORD_HASH); }
   catch (error) {
     if (!(error instanceof PasswordBusyError)) throw error;
     const response = jsonError(503, "Sign-in is busy. Please try again in a few seconds.");

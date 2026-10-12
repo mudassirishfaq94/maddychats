@@ -34,7 +34,8 @@ export async function migrateOnline(client,direction='up'){
  }
 }
 if(process.argv[1]===fileURLToPath(import.meta.url)){
- assert(process.env.DATABASE_URL,'DATABASE_URL required');
- const pool=new pg.Pool({connectionString:process.env.DATABASE_URL,max:1,connectionTimeoutMillis:15000});
+ const connectionString=process.env.MIGRATION_DATABASE_URL || process.env.DATABASE_URL;
+ assert(connectionString,'Migration database URL required');
+ const pool=new pg.Pool({connectionString,max:1,connectionTimeoutMillis:15000});
  const client=await pool.connect();try{await migrateOnline(client,process.argv[2]??'up');}finally{client.release();await pool.end();}
 }

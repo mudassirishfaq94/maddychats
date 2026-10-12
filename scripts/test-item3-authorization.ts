@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { spawn, type ChildProcess } from "node:child_process";
 import { once } from "node:events";
-import { mkdir, writeFile, unlink } from "node:fs/promises";
+import { mkdir, writeFile, unlink, readFile } from "node:fs/promises";
 import { resolve, join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { Pool } from "pg";
@@ -20,16 +20,37 @@ async function main() {
   const admin = new Pool({ connectionString: adminUrl.toString() });
   const sql = new Pool({ connectionString: url });
   let server: ChildProcess | undefined;
+  let runtimePool: Pool | undefined;
+  let runtimeRoleCreated = false;
+  let untrustedRoleCreated = false;
   const fileName = `item3-${randomUUID()}.bin`;
   const filePath = resolve(".next/standalone/server/uploads/files", fileName);
   try {
     await admin.query("DROP DATABASE IF EXISTS item3_authorization_test WITH (FORCE)");
     await admin.query("CREATE DATABASE item3_authorization_test");
     await migrate(drizzle(sql), { migrationsFolder: "drizzle" });
+    await sql.query(await readFile("docs/database/runtime-role.sql", "utf8"));
+    runtimeRoleCreated = true;
+    await sql.query("ALTER ROLE circlo_runtime LOGIN PASSWORD 'disposable-item3-runtime-only'");
+    const runtimeUrl = new URL(url); runtimeUrl.username = "circlo_runtime"; runtimeUrl.password = "disposable-item3-runtime-only";
+    runtimePool = new Pool({ connectionString: runtimeUrl.toString() });
+    const capabilities = (await runtimePool.query("select rolsuper,rolcreatedb,rolcreaterole,rolbypassrls from pg_roles where rolname=current_user")).rows[0];
+    assert.deepEqual(capabilities, { rolsuper: false, rolcreatedb: false, rolcreaterole: false, rolbypassrls: false });
+    await assert.rejects(runtimePool.query("CREATE TABLE public.permission_probe(id int)"), /permission denied/);
+    await assert.rejects(runtimePool.query("TRUNCATE users"), /permission denied/);
+    await assert.rejects(runtimePool.query(`SET ROLE "${parsed.username.replace(/"/g, '""')}"`), /permission denied/, "Runtime cannot become the database owner");
     const password = "IsolatedItem3Password9";
     const passwordHash = await hashPassword(password);
     const account = async (name: string) => (await sql.query("insert into users(username,display_name,email,password_hash,email_verified_at) values($1,$1,$2,$3,now()) returning id,username", [name, `${name}@example.invalid`, passwordHash])).rows[0];
     const alice = await account("item3_alice"), bob = await account("item3_bob"), outsider = await account("item3_outsider");
+    assert.equal((await runtimePool.query("select count(*)::int n from users")).rows[0].n, 3);
+    await sql.query("CREATE ROLE item3_untrusted NOLOGIN; GRANT USAGE ON SCHEMA public TO item3_untrusted; GRANT SELECT ON users TO item3_untrusted");
+    untrustedRoleCreated = true;
+    const untrusted = await sql.connect();
+    try {
+      await untrusted.query("BEGIN; SET LOCAL ROLE item3_untrusted");
+      assert.equal((await untrusted.query("select count(*)::int n from users")).rows[0].n, 0, "A different role with SELECT remains blocked by RLS");
+    } finally { await untrusted.query("ROLLBACK"); untrusted.release(); }
     const conversation = (await sql.query("insert into conversations(type,created_by_id) values('dm',$1) returning id", [alice.id])).rows[0];
     await sql.query("insert into conversation_members(conversation_id,user_id,accepted_at) values($1,$2,now()),($1,$3,now())", [conversation.id, alice.id, bob.id]);
     await sql.query("insert into messages(conversation_id,sender_id,text,created_at) select $1,$2,'history-'||n,now()-n*interval '1 minute' from generate_series(1,75) n", [conversation.id, alice.id]);
@@ -41,7 +62,7 @@ async function main() {
     await sql.query("insert into conversation_members(conversation_id,user_id,role) values($1,$2,'owner'),($1,$3,'member')", [group.id, alice.id, bob.id]);
 
     const base = "http://127.0.0.1:3109";
-    const env = { ...process.env, NODE_ENV: "production" as const, DATABASE_URL: url, HOSTNAME: "127.0.0.1", PORT: "3109", CLIENT_URL: base,
+    const env = { ...process.env, NODE_ENV: "production" as const, DATABASE_URL: runtimeUrl.toString(), REALTIME_DATABASE_URL: runtimeUrl.toString(), HOSTNAME: "127.0.0.1", PORT: "3109", CLIENT_URL: base,
       JWT_SECRET: "item3-disposable-test-secret-at-least-thirty-two-characters", HEALTHCHECK_SECRET: "item3-health", CRON_SECRET: "item3-cron",
       SUPABASE_URL: "", SUPABASE_SERVICE_ROLE_KEY: "", RESEND_API_KEY: "", VAPID_PRIVATE_KEY: "", FIREBASE_PROJECT_ID: "", FIREBASE_CLIENT_EMAIL: "", FIREBASE_PRIVATE_KEY: "" };
     server = spawn(process.execPath, [resolve(".next/standalone/server.js")], { env, stdio: "pipe", windowsHide: true });
@@ -52,6 +73,7 @@ async function main() {
       if (ready || server.exitCode !== null) break; await sleep(200);
     }
     assert(ready, output);
+    assert.equal((await fetch(`${base}/api/ready`, { headers: { authorization: "Bearer item3-health" } })).status, 200, "Limited runtime credentials pass schema and realtime readiness");
     const api = (path: string, cookie = "", method = "GET", body?: unknown, headers: Record<string, string> = {}) => fetch(`${base}${path}`, {
       method, headers: { cookie, origin: base, "content-type": "application/json", ...headers },
       body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(15000),
@@ -77,8 +99,17 @@ async function main() {
     assert.equal((await api(`/api/media/${attachment.id}`)).status, 401);
     assert.equal((await api(`/api/media/${attachment.id}`, outsiderCookie)).status, 404);
     const media = await api(`/api/media/${attachment.id}`, bobCookie);
+    assert.equal(media.headers.get("cache-control"), "private, no-store", "Private media must reauthorize every request");
     assert.equal(media.status, 200); assert.equal(await media.text(), "isolated-private-attachment");
     assert.equal((await api(historyPath, aliceCookie, "POST", { text: "ciphertext", encrypted: true }, { origin: "https://evil.example" })).status, 403);
+    const adminPage = await api("/app/admin", bobCookie);
+    const adminHtml = await adminPage.text();
+    assert(!adminHtml.includes("Admin Dashboard v1.0"), "Regular users never receive the admin shell");
+    assert.equal((await api("/api/admin/stats", bobCookie)).status, 403);
+    await sql.query("update users set role='moderator' where id=$1", [bob.id]);
+    assert((await (await api("/app/admin", bobCookie)).text()).includes("Admin Dashboard v1.0"), "Authorized moderators retain their admin shell");
+    await sql.query("update users set role='user' where id=$1", [bob.id]);
+    assert.equal((await api("/api/admin/stats", bobCookie)).status, 403, "Role changes are checked freshly");
     assert.equal((await api(`/api/conversations/${conversation.id}`, aliceCookie, "DELETE", undefined, { "sec-fetch-site": "cross-site" })).status, 403);
     assert.equal((await sql.query("select count(*)::int as count from conversations where id=$1", [conversation.id])).rows[0].count, 1);
     assert.equal((await api(historyPath, outsiderCookie, "POST", { text: "ciphertext", encrypted: true })).status, 404);
@@ -109,6 +140,9 @@ async function main() {
       const stopped = once(server, "exit"); server.kill(); await stopped;
     }
     await unlink(filePath).catch(() => undefined);
+    await runtimePool?.end();
+    if (untrustedRoleCreated) await sql.query("DROP OWNED BY item3_untrusted; DROP ROLE item3_untrusted");
+    if (runtimeRoleCreated) await sql.query("DROP OWNED BY circlo_runtime; DROP ROLE circlo_runtime");
     await sql.end(); await admin.end();
   }
 }

@@ -117,8 +117,6 @@ export async function GET(
         found.attachment.kind === "image" || found.attachment.kind === "video";
     }
 
-    // Log storage path for debugging
-    console.log(`[media] Fetching attachment ${found.attachment.id}, path: ${relativePath}, encrypted: ${found.attachment.encrypted}`);
   } else {
     return jsonError(404, "Not found.");
   }
@@ -130,9 +128,10 @@ export async function GET(
     headers: {
       "Content-Type": mimeType,
       ...(stored.size !== null ? { "Content-Length": String(stored.size) } : {}),
-      "Content-Disposition": `${inline ? "inline" : "attachment"}; filename="${downloadName.replace(/"/g, "")}"`,
-      "Cache-Control": "private, max-age=3600",
+      "Content-Disposition": contentDisposition(downloadName, inline),
+      "Cache-Control": "private, no-store",
       "X-Content-Type-Options": "nosniff",
     },
   });
 }
+import { contentDisposition } from "@/server/content-disposition";

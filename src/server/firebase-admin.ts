@@ -1,3 +1,4 @@
+import { safeError } from "@/server/safe-error";
 /** Server-only Firebase Admin initialization shared by Firebase integrations. */
 let firebaseAdmin: any = null;
 
@@ -21,7 +22,7 @@ export async function getFirebaseAdmin(): Promise<any | null> {
     firebaseAdmin = admin;
     return admin;
   } catch (error) {
-    console.error("[firebase] Admin initialization failed:", error);
+    console.error("[firebase] Admin initialization failed:", safeError(error));
     return null;
   }
 }

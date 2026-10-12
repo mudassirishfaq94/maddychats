@@ -1,3 +1,4 @@
+import { safeError } from "@/server/safe-error";
 import { NextRequest, NextResponse } from "next/server";
 import { processScheduledMessages } from "@/server/scheduled-messages";
 import { jsonError } from "@/server/http";
@@ -48,7 +49,7 @@ export async function GET(req: NextRequest) {
       timestamp: new Date().toISOString(),
     });
   } catch (err) {
-    console.error("[cron] Failed to process scheduled messages:", err);
+    console.error("[cron] Failed to process scheduled messages:", safeError(err));
     return jsonError(500, "Failed to process scheduled messages.");
   }
 }

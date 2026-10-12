@@ -98,7 +98,14 @@ export async function testMobilePerformance(base, pool, source, owner, conversat
     await page.waitForURL(base + "/app");
     await page.goBack(); await composer.waitFor();
     await page.waitForFunction(() => document.querySelector('textarea[aria-label="Message text"]')?.value === "Rapid navigation draft");
-    await composer.fill(""); await page.waitForTimeout(800);
+    await composer.fill("");
+    // Persistence is asynchronous on the deliberately throttled browser.
+    // Observe the committed deletion rather than relying on a wall-clock sleep.
+    await heldTab.waitForFunction(conversationId => new Promise(resolve => {
+      const transaction = window.__heldOutbox.transaction("messages", "readonly");
+      const request = transaction.objectStore("messages").get(`draft:${conversationId}`);
+      request.onsuccess = () => resolve(!request.result); request.onerror = () => resolve(false);
+    }), conversationId, { timeout: 15000, polling: 100 });
     await page.reload(); await composer.waitFor();
     await page.getByRole("region", { name: "Messages", exact: true }).getByText("Real encrypted delivery baseline", { exact: true }).last().waitFor();
     assert.equal(await composer.inputValue(), "");
