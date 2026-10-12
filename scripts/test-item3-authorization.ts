@@ -77,7 +77,7 @@ async function main() {
     assert.equal((await api(`/api/media/${attachment.id}`)).status, 401);
     assert.equal((await api(`/api/media/${attachment.id}`, outsiderCookie)).status, 404);
     const media = await api(`/api/media/${attachment.id}`, bobCookie);
-    assert.equal(media.status, 200); assert.equal(await media.text(), "isolated-private-attachment");
+    assert.equal(media.status, 200); assert(media.headers.get("cache-control")?.includes("no-store")); assert.equal(await media.text(), "isolated-private-attachment");
     assert.equal((await api(historyPath, aliceCookie, "POST", { text: "ciphertext", encrypted: true }, { origin: "https://evil.example" })).status, 403);
     assert.equal((await api(`/api/conversations/${conversation.id}`, aliceCookie, "DELETE", undefined, { "sec-fetch-site": "cross-site" })).status, 403);
     assert.equal((await sql.query("select count(*)::int as count from conversations where id=$1", [conversation.id])).rows[0].count, 1);
