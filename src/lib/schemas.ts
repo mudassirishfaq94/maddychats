@@ -29,6 +29,7 @@ export const registerSchema = z
       .string()
       .min(8, "Password must be at least 8 characters")
       .max(72, "Password must be 72 characters or fewer")
+      .refine((value) => new TextEncoder().encode(value).length <= 72, "Password must fit within 72 UTF-8 bytes")
       .regex(/[a-z]/, "Password is too weak — add a lowercase letter")
       .regex(/[A-Z]/, "Password is too weak — add an uppercase letter")
       .regex(/[0-9]/, "Password is too weak — add a number"),
@@ -51,7 +52,7 @@ export const forgotPasswordSchema = z.object({
 export const resetPasswordSchema = z
   .object({
     token: z.string().min(32, "This reset link is invalid"),
-    password: z.string().min(8, "Password must be at least 8 characters").max(72, "Password must be 72 characters or fewer").regex(/[a-z]/, "Add a lowercase letter").regex(/[A-Z]/, "Add an uppercase letter").regex(/[0-9]/, "Add a number"),
+    password: z.string().min(8, "Password must be at least 8 characters").max(72, "Password must be 72 characters or fewer").refine((value) => new TextEncoder().encode(value).length <= 72, "Password must fit within 72 UTF-8 bytes").regex(/[a-z]/, "Add a lowercase letter").regex(/[A-Z]/, "Add an uppercase letter").regex(/[0-9]/, "Add a number"),
     confirmPassword: z.string(),
   })
   .refine((value) => value.password === value.confirmPassword, { message: "Passwords do not match", path: ["confirmPassword"] });

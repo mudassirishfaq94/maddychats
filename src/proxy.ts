@@ -21,12 +21,13 @@ import { rateLimit } from "@/server/rate-limit";
 const PROTECTED_PREFIXES = ["/app"];
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
+  const publicMetadata = ["/api/app-version", "/api/auth/methods"].includes(pathname);
 
   let token = req.cookies.get(SESSION_COOKIE)?.value;
   let claims = token ? await verifySessionToken(token) : null;
   let credentials;
   const refresh = req.cookies.get(REFRESH_COOKIE)?.value;
-  if (!claims && refresh && !guardSameOrigin(req)) {
+  if (!claims && refresh && !publicMetadata && !guardSameOrigin(req)) {
     credentials = await rotateDeviceSession(refresh);
     if (credentials) {
       token = credentials.access;
@@ -70,6 +71,12 @@ export async function proxy(req: NextRequest) {
   headers.set("x-nonce", nonce);
   headers.set("Content-Security-Policy", policy);
   const res = NextResponse.next({ request: { headers } });
+  // Authenticated API results (including errors) must never be retained by a
+  // shared cache or a previous account's browser session. Public release/auth
+  // capability metadata keeps its deliberately separate cache policy.
+  if (pathname.startsWith("/api/") && !publicMetadata) {
+    res.headers.set("Cache-Control", "private, no-store");
+  }
   if (!pathname.startsWith("/api/")) {
     res.headers.set(process.env.CSP_ENFORCE === "1" ? "Content-Security-Policy" : "Content-Security-Policy-Report-Only", policy);
   }
@@ -78,5 +85,5 @@ export async function proxy(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|api/health|api/ready|api/cron|api/security/csp-report|favicon.ico|icons/|brand/|signal/|sw.js|manifest.webmanifest|theme-init.js).*)"],
+  matcher: ["/((?!_next/static|_next/image|api/health|api/ready|api/cron|api/security/csp-report|favicon.ico|icons/|brand/|gifs/|stickers/|signal/|sw.js|manifest.webmanifest|theme-init.js).*)"],
 };

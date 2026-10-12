@@ -128,7 +128,7 @@ async function main() {
       console.log("Four authenticated administrative browser pages passed");
     }
     await sql.query("insert into rate_limit_buckets(key,window_started_at,count) values($1,now(),240) on conflict(key) do update set window_started_at=now(),count=240", [`api-write:${alice.id}`]);
-    const limitedWrite = await api("/api/privacy/settings", aliceCookie, "PATCH", { readReceipts: false }, { "x-forwarded-for": "198.51.100.55" });
+    const limitedWrite = await api("/api/privacy/settings", aliceCookie, "PUT", { readReceipts: false }, { "x-forwarded-for": "198.51.100.55" });
     assert.equal(limitedWrite.status, 429, "Account limiter cannot be bypassed with a different claimed IP");
     assert(limitedWrite.headers.get("retry-after"));
     assert.equal((await api("/api/auth/logout", aliceCookie, "POST", {})).status, 200, "Logout remains available under mutation throttling");

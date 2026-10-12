@@ -1,13 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   BarChart3,
   Users,
   MessageSquare,
-  Shield,
   Activity,
   Flag,
   HardDrive,
@@ -28,47 +27,9 @@ const NAV_ITEMS = [
   { href: "/app/admin/audit", label: "Audit Log", icon: Activity },
 ];
 
-export function AdminShell({ children }: { children: React.ReactNode }) {
+export default function AdminShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [accessDenied, setAccessDenied] = useState(false);
-  const [checking, setChecking] = useState(true);
-
-  useEffect(() => {
-    fetch("/api/admin/stats")
-      .then((r) => {
-        if (!r.ok) setAccessDenied(true);
-      })
-      .catch(() => setAccessDenied(true))
-      .finally(() => setChecking(false));
-  }, []);
-
-  if (checking) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <div className="text-sm text-[var(--muted)]">Checking admin access…</div>
-      </div>
-    );
-  }
-
-  if (accessDenied) {
-    return (
-      <div className="flex h-full flex-col items-center justify-center px-8 text-center">
-        <Shield className="mb-4 h-12 w-12 text-[var(--danger)]" />
-        <h1 className="text-xl font-bold">Access Denied</h1>
-        <p className="mt-2 max-w-sm text-sm text-[var(--muted)]">
-          Admin access requires an administrator or moderator role and enabled two-factor authentication.
-        </p>
-        <Link
-          href="/app"
-          className="btn btn-primary mt-6 px-4 py-2 text-sm"
-        >
-          Back to Chats
-        </Link>
-      </div>
-    );
-  }
-
   return (
     <div className="flex h-full min-h-0">
       {/* Mobile overlay */}

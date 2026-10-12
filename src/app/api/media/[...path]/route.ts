@@ -128,9 +128,10 @@ export async function GET(
     headers: {
       "Content-Type": mimeType,
       ...(stored.size !== null ? { "Content-Length": String(stored.size) } : {}),
-      "Content-Disposition": `${inline ? "inline" : "attachment"}; filename="${downloadName.replace(/"/g, "")}"`,
+      "Content-Disposition": contentDisposition(downloadName, inline),
       "Cache-Control": "private, no-store",
       "X-Content-Type-Options": "nosniff",
     },
   });
 }
+import { contentDisposition } from "@/server/content-disposition";

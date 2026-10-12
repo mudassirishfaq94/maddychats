@@ -42,7 +42,11 @@ async function bounded<T>(operation: () => Promise<T>): Promise<T> {
  */
 const BCRYPT_ROUNDS = 12;
 
+/** Public dummy hash for unknown-account timing parity; never an account credential. */
+export const DUMMY_PASSWORD_HASH = "$2b$12$mvEOPCGRUthBxDB9aqUo1ufDfG06OmmbhcY7lRFpEP.oteY1dbIy.";
+
 export async function hashPassword(plaintext: string): Promise<string> {
+  if (Buffer.byteLength(plaintext, "utf8") > 72) throw new Error("Password exceeds bcrypt's 72-byte limit.");
   return bounded(() => bcrypt.hash(plaintext, BCRYPT_ROUNDS));
 }
 

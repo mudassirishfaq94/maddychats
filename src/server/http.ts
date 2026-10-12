@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { clientUrl } from "./config";
-import { originAllowed } from "../lib/request-origin";
 
 /** Consistent, safe error envelope: never leaks internals. */
 export function jsonError(
@@ -116,6 +115,9 @@ const DEV_HOST_PATTERN = /^(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\]|.*\.local|
  *  4. Host heuristic — any non-local public host is assumed TLS.
  */
 export function requestIsSecure(req: NextRequest): boolean {
+  // Deployment configuration is authoritative. Forwarding headers supplied by
+  // a caller must never downgrade cookies on the configured HTTPS deployment.
+  if (process.env.NODE_ENV === "production" && clientUrl().startsWith("https://")) return true;
   const hint = req.headers.get("x-secure-context");
   if (hint === "1") return true;
 
@@ -179,14 +181,20 @@ export function guardSameOrigin(req: NextRequest): NextResponse | null {
   }
   const origin = req.headers.get("origin");
   if (!origin) return null;
-  // Forwarding headers do not widen the allowed-origin set. For TLS-terminated
-  // requests, use the actual Host with the trusted configured transport.
-  let requestOrigin = req.nextUrl.origin;
-  const host = req.headers.get("host");
   try {
-    const configured = new URL(clientUrl());
-    if (host) requestOrigin = new URL(`${configured.protocol}//${host}`).origin;
-  } catch { return jsonError(403, "Cross-origin requests are not allowed."); }
-  if (originAllowed(origin, clientUrl(), requestOrigin)) return null;
+    const o = new URL(origin);
+    if (o.username || o.password || o.origin === "null") throw new Error("invalid_origin");
+    const allowed = new Set([new URL(clientUrl()).origin]);
+    // Render's built-in service URL remains a supported first-party alias
+    // when CLIENT_URL is the custom domain. This value comes from the host's
+    // server environment, never from the request's Host header.
+    if (process.env.RENDER_EXTERNAL_URL) allowed.add(new URL(process.env.RENDER_EXTERNAL_URL).origin);
+    // Development can use either loopback alias; production uses CLIENT_URL
+    // exclusively, never a caller-controlled Host or X-Forwarded-Host header.
+    if (process.env.NODE_ENV !== "production") allowed.add(req.nextUrl.origin);
+    if (allowed.has(o.origin) && origin === o.origin) return null;
+  } catch {
+    // fall through to rejection
+  }
   return jsonError(403, "Cross-origin requests are not allowed.");
 }

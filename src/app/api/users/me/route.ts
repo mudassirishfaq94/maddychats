@@ -1,3 +1,4 @@
+import { safeError } from "@/server/safe-error";
 import { NextRequest, NextResponse } from "next/server";
 import { fieldErrors, profileUpdateSchema } from "@/lib/schemas";
 import { AUTH_RATE_LIMIT, rateLimit } from "@/server/rate-limit";
@@ -95,7 +96,7 @@ export async function PATCH(req: NextRequest) {
         username: "This username is taken",
       });
     }
-    console.error("[maddy-chats] profile update error:", err);
+    console.error("[maddy-chats] profile update error:", safeError(err));
     return jsonError(500, "Something went wrong. Please try again.");
   }
 

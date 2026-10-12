@@ -1,3 +1,4 @@
+import { safeError } from "@/server/safe-error";
 import { withPasswordCapacity } from "@/server/password-capacity";
 import { issueEmailVerification } from "@/server/email-verification";
 import { NextRequest, NextResponse } from "next/server";
@@ -76,7 +77,7 @@ async function handlePOST(req: NextRequest) {
         username: "This username is taken",
       });
     }
-    console.error("[maddy-chats] register error:", err);
+    console.error("[maddy-chats] register error:", safeError(err));
     return jsonError(500, "Something went wrong. Please try again.");
   }
 

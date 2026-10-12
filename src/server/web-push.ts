@@ -1,3 +1,4 @@
+import { safeError } from "@/server/safe-error";
 import webPush from "web-push";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
@@ -49,7 +50,7 @@ async function getFirebaseAdmin() {
     firebaseAdmin = admin;
     return firebaseAdmin;
   } catch (error) {
-    console.error("[push] Firebase Admin init failed:", error);
+    console.error("[push] Firebase Admin init failed:", safeError(error));
     return null;
   }
 }
@@ -145,7 +146,7 @@ export async function sendMessagePush(
       ...notificationPayload,
       url: `ziptalks://chat/${payload.conversationId}?latest=1`,
     }).catch((err) =>
-      console.error("[push] FCM batch error:", err),
+      console.error("[push] FCM batch error:", safeError(err)),
     );
   }
 

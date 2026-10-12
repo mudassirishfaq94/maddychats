@@ -99,7 +99,7 @@ const editSchema = z.object({
   username: z.string().regex(/^[a-zA-Z0-9_]{3,20}$/).optional(),
   email: z.email().max(254).optional(),
   bio: z.string().max(500).optional(),
-  newPassword: z.string().min(8).max(72).regex(/[a-z]/).regex(/[A-Z]/).regex(/[0-9]/).optional(),
+  newPassword: z.string().min(8).max(72).refine((value) => new TextEncoder().encode(value).length <= 72, "Password must fit within 72 UTF-8 bytes").regex(/[a-z]/).regex(/[A-Z]/).regex(/[0-9]/).optional(),
   ban: z.boolean().optional(),
   // avatar URLs are uploaded through the safety pipeline, not editable here.
 });

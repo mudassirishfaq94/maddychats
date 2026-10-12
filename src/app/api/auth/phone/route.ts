@@ -1,3 +1,4 @@
+import { safeError } from "@/server/safe-error";
 import { withPasswordCapacity } from "@/server/password-capacity";
 import { beginSignIn } from "@/server/authentication";
 import { randomBytes } from "crypto";
@@ -82,7 +83,7 @@ async function handlePOST(req: NextRequest) {
       const busy = passwordBusyResponse(error); if (busy) return busy;
       const code = (error as { code?: string }).code;
       if (code === "23505") return jsonError(409, "This username is taken.", { username: "This username is taken" });
-      console.error("[auth] phone account creation failed:", error);
+      console.error("[auth] phone account creation failed:", safeError(error));
       return jsonError(500, "Could not create your account. Please try again.");
     }
   }
