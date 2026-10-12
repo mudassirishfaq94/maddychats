@@ -248,9 +248,11 @@ export function AttachmentPreviews({
 export function AttachButton({
   onFiles,
   disabled,
+  compact = false,
 }: {
   onFiles: (files: FileList) => void;
   disabled?: boolean;
+  compact?: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   return (
@@ -274,7 +276,8 @@ export function AttachButton({
         aria-label="Attach files"
         title="Attach files"
         className={cn(
-          "flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-[var(--border)] text-[var(--muted)] transition-colors",
+          "composer-icon flex h-11 w-11 flex-none items-center justify-center text-[var(--muted)] transition-colors",
+          compact ? "rounded-full" : "rounded-2xl border border-[var(--border)]",
           "hover:border-[var(--border-strong)] hover:text-[var(--text)] disabled:opacity-50",
         )}
       >

@@ -34,7 +34,6 @@ import {
   Pin,
   Reply as ReplyIcon,
   SmilePlus,
-  Sticker,
   Star,
   Send,
   Clock,
@@ -68,8 +67,7 @@ import { emojiOnlyCount } from "@/lib/emoji";
 import { cn, formatDate, timeAgo, initials, avatarHue } from "@/lib/utils";
 import { CHAT_BACKGROUNDS, chatBubbleTheme, isBackgroundImage } from "@/lib/chat-backgrounds";
 import { getPattern } from "@/lib/chat-patterns";
-const EmojiPicker = dynamic(() => import("./emoji-picker").then((module) => module.EmojiPicker));
-const StickerPicker = dynamic(() => import("./sticker-picker").then((module) => module.StickerPicker));
+const MediaPicker = dynamic(() => import("./media-picker").then((module) => module.MediaPicker));
 import { AudioMessage } from "./audio-message";
 import { RecordingWaveform } from "./waveform";
 import { useVoiceRecorder } from "@/hooks/use-voice-recorder";
@@ -579,7 +577,7 @@ export function ChatView({
   );
 
   const [showEmoji, setShowEmoji] = useState(false);
-  const [showStickers, setShowStickers] = useState(false);
+  const mediaPickerAnchor = useRef<HTMLButtonElement>(null);
   const [mobileMenuMsg, setMobileMenuMsg] = useState<MessageDTO | null>(null);
   const [forwardMsg, setForwardMsg] = useState<MessageDTO | null>(null);
   const [reportMsg, setReportMsg] = useState<MessageDTO | null>(null);
@@ -2652,8 +2650,9 @@ export function ChatView({
             )}
           </div>
         ) : (
-          <div className="flex items-center gap-2 sm:items-end">
+          <div className="composer-row flex items-end gap-1 rounded-[24px] bg-[var(--input-bg)] p-1.5">
             <AttachButton
+              compact
               onFiles={(files) => attachments.addFiles(files)}
               disabled={mediaPaused || sendPending || !canCompose || awaitingApproval}
             />
@@ -2661,30 +2660,33 @@ export function ChatView({
             {/* Emoji button */}
             <div className="relative">
               <button
+                ref={mediaPickerAnchor}
                 type="button"
                 onClick={() => setShowEmoji((v) => !v)}
                 aria-label="Emoji"
+                title="Emoji, stickers and GIFs"
+                aria-expanded={showEmoji}
                 disabled={!canCompose}
-                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-[var(--border)] text-[var(--muted)] transition-colors hover:border-[var(--border-strong)] hover:text-[var(--text)]"
+                className="composer-icon flex h-11 w-11 flex-none items-center justify-center rounded-full text-[var(--muted)] hover:text-[var(--text)]"
               >
                 <SmilePlus className="h-4.5 w-4.5" />
                 <span className="sr-only">Emoji</span>
               </button>
               {showEmoji ? (
-                <EmojiPicker
-                  onSelect={(emoji) => {
+                <MediaPicker
+                  anchor={mediaPickerAnchor}
+                  mediaDisabled={mediaPaused || sendPending || !canCompose || awaitingApproval}
+                  onFile={file => attachments.addFiles([file])}
+                  onEmoji={(emoji) => {
                     setDraft((prev) => prev + emoji);
+                    growComposer();
                     composerRef.current?.focus();
                   }}
-                  onClose={() => setShowEmoji(false)}
+                  onClose={() => { setShowEmoji(false); composerRef.current?.focus(); }}
                 />
               ) : null}
             </div>
-            <div className="relative hidden sm:block">
-              <button type="button" disabled={!canCompose} onClick={() => setShowStickers((v) => !v)} aria-label="Stickers and GIFs" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-[var(--border)] text-[var(--muted)] transition-colors hover:border-[var(--border-strong)] hover:text-[var(--text)]"><Sticker className="h-4.5 w-4.5" /></button>
-              {showStickers ? <StickerPicker onSelect={(sticker) => { setDraft((prev) => prev + sticker); composerRef.current?.focus(); }} onClose={() => setShowStickers(false)} /> : null}
-            </div>
-            <div className="min-w-0 flex-1 rounded-2xl bg-[var(--input-bg)] px-3.5">
+            <div className="min-w-0 flex-1 px-1">
               <textarea
                 ref={composerRef}
                 defaultValue={draft}
@@ -2713,7 +2715,7 @@ export function ChatView({
                 aria-label="Message text"
                 rows={1}
                 maxLength={2000}
-                className="chat-composer max-h-24 w-full resize-none overflow-y-auto border-0 bg-transparent py-2.5 text-[0.93rem] leading-5 outline-none placeholder:text-[color-mix(in_srgb,var(--muted)_60%,transparent)]"
+                className="chat-composer block min-h-11 max-h-24 w-full resize-none overflow-y-auto border-0 bg-transparent py-3 text-[0.93rem] leading-5 outline-none placeholder:text-[color-mix(in_srgb,var(--muted)_60%,transparent)]"
               />
             </div>
             {draft.trim() || attachments.pending.length > 0 ? (
@@ -2723,7 +2725,7 @@ export function ChatView({
                   onClick={() => { setDraftState(draftRef.current); setShowSchedule(true); }}
                   disabled={schedulePaused || sendPending || !canCompose || awaitingApproval}
                   aria-label="Schedule message"
-                  className="flex h-9 w-9 min-h-[36px] min-w-[36px] items-center justify-center rounded-full border border-[var(--border)] text-[var(--muted)] transition-colors hover:border-[var(--border-strong)] hover:text-[var(--text)]"
+                  className="composer-icon flex h-11 w-11 flex-none items-center justify-center rounded-full text-[var(--muted)] hover:text-[var(--text)]"
                   title={schedulePaused ? "Scheduled sending is paused" : "Schedule message"}
                 >
                   <Clock className="h-4 w-4" />
@@ -2732,7 +2734,7 @@ export function ChatView({
                   type="submit"
                   disabled={sendPending || !canCompose}
                   aria-label="Send message"
-                  className="btn btn-primary h-10 w-10 min-h-[44px] min-w-[44px] shrink-0 rounded-full! p-0!"
+                  className="composer-icon btn btn-primary h-11 w-11 flex-none rounded-full! p-0!"
                 >
                   {sendPending ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -2748,7 +2750,7 @@ export function ChatView({
                 onClick={() => void recorder.startRecording()}
                 aria-label="Record voice message"
                 title={mediaPaused ? "Voice messages are paused" : "Record voice message"}
-                className="flex h-10 w-10 min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-full border border-[var(--border)] text-[var(--muted)] transition-colors hover:border-[var(--border-strong)] hover:text-[var(--text)] disabled:opacity-50"
+                className="composer-icon flex h-11 w-11 flex-none items-center justify-center rounded-full text-[var(--muted)] hover:text-[var(--text)] disabled:opacity-50"
               >
                 <Mic className="h-4.5 w-4.5" />
                 <span className="sr-only">Record voice message</span>

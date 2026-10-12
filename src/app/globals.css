@@ -440,15 +440,7 @@ html:not(.light) .chat-message-area {
   }
 }
 
-/* PWA keyboard handling â€” ensure composer stays visible */
-@supports (padding: env(safe-area-inset-bottom)) {
-  /* When keyboard is open on iOS PWA, reduce bottom padding */
-  @media (display-mode: standalone) {
-    .chat-composer {
-      padding-bottom: max(env(safe-area-inset-bottom), 0.5rem);
-    }
-  }
-}
+/* AppShell reserves the navigation safe area. Do not add it to textarea height. */
 
 /* Typing indicator bounce animation */
 @keyframes typingBounce {
@@ -461,6 +453,7 @@ html:not(.light) .chat-message-area {
 
 /* Composer uses its existing surface; no extra focus rectangle. */
 .chat-composer:focus, .chat-composer:focus-visible { outline: none !important; box-shadow: none !important; border: 0 !important; }
+.composer-row .composer-icon { width: 44px; height: 44px; min-width: 44px; max-width: 44px; min-height: 44px; max-height: 44px; flex: 0 0 44px; align-self: flex-end; }
 
 /* Keep icon geometry consistent without adding animation to the chat canvas. */
 svg.lucide { stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }

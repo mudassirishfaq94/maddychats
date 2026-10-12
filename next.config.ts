@@ -50,6 +50,8 @@ const nextConfig: NextConfig = {
         source: "/brand/:path*",
         headers: [{ key: "Cache-Control", value: "public, max-age=3600, must-revalidate" }],
       },
+      { source: "/stickers/:path*", headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }] },
+      { source: "/gifs/:path*", headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }] },
     ];
   },
 };

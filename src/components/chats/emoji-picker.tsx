@@ -91,9 +91,10 @@ const EMOJI_CATEGORIES = [
 interface EmojiPickerProps {
   onSelect: (emoji: string) => void;
   onClose: () => void;
+  embedded?: boolean;
 }
 
-export function EmojiPicker({ onSelect, onClose }: EmojiPickerProps) {
+export function EmojiPicker({ onSelect, onClose, embedded = false }: EmojiPickerProps) {
   const [activeCategory, setActiveCategory] = useState("smileys");
   const [search, setSearch] = useState("");
   const ref = useRef<HTMLDivElement>(null);
@@ -104,6 +105,7 @@ export function EmojiPicker({ onSelect, onClose }: EmojiPickerProps) {
   }, []);
 
   useEffect(() => {
+    if (embedded) return;
     function handleClickOutside(e: MouseEvent) {
       if (ref.current && !ref.current.contains(e.target as Node)) {
         onClose();
@@ -111,7 +113,7 @@ export function EmojiPicker({ onSelect, onClose }: EmojiPickerProps) {
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [onClose]);
+  }, [onClose, embedded]);
 
   const handleSelect = useCallback(
     (emoji: string) => {
@@ -134,8 +136,8 @@ export function EmojiPicker({ onSelect, onClose }: EmojiPickerProps) {
   return (
     <div
       ref={ref}
-      className="absolute bottom-full left-0 z-50 mb-2 w-[min(320px,calc(100vw-1rem))] rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-xl animate-fade-up"
-      role="dialog"
+      className={embedded ? "w-full" : "absolute bottom-full left-0 z-50 mb-2 w-[min(320px,calc(100vw-1rem))] rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-xl animate-fade-up"}
+      role={embedded ? undefined : "dialog"}
       aria-label="Emoji picker"
     >
       {/* Search */}
