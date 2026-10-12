@@ -11,7 +11,7 @@
     "signal-bridge/Cargo.lock:generic-api-key:778",
     "scripts/test-items4-6.ts:generic-api-key:64",
     "scripts/test-item1-security.ts:generic-api-key:47",
-    "scripts/test-remaining-hardening.ts:generic-api-key:60",
+    "scripts/test-remaining-hardening.ts:generic-api-key:61",
     "scripts/test-item3-authorization.ts:generic-api-key:66"
   ]
 }

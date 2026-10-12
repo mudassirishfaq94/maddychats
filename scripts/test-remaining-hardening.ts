@@ -48,7 +48,8 @@ async function main() {
       const challenge = response.headers.getSetCookie().find((value) => value.startsWith("maddy_mfa_challenge="))?.split(";")[0]; assert(challenge);
       const verified = await api("/api/auth/mfa", challenge, "POST", { code: new TOTP({ secret: mfa, algorithm: "SHA1", digits: 6, period: 30 }).generate() }); assert.equal(verified.status, 200, await verified.clone().text()); return sessionCookie(verified);
     };
-    const aliceCookie = await login(alice.username), bobCookie = await login(bob.username), noMfaCookie = await login(owner.username);
+    let aliceCookie = await login(alice.username);
+    const bobCookie = await login(bob.username), noMfaCookie = await login(owner.username);
     const ownProfile = await api("/api/users/me", aliceCookie);
     assert.equal(ownProfile.status, 200);
     assert(ownProfile.headers.get("cache-control")?.includes("no-store"), "Private profile responses cannot be cached");
@@ -134,7 +135,8 @@ async function main() {
     assert.equal((await api("/api/auth/logout", aliceCookie, "POST", {})).status, 200, "Logout remains available under mutation throttling");
     await sql.query("insert into rate_limit_buckets(key,window_started_at,count) values($1,now(),25) on conflict(key) do update set window_started_at=now(),count=25", [`login-account:${alice.id}`]);
     assert.equal((await api("/api/auth/login", "", "POST", { identifier: alice.username, password }, { "x-forwarded-for": "198.51.100.56" })).status, 429, "Distributed login attempts share an account budget");
-    await sql.query("delete from rate_limit_buckets where key=$1", [`login-account:${alice.id}`]);
+    await sql.query("delete from rate_limit_buckets where key = any($1::text[])", [[`login-account:${alice.id}`, `api-write:${alice.id}`]]);
+    aliceCookie = await login(alice.username); // The logout assertion revoked the previous session.
     await sql.query("alter table rate_limit_buckets rename to unavailable_rate_limits");
     try { assert.equal((await api("/api/auth/login", "", "POST", { identifier: alice.username, password })).status, 429, "Shared rate limit outage fails closed"); }
     finally { await sql.query("alter table unavailable_rate_limits rename to rate_limit_buckets"); }
