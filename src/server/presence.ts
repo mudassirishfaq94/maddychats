@@ -70,6 +70,9 @@ export async function removeConnection(userId: string): Promise<boolean> {
   entry.lastSeenAt = new Date();
   if (entry.connections > 0) return false;
   await writeLastSeen(userId, entry.lastSeenAt);
+  // Reconnecting while the flush awaits must not emit a stale offline event.
+  if (entry.connections > 0 || registry.get(userId) !== entry) return false;
+  registry.delete(userId);
   return true;
 }
 

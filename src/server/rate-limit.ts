@@ -8,27 +8,14 @@ export interface RateLimitResult {
   retryAfterSeconds: number;
 }
 
-const localBuckets = new Map<string, { count: number; started: number }>();
-
-/** Temporary compatibility path for deployments whose migration has not run. */
-function localRateLimit(key: string, limit: number, windowMs: number): RateLimitResult {
-  const now = Date.now();
-  const bucket = localBuckets.get(key);
-  if (!bucket || bucket.started + windowMs <= now) {
-    localBuckets.set(key, { count: 1, started: now });
-    return { allowed: true, retryAfterSeconds: 0 };
-  }
-  bucket.count += 1;
-  return bucket.count <= limit
-    ? { allowed: true, retryAfterSeconds: 0 }
-    : { allowed: false, retryAfterSeconds: Math.max(1, Math.ceil((bucket.started + windowMs - now) / 1000)) };
-}
-
 export async function rateLimit(
   key: string,
   limit: number,
   windowMs: number,
 ): Promise<RateLimitResult> {
+  if (!key || key.length > 512 || !Number.isSafeInteger(limit) || limit < 1 || !Number.isSafeInteger(windowMs) || windowMs < 1 || windowMs > 86400000) {
+    return { allowed: false, retryAfterSeconds: 60 };
+  }
   let result;
   try {
     result = await db.execute<{ count: number; window_started_at: Date }>(sql`
@@ -41,11 +28,10 @@ export async function rateLimit(
         THEN now() ELSE rate_limit_buckets.window_started_at END
     RETURNING count, window_started_at
     `);
-  } catch (error) {
-    // Do not make authentication unavailable during a rolling deployment when
-    // application code reaches production before its database migration.
-    console.error("[circlo] distributed rate-limit store unavailable; using local fallback", error instanceof Error ? error.message : "unknown error");
-    return localRateLimit(key, limit, windowMs);
+  } catch {
+    // An instance-local fallback would let an outage bypass shared abuse limits.
+    console.error("[rate-limit] Shared store unavailable; request denied.");
+    return { allowed: false, retryAfterSeconds: 30 };
   }
   const row = result.rows[0];
   if (!row) throw new Error("rate_limit_unavailable");
@@ -59,3 +45,17 @@ export async function rateLimit(
 
 /** Auth endpoints: 25 requests per 10 minutes per client IP. */
 export const AUTH_RATE_LIMIT = { limit: 25, windowMs: 10 * 60 * 1000 } as const;
+
+/** Bound cleanup work and preserve every possible active (at most 24h) window. */
+export async function cleanupRateLimits() {
+  const result = await db.execute(sql`
+    WITH expired AS (
+      SELECT key FROM rate_limit_buckets
+      WHERE window_started_at < now() - interval '2 days'
+      ORDER BY window_started_at LIMIT 1000 FOR UPDATE SKIP LOCKED
+    )
+    DELETE FROM rate_limit_buckets b USING expired e WHERE b.key=e.key
+    RETURNING b.key
+  `);
+  return result.rows.length;
+}

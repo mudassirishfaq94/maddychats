@@ -34,7 +34,11 @@ interface MobileMessageMenuProps {
  * Full-screen mobile context menu triggered by long-press.
  * Shows Copy, Reply, Forward, React, Delete with a backdrop.
  */
-export function MobileMessageMenu({
+export function MobileMessageMenu(props: MobileMessageMenuProps) {
+  return props.open ? <MobileMessageMenuContent {...props} /> : null;
+}
+
+function MobileMessageMenuContent({
   open,
   onClose,
   own,
@@ -51,14 +55,6 @@ export function MobileMessageMenu({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [copied, setCopied] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) {
-      setShowReactions(false);
-      setShowDeleteConfirm(false);
-      setCopied(false);
-    }
-  }, [open]);
 
   // Prevent body scroll when menu is open
   useEffect(() => {

@@ -95,10 +95,9 @@ export function Avatar({
   preview?: boolean;
 }) {
   const [viewerOpen, setViewerOpen] = useState(false);
-  const [imageFailed, setImageFailed] = useState(false);
-  useEffect(() => setImageFailed(false), [user.avatarUrl]);
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
   const hue = avatarHue(user.username);
-  const showImage = Boolean(user.avatarUrl) && !imageFailed;
+  const showImage = Boolean(user.avatarUrl) && failedUrl !== user.avatarUrl;
   const style = {
     width: size,
     height: size,
@@ -121,7 +120,8 @@ export function Avatar({
         width={size}
         height={size}
         unoptimized
-        onError={() => setImageFailed(true)}
+        onError={() => setFailedUrl(user.avatarUrl)}
+        onLoad={() => setFailedUrl(null)}
         className="shrink-0 rounded-full object-cover"
         style={style}
       />

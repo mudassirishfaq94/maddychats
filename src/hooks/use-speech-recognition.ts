@@ -20,12 +20,12 @@ export function useSpeechRecognition(): UseSpeechRecognitionReturn {
   const [transcript, setTranscript] = useState("");
   const [isListening, setIsListening] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   const recognitionRef = useRef<any>(null);
 
   const isSupported =
     typeof window !== "undefined" &&
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     ("SpeechRecognition" in (window as any) || "webkitSpeechRecognition" in (window as any));
 
   const cleanup = useCallback(() => {
@@ -47,7 +47,7 @@ export function useSpeechRecognition(): UseSpeechRecognitionReturn {
     setError(null);
     setTranscript("");
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     const Win = window as any;
     const SpeechRecognitionConstructor =
       Win.SpeechRecognition || Win.webkitSpeechRecognition;
@@ -55,7 +55,7 @@ export function useSpeechRecognition(): UseSpeechRecognitionReturn {
       setError("Speech recognition is not supported.");
       return;
     }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     const recognition: any = new SpeechRecognitionConstructor();
     recognitionRef.current = recognition;
 
@@ -65,7 +65,7 @@ export function useSpeechRecognition(): UseSpeechRecognitionReturn {
 
     let finalTranscript = "";
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     recognition.onresult = (event: any) => {
       let interim = "";
       for (let i = event.resultIndex; i < event.results.length; i++) {
@@ -79,7 +79,7 @@ export function useSpeechRecognition(): UseSpeechRecognitionReturn {
       setTranscript(finalTranscript + interim);
     };
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     recognition.onerror = (event: any) => {
       if (event.error === "no-speech") {
         setIsListening(false);

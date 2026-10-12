@@ -1,96 +1,289 @@
-# Free Vercel deployment
+# Current starter deployment: Render + Neon + Supabase Storage
 
-This application is prepared for Vercel Hobby, Neon Free PostgreSQL, and a
-private Vercel Blob store. Realtime events use a short-lived PostgreSQL queue,
-so chat delivery works across independently scaled Vercel instances.
+The selected target is the existing free Render service at
+https://maddychats.onrender.com, retaining Neon PostgreSQL and using private
+Supabase media storage. Supabase database cutover is deferred under the current
+$0 budget. Follow [the Render release plan](./docs/RENDER_DEPLOYMENT_CUTOVER.md)
+and `render.yaml`; no paid services are authorized.
 
-## 1. Create and connect Neon
+The Docker VPS procedure below is an alternative deployment option. Free tiers
+can pause or reject traffic after a usage limit, so they cannot meet an
+always-on production requirement.
 
-The easiest route is through Vercel:
+## Current $0 starter deployment
 
-1. Import the Git repository into a Vercel project.
-2. Open **Storage** or **Marketplace** in that project and add **Neon**.
-3. Create a free Neon database and connect it to Production and Preview.
-4. Confirm that Vercel created `DATABASE_URL`. The hostname should contain
-   `-pooler`, which identifies Neon's pooled serverless connection.
-5. In Neon, open **Connect**, disable connection pooling, and copy the direct
-   URL as `DATABASE_URL_UNPOOLED`. Use this direct URL when running migrations.
+Use the existing free Render service and retain Neon as the production database.
+Supabase is linked and its separate private storage bucket is prepared; database
+cutover is deferred to avoid crowding its free database allowance.
 
-You can also create Neon separately. In the Neon **Connect** dialog, enable
-**Connection pooling** for the application `DATABASE_URL`; use the unpooled
-version for `DATABASE_URL_UNPOOLED`.
+Set `STARTER_MODE=1` for both the build and runtime. The build exposes only the
+non-secret availability flag. Encrypted text chat, device approval/recovery,
+draft preservation, and recoverable existing media reads remain available.
+Set `CHAT_MEDIA_ENABLED=1` to enable encrypted attachments and voice using the existing
+private Supabase bucket. Ciphertext is opaque to the server; size, file metadata,
+membership, consent and storage-budget checks remain enforced. Readable uploads
+still require the scanner, except photo statuses: the starter accepts static JPG,
+PNG and WebP up to 3 MB/12 megapixels through a separate short-lived renderer.
+Only newly encoded WebP pixels are stored; original bytes and metadata are discarded.
+The renderer has no application secrets, JavaScript filesystem permissions restricted
+ to its script/dependencies, one concurrent job and a ten-second deadline. Native
+addons are necessary for Sharp; this is process isolation, not an OS sandbox or an
+antivirus guarantee. If a scanner is configured, scanning remains mandatory.
+Video statuses still require scanning. Status storage is capped at 50 tracked files
+(150 MB maximum); expired files use the existing retention processor. Set
+`CHAT_STORAGE_BUDGET_MB=400` to retain headroom in the free storage allowance.
+Phone sign-in and experimental Signal provisioning remain paused.
 
-Apply the committed schema before the first deployment:
+Set `SCHEDULED_MESSAGES_ENABLED=1` to run the existing, database-locked processor
+in the Node web process every ten seconds, independent of browser activity.
+Persisted jobs catch up after a server restart. Free Render can sleep: delivery
+while the host is asleep cannot be guaranteed; an always-on host or independent
+caller of the existing authenticated cron endpoint is required for that guarantee.
+No paid worker is provisioned. Historical missing media cannot be reconstructed.
 
-```powershell
-npm ci
-$env:DATABASE_URL=$env:DATABASE_URL_UNPOOLED
-npm run db:migrate
+Email/password registration creates a protected pending account. Login requires
+verification. Configure a valid `RESEND_API_KEY` and verified sender for real email
+delivery; the UI reports unavailable delivery honestly. An unverified password user
+with a matching Google-owned address can verify ownership through Google and enter
+the existing Circlo password.
+The proof is a five-minute HttpOnly cookie, scoped to that user and email,
+redeemed once through the shared rate-limit store. Password verification and
+MFA still apply, and this does not automatically link a Google identity.
+
+Preserve the production JWT and OAuth secrets. Set `REALTIME_DATABASE_URL` to a
+verified direct Neon connection for LISTEN, alongside the pooled `DATABASE_URL`.
+Generate distinct readiness/cron secrets. Device linking uses a five-minute code,
+trusted-key approval proof and single-use persisted requests. Removing a linked
+session revokes its encryption trust atomically. After signing in again, proof
+of possession binds the existing key to the new session without approving it.
+The build command in `render.yaml` embeds the actual Git commit as APP_VERSION.
+`npm start` applies additive Drizzle migrations before starting Next.js.
+The reference Blueprint follows the current release branch; change it to main
+only after the reviewed release is merged. Update the existing service by ID
+rather than creating a second web service.
+
+Free hosting can sleep and has quotas. A consistently instant cold start or an
+unlimited production service cannot be promised. Record live speed measurements
+separately from warmed local typing tests.
+
+## 1. Provision Supabase
+
+1. Create a Supabase project on a paid plan in a region close to the VPS.
+2. In **Connect**, copy the **direct** Postgres URL for a VPS with IPv6. For
+   an IPv4-only VPS, copy the **Session Pooler** URL instead. Set it as
+   `DATABASE_URL` in the server's `.env`.
+3. In **Storage**, create a bucket named `maddy-media` and leave it **private**.
+   The application authorizes every media read through `/api/media`; do not
+   make this bucket public.
+4. In **Settings → API**, copy the Project URL into `SUPABASE_URL` and the
+   `service_role` secret into `SUPABASE_SERVICE_ROLE_KEY`. These values stay
+   on the server only—never prefix them with `NEXT_PUBLIC_`.
+5. Apply the schema from a trusted machine using the direct database URL:
+
+   ```powershell
+   $env:DATABASE_URL='postgresql://...'
+   npm ci
+   npm run db:migrate
+   ```
+
+   For an existing Neon database, export it with `pg_dump` and restore it to
+   Supabase with `pg_restore` before switching the live app. Take a backup and
+   schedule a brief maintenance window so writes cannot be lost during the
+   final cutover.
+
+## 2. Prepare the VPS
+
+Use an Ubuntu VPS with Docker Engine and Docker Compose installed. Point your
+domain's DNS A/AAAA record at the VPS, then place a reverse proxy with TLS
+(for example, Caddy or Nginx) in front of `127.0.0.1:3000`.
+
+On the server:
+
+```bash
+git clone https://github.com/mudassirishfaq94/maddychats.git
+cd maddychats
+cp .env.example .env
+chmod 600 .env
 ```
 
-## 2. Create private Vercel Blob storage
+Fill `.env` with the Supabase values above plus the existing authentication,
+email, Firebase, VAPID, and `JWT_SECRET` values. Set `CLIENT_URL` to the final
+HTTPS origin and `GOOGLE_CALLBACK_URL` to `${CLIENT_URL}/api/auth/google/callback` (or unset it
+to derive it). Register this exact callback in Google and the domain in
+Firebase Auth. Generate `JWT_SECRET`
+with `openssl rand -hex 32` if you do not already have the live value.
 
-1. In the Vercel project, open **Storage**.
-2. Create a **Blob** store and select **Private** access. Access cannot be
-   changed later.
-3. Connect it to Production and Preview.
-4. Vercel automatically injects `BLOB_READ_WRITE_TOKEN`.
+Set distinct random `HEALTHCHECK_SECRET` and `CRON_SECRET` values, using
+`openssl rand -hex 32`. Keep `PORT=3000` for this Compose configuration. Set
+the public Firebase variables, VAPID public key, and `APP_VERSION` before
+building: browser-visible values are baked into the image. `.dockerignore`
+excludes environment files, databases, uploads, backups, Android artifacts,
+and local caches; runtime secrets enter only through `.env` at container start.
 
-Vercel Blob Hobby currently includes 1 GB of storage, 10 GB of Blob transfer,
-10,000 simple operations, and 2,000 advanced operations per month. The store
-becomes unavailable until its rolling allowance recovers if the limit is hit.
+Build and start the app:
 
-## 3. Configure Vercel variables
+```bash
+docker compose up -d --build
+docker compose logs -f web
+```
 
-Add these under **Project Settings → Environment Variables**:
+Compose runs the migration container before starting web, then starts the
+worker only after web becomes ready. Migration failure blocks startup.
+Web also waits for the private ClamAV service, which may take several minutes
+to download signatures on its first start. Keep port 3310 private. Readable
+uploads fail closed if scanning is unavailable. This release applies migrations
+`0035_upload_retention`, `0036_device_sessions`, and the realtime/admin
+hardening migrations through `0038`; readiness checks this release.
+Start with `CSP_ENFORCE=0`, validate the provider/native/PWA flows in staging,
+then enable enforcement. See [tasks 4–6](./docs/ITEMS4_6_HARDENING_AND_PERFORMANCE.md)
+for retention, session migration, scanner checks, and performance profiling.
+Verify `https://your-domain/api/health`, then test sign-in, media upload,
+messaging, and push notifications. Set up the host's firewall to expose only
+ports 80 and 443; do not expose port 3000 or database credentials.
 
-- `DATABASE_URL` — Neon pooled connection string
-- `DATABASE_URL_UNPOOLED` — Neon direct connection string, for migrations only
-- `JWT_SECRET` — output of `openssl rand -hex 32`
-- `CLIENT_URL` — the production URL, such as `https://project.vercel.app`
-- `BLOB_READ_WRITE_TOKEN` — normally injected by the Blob integration
-- `SESSION_TTL_DAYS` — `365`
-- `MAX_AVATAR_MB`, `MAX_IMAGE_MB`, `MAX_FILE_MB` — `3`
-- `NEXT_PUBLIC_VAPID_PUBLIC_KEY` — public key from `npm run vapid:generate`
-- `VAPID_PRIVATE_KEY` — private key from the same command (keep secret)
-- `VAPID_SUBJECT` — a contact URI such as `mailto:you@example.com`
+## Operations
 
-Optional features require `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`,
-`GOOGLE_CALLBACK_URL`, `RESEND_API_KEY`, and `EMAIL_FROM`.
+- Back up the database and private media before updates. Put the reverse proxy
+  in maintenance mode and follow the update sequence below.
+- Use a paid Supabase project and enable backups/billing alerts. Free projects
+  have hard limits and can pause, so they are unsuitable for this requirement.
+- Monitor VPS disk, RAM, and CPU, and configure automated off-host backups.
+- Presence remains process-local: keep one web replica. Realtime events and
+  rate-limit buckets are persisted in PostgreSQL.
+- Realtime uses one dedicated PostgreSQL LISTEN connection per web process.
+  Set `REALTIME_DATABASE_URL` to the same database's direct/session connection
+  if `DATABASE_URL` uses transaction pooling. Apply migrations through `0038` before
+  startup; readiness verifies the listener. See
+  [remaining audit work](./docs/REMAINING_PROJECT_WORK.md).
+- Monitor Docker health status for web and scheduled-worker and alert when
+  either becomes unhealthy. Restart policies restart crashes, not unhealthy
+  containers. Monitor both services rather than public liveness alone.
 
-### Phone-number sign-in (Firebase)
+## Safe updates and monitoring
 
-In Firebase Console, enable **Authentication → Sign-in method → Phone** and
-add the deployed domain under **Authentication → Settings → Authorized
-domains**. Create a Web app in Project Settings and add its public config to
-Vercel as `NEXT_PUBLIC_FIREBASE_API_KEY`, `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`,
-`NEXT_PUBLIC_FIREBASE_PROJECT_ID`, and `NEXT_PUBLIC_FIREBASE_APP_ID`.
+Schema changes may affect the previous application version. Stop writes and
+the worker for the migration, then restore traffic after readiness and smoke
+checks pass:
 
-The server also needs `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, and
-`FIREBASE_PRIVATE_KEY` from a Firebase service-account key; these are already
-used by the Android push integration if it is configured. Phone OTP requires a
-Firebase Blaze billing account and is charged per SMS, so set an SMS region
-policy and a billing alert before enabling it publicly.
+```bash
+docker compose stop scheduled-worker web
+docker compose build
+docker compose run --rm migrate
+docker compose up -d
+docker compose ps
+docker compose logs --tail=100 scheduled-worker
+```
 
-Deploy, visit `/api/health`, and test two accounts, messages, reactions,
-statuses, and private media. Never put either database URL, the JWT secret, or
-the Blob token in source control or chat.
+Public `/api/health` is liveness only. Private `/api/ready` requires
+`Authorization: Bearer <HEALTHCHECK_SECRET>` and returns 200 only when the DB
+and release schema are ready; failures return 503 without database details.
+Compose runs `scripts/readiness.mjs` automatically.
 
-After adding the three VAPID values, redeploy (the public key is embedded at
-build time). On every Android or desktop device, open **Settings →
-Notifications** in ZipTalk and select **Enable** once. The installed PWA
-can then receive new-message notifications while it is closed.
+The independent worker calls the authenticated cron endpoint every 15 seconds,
+retries failures, and records a heartbeat only after a successful batch.
+Its health check detects stale successes. No browser needs to remain open.
+Processing claims each job with a transaction-scoped `FOR UPDATE SKIP LOCKED`
+row lock, which supports transaction poolers and prevents duplicate delivery.
+Due messages beyond the batch
+limit of 50 are handled on subsequent intervals.
 
-## 4. Add a custom domain later
+## Migration compatibility
 
-Add the domain under Vercel Project Settings, configure the displayed DNS
-records, then change `CLIENT_URL` and `GOOGLE_CALLBACK_URL` to the new HTTPS
-domain. Add the callback URL in Google Cloud Console and redeploy.
+The journal registers `0032_e2ee_trusted_devices` after the already introduced
+`0033_account_security`. This ordering is intentional: Drizzle skips migration
+timestamps older than the latest recorded entry. `0034_deployment_schema_repair`
+reconciles unregistered 0017–0022 changes and the missing channel conversation
+reference on fresh databases and existing journal-managed ones. Existing data
+is retained. Manually upgraded pending devices stay pending; only devices
+predating the trusted-device column are backfilled. Do not reorder the journal
+or edit released SQL.
 
-## Operational notes
+For a database previously initialized solely with `drizzle-kit push`, do not
+run the journal blindly: its initial migration creates existing tables. Clone
+it to staging, compare schema/history, and establish a reviewed baseline before
+cutover. The tested upgrade path uses the existing migration journal.
 
-- Vercel Hobby is for personal, non-commercial use.
-- Multipart requests stay below Vercel's 4.5 MB function payload limit.
-- SSE connections recycle before the five-minute function duration; browser
-  `EventSource` reconnects automatically.
-- Monitor the Vercel and Neon usage dashboards as adoption grows.
+## Android origin
+
+Use the same HTTPS `CLIENT_URL` without a trailing slash for Capacitor and
+Gradle. The native API URL and app-link host derive from it:
+
+```powershell
+$env:CLIENT_URL='https://chat.example.com'
+npx cap sync android
+cd android
+./gradlew :app:assembleDebug
+```
+
+Publish the Android `assetlinks.json` for the chosen domain and signing
+certificate before expecting verified app links. Keep OAuth and Firebase
+authorized domains aligned with this origin.
+
+## Backup and restoration
+
+Install PostgreSQL client tools matching or newer than the server. Set `PG_BIN`
+if executables are not on PATH. From a trusted machine:
+
+```bash
+node --env-file=.env scripts/database-backup.mjs backup backups/application.dump
+```
+
+This creates a custom-format backup of the application `public` schema and
+`drizzle` history, plus a companion `.dump.json` extension manifest. Keep both
+files together. Schema-scoped dumps omit extension definitions; the manifest
+records required extensions such as `pg_trgm` and their schema locations.
+The command refuses to overwrite an existing backup. Use timestamped
+filenames for recurring backups. Encrypt copies and send them off-host.
+Credentials pass through the child environment, not command arguments. For
+remote connections use verified TLS, such as `sslmode=verify-full` with the
+provider CA configured through `PGSSLROOTCERT`.
+
+A database dump does not back up Supabase Storage objects, provider settings,
+Firebase, or client encryption keys. Export the private `maddy-media` bucket
+separately with a trusted object export, retain encrypted off-host copies,
+and verify object paths/counts. Database restoration alone cannot recover
+missing media bytes or client encryption keys.
+
+Run a restore drill in a newly created empty, isolated database, with its
+connection string in `RESTORE_DATABASE_URL`:
+
+```bash
+node scripts/database-backup.mjs restore backups/application.dump
+```
+
+The command refuses a destination with existing application relations. It
+first prepares extension dependencies using the manifest (the restore role
+needs permission to install them). It refuses a conflicting extension schema
+instead of moving an existing extension. It then restores application objects
+in one transaction, stopping on errors, without source ownership or
+ACLs. Reapply provider access restrictions, run migrations on the isolated
+destination if restoring an older release, and verify private readiness,
+account/message counts, sample attachment paths, sign-in, and test scheduling.
+Restore private media separately before testing media reads.
+
+Production cutover requires maintenance, stopped writes/worker, a final backup,
+and switching credentials only after the restored environment passes checks.
+Retain the previous environment and final backup until the cutover is verified.
+
+## Local deployment verification
+
+After `npm run build`, run the isolated drill:
+
+```powershell
+$env:ITEM2_TEST_DATABASE_URL='postgresql://test_operator@127.0.0.1:5432/item2_deployment_test'
+npm run test:item2
+```
+
+The role needs permission to create disposable databases. The script resets
+only `item2_deployment_test`, `item2_upgrade_test`, and `item2_restore_test` on
+a loopback host. It verifies fresh/upgraded migrations, Drizzle table columns
+and nullability, reruns, pending-device preservation, private readiness and
+liveness during schema degradation, independent delivery, worker heartbeats,
+and real backup restoration of messages and migration history. It leaves test
+databases and a temporary dump available for inspection.
+
+## Email verification codes
+
+Configure `RESEND_API_KEY` and either `EMAIL_FROM_ADDRESS` (with `EMAIL_FROM_NAME=Circlo`) or `EMAIL_FROM` using a sender/domain verified by Resend. Password registration and unverified password sign-in issue six-digit, ten-minute codes. Already verified accounts do not receive a new code on each sign-in. OAuth ownership checks and MFA remain separate. Codes are HMAC-bound to their account, single-use, limited to five verification attempts per ten minutes, and replaced on resend after a one-minute cooldown. The resend endpoint has an additional shared IP limit. Existing outstanding verification links remain supported.
+
+Registration reports whether the provider accepted the email; an unavailable provider leaves the account unverified. Resend uses a generic conditional response to avoid disclosing account existence and does not guarantee inbox delivery. The branded template includes both HTML and plain text and uses `/brand/circlo-email.png`. Do not log codes or add credentials to the repository. `npm run test:verification` tests the provider transport contract with interception, not real inbox delivery; `npm run test:verification-template` checks the mobile/desktop HTML preview.

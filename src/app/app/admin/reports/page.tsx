@@ -1,5 +1,7 @@
 "use client";
 
+import { useAdminProof } from "@/components/admin-authentication";
+
 import { useEffect, useState } from "react";
 import { Flag, Loader2, CheckCircle, XCircle, AlertTriangle } from "lucide-react";
 
@@ -22,6 +24,7 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 export default function AdminReportsPage() {
+  const { proof, clearProof, form } = useAdminProof();
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("pending");
@@ -58,7 +61,7 @@ export default function AdminReportsPage() {
       const response = await fetch("/api/admin/reports", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reportId, status }),
+        body: JSON.stringify({ reportId, status, ...proof }),
       });
       const data = await response.json().catch(() => null);
       if (!response.ok) throw new Error(data?.error ?? "Report could not be updated.");
@@ -66,7 +69,7 @@ export default function AdminReportsPage() {
     } catch (cause) {
       setError((cause as Error).message);
     }
-    setBusyId(null);
+    clearProof(); setBusyId(null);
   }
 
   return (
@@ -76,6 +79,7 @@ export default function AdminReportsPage() {
         <p className="mt-1 text-sm text-[var(--muted)]">Review user and message reports.</p>
       </div>
 
+      {form}
       <div className="flex gap-2">
         {["pending", "reviewed", "resolved", "dismissed", "all"].map((s) => (
           <button

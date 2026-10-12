@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
 import { getSessionUser } from "@/server/session";
-import { createCommunity, listUserCommunities, listPublicCommunities } from "@/server/communities";
+import { createCommunity, listUserCommunities, listPublicCommunities, PUBLIC_COMMUNITIES_CACHE_TAG } from "@/server/communities";
 import { guardSameOrigin, jsonError, readJson } from "@/server/http";
 
 export const dynamic = "force-dynamic";
@@ -16,7 +17,9 @@ export async function GET(req: NextRequest) {
   const myCommunities = await listUserCommunities(user.id);
   const publicCommunities = await listPublicCommunities();
 
-  return NextResponse.json({ myCommunities, publicCommunities });
+  return NextResponse.json({ myCommunities, publicCommunities }, {
+    headers: { "Cache-Control": "private, no-store" },
+  });
 }
 
 /** Create a new community */
@@ -41,5 +44,6 @@ export async function POST(req: NextRequest) {
     isPublic: data.isPublic !== false,
   });
 
-  return NextResponse.json({ community }, { status: 201 });
+  revalidateTag(PUBLIC_COMMUNITIES_CACHE_TAG, { expire: 0 });
+  return NextResponse.json({ community }, { status: 201, headers: { "Cache-Control": "private, no-store" } });
 }

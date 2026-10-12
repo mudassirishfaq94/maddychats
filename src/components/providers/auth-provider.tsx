@@ -13,10 +13,12 @@ import {
 import { useRouter } from "next/navigation";
 import type { AuthStatus, SafeUser } from "@/lib/types";
 import type { LoginInput, RegisterInput } from "@/lib/schemas";
-import { clearVerifiedMessageCache } from "@/lib/e2ee-message-cache";
 
 export interface AuthResult {
   ok: boolean;
+  mfaRequired?: boolean;
+  verificationRequired?: boolean;
+  emailSent?: boolean;
   error?: string;
   fields?: Record<string, string>;
 }
@@ -47,11 +49,14 @@ function secureContextHeader(): Record<string, string> {
   return {};
 }
 
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const [status, setStatus] = useState<AuthStatus>("loading");
-  const [user, setUser] = useState<SafeUser | null>(null);
+export function AuthProvider({ children, initialUser }: { children: ReactNode; initialUser?: SafeUser | null }) {
+  // This snapshot comes from the same server-side eligibility check used by
+  // protected pages. Still revalidate through /me on mount and focus; proxy renews expired access.
+  const [status, setStatus] = useState<AuthStatus>(initialUser === undefined ? "loading" : initialUser ? "authenticated" : "unauthenticated");
+  const [user, setUser] = useState<SafeUser | null>(initialUser ?? null);
   const router = useRouter();
   const mounted = useRef(true);
+  const loginRetryAt = useRef(0);
 
   useEffect(() => {
     mounted.current = true;
@@ -106,6 +111,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signIn = useCallback(
     async (input: LoginInput): Promise<AuthResult> => {
+      if (Date.now() < loginRetryAt.current) return {
+        ok: false, error: `Please retry sign-in in ${Math.ceil((loginRetryAt.current - Date.now()) / 1000)} seconds.`,
+      };
       try {
         const res = await fetch("/api/auth/login", {
           method: "POST",
@@ -116,17 +124,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           body: JSON.stringify(input),
         });
         const data = (await res.json().catch(() => null)) as {
+          mfaRequired?: boolean;
+          verificationRequired?: boolean;
+          emailSent?: boolean;
           user?: SafeUser;
           error?: string;
           fields?: Record<string, string>;
         } | null;
         if (!res.ok) {
+          if (res.status === 503 || res.status === 429) {
+            const seconds = Number(res.headers.get("Retry-After") ?? 5);
+            loginRetryAt.current = Date.now() + Math.min(60, Math.max(1, Number.isFinite(seconds) ? seconds : 5)) * 1000;
+          }
           return {
             ok: false,
             error: data?.error ?? "Something went wrong. Please try again.",
             fields: data?.fields,
+            verificationRequired: data?.verificationRequired,
           };
         }
+        if (data?.mfaRequired || data?.verificationRequired) return { ok: true, mfaRequired: data.mfaRequired, verificationRequired: data.verificationRequired, emailSent: data.emailSent };
         if (data?.user) {
           setUser(data.user);
           setStatus("authenticated");
@@ -152,6 +169,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           body: JSON.stringify(input),
         });
         const data = (await res.json().catch(() => null)) as {
+          mfaRequired?: boolean;
+          verificationRequired?: boolean;
+          emailSent?: boolean;
           user?: SafeUser;
           error?: string;
           fields?: Record<string, string>;
@@ -161,8 +181,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             ok: false,
             error: data?.error ?? "Something went wrong. Please try again.",
             fields: data?.fields,
+            verificationRequired: data?.verificationRequired,
           };
         }
+        if (data?.mfaRequired || data?.verificationRequired) return { ok: true, mfaRequired: data.mfaRequired, verificationRequired: data.verificationRequired, emailSent: data.emailSent };
         if (data?.user) {
           setUser(data.user);
           setStatus("authenticated");
@@ -187,7 +209,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (signedOutUserId) {
       // Best-effort local hygiene. These records are device-encrypted either
       // way, but logout should not retain readable history for this account.
-      void clearVerifiedMessageCache(signedOutUserId).catch(() => {});
+      void import("@/lib/e2ee-message-cache")
+        .then(({ clearVerifiedMessageCache }) => clearVerifiedMessageCache(signedOutUserId))
+        .catch(() => {});
     }
     setUser(null);
     setStatus("unauthenticated");

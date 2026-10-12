@@ -11,7 +11,6 @@ import {
 } from "@/server/http";
 import { getSessionUser } from "@/server/session";
 import { isUuid } from "@/server/users";
-import { publishToUsers } from "@/server/realtime";
 import { isOnline } from "@/server/presence";
 import {
   createMessage,
@@ -43,14 +42,9 @@ export async function GET(
   const membership = await getMembership(id, me.id);
   if (!membership) return jsonError(404, "Conversation not found.");
 
-  // Lazy-process any due scheduled messages for this conversation
-  // This ensures messages appear even if the cron hasn't run yet
-  try {
-    const { processScheduledMessages } = await import("@/server/scheduled-messages");
-    void processScheduledMessages(); // fire-and-forget, don't block the response
-  } catch {
-    // best-effort
-  }
+  // The instrumentation maintenance worker delivers due messages every ten
+  // seconds. History reads must not scan the global job queue or start
+  // unobserved promises alongside every request.
 
   const limitParam = Number(req.nextUrl.searchParams.get("limit"));
   const limit =
@@ -59,8 +53,9 @@ export async function GET(
       : MESSAGE_PAGE_SIZE;
   const cursor = decodeCursor(req.nextUrl.searchParams.get("cursor"));
 
+  const started = performance.now();
   const page = await listMessages(id, cursor, limit, me.id);
-  return NextResponse.json(page);
+  return NextResponse.json(page, { headers: { "Server-Timing": `history;dur=${(performance.now() - started).toFixed(1)}`, "Cache-Control": "no-store" } });
 }
 
 /** Send a text message (optionally replying to another). Members only. */
@@ -72,16 +67,12 @@ export async function POST(
   const blocked = guardSameOrigin(req);
   if (blocked) return blocked;
 
-  const rl = await rateLimit(
-    `msg-send:${clientIp(req)}`,
-    AUTH_RATE_LIMIT.limit * 4,
-    AUTH_RATE_LIMIT.windowMs,
-  );
-  if (!rl.allowed) {
-    return jsonError(429, "You are sending messages too quickly.");
-  }
-
-  const me = await getSessionUser();
+  // Revocation/MFA reads and the shared rate counter are independent.
+  const [rl, me] = await Promise.all([
+    rateLimit(`msg-send:${clientIp(req)}`, AUTH_RATE_LIMIT.limit * 4, AUTH_RATE_LIMIT.windowMs),
+    getSessionUser(),
+  ]);
+  if (!rl.allowed) return jsonError(429, "You are sending messages too quickly.");
   if (!me) return jsonError(401, "Not authenticated.");
 
   const { id } = await ctx.params;
@@ -116,6 +107,7 @@ export async function POST(
     disappearing_seconds: number;
     member_ids: string[];
     blocked: boolean;
+    request_pending: boolean;
   };
   const [spamCheck, isDupe, contextResult] = await Promise.all([
     isSpammingMessages(me.id),
@@ -126,6 +118,7 @@ export async function POST(
       select c.type, mine.role,
         c.admin_only_messaging, c.slow_mode_seconds, c.last_message_at,
         c.deleted_at, c.disappearing_seconds,
+        bool_or(members.accepted_at is null) as request_pending,
         array_agg(members.user_id order by members.joined_at) as member_ids,
         exists (
           select 1 from blocks b
@@ -185,8 +178,14 @@ export async function POST(
         ? new Date()
         : null,
       sender: me,
+      realtimeRecipients: members,
+      enforceMessageRequest: detail.type === "dm" && detail.request_pending,
     },
-  );
+  ).catch((cause: unknown) => {
+    if (cause instanceof Error && cause.message.startsWith("MESSAGE_REQUEST_")) return null;
+    throw cause;
+  });
+  if (!createdResult) return jsonError(403, "Your message request is waiting for approval. You can send more messages after it is accepted.");
   const message = createdResult.message;
   const persistedAt = performance.now();
 
@@ -199,21 +198,22 @@ export async function POST(
     });
   }
 
-  await publishToUsers(members, {
-    type: "message:new",
-    conversationId: id,
-    message,
-  });
+  // The durable realtime event now commits in the message statement. LISTEN
+  // wakes recipients immediately; a failed event write cannot acknowledge a
+  // message that would be invisible to the realtime stream.
   const publishedAt = performance.now();
   // Persist the message and realtime event before acknowledging it. Push
   // services and notification fan-out continue in Next's managed after task.
-  after(async () => {
+  const notify = async () => {
     await notifyNewMessage({
       conversationId: id,
       messageId: message.id,
       actorId: me.id,
       actorName: me.displayName,
-      preview: isEncrypted
+      persistedRequest: detail.type === "dm" && detail.request_pending,
+      preview: detail.type === "dm" && detail.request_pending
+        ? "Message request — accept to continue the conversation"
+        : isEncrypted
         ? "New message"
         : parsed.data.text,
     });
@@ -226,7 +226,10 @@ export async function POST(
         preview: parsed.data.text.slice(0, 140),
       }, me.id)));
     }
-  });
+  };
+  // Request notifications are already committed in the introduction's
+  // transaction. Realtime notification delivery and push stay off the ack path.
+  after(notify);
   return NextResponse.json({ message }, {
     status: 201,
     headers: {

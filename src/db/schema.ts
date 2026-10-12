@@ -2,6 +2,7 @@ import { relations, sql } from "drizzle-orm";
 import {
   index,
   boolean,
+  bigint,
   integer,
   jsonb,
   pgEnum,
@@ -15,6 +16,11 @@ import {
 } from "drizzle-orm/pg-core";
 
 /* ================================ users ================================ */
+
+export const storedUploads = pgTable("stored_uploads", {
+  path: text("path").primaryKey(),
+  createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+}, (table) => [index("stored_uploads_created_idx").on(table.createdAt)]);
 
 /**
  * Maddy Chats — core identity table.
@@ -34,6 +40,7 @@ export const users = pgTable(
     username: text("username").notNull().unique(),
     displayName: text("display_name").notNull(),
     email: text("email").notNull().unique(),
+    emailVerifiedAt: timestamp("email_verified_at", { withTimezone: true, mode: "date" }),
     passwordHash: text("password_hash").notNull(),
     avatarUrl: text("avatar_url"),
     bio: text("bio"),
@@ -82,6 +89,22 @@ export const oauthAccounts = pgTable(
   ],
 );
 
+export const deviceSessions = pgTable("device_sessions", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  refreshHash: text("refresh_hash").notNull(),
+  previousHash: text("previous_hash"),
+  previousValidUntil: timestamp("previous_valid_until", { withTimezone: true, mode: "date" }),
+  generation: integer("generation").default(0).notNull(),
+  userAgent: text("user_agent").notNull(),
+  authTime: bigint("auth_time", { mode: "number" }).notNull(),
+  mfaTime: bigint("mfa_time", { mode: "number" }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+  lastSeenAt: timestamp("last_seen_at", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true, mode: "date" }).notNull(),
+  revokedAt: timestamp("revoked_at", { withTimezone: true, mode: "date" }),
+}, (table) => [index("device_sessions_user_idx").on(table.userId), index("device_sessions_expires_idx").on(table.expiresAt)]);
+
 export const passwordResetTokens = pgTable(
   "password_reset_tokens",
   {
@@ -95,7 +118,7 @@ export const passwordResetTokens = pgTable(
   (table) => [index("password_reset_tokens_user_idx").on(table.userId)],
 );
 
-/** Short-lived cross-instance event queue used by Vercel realtime streams. */
+/** Durable short-lived catch-up queue for notification-driven realtime streams. */
 export const realtimeEvents = pgTable(
   "realtime_events",
   {
@@ -104,7 +127,7 @@ export const realtimeEvents = pgTable(
     payload: jsonb("payload").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
   },
-  (table) => [index("realtime_events_user_created_idx").on(table.userId, table.createdAt)],
+  (table) => [index("realtime_events_user_created_idx").on(table.userId, table.createdAt), index("realtime_events_replay_idx").on(table.userId, table.createdAt, table.id), index("realtime_events_expiry_idx").on(table.createdAt, table.id)],
 );
 
 export const emailVerificationTokens = pgTable(
@@ -303,6 +326,9 @@ export const messages = pgTable(
       table.clientMessageId,
     ),
     index("messages_expires_idx").on(table.expiresAt),
+    // Online migration 0041: only realtime deliveries still awaiting a recipient.
+    index("messages_undelivered_conversation_idx").on(table.conversationId, table.senderId)
+      .where(sql`${table.deliveredAt} IS NULL`),
   ],
 );
 
@@ -910,6 +936,8 @@ export const user2fa = pgTable(
       .primaryKey()
       .references(() => users.id, { onDelete: "cascade" }),
     secret: text("secret").notNull(),
+    recoveryCodeHashes: jsonb("recovery_code_hashes").$type<string[]>().default([]).notNull(),
+    lastUsedStep: integer("last_used_step"),
     enabled: boolean("enabled").default(false).notNull(),
     enabledAt: timestamp("enabled_at", { withTimezone: true, mode: "date" }),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" })
@@ -962,8 +990,7 @@ export const adminAuditLog = pgTable(
   {
     id: uuid("id").defaultRandom().primaryKey(),
     adminId: uuid("admin_id")
-      .references(() => users.id, { onDelete: "set null" })
-      .notNull(),
+      .references(() => users.id, { onDelete: "set null" }),
     action: text("action").notNull(),
     targetUserId: uuid("target_user_id").references(() => users.id, {
       onDelete: "set null",
@@ -1193,8 +1220,11 @@ export const e2eeKeys = pgTable(
     id: uuid("id").defaultRandom().primaryKey(),
     userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
     deviceId: text("device_id").notNull(),
+    sessionId: uuid("session_id").references(() => deviceSessions.id, { onDelete: "set null" }),
     publicKey: text("public_key").notNull(),
     encryptedPrivateKey: text("encrypted_private_key").notNull(),
+    /** Only an explicitly approved device may receive conversation keys. */
+    trustedAt: timestamp("trusted_at", { withTimezone: true, mode: "date" }),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
     lastUsedAt: timestamp("last_used_at", { withTimezone: true, mode: "date" }),
   },
@@ -1238,7 +1268,7 @@ export const e2eeSignalPrekeys = pgTable(
     id: uuid("id").defaultRandom().primaryKey(),
     userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
     deviceId: text("device_id").notNull(),
-    keyId: integer("key_id").notNull(),
+    keyId: bigint("key_id", { mode: "number" }).notNull(),
     kind: text("kind").notNull(),
     publicKey: text("public_key").notNull(),
     signature: text("signature"),
@@ -1328,3 +1358,24 @@ export const e2eeKeyHistory = pgTable(
 
 export type CommunityRow = typeof communities.$inferSelect;
 export type ChannelRow = typeof channels.$inferSelect;
+
+/** Opaque primary-authentication proofs; never accepted as application sessions. */
+export const mfaChallenges = pgTable("mfa_challenges", {
+  tokenHash: text("token_hash").primaryKey(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true, mode: "date" }).notNull(),
+}, (table) => [index("mfa_challenges_expires_idx").on(table.expiresAt)]);
+
+/** Short-lived pairing requests contain a hash, never the displayed code. */
+export const deviceLinkRequests = pgTable("device_link_requests", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  sessionId: uuid("session_id").notNull().references(() => deviceSessions.id, { onDelete: "cascade" }),
+  deviceId: text("device_id").notNull(),
+  fingerprint: text("fingerprint").notNull(),
+  codeHash: text("code_hash").notNull(),
+  status: text("status").notNull().default("pending"),
+  expiresAt: timestamp("expires_at", { withTimezone: true, mode: "date" }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+}, table => [index("device_link_owner_idx").on(table.userId, table.expiresAt)]);

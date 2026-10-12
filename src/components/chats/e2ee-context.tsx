@@ -19,6 +19,7 @@ import {
   type ReactNode,
 } from "react";
 import type { AttachmentDTO } from "@/lib/types";
+import { registerLocalAudio } from "@/lib/audio-analysis";
 
 type DecryptFn = (
   encryptedBytesB64: string,
@@ -153,9 +154,9 @@ export function useEncryptedAttachmentUrl(
           return;
         }
 
-        const objectUrl = URL.createObjectURL(
-          new Blob([plain], { type: attachment.mimeType || "application/octet-stream" }),
-        );
+        const blob = new Blob([plain], { type: attachment.mimeType || "application/octet-stream" });
+        const objectUrl = URL.createObjectURL(blob);
+        if (attachment.mimeType?.startsWith("audio/")) registerLocalAudio(objectUrl, blob);
         objectUrlCache.set(attachment.id, objectUrl);
         setState({ request, url: objectUrl, failed: false });
       } catch (error) {

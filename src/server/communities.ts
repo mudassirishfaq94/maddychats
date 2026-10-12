@@ -1,4 +1,5 @@
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and, sql, inArray } from "drizzle-orm";
+import { unstable_cache } from "next/cache";
 import { db } from "@/db";
 import { communities, communityMembers, channels, users, conversations, conversationMembers } from "@/db/schema";
 
@@ -60,6 +61,12 @@ export async function getCommunity(communityId: string) {
   return { ...community, memberCount, channelCount };
 }
 
+export async function getCommunityMembership(communityId: string, userId: string) {
+  const [membership] = await db.select({ role: communityMembers.role }).from(communityMembers)
+    .where(and(eq(communityMembers.communityId, communityId), eq(communityMembers.userId, userId))).limit(1);
+  return membership ?? null;
+}
+
 /** List communities a user belongs to */
 export async function listUserCommunities(userId: string) {
   const memberships = await db
@@ -77,7 +84,7 @@ export async function listUserCommunities(userId: string) {
   const communityList = await db
     .select()
     .from(communities)
-    .where(sql`${communities.id} IN ${communityIds}`);
+    .where(inArray(communities.id, communityIds));
 
   const communityMap = new Map(communityList.map((c) => [c.id, c]));
 
@@ -89,7 +96,11 @@ export async function listUserCommunities(userId: string) {
 }
 
 /** List public communities */
-export async function listPublicCommunities(limit = 20) {
+export const PUBLIC_COMMUNITIES_CACHE_TAG = "public-communities-v2";
+
+// Only the public projection is shared. Memberships and authorization stay fresh.
+// Arguments (including limit) form part of Next's cache key.
+async function readPublicCommunities(limit: number) {
   return db
     .select({
       id: communities.id,
@@ -97,12 +108,30 @@ export async function listPublicCommunities(limit = 20) {
       description: communities.description,
       avatarUrl: communities.avatarUrl,
       createdBy: communities.createdBy,
+      isPublic: communities.isPublic,
       createdAt: communities.createdAt,
     })
     .from(communities)
     .where(eq(communities.isPublic, true))
     .orderBy(sql`${communities.createdAt} DESC`)
     .limit(limit);
+}
+
+const cachedPublicCommunities = unstable_cache(async (limit: number) => ({
+  rows: await readPublicCommunities(limit),
+  expiresAt: Date.now() + 60_000,
+}), [PUBLIC_COMMUNITIES_CACHE_TAG], {
+  tags: [PUBLIC_COMMUNITIES_CACHE_TAG],
+  revalidate: 60,
+});
+
+export async function listPublicCommunities(limit = 20) {
+  const snapshot = await cachedPublicCommunities(limit);
+  // Next can serve stale data while revalidating. Never return a directory
+  // older than our TTL, even when an external SQL edit bypasses invalidation.
+  const rows = Date.now() < snapshot.expiresAt ? snapshot.rows : await readPublicCommunities(limit);
+  // Next serializes cached values; retain the existing server Date contract.
+  return rows.map(row => ({ ...row, createdAt: new Date(row.createdAt) }));
 }
 
 /** Join a community */
@@ -210,10 +239,15 @@ export async function createChannel(input: {
   type?: string;
   createdBy: string;
 }) {
+  return db.transaction(async tx => {
+  const [actor] = await tx.select({ role: communityMembers.role }).from(communityMembers)
+    .where(and(eq(communityMembers.communityId, input.communityId), eq(communityMembers.userId, input.createdBy))).limit(1).for("share");
+  if (!actor) throw new Error("community_not_found");
+  if (actor.role !== "owner" && actor.role !== "admin") throw new Error("community_channel_forbidden");
   const channelName = input.name.toLowerCase().replace(/\s+/g, "-");
 
   // 1. Create a conversation for this channel
-  const [conversation] = await db
+  const [conversation] = await tx
     .insert(conversations)
     .values({
       type: "group",
@@ -224,13 +258,13 @@ export async function createChannel(input: {
     .returning();
 
   // 2. Get all community members and add them to the conversation
-  const members = await db
+  const members = await tx
     .select({ userId: communityMembers.userId, role: communityMembers.role })
     .from(communityMembers)
     .where(eq(communityMembers.communityId, input.communityId));
 
   if (members.length > 0) {
-    await db.insert(conversationMembers).values(
+    await tx.insert(conversationMembers).values(
       members.map((m) => ({
         conversationId: conversation.id,
         userId: m.userId,
@@ -241,7 +275,7 @@ export async function createChannel(input: {
   }
 
   // 3. Create the channel linked to the conversation
-  const [channel] = await db
+  const [channel] = await tx
     .insert(channels)
     .values({
       communityId: input.communityId,
@@ -254,6 +288,7 @@ export async function createChannel(input: {
     .returning();
 
   return channel;
+  });
 }
 
 /** List channels in a community */

@@ -1,14 +1,54 @@
+# Reference configuration. Adopt the existing circlo service, not a duplicate.
+# $0 starter; existing Neon database retained.
 services:
   - type: web
-    runtime: node
     name: circlo
-    buildCommand: npm ci && npm run build
+    runtime: node
+    region: oregon
+    plan: free
+    numInstances: 1
+    repo: https://github.com/mudassirishfaq94/maddychats
+    branch: codex/audit-remainder-20261009
+    autoDeployTrigger: "off"
+    buildCommand: npm ci && APP_VERSION=$RENDER_GIT_COMMIT npm run build
     startCommand: npm start
     healthCheckPath: /api/health
     envVars:
+      - key: STARTER_MODE
+        value: "1"
+      - key: CHAT_MEDIA_ENABLED
+        value: "1"
+      - key: CHAT_STORAGE_BUDGET_MB
+        value: "400"
+      - key: SCHEDULED_MESSAGES_ENABLED
+        value: "1"
       - key: NODE_VERSION
-        value: "22"
+        value: 22.23.3
+      - key: NODE_EXTRA_CA_CERTS
+        value: /opt/render/project/src/scripts/certs/supabase-ca.crt
+      - key: DATABASE_URL
+        sync: false
+      - key: REALTIME_DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
       - key: CLIENT_URL
-        value: "https://maddychats.onrender.com"
+        value: https://maddychats.onrender.com
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
       - key: GOOGLE_CALLBACK_URL
-        value: "https://maddychats.onrender.com/api/auth/google/callback"
+        value: https://maddychats.onrender.com/api/auth/google/callback
+      - key: SUPABASE_URL
+        value: https://ewkzodtvduwbjbomxvpu.supabase.co
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_STORAGE_BUCKET
+        value: maddy-media
+      - key: HEALTHCHECK_SECRET
+        generateValue: true
+      - key: CRON_SECRET
+        generateValue: true
+      - key: CSP_ENFORCE
+        value: "1"

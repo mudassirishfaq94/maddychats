@@ -50,7 +50,7 @@ class AndroidKeystoreStorage implements HardwareKeyStorage {
   async storeKey(id: string, key: CryptoKey): Promise<void> {
     // Try native Capacitor SecureStorage plugin first
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       const mod = await (Function("return import('@capacitor/secure-storage')")() as Promise<any>);
       const SecureStoragePlugin = mod?.SecureStoragePlugin;
       if (SecureStoragePlugin) {
@@ -67,7 +67,7 @@ class AndroidKeystoreStorage implements HardwareKeyStorage {
 
   async loadKey(id: string): Promise<CryptoKey | null> {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       const mod = await (Function("return import('@capacitor/secure-storage')")() as Promise<any>);
       const SecureStoragePlugin = mod?.SecureStoragePlugin;
       if (SecureStoragePlugin) {
@@ -85,7 +85,7 @@ class AndroidKeystoreStorage implements HardwareKeyStorage {
 
   async deleteKey(id: string): Promise<void> {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       const mod = await (Function("return import('@capacitor/secure-storage')")() as Promise<any>);
       const SecureStoragePlugin = mod?.SecureStoragePlugin;
       if (SecureStoragePlugin) {
@@ -100,7 +100,7 @@ class AndroidKeystoreStorage implements HardwareKeyStorage {
 
   async hasKey(id: string): Promise<boolean> {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       const mod = await (Function("return import('@capacitor/secure-storage')")() as Promise<any>);
       const SecureStoragePlugin = mod?.SecureStoragePlugin;
       if (SecureStoragePlugin) {
@@ -231,7 +231,7 @@ class DesktopKeyStorage implements HardwareKeyStorage {
     const salt = new Uint8Array(32);
     crypto.getRandomValues(salt);
     this.passphraseSalt = salt;
-    
+
     const keyMaterial = await crypto.subtle.importKey(
       "raw",
       new TextEncoder().encode(passphrase),
@@ -239,7 +239,7 @@ class DesktopKeyStorage implements HardwareKeyStorage {
       false,
       ["deriveKey"]
     );
-    
+
     this.derivedKey = await crypto.subtle.deriveKey(
       { name: "PBKDF2", salt: salt as unknown as BufferSource, iterations: 600000, hash: "SHA-256" },
       keyMaterial,
@@ -395,7 +395,7 @@ export async function deriveKeyFromPassword(
 ): Promise<CryptoKey> {
   const encoder = new TextEncoder();
   const passwordBytes = encoder.encode(password);
-  
+
   // Import password as raw key material
   const passwordKey = await crypto.subtle.importKey(
     "raw",
@@ -404,7 +404,7 @@ export async function deriveKeyFromPassword(
     false,
     ["deriveKey"]
   );
-  
+
   // Derive AES-GCM key using PBKDF2
   return crypto.subtle.deriveKey(
     {

@@ -24,7 +24,7 @@ function configureWebPush(): boolean {
 async function getFirebaseAdmin() {
   if (firebaseAdmin) return firebaseAdmin;
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
+
     const admin: any = await import("firebase-admin");
 
     if (!admin.apps.length) {

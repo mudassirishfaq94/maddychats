@@ -1,3 +1,4 @@
+import { withPasswordCapacity } from "@/server/password-capacity";
 import { NextRequest, NextResponse } from "next/server";
 import { fieldErrors, resetPasswordSchema } from "@/lib/schemas";
 import { guardSameOrigin, jsonError, readJson } from "@/server/http";
@@ -5,7 +6,7 @@ import { consumePasswordReset } from "@/server/password-reset";
 import { AUTH_RATE_LIMIT, rateLimit } from "@/server/rate-limit";
 import { clientIp } from "@/server/http";
 
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   const blocked = guardSameOrigin(req);
   if (blocked) return blocked;
   const rl = await rateLimit(`reset:${clientIp(req)}`, AUTH_RATE_LIMIT.limit, AUTH_RATE_LIMIT.windowMs);
@@ -18,3 +19,5 @@ export async function POST(req: NextRequest) {
   if (!changed) return jsonError(400, "This reset link is invalid or has expired.");
   return NextResponse.json({ ok: true });
 }
+
+export const POST = withPasswordCapacity(handlePOST);

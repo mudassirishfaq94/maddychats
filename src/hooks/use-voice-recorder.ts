@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { registerLocalAudio, forgetLocalAudio } from "@/lib/audio-analysis";
 
 export type RecorderState = "idle" | "recording" | "paused" | "recorded";
 
@@ -51,6 +52,13 @@ export function useVoiceRecorder(): UseVoiceRecorderReturn {
     mediaRecorderRef.current = null;
     chunksRef.current = [];
   }, []);
+  useEffect(() => () => {
+    if (mediaRecorderRef.current) { mediaRecorderRef.current.onstop = null; mediaRecorderRef.current.ondataavailable = null; }
+    cleanup();
+  }, [cleanup]);
+  useEffect(() => () => {
+    if (audioUrl) { forgetLocalAudio(audioUrl); URL.revokeObjectURL(audioUrl); }
+  }, [audioUrl]);
 
   const startRecording = useCallback(async () => {
     setError(null);
@@ -67,7 +75,7 @@ export function useVoiceRecorder(): UseVoiceRecorderReturn {
       return;
     }
 
-    if (!navigator.mediaDevices?.getUserMedia) {
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
       setError(
         "Microphone is not supported in this browser or the page is not served over HTTPS."
       );
@@ -107,6 +115,7 @@ export function useVoiceRecorder(): UseVoiceRecorderReturn {
           type: recorder.mimeType || "audio/webm",
         });
         const url = URL.createObjectURL(blob);
+        registerLocalAudio(url, blob);
         setAudioBlob(blob);
         setAudioUrl(url);
         setState("recorded");
@@ -154,7 +163,7 @@ export function useVoiceRecorder(): UseVoiceRecorderReturn {
           "Try these steps:\n" +
           "1. Type chrome://settings/content/microphone in your address bar\n" +
           "2. Make sure 'Sites can ask to use your microphone' is selected\n" +
-          "3. Remove maddychats.onrender.com from any block list if present\n" +
+          "3. Remove this site from any block list if present\n" +
           "4. Reload this page (Ctrl+Shift+R) and click 'Try again'\n\n" +
           "If it still fails, try opening this page in an incognito window (Ctrl+Shift+N)."
         );
@@ -217,7 +226,7 @@ export function useVoiceRecorder(): UseVoiceRecorderReturn {
   }, [cleanup]);
 
   const clearRecording = useCallback(() => {
-    if (audioUrl) URL.revokeObjectURL(audioUrl);
+    if (audioUrl) { forgetLocalAudio(audioUrl); URL.revokeObjectURL(audioUrl); }
     setAudioBlob(null);
     setAudioUrl(null);
     setDuration(0);

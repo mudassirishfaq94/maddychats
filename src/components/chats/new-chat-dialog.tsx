@@ -1,5 +1,7 @@
 "use client";
 
+import Image from "next/image";
+
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, ArrowLeft, Camera, Check, Loader2, MessageCircle, Search, SquarePen, Users, X, UserX } from "lucide-react";
@@ -143,7 +145,7 @@ export function NewChatDialog({ start = "choose", openExternally, onExternalClos
         </> : null}
 
         {mode === "group-info" ? <div className="mt-5 space-y-4">
-          <label className="mx-auto flex h-20 w-20 cursor-pointer items-center justify-center overflow-hidden rounded-full bg-[var(--surface-2)] text-[var(--muted)]">{image ? <img src={URL.createObjectURL(image)} alt="Group preview" className="h-full w-full object-cover" /> : <Camera className="h-7 w-7" />}<input type="file" accept="image/*" className="sr-only" onChange={(e) => setImage(e.target.files?.[0] ?? null)} /></label>
+          <label className="mx-auto flex h-20 w-20 cursor-pointer items-center justify-center overflow-hidden rounded-full bg-[var(--surface-2)] text-[var(--muted)]">{image ? <Image unoptimized width={1200} height={1200} src={URL.createObjectURL(image)} alt="Group preview" className="h-full w-full object-cover" /> : <Camera className="h-7 w-7" />}<input type="file" accept="image/*" className="sr-only" onChange={(e) => setImage(e.target.files?.[0] ?? null)} /></label>
           <div><label className="mb-1 block text-xs font-semibold">Group name</label><input ref={inputRef} value={name} maxLength={100} onChange={(e) => setName(e.target.value)} className="field-input" placeholder="Group name" /></div>
           <div><label className="mb-1 block text-xs font-semibold">Description <span className="font-normal text-[var(--muted)]">(optional)</span></label><textarea value={description} maxLength={500} onChange={(e) => setDescription(e.target.value)} className="field-input min-h-20 resize-none" placeholder="What is this group about?" /></div>
           <button type="button" disabled={starting || !name.trim()} onClick={() => void createGroup()} className="btn btn-primary w-full disabled:opacity-50">{starting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Users className="h-4 w-4" />} Create group</button>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState, useEffect } from "react";
+import { useCallback, useRef, useState } from "react";
 import { Lock, Trash2, Pause, Play, Send, StopCircle, Loader2 } from "lucide-react";
 import { useVoiceRecorder } from "@/hooks/use-voice-recorder";
 import { AudioMessage } from "./audio-message";
@@ -58,11 +58,11 @@ export function VoiceRecorderUI({ me, onSend, sending }: VoiceRecorderUIProps) {
     // If not locked and was a short tap, do nothing (the mic button handles it)
   }, []);
 
-  useEffect(() => {
-    if (recorder.state === "idle") {
-      setLocked(false);
-    }
-  }, [recorder.state]);
+  const [previousState, setPreviousState] = useState(recorder.state);
+  if (previousState !== recorder.state) {
+    setPreviousState(recorder.state);
+    if (recorder.state === "idle") setLocked(false);
+  }
 
   if (recorder.state === "idle") return null;
 

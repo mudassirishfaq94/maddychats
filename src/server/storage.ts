@@ -2,11 +2,28 @@ import { randomUUID } from "crypto";
 import { createReadStream } from "fs";
 import { mkdir, stat, unlink, writeFile } from "fs/promises";
 import path from "path";
-import { del, get, put } from "@vercel/blob";
+import { createClient } from "@supabase/supabase-js";
 
-function isVercelBlobConfigured(): boolean {
-  return Boolean(process.env.BLOB_READ_WRITE_TOKEN);
+const SUPABASE_MEDIA_BUCKET = process.env.SUPABASE_STORAGE_BUCKET ?? "maddy-media";
+
+function isSupabaseStorageConfigured(): boolean {
+  return Boolean(
+    process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY,
+  );
 }
+
+/**
+ * This client is server-only. Its service-role key bypasses Storage RLS, which
+ * is intentional because every read is authorized by the application before
+ * it reaches this adapter. Never expose either variable with NEXT_PUBLIC_.
+ */
+const supabaseStorage = isSupabaseStorageConfigured()
+  ? createClient(
+      process.env.SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      { auth: { persistSession: false, autoRefreshToken: false } },
+    )
+  : null;
 
 /**
  * Local filesystem media storage.
@@ -263,25 +280,54 @@ export async function saveBuffer(
   storedName: string,
   data: Buffer,
 ): Promise<string> {
-  if (isVercelBlobConfigured()) {
-    const relative = path.posix.join(BUCKETS[bucket], storedName);
-    const blob = await put(relative, data, {
-      access: "private",
-      addRandomSuffix: false,
-    });
-    return blob.pathname;
+  if (!/^[a-zA-Z0-9.-]+$/.test(storedName) || storedName.includes("..")) throw new Error("invalid_path");
+  const relative = path.posix.join(BUCKETS[bucket], storedName);
+  // Reserve inventory first: even a partial storage failure remains tracked.
+  // A database outage must never create an object that cleanup cannot find.
+  await trackUpload(relative);
+  if (supabaseStorage) {
+    const { error } = await supabaseStorage.storage
+      .from(SUPABASE_MEDIA_BUCKET)
+      .upload(relative, data, {
+        contentType: "application/octet-stream",
+        upsert: false,
+      });
+    if (error) throw new Error(`Supabase Storage upload failed: ${error.message}`);
+    return relative;
   }
   await ensureBuckets();
-  const relative = path.posix.join(BUCKETS[bucket], storedName);
   const absolute = resolveWithinUploads(relative);
   if (!absolute) throw new Error("invalid_path");
   await writeFile(absolute, data, { mode: 0o640 });
   return relative;
 }
 
+async function trackUpload(relative: string) {
+  const { db } = await import("@/db");
+  const { storedUploads } = await import("@/db/schema");
+  await db.insert(storedUploads).values({ path: relative });
+}
+
+/** Retention retries storage failures rather than forgetting the object. */
+export async function deleteStoredStrict(relativePath: string): Promise<void> {
+  if (!/^(avatars|images|files|statuses)\/[a-zA-Z0-9.-]+$/.test(relativePath) || relativePath.includes("..")) throw new Error("invalid_path");
+  if (supabaseStorage) {
+    const { error } = await supabaseStorage.storage.from(SUPABASE_MEDIA_BUCKET).remove([relativePath]);
+    if (error) throw new Error("storage_delete_failed");
+    return;
+  }
+  const absolute = resolveWithinUploads(relativePath);
+  if (!absolute) throw new Error("invalid_path");
+  try { await unlink(absolute); }
+  catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+}
+
 export async function deleteStored(relativePath: string): Promise<void> {
-  if (isVercelBlobConfigured()) {
-    await del(relativePath).catch(() => undefined);
+  if (supabaseStorage) {
+    await supabaseStorage.storage
+      .from(SUPABASE_MEDIA_BUCKET)
+      .remove([relativePath])
+      .catch(() => undefined);
     return;
   }
   const absolute = resolveWithinUploads(relativePath);
@@ -306,26 +352,17 @@ export function streamStored(relativePath: string) {
   return createReadStream(absolute);
 }
 
-/** Reads a private Vercel Blob object, with local-disk fallback for development. */
+/** Reads a private Supabase Storage object, with local-disk fallback for development. */
 export async function readStored(relativePath: string): Promise<{
   body: ReadableStream<Uint8Array> | NodeJS.ReadableStream;
   size: number | null;
 } | null> {
-  if (isVercelBlobConfigured()) {
-    console.log(`[storage] Reading from blob: ${relativePath}`);
-    try {
-      const result = await get(relativePath, { access: "private" });
-      console.log(`[storage] Blob result:`, result ? `found (${result.blob?.size} bytes)` : 'null');
-      if (!result || result.statusCode !== 200 || !result.stream) return null;
-      // The SDK reports size=0 when an upstream streamed response omits
-      // Content-Length. Forwarding that zero discards a non-empty body.
-      const length = result.headers.get("content-length");
-      const size = length !== null && /^\d+$/.test(length) ? Number(length) : null;
-      return { body: result.stream, size: size !== null && Number.isSafeInteger(size) ? size : null };
-    } catch (err) {
-      console.error(`[storage] Blob error for ${relativePath}:`, err);
-      return null;
-    }
+  if (supabaseStorage) {
+    const { data, error } = await supabaseStorage.storage
+      .from(SUPABASE_MEDIA_BUCKET)
+      .download(relativePath);
+    if (error || !data) return null;
+    return { body: data.stream(), size: data.size };
   }
   const info = await statStored(relativePath);
   if (!info?.isFile()) return null;

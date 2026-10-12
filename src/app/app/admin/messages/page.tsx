@@ -1,5 +1,7 @@
 "use client";
 
+import { useAdminProof } from "@/components/admin-authentication";
+
 import { useEffect, useState, useCallback } from "react";
 import {
   Search,
@@ -24,6 +26,8 @@ interface AdminMessage {
 }
 
 export default function AdminMessagesPage() {
+  const { proof, clearProof, form } = useAdminProof();
+  const [error, setError] = useState<string | null>(null);
   const [messages, setMessages] = useState<AdminMessage[]>([]);
   const [pagination, setPagination] = useState({ page: 1, limit: 30, total: 0, totalPages: 1 });
   const [loading, setLoading] = useState(true);
@@ -58,10 +62,14 @@ export default function AdminMessagesPage() {
 
   async function deleteMessage(id: string) {
     if (!confirm("Delete this message?")) return;
-    setBusy(true);
-    await fetch(`/api/admin/messages/${id}`, { method: "DELETE" });
-    fetchMessages(pagination.page);
-    setBusy(false);
+    setBusy(true); setError(null);
+    try {
+      const response = await fetch(`/api/admin/messages/${id}`, { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify(proof) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "Message deletion failed.");
+      await fetchMessages(pagination.page);
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Message deletion failed."); }
+    finally { clearProof(); setBusy(false); }
   }
 
   return (
@@ -73,6 +81,8 @@ export default function AdminMessagesPage() {
         </p>
       </div>
 
+      {form}
+      {error && <p role="alert" className="text-sm text-[var(--danger)]">{error}</p>}
       {/* Search */}
       <div className="flex gap-2">
         <div className="relative flex-1">

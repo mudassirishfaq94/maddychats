@@ -1,10 +1,13 @@
-import { createHash, randomBytes } from "crypto";
-import { and, eq, gt, isNull } from "drizzle-orm";
+import { createHash, createHmac, randomInt } from "crypto";
+import { and, eq, gt, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { emailVerificationTokens, users, type UserRow } from "@/db/schema";
-import { clientUrl } from "./config";
+import { clientUrl, jwtSecret } from "./config";
+import { verificationEmail } from "./verification-email-template";
+import { rateLimit } from "./rate-limit";
 
-const TTL_MS = 24 * 60 * 60 * 1000;
+const TTL_MS = 10 * 60 * 1000;
+const codeHash = (userId: string, code: string) => createHmac("sha256", jwtSecret()).update(`email-verification:${userId}:${code}`).digest("hex");
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 
 function sender() {
@@ -13,16 +16,30 @@ function sender() {
   return address ? `${name} <${address}>` : process.env.EMAIL_FROM;
 }
 
+export function verificationDeliveryConfigured() {
+  return Boolean(process.env.RESEND_API_KEY && sender());
+}
+
 export async function issueEmailVerification(user: UserRow): Promise<boolean> {
+  if (user.emailVerifiedAt || user.email.endsWith("@auth.maddychats.invalid")) return false;
   const from = sender();
   if (!process.env.RESEND_API_KEY || !from) return false;
   try {
-    const token = randomBytes(32).toString("base64url");
-    await db.delete(emailVerificationTokens).where(eq(emailVerificationTokens.userId, user.id));
-    await db.insert(emailVerificationTokens).values({ userId: user.id, tokenHash: hash(token), expiresAt: new Date(Date.now() + TTL_MS) });
-    const url = `${clientUrl()}/verify-email?token=${encodeURIComponent(token)}`;
-    const html = `<!doctype html><html><body style="margin:0;background:#f4f7f6;font-family:Arial,sans-serif;color:#18332c"><div style="max-width:560px;margin:32px auto;background:#fff;border-radius:20px;overflow:hidden"><div style="background:#148d68;color:#fff;padding:28px 32px;font-size:24px;font-weight:800">Circlo</div><div style="padding:32px"><h1 style="margin:0 0 14px">Welcome to Circlo 👋</h1><p>Thanks for creating your Circlo account. Confirm your email address to activate it.</p><p style="margin:28px 0"><a href="${url}" style="background:#148d68;color:#fff;text-decoration:none;padding:14px 20px;border-radius:10px;font-weight:bold">Verify My Email</a></p><p style="font-size:13px;color:#5b6d67">This link expires in 24 hours and can be used once. If you did not create a Circlo account, you can ignore this email.</p></div><div style="padding:18px 32px;background:#eef5f2;font-size:12px;color:#5b6d67">© Circlo · Your people, your conversations.</div></div></body></html>`;
-    const response = await fetch("https://api.resend.com/emails", { method: "POST", headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, "Content-Type": "application/json" }, body: JSON.stringify({ from, to: [user.email], ...(process.env.EMAIL_REPLY_TO ? { reply_to: process.env.EMAIL_REPLY_TO } : {}), subject: "Verify your Circlo email", html, text: `Welcome to Circlo. Verify your email: ${url}\nThis link expires in 24 hours.` }) });
+    const code = randomInt(0, 1_000_000).toString().padStart(6, "0");
+    const tokenHash = codeHash(user.id, code);
+    const issued = await db.transaction(async tx => {
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`verify-email:${user.id}`},0))`);
+      const [recent] = await tx.select().from(emailVerificationTokens).where(eq(emailVerificationTokens.userId,user.id)).orderBy(sql`${emailVerificationTokens.createdAt} desc`).limit(1);
+      if (recent && Date.now() - recent.createdAt.getTime() < 60_000) return false;
+      await tx.delete(emailVerificationTokens).where(eq(emailVerificationTokens.userId,user.id));
+      await tx.insert(emailVerificationTokens).values({userId:user.id,tokenHash,expiresAt:new Date(Date.now()+TTL_MS)});
+      return true;
+    });
+    if (!issued) return false;
+    const template = verificationEmail(code, clientUrl());
+    const response = await fetch("https://api.resend.com/emails", { method: "POST", signal: AbortSignal.timeout(15000), headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, "Content-Type": "application/json" }, body: JSON.stringify({ from, to: [user.email], ...(process.env.EMAIL_REPLY_TO ? { reply_to: process.env.EMAIL_REPLY_TO } : {}), subject: "Your Circlo verification code", ...template }) });
+    // A rejected provider request is not successful delivery. Retain the short
+    // cooldown even on failure, preventing provider-error retry floods.
     return response.ok;
   } catch (error) {
     console.error("[circlo] email verification unavailable", error instanceof Error ? error.message : "unknown error");
@@ -35,7 +52,25 @@ export async function consumeEmailVerification(token: string): Promise<"verified
   return db.transaction(async (tx) => {
     const rows = await tx.update(emailVerificationTokens).set({ usedAt: now }).where(and(eq(emailVerificationTokens.tokenHash, hash(token)), isNull(emailVerificationTokens.usedAt), gt(emailVerificationTokens.expiresAt, now))).returning({ userId: emailVerificationTokens.userId });
     if (!rows[0]) return "invalid";
-    await tx.update(users).set({ updatedAt: now }).where(eq(users.id, rows[0].userId));
+    await tx.update(users).set({ emailVerifiedAt: now, updatedAt: now }).where(eq(users.id, rows[0].userId));
+    return "verified";
+  });
+}
+
+/** Account and IP limits are independent; codes are HMAC-bound to one user. */
+export async function consumeEmailVerificationCode(email: string, code: string): Promise<"verified" | "invalid" | "expired" | "limited"> {
+  const bucket = createHmac("sha256", jwtSecret()).update(email).digest("hex");
+  if (!(await rateLimit(`verify-code:${bucket}`, 5, 10 * 60 * 1000)).allowed) return "limited";
+  return db.transaction(async tx => {
+    const [user] = await tx.select().from(users).where(eq(users.email,email)).limit(1);
+    if (!user) return "invalid";
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`verify-email:${user.id}`},0))`);
+    const [row] = await tx.select().from(emailVerificationTokens).where(and(eq(emailVerificationTokens.userId,user.id),eq(emailVerificationTokens.tokenHash,codeHash(user.id,code)),isNull(emailVerificationTokens.usedAt))).limit(1);
+    if (!row) return "invalid";
+    if (row.expiresAt.getTime() <= Date.now()) return "expired";
+    const now = new Date();
+    await tx.update(emailVerificationTokens).set({usedAt:now}).where(eq(emailVerificationTokens.id,row.id));
+    await tx.update(users).set({emailVerifiedAt:now,updatedAt:now}).where(eq(users.id,user.id));
     return "verified";
   });
 }

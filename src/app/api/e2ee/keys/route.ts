@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { eq, and } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { e2eeKeys } from "@/db/schema";
-import { getSessionUser } from "@/server/session";
+import { e2eeKeys, deviceSessions, users } from "@/db/schema";
+import { getSessionUser, getSessionDeviceId } from "@/server/session";
 import { guardSameOrigin, jsonError, readJson } from "@/server/http";
 import { isUuid } from "@/server/users";
+import { publishToConversation } from "@/server/realtime";
+import { rateLimit } from "@/server/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -32,23 +34,28 @@ export async function GET(req: NextRequest) {
       deviceId: e2eeKeys.deviceId,
       publicKey: e2eeKeys.publicKey,
       encryptedPrivateKey: e2eeKeys.encryptedPrivateKey,
+      trustedAt: e2eeKeys.trustedAt,
       createdAt: e2eeKeys.createdAt,
       lastUsedAt: e2eeKeys.lastUsedAt,
+      browser: deviceSessions.userAgent,
+      sessionExpiresAt: deviceSessions.expiresAt,
+      sessionRevokedAt: deviceSessions.revokedAt,
     })
     .from(e2eeKeys)
+    .leftJoin(deviceSessions, and(eq(deviceSessions.id, e2eeKeys.sessionId), eq(deviceSessions.userId, e2eeKeys.userId)))
     .where(eq(e2eeKeys.userId, ownerId));
 
   // Private-key backups are only returned to their authenticated owner. A
   // peer can receive the public key only, which is all key exchange needs.
-  const keys = rows.map((key) => targetId ? {
+  const keys = rows.filter((key) => !targetId || key.trustedAt).map((key) => targetId ? {
     id: key.id,
     deviceId: key.deviceId,
     publicKey: key.publicKey,
     createdAt: key.createdAt,
     lastUsedAt: key.lastUsedAt,
-  } : key);
+  } : { ...key, sessionState: key.sessionRevokedAt ? "revoked" : key.sessionExpiresAt ? (key.sessionExpiresAt.getTime() <= Date.now() ? "expired" : "active") : "unknown" });
 
-  return NextResponse.json({ keys });
+  return NextResponse.json({ keys }, { headers: { "Cache-Control": "no-store" } });
 }
 
 /** Register a new device key */
@@ -58,6 +65,7 @@ export async function POST(req: NextRequest) {
 
   const user = await getSessionUser();
   if (!user) return jsonError(401, "Not authenticated.");
+  if (!(await rateLimit(`device-registration:${user.id}`, 20, 60000)).allowed) return jsonError(429, "Too many device registrations. Please wait.");
 
   const body = await readJson(req);
   const data = (body ?? {}) as Record<string, unknown>;
@@ -66,10 +74,11 @@ export async function POST(req: NextRequest) {
   const publicKey = data.publicKey ? String(data.publicKey) : null;
   const encryptedPrivateKey = data.encryptedPrivateKey ? String(data.encryptedPrivateKey) : null;
 
-  if (!deviceId || !publicKey || !encryptedPrivateKey) {
+  if (!deviceId || !publicKey || !encryptedPrivateKey || deviceId.length > 100 || publicKey.length > 8192 || encryptedPrivateKey.length > 16384) {
     return jsonError(422, "deviceId, publicKey, and encryptedPrivateKey are required.");
   }
 
+  const sessionId = await getSessionDeviceId();
   // Upsert: update if device already registered, insert otherwise
   const [existing] = await db
     .select({ id: e2eeKeys.id })
@@ -97,13 +106,29 @@ export async function POST(req: NextRequest) {
       .set({ encryptedPrivateKey, lastUsedAt: new Date() })
       .where(eq(e2eeKeys.id, existing.id));
   } else {
-    await db.insert(e2eeKeys).values({
-      userId: user.id,
-      deviceId,
-      publicKey,
-      encryptedPrivateKey,
+    // Bootstrap only a genuinely new account. An account with lost/revoked
+    // keys must explicitly recover; an empty trusted set is not permission.
+    // Serialize first registrations so two browsers cannot both bootstrap.
+    await db.transaction(async tx => {
+      await tx.select({ id: users.id }).from(users).where(eq(users.id, user.id)).for("update");
+      const [priorDevice] = await tx.select({ id: e2eeKeys.id }).from(e2eeKeys).where(eq(e2eeKeys.userId, user.id)).limit(1);
+      await tx.insert(e2eeKeys).values({ userId: user.id, deviceId, publicKey, encryptedPrivateKey, sessionId, trustedAt: priorDevice ? null : new Date() }).onConflictDoNothing();
     });
   }
 
-  return NextResponse.json({ success: true });
+  const [registered] = await db.select({ publicKey: e2eeKeys.publicKey, trustedAt: e2eeKeys.trustedAt, sessionId: e2eeKeys.sessionId }).from(e2eeKeys)
+    .where(and(eq(e2eeKeys.userId, user.id), eq(e2eeKeys.deviceId, deviceId))).limit(1);
+  if (!registered || registered.publicKey !== publicKey) return jsonError(409, "A different encryption key is already registered for this device.");
+  if (!existing && registered?.trustedAt) {
+    const requests = await db.execute<{ id: string }>(sql`
+      select c.id from conversations c join conversation_members p on p.conversation_id=c.id
+      where p.user_id=${user.id} and c.type='dm' and c.created_by_id<>${user.id}
+        and c.deleted_at is null and c.last_message_at is not null
+        and not exists(select 1 from messages m where m.conversation_id=c.id offset 1)
+      limit 100`);
+    await Promise.all(requests.rows.map(row => publishToConversation(row.id, {
+      type: "conversation:encryption-ready", conversationId: row.id, userId: user.id,
+    })));
+  }
+  return NextResponse.json({ success: true, pendingApproval: !registered?.trustedAt, needsSessionBinding: Boolean(sessionId && registered?.sessionId !== sessionId) });
 }

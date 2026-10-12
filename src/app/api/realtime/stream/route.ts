@@ -1,112 +1,121 @@
+import { randomUUID } from "node:crypto";
 import { NextRequest } from "next/server";
-import { getSessionUser } from "@/server/session";
+import { pool } from "@/db";
+import { getSessionUser, resolveSessionToken } from "@/server/session";
+import { SESSION_COOKIE } from "@/server/config";
 import { jsonError } from "@/server/http";
-import { eventsForUser, publishToConversation, publishToUsers } from "@/server/realtime";
+import { publishToUsers, publishToConversation } from "@/server/realtime";
+import { realtimeListener, type Delivery } from "@/server/realtime-listener";
 import { addConnection, connectionCount, peersOf, presenceSnapshotFor, removeConnection, touch } from "@/server/presence";
 import { markDeliveredFor } from "@/server/chat";
-import type { RealtimeEvent } from "@/lib/types";
+import { isUuid } from "@/server/users";
+import { startStarterMaintenance } from "@/server/starter-maintenance";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
-const HEARTBEAT_MS = 25_000;
-// The stream is database-backed for cross-instance reliability. A 500 ms
-// interval keeps the worst fixed delivery wait below the UI's one-second goal.
-const POLL_MS = 500;
-const STREAM_LIFETIME_MS = 280_000;
-// Each live stream polls the event queue twice per second. A small cap keeps
-// an authenticated client from multiplying database work with many tabs or
-// scripted connections while allowing normal multi-tab/device use.
-const MAX_STREAMS_PER_USER = 5;
-
-/** Database-backed SSE stream that remains reliable across Vercel instances. */
 export async function GET(req: NextRequest) {
   const me = await getSessionUser();
-  if (!me) return jsonError(401, "Not authenticated.");
-  if (connectionCount(me.id) >= MAX_STREAMS_PER_USER) {
-    return jsonError(429, "Too many realtime connections.");
-  }
-
+  const token = req.cookies.get(SESSION_COOKIE)?.value;
+  if (!me || !token) return jsonError(401, "Not authenticated.");
+  startStarterMaintenance();
+  if (connectionCount(me.id) >= 5) return jsonError(429, "Too many realtime connections.");
+  const lastId = req.headers.get("last-event-id");
+  if (lastId && !isUuid(lastId)) return jsonError(400, "Invalid event cursor.");
+  let consume: (row: Delivery | null) => void = () => undefined;
+  let ready = false;
+  const early: (Delivery | null)[] = [];
+  let unsubscribe: () => void;
+  try {
+    // Commit LISTEN before reading catch-up rows: avoids the initial race.
+    unsubscribe = await realtimeListener.subscribe(me.id, (row) => {
+      if (ready) consume(row);
+      else if (early.length < 4000) early.push(row);
+      else early[0] = null;
+    });
+  } catch { return jsonError(503, "Realtime is temporarily unavailable."); }
+  let stop = () => unsubscribe();
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
-      let closed = false;
-      let cursor = new Date(Date.now() - 1_000);
-      const sent = new Set<string>();
-      const send = (chunk: string) => {
-        if (closed) return;
-        try { controller.enqueue(encoder.encode(chunk)); } catch { closed = true; }
-      };
-      const sendEvent = (event: unknown) => send(`data: ${JSON.stringify(event)}\n\n`);
-      send(": maddy-chats realtime connected\n\n");
-
-      const cameOnline = await addConnection(me.id);
-      const peers = await peersOf(me.id);
-      if (cameOnline && peers.length) {
-        await publishToUsers(peers, { type: "presence:update", userId: me.id, online: true, lastSeenAt: new Date().toISOString() });
-      }
-      const snapshot = await presenceSnapshotFor(me.id);
-      for (const [userId, state] of Object.entries(snapshot)) {
-        sendEvent({ type: "presence:update", userId, online: state.online, lastSeenAt: state.lastSeenAt });
-      }
-      try {
-        const delivered = await markDeliveredFor(me.id);
-        const deliveredAt = new Date().toISOString();
-        for (const [conversationId, messageIds] of delivered) {
-          await publishToConversation(conversationId, { type: "message:delivered", conversationId, messageIds, deliveredAt });
-        }
-      } catch { /* delivery sweep must not break the stream */ }
-
-      let polling = false;
-      const poll = async () => {
-        if (closed || polling) return;
-        polling = true;
-        try {
-          const rows = await eventsForUser(me.id, cursor);
-          for (const row of rows) {
-            if (!sent.has(row.id)) {
-              sent.add(row.id);
-              sendEvent(row.payload as RealtimeEvent);
-            }
-            if (row.createdAt > cursor) cursor = row.createdAt;
-          }
-          if (sent.size > 500) sent.clear();
-        } catch { /* the next poll retries */ }
-        finally { polling = false; }
-      };
-      const poller = setInterval(() => void poll(), POLL_MS);
-      const heartbeat = setInterval(() => {
-        void touch(me.id);
-        send(`: ping ${Date.now()}\n\n`);
-      }, HEARTBEAT_MS);
-
+      let closed = false, registered = false;
+      const seen = new Set<string>();
+      let heartbeat: ReturnType<typeof setInterval> | undefined;
+      let eligibility: ReturnType<typeof setInterval> | undefined;
+      let lifetime: ReturnType<typeof setTimeout> | undefined;
       const cleanup = () => {
         if (closed) return;
-        closed = true;
-        clearInterval(poller);
-        clearInterval(heartbeat);
-        clearTimeout(lifetime);
-        void removeConnection(me.id).then(async (wentOffline) => {
-          if (wentOffline) {
-            const list = await peersOf(me.id);
-            if (list.length) await publishToUsers(list, { type: "presence:update", userId: me.id, online: false, lastSeenAt: new Date().toISOString() });
-          }
-        });
-        try { controller.close(); } catch { /* already closed */ }
+        closed = true; unsubscribe();
+        clearInterval(heartbeat); clearInterval(eligibility); clearTimeout(lifetime);
+        req.signal.removeEventListener("abort", cleanup);
+        if (registered) void removeConnection(me.id).then(async (wentOffline) => {
+          if (wentOffline) await publishToUsers(await peersOf(me.id), { type: "presence:update", userId: me.id, online: false, lastSeenAt: new Date().toISOString() });
+        }).catch(() => undefined);
+        try { controller.close(); } catch { /* already canceled */ }
       };
-      const lifetime = setTimeout(cleanup, STREAM_LIFETIME_MS);
+      stop = cleanup;
+      const send = (text: string) => {
+        if (closed) return;
+        if ((controller.desiredSize ?? 0) <= 0) { cleanup(); return; }
+        try { controller.enqueue(encoder.encode(text)); } catch { cleanup(); }
+      };
+      const deliver = (row: Delivery | null) => {
+        if (!row) { cleanup(); return; }
+        if (seen.has(row.id) || closed) return;
+        seen.add(row.id);
+        if (seen.size > 5000) seen.delete(seen.values().next().value!);
+        send(`id: ${row.id}\ndata: ${JSON.stringify(row.payload)}\n\n`);
+      };
+      consume = deliver;
       req.signal.addEventListener("abort", cleanup, { once: true });
-      void poll();
+      try {
+        if (req.signal.aborted || early.includes(null)) { cleanup(); return; }
+        const registration = addConnection(me.id); registered = true;
+        await registration;
+        if (closed || connectionCount(me.id) > 5) { cleanup(); return; }
+        send(": ziptalk realtime connected\nretry: 1000\n\n");
+        const snapshot = await presenceSnapshotFor(me.id);
+        for (const [userId, state] of Object.entries(snapshot)) send(`id: ${randomUUID()}\ndata: ${JSON.stringify({ type: "presence:update", userId, ...state })}\n\n`);
+        // Resume replays retained rows, including transactions committed out of
+        // timestamp order. The browser suppresses duplicates by durable event ID.
+        const since = new Date(Date.now() - (lastId ? 600000 : 1000));
+        let cursor: { stamp: string; id: string } | undefined;
+        for (let pages = 0; !closed; pages++) {
+          const query = {
+            text: `SELECT id,user_id AS "userId",payload,created_at::text AS stamp FROM realtime_events
+              WHERE user_id=$1 AND created_at >= $2 AND ($3::timestamptz IS NULL OR (created_at,id)>($3::timestamptz,$4::uuid))
+              ORDER BY created_at,id LIMIT 200`,
+            values: [me.id, since, cursor?.stamp ?? null, cursor?.id ?? null], query_timeout: 5000,
+          };
+          const result = await pool.query<Delivery & { stamp: string }>(query);
+          for (const row of result.rows) deliver(row);
+          if (result.rows.length < 200) break;
+          const last = result.rows[result.rows.length - 1]; cursor = { stamp: last.stamp, id: last.id };
+          if (pages >= 24) {
+            // Large gaps use an authoritative page refresh rather than an
+            // endless replay/reconnect cycle or an unbounded in-memory queue.
+            send("event: resync\ndata: {}\n\n");
+            break;
+          }
+        }
+        ready = true;
+        for (const row of early.splice(0)) deliver(row);
+        if (closed) return;
+        let checking = false;
+        eligibility = setInterval(() => {
+          if (checking || closed) return;
+          checking = true;
+          void resolveSessionToken(token).then((user) => { if (!user) cleanup(); }).catch(cleanup).finally(() => { checking = false; });
+        }, 5000);
+        heartbeat = setInterval(() => { send(": ping\n\n"); void touch(me.id).catch(cleanup); }, 25000);
+        lifetime = setTimeout(cleanup, 280000);
+        void markDeliveredFor(me.id).then(async (delivered) => {
+          for (const [conversationId, messageIds] of delivered) await publishToConversation(conversationId, { type: "message:delivered", conversationId, messageIds, deliveredAt: new Date().toISOString() });
+        }).catch(() => undefined);
+      } catch { cleanup(); }
     },
-  });
-
-  return new Response(stream, {
-    headers: {
-      "Content-Type": "text/event-stream; charset=utf-8",
-      "Cache-Control": "no-cache, no-transform",
-      Connection: "keep-alive",
-      "X-Accel-Buffering": "no",
-    },
-  });
+    cancel() { stop(); },
+  }, { highWaterMark: 256 * 1024, size: (chunk) => chunk.byteLength });
+  return new Response(stream, { headers: { "Content-Type": "text/event-stream; charset=utf-8", "Cache-Control": "no-store, no-transform", Connection: "keep-alive", "X-Accel-Buffering": "no" } });
 }

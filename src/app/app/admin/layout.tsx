@@ -17,6 +17,7 @@ import {
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { LogoMark } from "@/components/brand/logo";
 
 const NAV_ITEMS = [
   { href: "/app/admin", label: "Overview", icon: BarChart3 },
@@ -92,7 +93,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           >
             <ChevronLeft className="h-4 w-4" />
           </Link>
-          <Shield className="h-4 w-4 text-[var(--accent)]" />
+          <LogoMark size={24} />
           <span className="text-sm font-bold">Admin Panel</span>
           <button
             type="button"

@@ -4,18 +4,18 @@ import { createHash } from "crypto";
 export const SESSION_COOKIE = "maddy_session";
 
 /**
- * Persistent session lifetime. Defaults to one year so closing/restarting the
- * browser does not sign the user out. Production can shorten this with
- * SESSION_TTL_DAYS. Explicit logout still revokes the token immediately.
+ * Absolute device lifetime; access cookies last only fifteen minutes.
  */
 function sessionTtlDays(): number {
   const configured = Number(process.env.SESSION_TTL_DAYS);
   return Number.isFinite(configured) && configured >= 1
-    ? Math.min(Math.floor(configured), 3650)
-    : 365;
+    ? Math.min(Math.floor(configured), 90)
+    : 30;
 }
 
 export const SESSION_TTL_SECONDS = 60 * 60 * 24 * sessionTtlDays();
+export const ACCESS_TTL_SECONDS = 15 * 60;
+export const REFRESH_COOKIE = "maddy_refresh";
 
 let cachedSecret: Uint8Array | null = null;
 let warned = false;
@@ -69,10 +69,12 @@ export function clientUrl(): string {
 
 /** Exact OAuth callback registered with Google; defaults to this app origin. */
 export function googleCallbackUrl(): string {
-  return (
-    process.env.GOOGLE_CALLBACK_URL ??
-    `${clientUrl()}/api/auth/google/callback`
-  );
+  const expected = `${clientUrl()}/api/auth/google/callback`;
+  const configured = process.env.GOOGLE_CALLBACK_URL;
+  if (configured && configured !== expected) {
+    throw new Error("GOOGLE_CALLBACK_URL must match CLIENT_URL + /api/auth/google/callback.");
+  }
+  return expected;
 }
 
 /**

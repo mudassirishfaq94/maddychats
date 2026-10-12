@@ -124,6 +124,7 @@ export async function notifyNewMessage(input: {
   actorId: string;
   actorName: string;
   preview: string;
+  persistedRequest?: boolean;
 }): Promise<void> {
   const members = await db
     .select()
@@ -144,7 +145,15 @@ export async function notifyNewMessage(input: {
           ? preferences.groupNotifications
           : preferences.messageNotifications;
         if (!enabled) return;
-        await create(
+        if (input.persistedRequest) {
+          const rows = await db.select().from(notifications).where(and(
+            eq(notifications.userId, m.userId),
+            eq(notifications.type, "message"),
+            sql`${notifications.data}->>'messageId' = ${input.messageId}`,
+          )).limit(1);
+          if (!rows[0]) return;
+          await publishToUsers([m.userId], { type: "notification:new", notification: toNotificationDTO(rows[0]) });
+        } else await create(
           m.userId,
           "message",
           {

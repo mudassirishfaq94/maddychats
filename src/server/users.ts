@@ -47,23 +47,21 @@ export function isUuid(value: string): boolean {
   );
 }
 
+// Reuse SQL construction, never user results. Empty names work with poolers.
+const emailLookup = db.select().from(users)
+  .where(sql`lower(${users.email}) = ${sql.placeholder("identifier")}`).limit(1).prepare("");
+const usernameLookup = db.select().from(users)
+  .where(sql`lower(${users.username}) = ${sql.placeholder("identifier")}`).limit(1).prepare("");
+
 export async function findUserByEmail(email: string): Promise<UserRow | null> {
-  const rows = await db
-    .select()
-    .from(users)
-    .where(sql`lower(${users.email}) = ${email.trim().toLowerCase()}`)
-    .limit(1);
+  const rows = await emailLookup.execute({ identifier: email.trim().toLowerCase() });
   return rows[0] ?? null;
 }
 
 export async function findUserByUsername(
   username: string,
 ): Promise<UserRow | null> {
-  const rows = await db
-    .select()
-    .from(users)
-    .where(sql`lower(${users.username}) = ${username.trim().toLowerCase()}`)
-    .limit(1);
+  const rows = await usernameLookup.execute({ identifier: username.trim().toLowerCase() });
   return rows[0] ?? null;
 }
 

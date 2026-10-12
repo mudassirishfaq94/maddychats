@@ -1,3 +1,7 @@
+import { guardReadableUploadBudget } from "@/server/upload-budget";
+import { UploadSafetyError } from "@/server/upload-safety";
+import { prepareAvatarPhoto } from "@/server/status-photo";
+import { readUploadForm } from "@/server/http";
 import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
@@ -15,7 +19,6 @@ import {
   generateStoredName,
   LIMITS,
   saveBuffer,
-  validateUpload,
 } from "@/server/storage";
 
 export const dynamic = "force-dynamic";
@@ -25,7 +28,7 @@ export const runtime = "nodejs";
 export async function POST(req: NextRequest) {
   const blocked = guardSameOrigin(req);
   if (blocked) return blocked;
-  const oversized = guardUploadSize(req);
+  const oversized = guardUploadSize(req, true);
   if (oversized) return oversized;
 
   const rl = await rateLimit(
@@ -38,11 +41,12 @@ export async function POST(req: NextRequest) {
   const me = await getSessionUser();
   if (!me) return jsonError(401, "Not authenticated.");
 
+  const budget = await guardReadableUploadBudget(me.id); if (budget) return budget;
   let form: FormData;
   try {
-    form = await req.formData();
-  } catch {
-    return jsonError(400, "Invalid upload.");
+    form = await readUploadForm(req);
+  } catch (error) {
+    return jsonError(error instanceof Error && error.message === "body_too_large" ? 413 : 400, "Invalid or oversized upload.");
   }
 
   const entry = form.get("file");
@@ -59,15 +63,11 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  const check = validateUpload(file.name, file.type, file.size, "avatar");
-  if (!check.ok) return jsonError(422, check.error, { file: check.error });
-
-  const storedName = generateStoredName(check.extension);
-  const buffer = Buffer.from(await file.arrayBuffer());
-  // Re-check the real byte length (Content-Length can lie).
-  if (buffer.byteLength > LIMITS.avatar) {
-    return jsonError(413, "That image is too large.");
-  }
+  let prepared;
+  try { prepared = await prepareAvatarPhoto(file); }
+  catch (error) { return jsonError(error instanceof UploadSafetyError ? error.status : 500, error instanceof UploadSafetyError ? error.message : "Upload failed."); }
+  const storedName = generateStoredName(prepared.extension);
+  const buffer = prepared.buffer;
 
   let relative: string;
   try {
@@ -89,7 +89,7 @@ export async function POST(req: NextRequest) {
       storedName,
       path: relative,
       size: buffer.byteLength,
-      mimeType: file.type,
+      mimeType: prepared.mimeType,
     },
   });
 }

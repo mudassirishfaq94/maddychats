@@ -1,10 +1,43 @@
 "use client";
-import { createContext, useContext, type ReactNode } from "react";
+import { createContext, useContext, useEffect, type ReactNode } from "react";
 import { useE2EE } from "@/hooks/use-e2ee";
 import { useAuth } from "./auth-provider";
 const Context = createContext<ReturnType<typeof useE2EE> | null>(null);
 function UserEncryption({ userId, children }: { userId?: string; children: ReactNode }) {
   const encryption = useE2EE(userId);
+  const { initialized, getConversationKey, prepareConversation } = encryption;
+  useEffect(() => {
+    if (!initialized || !userId) return;
+    let stopped = false;
+    let running = false;
+    let queued = false;
+    const reconcile = async () => {
+      if (running) { queued = true; return; }
+      running = true;
+      try {
+        const response = await fetch("/api/e2ee/message-requests", { cache: "no-store", signal: AbortSignal.timeout(15000) });
+        if (!response.ok || stopped) return;
+        const { conversationIds = [] } = await response.json() as { conversationIds?: string[] };
+        // Sequential reconciliation keeps RSA work off the typing hot path.
+        for (const id of conversationIds) {
+          if (stopped) break;
+          try {
+            // Never bootstrap/replace a key during background reconciliation.
+            await getConversationKey(id);
+            await prepareConversation(id);
+          } catch { /* A device without the original key must use trusted recovery. */ }
+        }
+      } catch { /* Offline reconciliation resumes on the next realtime connection. */ }
+      finally {
+        running = false;
+        if (queued && !stopped) { queued = false; void reconcile(); }
+      }
+    };
+    const refresh = () => { void reconcile(); };
+    refresh();
+    window.addEventListener("maddy:message-request-keys", refresh);
+    return () => { stopped = true; window.removeEventListener("maddy:message-request-keys", refresh); };
+  }, [initialized, userId, getConversationKey, prepareConversation]);
   return <Context.Provider value={encryption}>{children}</Context.Provider>;
 }
 export function E2EEProvider({ children }: { children: ReactNode }) {

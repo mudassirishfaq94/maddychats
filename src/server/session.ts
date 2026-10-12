@@ -2,12 +2,30 @@ import { cache } from "react";
 import { cookies } from "next/headers";
 import {
   SESSION_COOKIE,
-  SESSION_TTL_SECONDS,
+  ACCESS_TTL_SECONDS,
   cookieSecure,
 } from "./config";
 import { signSessionToken, verifySessionToken } from "./jwt";
-import { findUserById, toSafeUser, touchLastSeen } from "./users";
+import { toSafeUser, touchLastSeen } from "./users";
+import { is2FAEnabled } from "./two-factor";
+import type { UserRow } from "@/db/schema";
 import type { SafeUser } from "@/lib/types";
+import { db } from "@/db";
+import { users, user2fa, deviceSessions } from "@/db/schema";
+import { eq, sql } from "drizzle-orm";
+import { retryDatabaseRead } from "./database-read-retry";
+
+// Compile the query once, but execute against fresh state for every request.
+// An empty name avoids named prepared-statement requirements on DB poolers.
+const sessionQuery = db.select({ user: users, mfa: user2fa,
+  deviceActive: sql<boolean>`case when ${sql.placeholder("sid")}::uuid is null
+    then ${sql.placeholder("legacy")}::boolean else exists(select 1 from ${deviceSessions}
+    where ${deviceSessions.id}=${sql.placeholder("sid")}::uuid
+      and ${deviceSessions.userId}=${sql.placeholder("userId")}::uuid
+      and ${deviceSessions.revokedAt} is null
+      and ${deviceSessions.expiresAt}>${sql.placeholder("now")}::timestamptz) end`,
+}).from(users).leftJoin(user2fa, eq(user2fa.userId, users.id))
+  .where(eq(users.id, sql.placeholder("userId"))).limit(1).prepare("");
 
 /** Attributes applied to the session cookie (matches NextResponse cookie API). */
 export interface SessionCookieOptions {
@@ -33,15 +51,35 @@ export function sessionCookieOptions(
     sameSite: "lax",
     secure: secureTransport,
     path: "/",
-    maxAge: SESSION_TTL_SECONDS,
+    maxAge: ACCESS_TTL_SECONDS,
   };
 }
 
 export async function createSessionToken(
   userId: string,
   username: string,
+  authTime = 0,
+  mfaTime = 0,
+  sid?: string,
 ): Promise<string> {
-  return signSessionToken(userId, username);
+  return signSessionToken(userId, username, authTime, mfaTime, sid);
+}
+
+/**
+ * Central eligibility check for a *new* primary-authentication session.
+ * Existing sessions have already completed their login ceremony, but a
+ * suspended user must be rejected at every request by getSessionUser below.
+ */
+export async function newSessionBlockReason(
+  user: UserRow,
+): Promise<"suspended" | "mfa_required" | null> {
+  if (
+    user.suspendedAt &&
+    (!user.suspendedUntil || user.suspendedUntil.getTime() >= Date.now())
+  ) {
+    return "suspended";
+  }
+  return (await is2FAEnabled(user.id)) ? "mfa_required" : null;
 }
 
 /**
@@ -55,10 +93,30 @@ export const getSessionUser = cache(async (): Promise<SafeUser | null> => {
   const store = await cookies();
   const token = store.get(SESSION_COOKIE)?.value;
   if (!token) return null;
+  return resolveSessionToken(token);
+});
+
+/** Uncached eligibility check for long-lived connections. */
+export async function resolveSessionToken(token: string): Promise<SafeUser | null> {
   const claims = await verifySessionToken(token);
   if (!claims) return null;
-  const user = await findUserById(claims.sub);
+  return retryDatabaseRead(async () => {
+  // One fresh database snapshot checks all three conditions. No cross-request
+  // cache: logout, suspension, device revocation and MFA remain immediate.
+  const [record] = await sessionQuery.execute({ userId: claims.sub, sid: claims.sid ?? null,
+    legacy: Date.now() < Date.parse("2026-11-08T00:00:00Z"), now: new Date(),
+  });
+  const user = record?.user;
+  const deviceActive = record?.deviceActive;
+  const enabledSince = record?.mfa?.enabled ? record.mfa.enabledAt ?? record.mfa.createdAt : null;
+  if (!deviceActive) return null;
   if (!user) return null;
+  if (
+    user.suspendedAt &&
+    (!user.suspendedUntil || user.suspendedUntil.getTime() >= Date.now())
+  ) {
+    return null;
+  }
   // Revocation: a signed millisecond issuance claim avoids JWT `iat`'s
   // second-granularity ambiguity. A copied cookie issued at or before the
   // logout watermark is dead, while an immediate re-login remains valid.
@@ -68,8 +126,10 @@ export const getSessionUser = cache(async (): Promise<SafeUser | null> => {
   ) {
     return null;
   }
+  if (enabledSince && claims.mfaTime < enabledSince.getTime()) return null;
   return toSafeUser(user);
-});
+  });
+}
 
 /**
  * Like getSessionUser but also refreshes `lastSeenAt` when it is stale
@@ -84,4 +144,20 @@ export async function getSessionUserWithPresence(): Promise<SafeUser | null> {
     user.lastSeenAt = new Date().toISOString();
   }
   return user;
+}
+
+/** Authentication age is separate from cookie renewal/issuance. */
+export async function getSessionAuthTime(): Promise<number> {
+  const token = (await cookies()).get(SESSION_COOKIE)?.value;
+  return token ? (await verifySessionToken(token))?.authTime ?? 0 : 0;
+}
+
+export async function getSessionMfaTime(): Promise<number> {
+  const token = (await cookies()).get(SESSION_COOKIE)?.value;
+  return token ? (await verifySessionToken(token))?.mfaTime ?? 0 : 0;
+}
+
+export async function getSessionDeviceId(): Promise<string | undefined> {
+  const token = (await cookies()).get(SESSION_COOKIE)?.value;
+  return token ? (await verifySessionToken(token))?.sid : undefined;
 }

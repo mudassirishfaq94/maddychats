@@ -1,11 +1,19 @@
 "use client";
 
+import Image from "next/image";
+import { EncryptedMessageState } from "./encrypted-message-state";
+
+const starterMode = process.env.NEXT_PUBLIC_STARTER_MODE === "1";
+import { useHydrated } from "@/hooks/use-hydrated";
+
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
+  startTransition,
   type FormEvent,
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
@@ -27,7 +35,6 @@ import {
   Pin,
   Reply as ReplyIcon,
   SmilePlus,
-  Sticker,
   Star,
   Send,
   Clock,
@@ -61,8 +68,7 @@ import { emojiOnlyCount } from "@/lib/emoji";
 import { cn, formatDate, timeAgo, initials, avatarHue } from "@/lib/utils";
 import { CHAT_BACKGROUNDS, chatBubbleTheme, isBackgroundImage } from "@/lib/chat-backgrounds";
 import { getPattern } from "@/lib/chat-patterns";
-const EmojiPicker = dynamic(() => import("./emoji-picker").then((module) => module.EmojiPicker));
-const StickerPicker = dynamic(() => import("./sticker-picker").then((module) => module.StickerPicker));
+const MediaPicker = dynamic(() => import("./media-picker").then((module) => module.MediaPicker));
 import { AudioMessage } from "./audio-message";
 import { RecordingWaveform } from "./waveform";
 import { useVoiceRecorder } from "@/hooks/use-voice-recorder";
@@ -79,6 +85,9 @@ import {
 } from "@/lib/crypto";
 import { mapWithConcurrency } from "@/lib/async";
 import { chatPerf } from "@/lib/performance";
+import { loadChatDraft, saveChatDraft, loadQueuedMessages, removeQueuedMessage, saveQueuedMessage } from "@/lib/chat-outbox";
+
+class SecureDeliveryWaiting extends Error {}
 
 function formatDuration(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -95,15 +104,17 @@ function b64ToBytes(base64: string): Uint8Array {
   return bytes;
 }
 
-function timeLabel(iso: string): string {
-  return new Intl.DateTimeFormat("en", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).format(new Date(iso));
+// Intl constructors are expensive inside every message render. Keep the UTC
+// server/first-client representation, then use the browser's local timezone.
+const utcTimeFormatter = new Intl.DateTimeFormat("en", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "UTC" });
+const localTimeFormatter = new Intl.DateTimeFormat("en", { hour: "2-digit", minute: "2-digit", hour12: false });
+const utcDayFormatter = new Intl.DateTimeFormat("en", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
+function timeLabel(iso: string, hydrated: boolean): string {
+  return (hydrated ? localTimeFormatter : utcTimeFormatter).format(new Date(iso));
 }
 
-function dayLabel(iso: string): string {
+function dayLabel(iso: string, hydrated: boolean): string {
+  if (!hydrated) return utcDayFormatter.format(new Date(iso));
   const d = new Date(iso);
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -114,7 +125,8 @@ function dayLabel(iso: string): string {
   return formatDate(iso);
 }
 
-function sameDay(a: string, b: string): boolean {
+function sameDay(a: string, b: string, hydrated: boolean): boolean {
+  if (!hydrated) return a.slice(0, 10) === b.slice(0, 10);
   const da = new Date(a);
   const dbb = new Date(b);
   return (
@@ -126,6 +138,9 @@ function sameDay(a: string, b: string): boolean {
 
 /** Sent → Delivered → Read, with a WhatsApp-style tick and status label. */
 function ReceiptIcon({ message }: { message: MessageDTO }) {
+  if (message.sendStatus === "queued") {
+    return <span aria-label="Queued" className="inline-flex items-center gap-1 text-[var(--bubble-own-sub)]"><Clock className="h-3 w-3" /><span className="text-[0.6rem]">Queued</span></span>;
+  }
   if (message.sendStatus === "sending") {
     return (
       <span title="Sending" aria-label="Sending" className="inline-flex flex-col items-center leading-none text-[var(--bubble-own-sub)]">
@@ -179,10 +194,13 @@ export function ChatView({
   conversation: ConversationDetail;
   initial: MessagePage;
 }) {
+  const hydrated = useHydrated();
   const router = useRouter();
   const searchParams = useSearchParams();
   const { subscribe, presence } = useRealtime();
   const e2ee = useSharedE2EE();
+  const encryptionRef = useRef<typeof e2ee | null>(null);
+  useEffect(() => { encryptionRef.current = e2ee; }, [e2ee]);
 
   const [items, setItems] = useState<MessageDTO[]>(initial.messages);
   // Remove expired messages promptly in an open chat as well as on the next
@@ -197,9 +215,32 @@ export function ChatView({
   const [nextCursor, setNextCursor] = useState<string | null>(initial.nextCursor);
   const [hasMore, setHasMore] = useState(initial.hasMore);
   const [loadingOlder, setLoadingOlder] = useState(false);
-  const [sendPending, setSendPending] = useState(false);
+  const [sendPending, setSendPendingState] = useState(false);
+  const sendPendingRef = useRef(false);
+  const setSendPending = useCallback((value: boolean) => {
+    sendPendingRef.current = value;
+    setSendPendingState(value);
+  }, []);
   const [error, setError] = useState<string | null>(null);
-  const [draft, setDraft] = useState("");
+  const [draft, setDraftState] = useState("");
+  const draftRef = useRef("");
+  const draftRevision = useRef(0);
+  const composerRef = useRef<HTMLTextAreaElement>(null);
+  const composerResizeFrame = useRef<number | null>(null);
+  useEffect(() => () => {
+    if (composerResizeFrame.current !== null) cancelAnimationFrame(composerResizeFrame.current);
+  }, []);
+  const draftPersistTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const draftUpdateTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (draftUpdateTimer.current) clearTimeout(draftUpdateTimer.current); }, []);
+  const setDraft = useCallback((next: React.SetStateAction<string>) => {
+    const value = typeof next === "function" ? next(draftRef.current) : next;
+    if (draftUpdateTimer.current) clearTimeout(draftUpdateTimer.current);
+    draftRevision.current++;
+    draftRef.current = value;
+    if (composerRef.current) composerRef.current.value = value;
+    setDraftState(value);
+  }, []);
   const [replyTo, setReplyTo] = useState<MessageDTO | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState("");
@@ -215,6 +256,48 @@ export function ChatView({
   const [galleryRevision, setGalleryRevision] = useState(0);
   const [otherTyping, setOtherTyping] = useState(false);
   const [requestAccepted, setRequestAccepted] = useState(!conversation.requestPending);
+  const [awaitingApproval, setAwaitingApproval] = useState(Boolean(conversation.awaitingApproval));
+  const requestSent = awaitingApproval && (conversation.introductionSent || items.some((message) => message.senderId === me.id && message.sendStatus !== "failed"));
+  const [mediaPaused, setMediaPaused] = useState(starterMode);
+  const [schedulePaused, setSchedulePaused] = useState(starterMode);
+  useEffect(() => {
+    const controller = new AbortController();
+    let retry: ReturnType<typeof setTimeout> | undefined;
+    let failures = 0;
+    let fetching = false;
+    const refresh = async () => {
+      if (fetching || controller.signal.aborted) return;
+      fetching = true;
+      clearTimeout(retry);
+      try {
+        const response = await fetch("/api/chat-capabilities", { signal: controller.signal, cache: "no-store" });
+        if (!response.ok) throw new Error("Capabilities unavailable");
+        const capabilities = await response.json();
+        if (typeof capabilities.media !== "boolean" || typeof capabilities.scheduled !== "boolean") throw new Error("Invalid capabilities");
+        if (!controller.signal.aborted) {
+          setMediaPaused(!capabilities.media);
+          setSchedulePaused(!capabilities.scheduled);
+          failures = 0;
+        }
+      } catch {
+        if (!controller.signal.aborted && failures < 3) {
+          failures += 1;
+          retry = setTimeout(() => void refresh(), failures * 1000);
+        }
+      } finally { fetching = false; }
+    };
+    const resume = () => { if (document.visibilityState === "visible") void refresh(); };
+    void refresh();
+    window.addEventListener("online", resume);
+    document.addEventListener("visibilitychange", resume);
+    return () => {
+      controller.abort();
+      clearTimeout(retry);
+      window.removeEventListener("online", resume);
+      document.removeEventListener("visibilitychange", resume);
+    };
+  }, []);
+  const canCompose = requestAccepted && !requestSent;
   const [acceptingRequest, setAcceptingRequest] = useState(false);
   const attachments = useAttachmentUpload();
   const recorder = useVoiceRecorder();
@@ -288,6 +371,8 @@ export function ChatView({
   // Failed decryptions are retried after a short delay — the peer's key
   // may still be in flight when the message first arrives.
   const failedDecryptionRef = useRef<Map<string, number>>(new Map());
+  const [unavailableMessageIds, setUnavailableMessageIds] = useState<Set<string>>(() => new Set());
+  const missingMessageKeys = useRef(new Set<string>());
   const arrivalTimesRef = useRef<Map<string, number>>(new Map());
   const decryptingRef = useRef<Set<string>>(new Set());
   const decryptingRepliesRef = useRef<Set<string>>(new Set());
@@ -317,11 +402,13 @@ export function ChatView({
         m.encrypted &&
         m.text &&
         m.text !== "signal:v2" &&
+        (failedDecryptionRef.current.get(m.id) ?? 0) < 2 &&
         !decryptedTextsRef.current.has(m.id) &&
         !decryptingRef.current.has(m.id),
     );
     const pendingReplies = items.filter((m) =>
       m.replyTo?.encrypted && m.replyTo.text &&
+      (failedDecryptionRef.current.get(`reply:${m.replyTo.id}`) ?? 0) < 2 &&
       !decryptedRepliesRef.current.has(m.replyTo.id) &&
       !decryptingRepliesRef.current.has(m.replyTo.id),
     );
@@ -329,6 +416,13 @@ export function ChatView({
     let alive = true;
     (async () => {
       let hadFailure = false;
+      const textBatch = new Map<string, string>();
+      const replyBatch = new Map<string, string>();
+      const flushText = () => {
+        if (!alive || textBatch.size === 0) return;
+        const ready = new Map(textBatch); textBatch.clear();
+        startTransition(() => setDecryptedTexts(current => new Map([...current, ...ready])));
+      };
       pending.forEach((m) => decryptingRef.current.add(m.id));
       pendingReplies.forEach((m) => decryptingRepliesRef.current.add(m.replyTo!.id));
       // RSA/AES work is CPU-heavy. Keep history rendering responsive instead
@@ -337,35 +431,51 @@ export function ChatView({
         try {
           const plain = await decrypt(m.text, conversationId);
           failedDecryptionRef.current.delete(m.id);
+          missingMessageKeys.current.delete(m.id);
+          if (alive) setUnavailableMessageIds((current) => {
+            if (!current.has(m.id)) return current;
+            const next = new Set(current); next.delete(m.id); return next;
+          });
           const arrivedAt = arrivalTimesRef.current.get(m.id);
           if (arrivedAt !== undefined) {
             chatPerf("recipient-event-to-decrypted", arrivedAt);
             arrivalTimesRef.current.delete(m.id);
           }
           cacheDecryptedMessage(conversationId, m.id, m.text, plain);
-          if (alive) setDecryptedTexts((current) => new Map(current).set(m.id, plain));
-        } catch {
+          textBatch.set(m.id, plain);
+          if (textBatch.size >= 12) flushText();
+        } catch (cause) {
           // A peer can still publish a just-created key, but retries must be
           // bounded so one legacy message never burns CPU forever.
           const attempts = (failedDecryptionRef.current.get(m.id) ?? 0) + 1;
           failedDecryptionRef.current.set(m.id, attempts);
+          if (cause instanceof Error && cause.message === "This message's key is not available on this device") missingMessageKeys.current.add(m.id);
+          else missingMessageKeys.current.delete(m.id);
+          if (alive && attempts >= 2) setUnavailableMessageIds((current) => new Set(current).add(m.id));
           hadFailure ||= attempts < 2;
         } finally {
           decryptingRef.current.delete(m.id);
         }
       });
+      flushText();
       await mapWithConcurrency(pendingReplies, 4, async (m) => {
         const reply = m.replyTo!;
         try {
           const plain = await decrypt(reply.text, conversationId);
-          if (alive) setDecryptedReplies((current) => new Map(current).set(reply.id, plain));
+          failedDecryptionRef.current.delete(`reply:${reply.id}`);
+          replyBatch.set(reply.id, plain);
         } catch {
-          hadFailure = true;
+          const key = `reply:${reply.id}`;
+          const attempts = (failedDecryptionRef.current.get(key) ?? 0) + 1;
+          failedDecryptionRef.current.set(key, attempts);
+          hadFailure ||= attempts < 2;
+          if (alive && attempts >= 2) setUnavailableMessageIds(current => new Set(current).add(key));
         } finally {
           decryptingRepliesRef.current.delete(reply.id);
         }
       });
       if (!alive) return;
+      if (replyBatch.size) startTransition(() => setDecryptedReplies(current => new Map([...current, ...replyBatch])));
       // Retry once for a key that may still be in flight, then surface a
       // concise per-message fallback without blocking the rest of the chat.
       if (hadFailure && alive) {
@@ -386,10 +496,12 @@ export function ChatView({
     if (!m.encrypted) return m.text;
     if (m.text === "signal:v2") return "🔒 Waiting for this device’s secure message…";
     return decryptedTexts.get(m.id)
-      ?? (failedDecryptionRef.current.get(m.id) === 2
+      ?? (conversation.type === "dm" && conversation.requestInitiatorId !== me.id && items.length === 1
+        ? "Encrypted introduction — waiting for secure delivery" : undefined)
+      ?? (unavailableMessageIds.has(m.id)
         ? "🔒 Message unavailable on this device"
         : "");
-  }, [decryptedTexts]);
+  }, [decryptedTexts, unavailableMessageIds, conversation.type, conversation.requestInitiatorId, me.id, items.length]);
 
   /** Safe text for clipboard/edit: never copy ciphertext. */
   const copyableText = useCallback((m: { encrypted: boolean; text: string; id: string }) => {
@@ -410,28 +522,38 @@ export function ChatView({
   /** Re-check key delivery immediately before a mutation. Encryption status
    * can change while a chat remains open, so the initial UI snapshot is not
    * a safe basis for deciding whether plaintext may leave the device. */
-  async function prepareEncryptedSend() {
-    if (!e2ee.initialized) {
-      throw new Error(e2ee.loading
-        ? "Encryption is still initializing. Please try again in a moment."
-        : e2ee.error ?? "Encryption is unavailable on this device.");
+  const prepareEncryptedSend = useCallback(async (allowMessageRequest = false) => {
+    // A fast first keystroke/send can beat local key restoration on navigation.
+    // Keep the optimistic message and draft while setup finishes, with a bound
+    // so a failed initialization cannot leave the sending spinner running.
+    for (let attempt = 0; attempt < 300 && (!encryptionRef.current || (!encryptionRef.current.initialized && encryptionRef.current.loading)); attempt++) {
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    const encryption = encryptionRef.current;
+    if (!encryption) throw new SecureDeliveryWaiting("Waiting for secure messaging to start. Your message will send automatically when ready.");
+    if (!encryption.initialized) {
+      throw new SecureDeliveryWaiting(encryption.loading
+        ? "Secure messaging is taking longer than expected. Your draft is saved; please retry."
+        : encryption.error ?? "Encryption is unavailable on this device.");
     }
     // Never re-publish or replace a key on the sending path. A concurrent
     // device bootstrap used to create competing conversation keys and left
     // recipients with undecryptable messages. The upcoming per-device session
     // transport handles device changes explicitly.
-    const prepared = await e2ee.prepareConversation(conversationId);
+    const prepared = await encryption.prepareConversation(conversationId, { allowMessageRequest });
     setE2eeState((previous) => ({
       ...previous,
-      ready: prepared.ready,
+      ready: prepared.ready && !prepared.missingPeers,
       fingerprint: prepared.fingerprint,
       checking: false,
       trustChanged: Boolean(prepared.trustChanged),
     }));
     if (!prepared.ready) {
-      throw new Error("Encryption keys are not ready for every participant yet. No unencrypted message was sent.");
+      throw new SecureDeliveryWaiting(prepared.trustChanged
+        ? "A participant’s encryption device changed. Verify their safety number before sending."
+        : encryptionRef.current?.error ?? "Waiting for secure delivery. Your message will send automatically when encryption is ready.");
     }
-  }
+  }, [conversationId]);
 
   /** Encrypt a pending file into a ciphertext blob + conversation-wrapped key. */
   const encryptPendingFile = useCallback(
@@ -458,7 +580,7 @@ export function ChatView({
   );
 
   const [showEmoji, setShowEmoji] = useState(false);
-  const [showStickers, setShowStickers] = useState(false);
+  const mediaPickerAnchor = useRef<HTMLButtonElement>(null);
   const [mobileMenuMsg, setMobileMenuMsg] = useState<MessageDTO | null>(null);
   const [forwardMsg, setForwardMsg] = useState<MessageDTO | null>(null);
   const [reportMsg, setReportMsg] = useState<MessageDTO | null>(null);
@@ -467,8 +589,10 @@ export function ChatView({
   const [scheduledMessages, setScheduledMessages] = useState<Array<{ id: string; text: string; scheduledFor: string }>>([]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
+  const messageContentRef = useRef<HTMLDivElement>(null);
+  const followLatestRef = useRef(true);
+  const touchScrollY = useRef(0);
   const topSentinelRef = useRef<HTMLDivElement>(null);
-  const composerRef = useRef<HTMLTextAreaElement>(null);
   const nearBottomRef = useRef(true);
   const [showScrollDown, setShowScrollDown] = useState(false);
   const [initialUnread, setInitialUnread] = useState<{ ids: Set<string>; count: number } | null>(null);
@@ -489,23 +613,57 @@ export function ChatView({
 
   /* --------------------------- persistent drafts -------------------------- */
 
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      const saved = window.localStorage.getItem(draftStorageKey);
-      if (saved) setDraft(saved.slice(0, 2000));
-      draftStorageReady.current = true;
-    }, 0);
-    return () => window.clearTimeout(timer);
-  }, [draftStorageKey]);
-
-  useEffect(() => {
+  const persistDraft = useCallback(() => {
     if (!draftStorageReady.current) return;
-    const timer = window.setTimeout(() => {
-      if (draft) window.localStorage.setItem(draftStorageKey, draft.slice(0, 2000));
-      else window.localStorage.removeItem(draftStorageKey);
-    }, 180);
-    return () => window.clearTimeout(timer);
-  }, [draft, draftStorageKey]);
+    void saveChatDraft(me.id, conversationId, draftRef.current).catch(() => {});
+  }, [me.id, conversationId]);
+  const queueDraftPersistence = useCallback(() => {
+    if (draftPersistTimer.current) clearTimeout(draftPersistTimer.current);
+    draftPersistTimer.current = setTimeout(persistDraft, 180);
+  }, [persistDraft]);
+  useEffect(() => {
+    draftStorageReady.current = false;
+    let disposed = false;
+    const initialRevision = draftRevision.current;
+    void (async () => {
+      try {
+        let saved = await loadChatDraft(me.id, conversationId);
+        const legacy = window.localStorage.getItem(draftStorageKey);
+        if (saved === null && legacy) saved = legacy;
+        if (!disposed && saved && !draftRef.current && draftRevision.current === initialRevision) setDraft(saved);
+        // Remove the old plaintext entry only after durable encryption succeeds.
+        if (legacy && !disposed) {
+          await saveChatDraft(me.id, conversationId, draftRef.current);
+          window.localStorage.removeItem(draftStorageKey);
+        }
+      } catch { /* Keep current input and any unmigrated legacy draft. */ }
+      finally { if (!disposed) { draftStorageReady.current = true; queueDraftPersistence(); } }
+    })();
+    const background = () => { if (document.visibilityState === "hidden") persistDraft(); };
+    window.addEventListener("pagehide", persistDraft);
+    document.addEventListener("visibilitychange", background);
+    return () => {
+      disposed = true;
+      if (draftPersistTimer.current) clearTimeout(draftPersistTimer.current);
+      window.removeEventListener("pagehide", persistDraft);
+      document.removeEventListener("visibilitychange", background);
+      persistDraft();
+    };
+  }, [me.id, conversationId, draftStorageKey, setDraft, persistDraft, queueDraftPersistence]);
+  useEffect(() => { queueDraftPersistence(); }, [draft, queueDraftPersistence]);
+
+  // Retire the encrypted draft before exposing an empty composer. A fast
+  // reload must not read an older save that was still encrypting at delivery.
+  async function clearDeliveredDraft(expected: string, trimmed = false) {
+    if ((trimmed ? draftRef.current.trim() : draftRef.current) !== expected) return;
+    const revision = ++draftRevision.current;
+    draftRef.current = "";
+    if (draftPersistTimer.current) clearTimeout(draftPersistTimer.current);
+    if (draftUpdateTimer.current) clearTimeout(draftUpdateTimer.current);
+    await saveChatDraft(me.id, conversationId, "").catch(() => undefined);
+    // Preserve anything the user typed while IndexedDB was finishing.
+    if (draftRevision.current === revision) { setDraft(""); setReplyTo(null); }
+  }
 
   /* ------------------------------ read receipts ----------------------------- */
 
@@ -590,6 +748,19 @@ export function ChatView({
 
   useEffect(() => {
     return subscribe((event) => {
+      if (event.type === "conversation:accepted" && event.conversationId === conversationId) {
+        setAwaitingApproval(false);
+        setRequestAccepted(true);
+        router.refresh();
+        return;
+      }
+      if (event.type === "conversation:keys-shared" && event.conversationId === conversationId) {
+        failedDecryptionRef.current.clear();
+        setUnavailableMessageIds(new Set());
+        setDecryptRetry((value) => value + 1);
+        window.dispatchEvent(new Event("maddy:message-request-keys"));
+        return;
+      }
       if (event.type === "message:pinned" && event.conversationId === conversationId) {
         setHasPinnedMsgs(true);
         setPinnedCount((c) => c + 1);
@@ -680,6 +851,10 @@ export function ChatView({
         if (event.type === "message:update") {
           setDecryptedTexts(previous => { const next = new Map(previous); next.delete(msg.id); return next; });
           failedDecryptionRef.current.delete(msg.id);
+          setUnavailableMessageIds((current) => {
+            if (!current.has(msg.id)) return current;
+            const next = new Set(current); next.delete(msg.id); return next;
+          });
         }
         setItems((prev) => prev.map((m) => (m.id === msg.id ? msg : m)));
       }
@@ -691,37 +866,62 @@ export function ChatView({
   const scrollToBottom = useCallback((smooth: boolean) => {
     const el = scrollRef.current;
     if (!el) return;
+    followLatestRef.current = true;
     el.scrollTo({ top: el.scrollHeight, behavior: smooth ? "smooth" : "auto" });
   }, []);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!initialScrollDone.current) {
       initialScrollDone.current = true;
-      scrollToBottom(false);
+      followLatestRef.current = !searchParams.get("message");
+      if (followLatestRef.current) scrollToBottom(false);
     }
-  }, [scrollToBottom]);
+  }, [scrollToBottom, searchParams]);
+
+  const hasMessages = items.length > 0;
+  useEffect(() => {
+    const viewport = scrollRef.current, content = messageContentRef.current;
+    if (!viewport || !content) return;
+    let frame: number | null = null;
+    const observer = new ResizeObserver(() => {
+      if (!followLatestRef.current || frame !== null) return;
+      frame = requestAnimationFrame(() => {
+        frame = null;
+        if (followLatestRef.current) viewport.scrollTo({ top: viewport.scrollHeight, behavior: "auto" });
+      });
+    });
+    // Decryption, images and content-visibility change row heights after mount.
+    observer.observe(content); observer.observe(viewport);
+    return () => { observer.disconnect(); if (frame !== null) cancelAnimationFrame(frame); };
+  }, [conversationId, hasMessages]);
 
   // System-notification taps always arrive at the current end of the chat.
   useEffect(() => {
     if (searchParams.get("latest") !== "1") return;
     requestAnimationFrame(() => scrollToBottom(false));
-  }, [items, scrollToBottom, searchParams]);
+  }, [scrollToBottom, searchParams]);
 
   const lastIdRef = useRef<string | null>(null);
+  const lastSendStateRef = useRef<string | undefined>(undefined);
   useEffect(() => {
     const last = items[items.length - 1];
-    if (!last || last.id === lastIdRef.current) return;
+    if (!last || searchParams.get("message")) return;
+    const previousId = lastIdRef.current;
+    const isNewMessage = previousId !== null && last.id !== previousId;
+    if (last.id === previousId && last.sendStatus === lastSendStateRef.current) return;
     lastIdRef.current = last.id;
-    if (last.senderId === me.id || nearBottomRef.current) {
-      scrollToBottom(true);
+    lastSendStateRef.current = last.sendStatus;
+    if ((isNewMessage && last.senderId === me.id) || followLatestRef.current) {
+      requestAnimationFrame(() => { if ((isNewMessage && last.senderId === me.id) || followLatestRef.current) scrollToBottom(true); });
     }
-  }, [items, me.id, scrollToBottom]);
+  }, [items, me.id, scrollToBottom, searchParams]);
 
   function onScroll() {
     const el = scrollRef.current;
     if (!el) return;
     const isNearBottom =
       el.scrollHeight - el.scrollTop - el.clientHeight < NEAR_BOTTOM_PX;
+    if (el.scrollHeight - el.scrollTop - el.clientHeight <= 2) followLatestRef.current = true;
     nearBottomRef.current = isNearBottom;
     setShowScrollDown(!isNearBottom);
   }
@@ -732,6 +932,7 @@ export function ChatView({
       setError("That message is further back — load older messages to see it.");
       return;
     }
+    followLatestRef.current = false;
     node.scrollIntoView({ behavior: "smooth", block: "center" });
     setHighlightId(messageId);
     setTimeout(() => setHighlightId(null), 1600);
@@ -745,6 +946,7 @@ export function ChatView({
     const node = nodeRefs.current.get(targetMessageId);
     if (!node) return;
     jumpedRef.current = targetMessageId;
+    followLatestRef.current = false;
     node.scrollIntoView({ behavior: "smooth", block: "center" });
     setHighlightId(targetMessageId);
     setTimeout(() => setHighlightId(null), 2200);
@@ -754,6 +956,7 @@ export function ChatView({
 
   const loadOlder = useCallback(async () => {
     if (!hasMore || loadingOlder || !nextCursor) return;
+    followLatestRef.current = false;
     const el = scrollRef.current;
     const prevHeight = el?.scrollHeight ?? 0;
     const prevTop = el?.scrollTop ?? 0;
@@ -802,13 +1005,17 @@ export function ChatView({
 
   async function send(e?: FormEvent) {
     e?.preventDefault();
+    if (!canCompose) return;
     const sendStarted = performance.now();
-    const text = draft.trim();
+    // Read the immediate draft, including a last keystroke whose background
+    // UI update has not committed yet. Encryption checks remain below.
+    const submittedDraft = draftRef.current;
+    const text = submittedDraft.trim();
     if (typingStopTimerRef.current) clearTimeout(typingStopTimerRef.current);
     signalTyping(false);
 
     if (attachments.pending.length > 0) {
-      if (sendPending) return;
+      if (sendPendingRef.current) return;
       setSendPending(true);
       setError(null);
       try {
@@ -828,8 +1035,7 @@ export function ChatView({
         setItems((prev) =>
           prev.some((m) => m.id === created.id) ? prev : [...prev, created],
         );
-        setDraft("");
-        setReplyTo(null);
+        await clearDeliveredDraft(submittedDraft);
         nearBottomRef.current = true;
         scrollToBottom(true);
       } catch (cause) {
@@ -840,7 +1046,9 @@ export function ChatView({
       return;
     }
 
-    if (!text || sendPending) return;
+    if (!text || sendPendingRef.current) return;
+    const queued = items.find(message => (message.sendStatus === "queued" || message.sendStatus === "sending") && decryptedTextsRef.current.get(message.id) === text && message.replyToMessageId === (replyTo?.id ?? null));
+    if (queued) { await retryFailedMessage(queued); return; }
     const clientMessageId = crypto.randomUUID();
     const optimisticId = `client:${clientMessageId}`;
     const now = new Date().toISOString();
@@ -881,20 +1089,23 @@ export function ChatView({
     setItems((prev) => [...prev, optimistic]);
     chatPerf("send-click-to-optimistic", sendStarted);
     const replyId = replyTo?.id ?? null;
-    setDraft("");
-    setReplyTo(null);
+    // Keep the draft until the server confirms delivery, including key failures.
     nearBottomRef.current = true;
     requestAnimationFrame(() => scrollToBottom(true));
     setSendPending(true);
     setError(null);
     try {
       // E2EE: plaintext never leaves this device — send AES-GCM ciphertext.
-      await prepareEncryptedSend();
+      await Promise.all([
+        saveQueuedMessage(me.id, { message: { ...optimistic, sendStatus: "queued", queueReason: "Waiting for secure delivery. Your message will send automatically when encryption is ready." }, plain: text }).catch(() => undefined),
+        prepareEncryptedSend(awaitingApproval && !conversation.introductionSent),
+      ]);
       chatPerf("send-key-ready", sendStarted);
       const payload = await e2ee.encrypt(text, conversationId);
       chatPerf("send-encrypted", sendStarted);
       const request = () => fetch(`/api/conversations/${conversationId}/messages`, {
         method: "POST",
+        signal: AbortSignal.timeout(30000),
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           clientMessageId,
@@ -916,12 +1127,15 @@ export function ChatView({
         error?: string;
       } | null;
       if (!res.ok || !data?.message) {
+        await removeQueuedMessage(me.id, conversationId, clientMessageId).catch(() => undefined);
         setError(data?.error ?? "Message failed to send. Try again.");
         setItems((prev) => prev.map((m) => m.id === optimisticId ? { ...m, sendStatus: "failed" } : m));
         return;
       }
       const created = data.message;
       chatPerf("send-server-confirmed", sendStarted);
+      void removeQueuedMessage(me.id, conversationId, clientMessageId).catch(() => undefined);
+      await clearDeliveredDraft(submittedDraft);
       setDecryptedTexts((prev) => {
         const next = new Map(prev);
         next.delete(optimisticId);
@@ -941,10 +1155,15 @@ export function ChatView({
           : [...prev, { ...created, sendStatus: "sent" }];
       });
       const ta = composerRef.current;
-      if (ta) ta.style.height = "auto";
+      if (ta && !draftRef.current) ta.style.height = "auto";
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Network error. Message was not sent.");
-      setItems((prev) => prev.map((m) => m.id === optimisticId ? { ...m, sendStatus: "failed" } : m));
+      const waiting = cause instanceof SecureDeliveryWaiting;
+      if (waiting) await saveQueuedMessage(me.id, { message: { ...optimistic, sendStatus: "queued", queueReason: cause.message }, plain: text }).catch(() => undefined);
+      if (!waiting) {
+        await removeQueuedMessage(me.id, conversationId, clientMessageId).catch(() => undefined);
+        setError(cause instanceof Error ? cause.message : "Network error. Message was not sent.");
+      }
+      setItems((prev) => prev.map((m) => m.id === optimisticId ? { ...m, sendStatus: waiting ? "queued" : "failed", queueReason: waiting ? cause.message : undefined } : m));
     } finally {
       setSendPending(false);
       composerRef.current?.focus();
@@ -952,11 +1171,11 @@ export function ChatView({
   }
 
   async function sendVoiceMessage() {
-    if (!recorder.audioBlob || sendPending) return;
+    if (!recorder.audioBlob || sendPendingRef.current) return;
     setSendPending(true);
     setError(null);
     try {
-      const ext = recorder.audioBlob.type.includes("webm") ? ".webm" : ".ogg";
+      const ext = recorder.audioBlob.type.includes("webm") ? ".webm" : recorder.audioBlob.type.includes("mp4") ? ".m4a" : ".ogg";
       const file = new File([recorder.audioBlob], `voice${ext}`, {
         type: recorder.audioBlob.type,
       });
@@ -1107,18 +1326,20 @@ export function ChatView({
   }
 
   async function retryFailedMessage(message: MessageDTO) {
-    if (message.sendStatus !== "failed" || !message.clientMessageId) return;
+    if (!['failed', 'queued'].includes(message.sendStatus ?? '') || !message.clientMessageId || retryingMessages.current.has(message.clientMessageId) || cancelledMessages.current.has(message.clientMessageId)) return;
     const plain = decryptedTextsRef.current.get(message.id);
     if (!plain) return;
-    setItems((current) => current.map((item) =>
-      item.id === message.id ? { ...item, sendStatus: "sending" } : item,
-    ));
+    retryingMessages.current.add(message.clientMessageId);
     setError(null);
     try {
-      await prepareEncryptedSend();
+      await prepareEncryptedSend(awaitingApproval && !conversation.introductionSent);
+      if (cancelledMessages.current.has(message.clientMessageId)) return;
+      setItems((current) => current.map((item) => item.id === message.id ? { ...item, sendStatus: "sending" } : item));
       const payload = await e2ee.encrypt(plain, conversationId);
-      const res = await fetch(`/api/conversations/${conversationId}/messages`, {
+      if (cancelledMessages.current.has(message.clientMessageId)) return;
+      const request = () => fetch(`/api/conversations/${conversationId}/messages`, {
         method: "POST",
+        signal: AbortSignal.timeout(30000),
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           clientMessageId: message.clientMessageId,
@@ -1127,9 +1348,13 @@ export function ChatView({
           encrypted: true,
         }),
       });
+      let res: Response;
+      try { res = await request(); } catch { res = await request(); }
       const data = await res.json().catch(() => null) as { message?: MessageDTO; error?: string } | null;
       if (!res.ok || !data?.message) throw new Error(data?.error ?? "Message failed to send.");
       const created = data.message;
+      await removeQueuedMessage(me.id, conversationId, message.clientMessageId).catch(() => undefined);
+      await clearDeliveredDraft(plain, true);
       setDecryptedTexts((current) => {
         const next = new Map(current);
         next.delete(message.id);
@@ -1149,15 +1374,69 @@ export function ChatView({
           : [...current, { ...created, sendStatus: "sent" }];
       });
     } catch (cause) {
+      if (cancelledMessages.current.has(message.clientMessageId)) return;
+      const waiting = cause instanceof SecureDeliveryWaiting;
+      if (waiting) await saveQueuedMessage(me.id, { message: { ...message, sendStatus: "queued", queueReason: cause.message }, plain }).catch(() => undefined);
       setItems((current) => current.map((item) =>
-        item.id === message.id ? { ...item, sendStatus: "failed" } : item,
+        item.id === message.id ? { ...item, sendStatus: waiting ? "queued" : "failed", queueReason: waiting ? cause.message : undefined } : item,
       ));
-      setError(cause instanceof Error ? cause.message : "Message failed to send.");
+      if (!waiting) {
+        await removeQueuedMessage(me.id, conversationId, message.clientMessageId).catch(() => undefined);
+        setError(cause instanceof Error ? cause.message : "Message failed to send.");
+      }
+    } finally {
+      retryingMessages.current.delete(message.clientMessageId);
     }
   }
 
+  const retryingMessages = useRef(new Set<string>());
+  const cancelledMessages = useRef(new Set<string>());
+  const queuedRetry = useRef<() => Promise<void>>(async () => undefined);
+  useEffect(() => {
+    queuedRetry.current = async () => {
+      if (sendPendingRef.current || document.visibilityState !== "visible" || !navigator.onLine) return;
+      for (const message of items.filter(item => item.sendStatus === "queued")) await retryFailedMessage(message);
+    };
+  });
+  useEffect(() => {
+    let stopped = false;
+    void loadQueuedMessages(me.id, conversationId).then(entries => {
+      if (stopped) return;
+      const committed = new Set(initial.messages.map(message => message.clientMessageId));
+      const pending = entries.filter(entry => !committed.has(entry.message.clientMessageId));
+      for (const entry of entries.filter(entry => committed.has(entry.message.clientMessageId))) {
+        void removeQueuedMessage(me.id, conversationId, entry.message.clientMessageId!).catch(() => undefined);
+      }
+      setDecryptedTexts(current => {
+        const next = new Map(current);
+        for (const entry of pending) next.set(entry.message.id, entry.plain);
+        return next;
+      });
+      setItems(current => {
+        const known = new Set(current.map(message => message.clientMessageId));
+        return [...current, ...pending.filter(entry => !known.has(entry.message.clientMessageId)).map(entry => ({ ...entry.message, sendStatus: "queued" as const }))];
+      });
+    }).catch(() => undefined);
+    const resume = () => { if (!stopped) void queuedRetry.current(); };
+    const timer = window.setInterval(resume, 30_000);
+    const first = window.setTimeout(resume, 2_000);
+    window.addEventListener("online", resume);
+    window.addEventListener("focus", resume);
+    window.addEventListener("maddy:message-request-keys", resume);
+    document.addEventListener("visibilitychange", resume);
+    return () => {
+      stopped = true;
+      window.clearInterval(timer); window.clearTimeout(first);
+      window.removeEventListener("online", resume);
+      window.removeEventListener("focus", resume);
+      window.removeEventListener("maddy:message-request-keys", resume);
+      document.removeEventListener("visibilitychange", resume);
+    };
+  }, [conversationId, me.id, initial.messages]);
+
   async function scheduleSendMessage() {
-    if (!draft.trim() || !scheduledTime) return;
+    const text = draftRef.current.trim();
+    if (!text || !scheduledTime || sendPendingRef.current) return;
     const scheduledFor = new Date(scheduledTime);
     if (scheduledFor <= new Date()) {
       setError("Scheduled time must be in the future.");
@@ -1167,7 +1446,7 @@ export function ChatView({
     setError(null);
     try {
       await prepareEncryptedSend();
-      const payload = await e2ee.encrypt(draft.trim(), conversationId);
+      const payload = await e2ee.encrypt(text, conversationId);
       const res = await fetch(`/api/conversations/${conversationId}/scheduled`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1397,16 +1676,19 @@ export function ChatView({
   /* -------------------------------- composer ------------------------------- */
 
   function growComposer() {
-    const ta = composerRef.current;
-    if (!ta) return;
-    ta.style.height = "auto";
-    // Keep the mobile composer intentionally compact. Longer drafts remain
-    // fully editable inside the textarea instead of pushing the chat and its
-    // controls away from the keyboard.
-    ta.style.height = `${Math.min(ta.scrollHeight, 96)}px`;
+    if (composerResizeFrame.current !== null) return;
+    composerResizeFrame.current = requestAnimationFrame(() => {
+      composerResizeFrame.current = null;
+      const ta = composerRef.current;
+      if (!ta) return;
+      // Coalesce layout reads instead of forcing layout in each input handler.
+      ta.style.height = "auto";
+      ta.style.height = `${Math.min(ta.scrollHeight, 96)}px`;
+    });
   }
 
   function onComposerKey(e: ReactKeyboardEvent<HTMLTextAreaElement>) {
+    if (e.nativeEvent.isComposing) return;
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       void send();
@@ -1426,17 +1708,17 @@ export function ChatView({
     () =>
       visibleItems.map((msg, i) => ({
         msg,
-        showDate: i === 0 || !sameDay(visibleItems[i - 1].createdAt, msg.createdAt),
+        showDate: i === 0 || !sameDay(visibleItems[i - 1].createdAt, msg.createdAt, hydrated),
         sameSenderPrev:
           i > 0 &&
           visibleItems[i - 1].senderId === msg.senderId &&
           !msg.replyTo &&
-          sameDay(visibleItems[i - 1].createdAt, msg.createdAt) &&
+          sameDay(visibleItems[i - 1].createdAt, msg.createdAt, hydrated) &&
           new Date(msg.createdAt).getTime() -
             new Date(visibleItems[i - 1].createdAt).getTime() <
             5 * 60_000,
       })),
-    [visibleItems],
+    [visibleItems, hydrated],
   );
 
   const firstVisibleUnreadId = useMemo(
@@ -1444,12 +1726,7 @@ export function ChatView({
     [initialUnread, visibleItems],
   );
 
-  useEffect(() => {
-    if (!firstVisibleUnreadId) return;
-    const node = nodeRefs.current.get(firstVisibleUnreadId);
-    if (!node) return;
-    node.scrollIntoView({ behavior: "smooth", block: "center" });
-  }, [firstVisibleUnreadId]);
+  // Keep the unread separator, but ordinary chat entry opens at the latest message.
 
   const firstPinned = useMemo(
     () => visibleItems.find((m) => m.pinned),
@@ -1479,7 +1756,7 @@ export function ChatView({
         </Link>
         {isGroup ? (
           <button type="button" onClick={() => setShowDetails(true)} className="flex min-w-0 flex-1 items-center gap-2.5 text-left">
-            {conversation.avatarUrl ? <img src={conversation.avatarUrl} alt="" className="h-9 w-9 shrink-0 rounded-full object-cover" /> : <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--accent-soft)]"><Users className="h-4 w-4 text-[var(--accent-fg)]" /></span>}
+            {conversation.avatarUrl ? <Image unoptimized width={1200} height={1200} src={conversation.avatarUrl} alt="" className="h-9 w-9 shrink-0 rounded-full object-cover" /> : <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--accent-soft)]"><Users className="h-4 w-4 text-[var(--accent-fg)]" /></span>}
             <span className="min-w-0"><span className="block truncate text-[0.92rem] font-semibold leading-tight">{otherName}</span><span className="block truncate text-[0.72rem] text-[var(--muted)]">{conversation.members.length} members</span></span>
           </button>
         ) : other ? (
@@ -1512,7 +1789,7 @@ export function ChatView({
                 {otherOnline
                   ? "Online"
                   : otherLastSeen
-                    ? `Last seen ${timeAgo(otherLastSeen)}`
+                    ? hydrated ? `Last seen ${timeAgo(otherLastSeen)}` : "Last seen"
                     : e2eeState.ready
                       ? "End-to-end encrypted"
                       : "Offline"}
@@ -1606,7 +1883,7 @@ export function ChatView({
             Learn more
           </span>
         </button>
-      ) : e2eeState.peersMissingKeys > 0 && !e2eeState.checking ? (
+      ) : e2eeState.peersMissingKeys > 0 && !e2eeState.checking && !awaitingApproval ? (
         <button
           type="button"
           onClick={() => setShowEncryptionInfo(true)}
@@ -1622,13 +1899,21 @@ export function ChatView({
         </button>
       ) : null}
 
+      {awaitingApproval ? (
+        <div role="status" className="border-b border-[var(--border)] bg-[var(--accent-soft)] px-4 py-3">
+          <p className="text-sm font-semibold">{sendPending ? "Sending message request" : requestSent ? "Message request sent" : "Start with a message request"}</p>
+          <p className="mt-1 text-xs text-[var(--muted)]">{requestSent
+            ? "The other person has been notified. You can send more messages after they accept. Secure delivery may wait for their encryption setup and your trusted device to reconnect."
+            : "You can send one encrypted introduction. The other person will receive an approval request before you can send more."}</p>
+        </div>
+      ) : null}
       {!requestAccepted ? (
         <div className="border-b border-[var(--border)] bg-[color-mix(in_srgb,var(--accent)_8%,var(--surface))] px-4 py-3">
           <div className="mx-auto flex max-w-xl items-center gap-3">
             <ShieldCheck className="h-5 w-5 shrink-0 text-[var(--accent-fg)]" />
             <div className="min-w-0 flex-1">
               <p className="text-sm font-semibold">Message request</p>
-              <p className="text-xs text-[var(--muted)]">Preview privately. The sender will not see a read receipt until you accept.</p>
+              <p className="text-xs text-[var(--muted)]">Someone wants to contact you. Accept to reply. No read receipt is sent before approval. If secure delivery is pending, the introduction will appear when its encryption key arrives.</p>
             </div>
             <button type="button" disabled={acceptingRequest} onClick={() => void acceptMessageRequest()} className="btn btn-primary shrink-0 px-3! py-2! text-xs!">
               {acceptingRequest ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Accept"}
@@ -1667,6 +1952,7 @@ export function ChatView({
             // Find the pinned message and scroll to it
             const node = nodeRefs.current.get(firstPinned.id);
             if (node) {
+              followLatestRef.current = false;
               node.scrollIntoView({ behavior: "smooth", block: "center" });
               setHighlightId(firstPinned.id);
               setTimeout(() => setHighlightId(null), 1600);
@@ -1711,6 +1997,22 @@ export function ChatView({
       <div aria-hidden="true" className="chat-message-area pointer-events-none absolute inset-0 -z-10" style={bgStyle} />
       <div
         ref={scrollRef}
+        role="region"
+        aria-label="Messages"
+        tabIndex={0}
+        onWheel={(event) => { if (event.deltaY < 0 && event.currentTarget.scrollHeight > event.currentTarget.clientHeight) followLatestRef.current = false; }}
+        onTouchStart={(event) => { touchScrollY.current = event.touches[0]?.clientY ?? 0; }}
+        onTouchMove={(event) => {
+          const nextY = event.touches[0]?.clientY ?? touchScrollY.current;
+          if (nextY > touchScrollY.current && event.currentTarget.scrollHeight > event.currentTarget.clientHeight) followLatestRef.current = false;
+          touchScrollY.current = nextY;
+        }}
+        onPointerDown={(event) => {
+          if (event.target === event.currentTarget && event.currentTarget.scrollHeight > event.currentTarget.clientHeight && event.clientX >= event.currentTarget.getBoundingClientRect().right - 20) followLatestRef.current = false;
+        }}
+        onKeyDown={(event) => {
+          if ((["ArrowUp", "PageUp", "Home"].includes(event.key) || (event.key === " " && event.shiftKey)) && event.currentTarget.scrollHeight > event.currentTarget.clientHeight) followLatestRef.current = false;
+        }}
         onScroll={onScroll}
         onDragOver={(e) => {
           e.preventDefault();
@@ -1723,7 +2025,7 @@ export function ChatView({
           e.preventDefault();
           setDragging(false);
           if (e.dataTransfer.files?.length) {
-            attachments.addFiles(e.dataTransfer.files);
+            if (!mediaPaused) attachments.addFiles(e.dataTransfer.files);
           }
         }}
         className={cn(
@@ -1774,13 +2076,15 @@ export function ChatView({
             </div>
           </div>
         ) : (
-          <div className="relative z-10 pb-4">
+          <div ref={messageContentRef} className="relative z-10 pb-4">
             {grouped.map(({ msg, showDate, sameSenderPrev }) => {
               const own = msg.senderId === me.id;
               const deleted = msg.deletedAt !== null;
               return (
                 <div
                   key={msg.id}
+                  className="message-history-row"
+                  style={{ containIntrinsicSize: `auto ${msg.attachments.length ? 280 : 80}px` }}
                   ref={(node) => {
                     nodeRefs.current.set(msg.id, node);
                   }}
@@ -1797,7 +2101,7 @@ export function ChatView({
                   {showDate ? (
                     <div className="my-4 flex justify-center">
                       <span className="rounded-full bg-black/50 px-3.5 py-1.5 text-[0.66rem] font-medium text-white/90 shadow-sm backdrop-blur-[2px]">
-                        {dayLabel(msg.createdAt)}
+                        {dayLabel(msg.createdAt, hydrated)}
                       </span>
                     </div>
                   ) : null}
@@ -1882,7 +2186,7 @@ export function ChatView({
                             )}
                             style={
                               own
-                                ? { background: "var(--bubble-own-bg)", ...(bubbleTheme ? { "--muted": "var(--bubble-own-sub)", "--accent-fg": "#ffffff" } : {}) } as React.CSSProperties
+                                ? { background: "var(--bubble-own-bg)", "--muted": "var(--bubble-own-sub)", "--accent-fg": bubbleTheme ? "#ffffff" : "var(--bubble-own-fg)" } as React.CSSProperties
                                 : undefined
                             }
                           >
@@ -1969,7 +2273,7 @@ export function ChatView({
                                           </span>
                                         ) : msg.replyTo.encrypted && decryptedReplies.get(msg.replyTo.id) === undefined ? (
                                           <span className="flex items-center gap-1 opacity-70">
-                                            <Lock className="inline h-3 w-3" />
+                                            {unavailableMessageIds.has(`reply:${msg.replyTo.id}`) ? "Reply unavailable on this device. Check Security & recovery." : "Loading replied message…"}
                                             …
                                           </span>
                                         ) : (
@@ -2013,10 +2317,19 @@ export function ChatView({
                                     />
                                   </div>
                                 ) : null}
-                                {msg.encrypted && isPendingDecrypt(msg) ? (
-                                  <span aria-label="Encrypted message" className="inline-flex min-h-4 items-center text-[var(--muted)]">
-                                    <Lock className="h-3 w-3" />
-                                  </span>
+                                {msg.encrypted && Boolean(msg.text) && decryptedTexts.get(msg.id) === undefined ? (
+                                  <EncryptedMessageState
+                                    failed={unavailableMessageIds.has(msg.id)}
+                                    missingKey={missingMessageKeys.current.has(msg.id)}
+                                    deviceError={Boolean(e2ee.error)} signal={msg.text === "signal:v2"}
+                                    introduction={!requestAccepted && conversation.requestInitiatorId !== me.id}
+                                    onRetry={() => {
+                                      failedDecryptionRef.current.delete(msg.id);
+                                      setUnavailableMessageIds(current => { const next = new Set(current); next.delete(msg.id); return next; });
+                                      setDecryptRetry(value => value + 1);
+                                    }}
+                                    onSecurity={() => { if (e2ee.error || msg.text === "signal:v2") router.push("/app/profile#encryption-devices"); else setShowEncryptionInfo(true); }}
+                                  />
                                 ) : textOf(msg) ? (
                                   (() => {
                                     const parsed = parseStatusReply(textOf(msg));
@@ -2094,7 +2407,7 @@ export function ChatView({
                               {msg.editedAt && !deleted ? (
                                 <span className="text-[0.58rem] italic opacity-70">edited</span>
                               ) : null}
-                              <span>{timeLabel(msg.createdAt)}</span>
+                              <span>{timeLabel(msg.createdAt, hydrated)}</span>
                               {msg.starred ? <Star className="h-2.5 w-2.5 fill-current text-[var(--accent-fg)]" /> : null}
                               {own && !deleted ? (
                                 msg.sendStatus === "failed" ? (
@@ -2106,6 +2419,27 @@ export function ChatView({
                             </span>
                           </div>
                           </LongPressTouchable>
+
+                          {own && msg.sendStatus === "queued" ? (
+                            <div role="status" className="mt-2 max-w-sm rounded-xl border border-sky-400/20 bg-sky-400/10 px-3 py-2 text-xs leading-relaxed text-[var(--text)]">
+                              <p>{msg.queueReason ?? "Waiting for secure delivery. Your message will send automatically when encryption is ready."}</p>
+                              <div className="mt-1 flex gap-3">
+                                <button type="button" className="underline" onClick={() => { if (msg.queueReason?.includes("This device needs approval")) router.push("/app/profile#encryption-devices"); else void retryFailedMessage(msg); }}>Try now</button>
+                                <button type="button" className="underline" onClick={async () => {
+                                  if (msg.clientMessageId) {
+                                    cancelledMessages.current.add(msg.clientMessageId);
+                                    try {
+                                      await removeQueuedMessage(me.id, conversationId, msg.clientMessageId);
+                                      setItems(current => current.filter(item => item.id !== msg.id));
+                                    } catch {
+                                      cancelledMessages.current.delete(msg.clientMessageId);
+                                      setError("Could not cancel the saved message. Please retry.");
+                                    }
+                                  }
+                                }}>Cancel queued message</button>
+                              </div>
+                            </div>
+                          ) : null}
 
                           {msg.reactions.length > 0 ? (
                             <div
@@ -2281,6 +2615,7 @@ export function ChatView({
           </div>
         ) : null}
 
+        {mediaPaused || schedulePaused ? <p className="mb-2 text-xs text-[var(--muted)]">{mediaPaused ? "Uploads and voice messages are unavailable. " : ""}{schedulePaused ? "Scheduled sending is unavailable." : ""}</p> : null}
         <AttachmentPreviews
           pending={attachments.pending}
           progress={attachments.progress}
@@ -2365,43 +2700,61 @@ export function ChatView({
             )}
           </div>
         ) : (
-          <div className="flex items-center gap-2 sm:items-end">
+          <div className="composer-row flex items-end gap-1 rounded-[24px] bg-[var(--input-bg)] p-1.5">
             <AttachButton
+              compact
               onFiles={(files) => attachments.addFiles(files)}
-              disabled={sendPending || !requestAccepted}
+              disabled={mediaPaused || sendPending || !canCompose || awaitingApproval}
             />
 
             {/* Emoji button */}
             <div className="relative">
               <button
+                ref={mediaPickerAnchor}
                 type="button"
                 onClick={() => setShowEmoji((v) => !v)}
                 aria-label="Emoji"
-                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-[var(--border)] text-[var(--muted)] transition-colors hover:border-[var(--border-strong)] hover:text-[var(--text)]"
+                title="Emoji, stickers and GIFs"
+                aria-expanded={showEmoji}
+                disabled={!canCompose}
+                className="composer-icon flex h-11 w-11 flex-none items-center justify-center rounded-full text-[var(--muted)] hover:text-[var(--text)]"
               >
                 <SmilePlus className="h-4.5 w-4.5" />
                 <span className="sr-only">Emoji</span>
               </button>
               {showEmoji ? (
-                <EmojiPicker
-                  onSelect={(emoji) => {
+                <MediaPicker
+                  anchor={mediaPickerAnchor}
+                  mediaDisabled={mediaPaused || sendPending || !canCompose || awaitingApproval}
+                  onFile={file => attachments.addFiles([file])}
+                  onEmoji={(emoji) => {
                     setDraft((prev) => prev + emoji);
+                    growComposer();
                     composerRef.current?.focus();
                   }}
-                  onClose={() => setShowEmoji(false)}
+                  onClose={() => { setShowEmoji(false); composerRef.current?.focus(); }}
                 />
               ) : null}
             </div>
-            <div className="relative hidden sm:block">
-              <button type="button" onClick={() => setShowStickers((v) => !v)} aria-label="Stickers and GIFs" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-[var(--border)] text-[var(--muted)] transition-colors hover:border-[var(--border-strong)] hover:text-[var(--text)]"><Sticker className="h-4.5 w-4.5" /></button>
-              {showStickers ? <StickerPicker onSelect={(sticker) => { setDraft((prev) => prev + sticker); composerRef.current?.focus(); }} onClose={() => setShowStickers(false)} /> : null}
-            </div>
-            <div className="min-w-0 flex-1 rounded-2xl bg-[var(--input-bg)] px-3.5">
+            <div className="min-w-0 flex-1 px-1">
               <textarea
                 ref={composerRef}
-                value={draft}
+                defaultValue={draft}
                 onChange={(e) => {
-                  setDraft(e.target.value);
+                  // Let the browser paint the keystroke immediately. Updating
+                  // mentions/buttons/history is interruptible background work.
+                  const value = e.target.value;
+                  draftRevision.current++;
+                  draftRef.current = value;
+                  if (draftUpdateTimer.current) clearTimeout(draftUpdateTimer.current);
+                  draftUpdateTimer.current = setTimeout(() => {
+                    startTransition(() => setDraftState(previous => {
+                      const latest = draftRef.current;
+                      const mention = (text: string) => isGroup ? text.match(/(?:^|\s)@([a-zA-Z0-9_]*)$/)?.[1] ?? null : null;
+                      return Boolean(previous.trim()) !== Boolean(latest.trim()) || mention(previous) !== mention(latest) || showSchedule ? latest : previous;
+                    }));
+                  }, 100);
+                  queueDraftPersistence();
                   growComposer();
                   if (e.target.value.trim()) noteTyping();
                   else signalTyping(false);
@@ -2409,30 +2762,30 @@ export function ChatView({
                 onBlur={() => signalTyping(false)}
                 onKeyDown={onComposerKey}
                 placeholder={requestAccepted ? "Message…" : "Accept this request to reply"}
-                disabled={!requestAccepted}
+                disabled={!canCompose}
                 aria-label="Message text"
                 rows={1}
                 maxLength={2000}
-                className="chat-composer max-h-24 w-full resize-none overflow-y-auto border-0 bg-transparent py-2.5 text-[0.93rem] leading-5 outline-none placeholder:text-[color-mix(in_srgb,var(--muted)_60%,transparent)]"
+                className="chat-composer block min-h-11 max-h-24 w-full resize-none overflow-y-auto border-0 bg-transparent py-3 text-[0.93rem] leading-5 outline-none placeholder:text-[color-mix(in_srgb,var(--muted)_60%,transparent)]"
               />
             </div>
             {draft.trim() || attachments.pending.length > 0 ? (
               <div className="flex shrink-0 items-center gap-1">
                 <button
                   type="button"
-                  onClick={() => setShowSchedule(true)}
-                  disabled={sendPending || !requestAccepted}
+                  onClick={() => { setDraftState(draftRef.current); setShowSchedule(true); }}
+                  disabled={schedulePaused || sendPending || !canCompose || awaitingApproval}
                   aria-label="Schedule message"
-                  className="hidden h-9 w-9 min-h-[36px] min-w-[36px] items-center justify-center rounded-full border border-[var(--border)] text-[var(--muted)] transition-colors hover:border-[var(--border-strong)] hover:text-[var(--text)] sm:flex"
-                  title="Schedule message"
+                  className="composer-icon flex h-11 w-11 flex-none items-center justify-center rounded-full text-[var(--muted)] hover:text-[var(--text)]"
+                  title={schedulePaused ? "Scheduled sending is paused" : "Schedule message"}
                 >
                   <Clock className="h-4 w-4" />
                 </button>
                 <button
                   type="submit"
-                  disabled={sendPending || !requestAccepted}
+                  disabled={sendPending || !canCompose}
                   aria-label="Send message"
-                  className="btn btn-primary h-10 w-10 min-h-[44px] min-w-[44px] shrink-0 rounded-full! p-0!"
+                  className="composer-icon btn btn-primary h-11 w-11 flex-none rounded-full! p-0!"
                 >
                   {sendPending ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -2444,10 +2797,11 @@ export function ChatView({
             ) : (
               <button
                 type="button"
-                disabled={!requestAccepted}
+                disabled={mediaPaused || !canCompose || awaitingApproval}
                 onClick={() => void recorder.startRecording()}
                 aria-label="Record voice message"
-                className="flex h-10 w-10 min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-full border border-[var(--border)] text-[var(--muted)] transition-colors hover:border-[var(--border-strong)] hover:text-[var(--text)] disabled:opacity-50"
+                title={mediaPaused ? "Voice messages are paused" : "Record voice message"}
+                className="composer-icon flex h-11 w-11 flex-none items-center justify-center rounded-full text-[var(--muted)] hover:text-[var(--text)] disabled:opacity-50"
               >
                 <Mic className="h-4.5 w-4.5" />
                 <span className="sr-only">Record voice message</span>
@@ -2565,9 +2919,11 @@ export function ChatView({
             <div className="mt-4">
               <input
                 type="datetime-local"
+                aria-label="Scheduled delivery time"
+                step="1"
                 value={scheduledTime}
                 onChange={(e) => setScheduledTime(e.target.value)}
-                min={new Date().toISOString().slice(0, 16)}
+                min={new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 19)}
                 className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2.5 text-sm text-[var(--text)] focus:border-[var(--accent)] focus:outline-none"
               />
             </div>
@@ -2627,11 +2983,12 @@ function EncryptionInfoDialog({
   error: string | null;
   peersMissing: number;
   conversationName: string;
-  onRestoreOtherDevices: () => Promise<void>;
+  onRestoreOtherDevices: () => Promise<string>;
   onClose: () => void;
 }) {
   const [copied, setCopied] = useState(false);
   const [restoring, setRestoring] = useState(false);
+  const [restoreResult, setRestoreResult] = useState<string | null>(null);
   return (
     <div
       className="fixed inset-0 z-[90] flex items-center justify-center bg-black/50 p-4"
@@ -2744,13 +3101,18 @@ function EncryptionInfoDialog({
                   disabled={restoring}
                   onClick={() => {
                     setRestoring(true);
-                    void onRestoreOtherDevices().finally(() => setRestoring(false));
+                    setRestoreResult(null);
+                    void onRestoreOtherDevices()
+                      .then(setRestoreResult)
+                      .catch((cause: unknown) => setRestoreResult(cause instanceof Error ? cause.message : "Device restoration failed. Please retry."))
+                      .finally(() => setRestoring(false));
                   }}
                   className="mt-3 inline-flex min-h-10 items-center gap-2 rounded-xl border border-[var(--border)] px-3 text-xs font-semibold text-[var(--accent-fg)] transition-colors hover:bg-[var(--accent-soft)] disabled:cursor-wait disabled:opacity-60"
                 >
                   {restoring ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="h-3.5 w-3.5" />}
                   {restoring ? "Restoring devices…" : "Restore my other devices"}
                 </button>
+                {restoreResult ? <p role="status" className="mt-2 text-xs text-[var(--muted)]">{restoreResult}</p> : null}
               </div>
             </>
           ) : (
