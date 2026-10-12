@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useSyncExternalStore, type RefObject } fro
 import { createPortal } from "react-dom";
 import { Loader2, X } from "lucide-react";
 import { EmojiPicker } from "./emoji-picker";
-import { ANIMATED_MEDIA, animatedMediaUrl } from "@/lib/animated-media";
+import { animatedMediaCatalog, animatedMediaPosterUrl, animatedMediaUrl } from "@/lib/animated-media";
 const reducedQuery = "(prefers-reduced-motion: reduce)";
 const subscribeMotion = (callback: () => void) => { const query = matchMedia(reducedQuery); query.addEventListener("change", callback); return () => query.removeEventListener("change", callback); };
 const reducedMotion = () => matchMedia(reducedQuery).matches;
@@ -35,7 +35,7 @@ export function MediaPicker({ anchor, onEmoji, onFile, onClose, mediaDisabled }:
     document.addEventListener("pointerdown", outside); document.addEventListener("keydown", key);
     return () => { cancelAnimationFrame(frame); window.removeEventListener("resize", place); window.visualViewport?.removeEventListener("resize", place); window.visualViewport?.removeEventListener("scroll", place); document.removeEventListener("pointerdown", outside); document.removeEventListener("keydown", key); };
   }, [anchor, onClose]);
-  async function select(id: string, label: string) {
+  async function select(id: string) {
     if (busy || mediaDisabled) return; setBusy(id); setError(null);
     const controller = new AbortController(); request.current = controller;
     try {
@@ -43,12 +43,12 @@ export function MediaPicker({ anchor, onEmoji, onFile, onClose, mediaDisabled }:
       if (!response.ok) throw new Error("Artwork could not load. Please try again.");
       const bytes = await response.blob(); if (bytes.size > 256 * 1024) throw new Error("Artwork is too large.");
       if (controller.signal.aborted) return;
-      onFile(new File([bytes], `circlo-${label.toLowerCase()}.${tab === "GIFs" ? "gif" : "webp"}`, { type: tab === "GIFs" ? "image/gif" : "image/webp" })); onClose();
+      onFile(new File([bytes], `circlo-${id}.${tab === "GIFs" ? "gif" : "webp"}`, { type: tab === "GIFs" ? "image/gif" : "image/webp" })); onClose();
     } catch { if (!controller.signal.aborted) setError("Could not load the animation. Check your connection and try again."); }
     finally { if (!controller.signal.aborted) setBusy(null); request.current = null; }
   }
   if (typeof document === "undefined") return null;
-  const items = ANIMATED_MEDIA.filter(item => `${item.label} ${item.tags}`.toLowerCase().includes(search.toLowerCase()));
+  const items = animatedMediaCatalog(tab === "GIFs").filter(item => `${item.label} ${item.tags}`.toLowerCase().includes(search.toLowerCase()));
   return createPortal(<div ref={ref} role="dialog" aria-label="Emoji, stickers and GIFs" style={position} className="fixed z-[150] flex w-[min(360px,calc(100vw-16px))] flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-xl">
     <div className="flex shrink-0 items-center gap-1 border-b border-[var(--border)] p-1.5">
       <div className="flex min-w-0 flex-1" role="tablist" aria-label="Express yourself">{(["Emoji", "Stickers", "GIFs"] as const).map(value => <button key={value} role="tab" aria-selected={tab === value} type="button" onClick={() => { setTab(value); setSearch(""); setError(null); }} className={`min-h-11 flex-1 rounded-xl px-2 text-sm ${tab === value ? "bg-[var(--surface-2)] text-[var(--text)]" : "text-[var(--muted)]"}`}>{value}</button>)}</div>
@@ -59,9 +59,9 @@ export function MediaPicker({ anchor, onEmoji, onFile, onClose, mediaDisabled }:
         <input aria-label="Search animations" placeholder="Search animations…" value={search} onChange={event => setSearch(event.target.value)} className="field-input mb-3 w-full" />
         {mediaDisabled ? <p className="mb-3 text-xs text-[var(--muted)]">Animated media becomes available when secure attachments are ready.</p> : null}
         {error ? <p role="alert" className="mb-3 text-sm">{error}</p> : null}
-        <div className="grid grid-cols-3 gap-2">{items.map(item => <button key={item.id} type="button" disabled={mediaDisabled || busy !== null} onClick={() => void select(item.id, item.label)} aria-label={`Add ${item.label} ${tab === "GIFs" ? "GIF" : "sticker"}`} className="relative rounded-xl bg-[var(--surface-2)] p-1 disabled:opacity-50">
+        <div className="grid grid-cols-3 gap-2">{items.map(item => <button key={item.id} type="button" disabled={mediaDisabled || busy !== null} onClick={() => void select(item.id)} aria-label={`Add ${item.label} ${tab === "GIFs" ? "GIF" : "sticker"}`} className="relative rounded-xl bg-[var(--surface-2)] p-1 disabled:opacity-50">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={reduceMotion ? `/stickers/circlo-${item.id}-v1.png` : animatedMediaUrl(item.id, tab === "GIFs")} alt="" loading="lazy" className="aspect-square w-full object-contain" />
+          <img src={reduceMotion ? animatedMediaPosterUrl(item.id, tab === "GIFs") : animatedMediaUrl(item.id, tab === "GIFs")} alt="" loading="lazy" className="aspect-square w-full object-contain" />
           <span className="block pb-1 text-xs">{item.label}</span>{busy === item.id ? <Loader2 className="absolute left-1/2 top-1/2 h-5 w-5 animate-spin" /> : null}
         </button>)}</div>
         {!items.length ? <p className="py-4 text-sm text-[var(--muted)]">No matching animations.</p> : null}

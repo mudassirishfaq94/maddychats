@@ -30,11 +30,23 @@ export async function testComposerMedia(base, source, recipient, pool, conversat
     assert(await reducedTray.locator("img").evaluateAll(images => images.every(image => image.src.endsWith(".png"))), "Reduced-motion previews remain still");
     await page.keyboard.press("Escape"); await page.emulateMedia({ reducedMotion: "no-preference" });
     await input.fill(""); await page.setViewportSize({ width: 390, height: 844 });
+    await page.getByRole("button", { name: "Emoji", exact: true }).click();
+    const catalogTray = page.getByRole("dialog", { name: "Emoji, stickers and GIFs", exact: true });
+    await catalogTray.getByRole("tab", { name: "Stickers", exact: true }).click();
+    const stickers = await catalogTray.locator("button[aria-label^='Add ']").evaluateAll(buttons => buttons.map(button => button.getAttribute("aria-label")));
+    await catalogTray.getByRole("tab", { name: "GIFs", exact: true }).click();
+    const gifs = await catalogTray.locator("button[aria-label^='Add ']").evaluateAll(buttons => buttons.map(button => button.getAttribute("aria-label")));
+    assert.equal(stickers.length, 6); assert.equal(gifs.length, 6);
+    assert(!gifs.some(label => stickers.includes(label.replace(" GIF", " sticker"))), "GIFs and stickers expose different packs");
+    await catalogTray.getByLabel("Search animations").fill("rocket");
+    assert.equal(await catalogTray.locator("button[aria-label^='Add ']").count(), 1);
+    await catalogTray.getByRole("button", { name: "Add On my way GIF", exact: true }).waitFor();
+    await page.keyboard.press("Escape");
     for (const kind of ["Stickers", "GIFs"]) {
       await page.getByRole("button", { name: "Emoji", exact: true }).click();
       const tray = page.getByRole("dialog", { name: "Emoji, stickers and GIFs", exact: true }); await tray.getByRole("tab", { name: kind, exact: true }).click();
-      await tray.getByRole("button", { name: `Add Hello ${kind === "GIFs" ? "GIF" : "sticker"}`, exact: true }).click();
-      const name = `circlo-hello.${kind === "GIFs" ? "gif" : "webp"}`;
+      await tray.getByRole("button", { name: `Add ${kind === "GIFs" ? "Hey there GIF" : "Hello sticker"}`, exact: true }).click();
+      const name = kind === "GIFs" ? "circlo-orbit.gif" : "circlo-hello.webp";
       await page.getByRole("img", { name, exact: true }).waitFor();
       const upload = page.waitForResponse(r => r.url().endsWith("/api/upload/message") && r.request().method() === "POST");
       await page.getByRole("button", { name: "Send message", exact: true }).click(); const response = await upload; assert.equal(response.status(), 201);
