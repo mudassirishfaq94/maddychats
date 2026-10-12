@@ -223,6 +223,7 @@ export function ChatView({
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraftState] = useState("");
   const draftRef = useRef("");
+  const draftRevision = useRef(0);
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const composerResizeFrame = useRef<number | null>(null);
   useEffect(() => () => {
@@ -234,6 +235,7 @@ export function ChatView({
   const setDraft = useCallback((next: React.SetStateAction<string>) => {
     const value = typeof next === "function" ? next(draftRef.current) : next;
     if (draftUpdateTimer.current) clearTimeout(draftUpdateTimer.current);
+    draftRevision.current++;
     draftRef.current = value;
     if (composerRef.current) composerRef.current.value = value;
     setDraftState(value);
@@ -618,15 +620,16 @@ export function ChatView({
   useEffect(() => {
     draftStorageReady.current = false;
     let disposed = false;
+    const initialRevision = draftRevision.current;
     void (async () => {
       try {
         let saved = await loadChatDraft(me.id, conversationId);
         const legacy = window.localStorage.getItem(draftStorageKey);
         if (saved === null && legacy) saved = legacy;
-        if (!disposed && saved && !draftRef.current) setDraft(saved);
+        if (!disposed && saved && !draftRef.current && draftRevision.current === initialRevision) setDraft(saved);
         // Remove the old plaintext entry only after durable encryption succeeds.
         if (legacy && !disposed) {
-          await saveChatDraft(me.id, conversationId, draftRef.current || saved || "");
+          await saveChatDraft(me.id, conversationId, draftRef.current);
           window.localStorage.removeItem(draftStorageKey);
         }
       } catch { /* Keep current input and any unmigrated legacy draft. */ }
@@ -2694,6 +2697,7 @@ export function ChatView({
                   // Let the browser paint the keystroke immediately. Updating
                   // mentions/buttons/history is interruptible background work.
                   const value = e.target.value;
+                  draftRevision.current++;
                   draftRef.current = value;
                   if (draftUpdateTimer.current) clearTimeout(draftUpdateTimer.current);
                   draftUpdateTimer.current = setTimeout(() => {

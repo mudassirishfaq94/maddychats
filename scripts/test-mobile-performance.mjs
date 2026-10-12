@@ -58,6 +58,31 @@ export async function testMobilePerformance(base, pool, source, owner, conversat
     await page.reload(); await composer.waitFor();
     await page.waitForFunction(text => document.querySelector('textarea[aria-label="Message text"]')?.value === text, draft, { timeout: 15000 });
     assert.equal(await composer.inputValue(), draft);
+    // Delay draft decryption deterministically: clearing input while restoration
+    // is pending must not resurrect the old draft after it resolves.
+    await page.addInitScript(() => {
+      if (sessionStorage.getItem("hold-draft-decrypt") !== "1") return;
+      sessionStorage.removeItem("hold-draft-decrypt");
+      const decrypt = crypto.subtle.decrypt.bind(crypto.subtle);
+      crypto.subtle.decrypt = async (...args) => {
+        const aad = args[0]?.additionalData;
+        if (aad && new TextDecoder().decode(aad).startsWith("draft:")) {
+          window.__draftDecryptHeld = true;
+          await new Promise(resolve => setTimeout(resolve, 1500));
+          const result = await decrypt(...args);
+          window.__draftDecryptReleased = true;
+          return result;
+        }
+        return decrypt(...args);
+      };
+    });
+    await page.evaluate(() => sessionStorage.setItem("hold-draft-decrypt", "1"));
+    await page.reload(); await composer.waitFor();
+    await page.waitForFunction(() => window.__draftDecryptHeld === true);
+    await composer.fill("");
+    await page.waitForFunction(() => window.__draftDecryptReleased === true);
+    await page.waitForTimeout(200);
+    assert.equal(await composer.inputValue(), "", "Late restoration never overwrites a user-cleared draft");
     await composer.fill("Rapid navigation draft");
     await page.locator('a[href="/app"]:visible').first().click();
     await page.waitForURL(base + "/app");
