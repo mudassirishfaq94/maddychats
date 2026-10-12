@@ -2758,7 +2758,10 @@ export function ChatView({
                   // Clearing has no encryption cost. Retire the saved draft
                   // immediately rather than leaving the old text recoverable
                   // until a debounce fires on a busy mobile browser.
-                  if (!value) persistDraft();
+                  // Explicit user intent must also retire the record while
+                  // draft restoration is pending (the normal save gate is
+                  // deliberately closed during that restoration).
+                  if (!value) void saveChatDraft(me.id, conversationId, "").catch(() => {});
                   growComposer();
                   if (e.target.value.trim()) noteTyping();
                   else signalTyping(false);
