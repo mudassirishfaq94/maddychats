@@ -7,6 +7,7 @@ import { eq, inArray, asc } from "drizzle-orm";
 import { db } from "@/db";
 import { users, adminAuditLog } from "@/db/schema";
 import { getSessionUser } from "./session";
+import { is2FAEnabled } from "./two-factor";
 import type { SafeUser } from "@/lib/types";
 
 /** Check if a user has admin or moderator role */
@@ -24,6 +25,7 @@ export async function requireAdmin(): Promise<SafeUser> {
     throw new Error("FORBIDDEN");
   }
 
+  if (!(await is2FAEnabled(user.id))) throw new Error("ADMIN_MFA_REQUIRED");
   return user;
 }
 
@@ -42,6 +44,7 @@ export async function requireSuperAdmin(): Promise<SafeUser> {
     throw new Error("FORBIDDEN");
   }
 
+  if (!(await is2FAEnabled(user.id))) throw new Error("ADMIN_MFA_REQUIRED");
   return user;
 }
 

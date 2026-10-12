@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { clientUrl } from "./config";
+import { originAllowed } from "../lib/request-origin";
 
 /** Consistent, safe error envelope: never leaks internals. */
 export function jsonError(
@@ -9,7 +10,7 @@ export function jsonError(
 ): NextResponse {
   return NextResponse.json(
     { error: message, ...(fields ? { fields } : {}) },
-    { status },
+    { status, headers: { "Cache-Control": "private, no-store" } },
   );
 }
 
@@ -171,15 +172,14 @@ export function guardSameOrigin(req: NextRequest): NextResponse | null {
   }
   const origin = req.headers.get("origin");
   if (!origin) return null;
+  // Forwarding headers do not widen the allowed-origin set. For TLS-terminated
+  // requests, use the actual Host with the trusted configured transport.
+  let requestOrigin = req.nextUrl.origin;
+  const host = req.headers.get("host");
   try {
-    const o = new URL(origin);
-    const allowed = new Set<string>();
-    const host = req.headers.get("host");
-    if (host) allowed.add(host);
-    allowed.add(new URL(clientUrl()).host);
-    if (allowed.has(o.host)) return null;
-  } catch {
-    // fall through to rejection
-  }
+    const configured = new URL(clientUrl());
+    if (host) requestOrigin = new URL(`${configured.protocol}//${host}`).origin;
+  } catch { return jsonError(403, "Cross-origin requests are not allowed."); }
+  if (originAllowed(origin, clientUrl(), requestOrigin)) return null;
   return jsonError(403, "Cross-origin requests are not allowed.");
 }

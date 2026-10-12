@@ -1,5 +1,6 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
+import { databasePoolMax } from "../lib/database-settings";
 
 // Route modules are evaluated by Next during `next build`, even when the
 // route itself is dynamic.  A build must not open a database connection, but
@@ -24,7 +25,7 @@ export const pool =
     connectionString: databaseUrl,
     // A long-running VPS can safely hold a small pool. Keep this bounded so
     // Supabase's shared pooler is not exhausted during traffic spikes.
-    max: Number(process.env.DATABASE_POOL_MAX ?? 5),
+    max: databasePoolMax(process.env.DATABASE_POOL_MAX),
     idleTimeoutMillis: 10_000,
     connectionTimeoutMillis: 10_000,
     ssl: databaseUrl.includes("supabase.co")

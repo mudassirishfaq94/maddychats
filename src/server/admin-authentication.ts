@@ -29,6 +29,7 @@ export function adminActionError(error: unknown) {
   const busy = passwordBusyResponse(error); if (busy) return busy;
   if (error instanceof AdminActionError) return jsonError(error.status, error.message);
   const message = error instanceof Error ? error.message : "";
+  if (message === "ADMIN_MFA_REQUIRED") return jsonError(403, "Enable two-factor authentication before accessing administration.");
   if (message === "UNAUTHENTICATED") return jsonError(401, "Not authenticated.");
   if (message === "FORBIDDEN") return jsonError(403, "Administrator permission required.");
   if (message === "NOT_FOUND") return jsonError(404, "Target not found.");

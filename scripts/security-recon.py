@@ -38,3 +38,15 @@ for p in pathlib.Path("src").rglob("*"):
         env_refs.append({"path":str(p),"name":name})
 (out/"environment-references.json").write_text(json.dumps(env_refs,indent=2))
 print("PUBLIC_ENV_NAMES="+json.dumps(sorted({x["name"] for x in env_refs if x["name"].startswith("NEXT_PUBLIC_")})))
+
+# Source-sink inventory contains filenames and line numbers only, never values.
+sinks=[]
+for p in pathlib.Path("src").rglob("*"):
+    if p.suffix not in [".ts",".tsx",".js",".mjs"]: continue
+    for n,line in enumerate(p.read_text().splitlines(),1):
+        if any(x in line for x in ["dangerouslySetInnerHTML", ".innerHTML", "new Function(", "eval("]):
+            sinks.append({"path":str(p),"line":n})
+print("HTML_SINKS="+json.dumps(sinks))
+all_source="\\n".join(p.read_text(errors="replace") for root in ["src","scripts"] for p in pathlib.Path(root).rglob("*") if p.is_file() and p.suffix in [".ts",".tsx",".js",".mjs"])
+package=json.loads(pathlib.Path("package.json").read_text())
+print("BCRYPTJS_IMPORT_USED="+json.dumps(any(x in all_source for x in ['from "bcryptjs"', "from 'bcryptjs'", 'require("bcryptjs")', "require('bcryptjs')", 'import("bcryptjs")', "import('bcryptjs')"])))

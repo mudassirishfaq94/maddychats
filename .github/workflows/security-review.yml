@@ -37,5 +37,10 @@ jobs:
         if: always()
         with:
           name: redacted-security-audit
-          path: /tmp/security-audit/
+          path: |
+            /tmp/security-audit/history-findings.json
+            /tmp/security-audit/current-findings.json
+            /tmp/security-audit/routes.json
+            /tmp/security-audit/public-probes.json
+            /tmp/security-audit/environment-references.json
           retention-days: 7
