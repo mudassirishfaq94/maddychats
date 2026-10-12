@@ -8,7 +8,7 @@ async function main() {
   try {
     await mkdir(".freebuff/email-preview",{recursive:true});
     const page=await browser.newPage();
-    await page.route("**/brand/circlo-email.png",route=>readFile("public/brand/circlo-email.png").then(body=>route.fulfill({contentType:"image/png",body})));
+    await page.route("**/brand/circlo-email.png*",route=>readFile("public/brand/circlo-email.png").then(body=>route.fulfill({contentType:"image/png",body})));
     const {html,text}=verificationEmail("123456","https://example.invalid");
     assert(text.includes("123456") && text.includes("10 minutes"));
     for(const width of [320,390,600]) {

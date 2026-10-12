@@ -12,15 +12,15 @@ export default function manifest(): MetadataRoute.Manifest {
     orientation: "any",
     categories: ["social", "communication"],
     shortcuts: [
-      { name: "Chats", url: "/app/chats", icons: [{ src: "/icons/circlo-192.png", sizes: "192x192" }] },
-      { name: "People", url: "/app/people", icons: [{ src: "/icons/circlo-192.png", sizes: "192x192" }] },
+      { name: "Chats", url: "/app/chats", icons: [{ src: "/icons/circlo-192.png?v=linked-c-2", sizes: "192x192" }] },
+      { name: "People", url: "/app/people", icons: [{ src: "/icons/circlo-192.png?v=linked-c-2", sizes: "192x192" }] },
     ],
     background_color: "#151719",
     theme_color: "#151719",
     icons: [
-      { src: "/icons/circlo-192.png", sizes: "192x192", type: "image/png" },
-      { src: "/icons/circlo-512.png", sizes: "512x512", type: "image/png" },
-      { src: "/icons/circlo-maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
+      { src: "/icons/circlo-192.png?v=linked-c-2", sizes: "192x192", type: "image/png" },
+      { src: "/icons/circlo-512.png?v=linked-c-2", sizes: "512x512", type: "image/png" },
+      { src: "/icons/circlo-maskable-512.png?v=linked-c-2", sizes: "512x512", type: "image/png", purpose: "maskable" },
     ],
   };
 }

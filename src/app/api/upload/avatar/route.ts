@@ -1,5 +1,6 @@
 import { guardReadableUploadBudget } from "@/server/upload-budget";
-import { prepareReadableUpload, UploadSafetyError } from "@/server/upload-safety";
+import { UploadSafetyError } from "@/server/upload-safety";
+import { prepareAvatarPhoto } from "@/server/status-photo";
 import { readUploadForm } from "@/server/http";
 import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
@@ -27,7 +28,7 @@ export const runtime = "nodejs";
 export async function POST(req: NextRequest) {
   const blocked = guardSameOrigin(req);
   if (blocked) return blocked;
-  const oversized = guardUploadSize(req);
+  const oversized = guardUploadSize(req, true);
   if (oversized) return oversized;
 
   const rl = await rateLimit(
@@ -63,7 +64,7 @@ export async function POST(req: NextRequest) {
   }
 
   let prepared;
-  try { prepared = await prepareReadableUpload(file, "avatar"); }
+  try { prepared = await prepareAvatarPhoto(file); }
   catch (error) { return jsonError(error instanceof UploadSafetyError ? error.status : 500, error instanceof UploadSafetyError ? error.message : "Upload failed."); }
   const storedName = generateStoredName(prepared.extension);
   const buffer = prepared.buffer;

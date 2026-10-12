@@ -29,6 +29,7 @@ type Phase =
 export function PeopleSearch() {
   const { presence } = useRealtime();
   const [query, setQuery] = useState("");
+  const [retry, setRetry] = useState(0);
   const [phase, setPhase] = useState<Phase>({ kind: "idle" });
   const abortRef = useRef<AbortController | null>(null);
 
@@ -48,6 +49,7 @@ export function PeopleSearch() {
           users?: PublicUser[];
           error?: string;
         } | null;
+        if (controller.signal.aborted) return;
         if (!res.ok) {
           setPhase({
             kind: "error",
@@ -67,7 +69,7 @@ export function PeopleSearch() {
       clearTimeout(timer);
       controller.abort();
     };
-  }, [query]);
+  }, [query, retry]);
 
   const q = query.trim();
 
@@ -130,7 +132,7 @@ export function PeopleSearch() {
             </p>
             <button
               type="button"
-              onClick={() => setQuery((v) => v.slice())}
+              onClick={() => { setPhase({ kind: "loading" }); setRetry(value => value + 1); }}
               className="btn btn-secondary mx-auto mt-6"
             >
               <RefreshCw className="h-4 w-4" />

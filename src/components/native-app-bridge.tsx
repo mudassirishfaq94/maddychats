@@ -26,7 +26,7 @@ export function NativeAppBridge() {
         if (disposed) return;
 
         await StatusBar.setStyle({ style: Style.Dark });
-        await StatusBar.setBackgroundColor({ color: "#0b1211" });
+        await StatusBar.setBackgroundColor({ color: "#151719" });
         await StatusBar.setOverlaysWebView({ overlay: false });
         await Keyboard.setResizeMode({ mode: KeyboardResize.Body });
 

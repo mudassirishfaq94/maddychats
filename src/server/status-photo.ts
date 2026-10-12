@@ -1,16 +1,16 @@
 import { spawn } from "node:child_process";
 import path from "node:path";
-import { UploadSafetyError } from "./upload-safety";
+import { prepareReadableUpload, UploadSafetyError } from "./upload-safety";
 import { validateUpload } from "./storage";
 
 let processing = false;
 
 /** Photo-only reconstruction; never used to accept raw videos or other files. */
-export async function reconstructStatusPhoto(file: File) {
-  const check = validateUpload(file.name, file.type, file.size, "message");
+export async function reconstructStatusPhoto(file: File, mode: "avatar" | "message" = "message") {
+  if (file.size > 3 * 1024 * 1024) throw new UploadSafetyError(413, "Photos must be 3 MB or smaller.");
+  const check = validateUpload(file.name, file.type, file.size, mode);
   const mime = file.type.split(";")[0].trim().toLowerCase();
   if (!check.ok || check.kind !== "image" || !["image/jpeg", "image/png", "image/webp"].includes(mime)) throw new UploadSafetyError(422, "Choose a JPG, PNG, or WebP photo.");
-  if (file.size > 3 * 1024 * 1024) throw new UploadSafetyError(413, "Photos must be 3 MB or smaller.");
   if (processing) throw new UploadSafetyError(429, "Another photo is processing. Try again in a moment.");
   processing = true;
   let closed: Promise<void> = Promise.resolve();
@@ -22,7 +22,7 @@ export async function reconstructStatusPhoto(file: File) {
     if (bytes.length !== file.size || !(mime === "image/jpeg" ? jpeg : mime === "image/png" ? png : webp)) throw new UploadSafetyError(422, "Photo contents do not match its type.");
     const script = path.resolve("scripts/reconstruct-status-photo.mjs");
     const buffer = await new Promise<Buffer>((resolve, reject) => {
-      const child = spawn(process.execPath, ["--max-old-space-size=64", "--disable-proto=throw", "--permission", "--allow-addons", `--allow-fs-read=${script}`, `--allow-fs-read=${path.resolve("node_modules")}`, script], {
+      const child = spawn(process.execPath, ["--max-old-space-size=64", "--disable-proto=throw", "--permission", "--allow-addons", `--allow-fs-read=${script}`, `--allow-fs-read=${path.resolve("node_modules")}`, script, mode], {
         windowsHide: true, stdio: ["pipe", "pipe", "ignore"],
         env: { NODE_ENV: "production", ...(process.env.SystemRoot ? { SystemRoot: process.env.SystemRoot } : {}) },
       });
@@ -47,4 +47,11 @@ export async function reconstructStatusPhoto(file: File) {
     });
     return { buffer, extension: ".webp", mimeType: "image/webp", kind: "image" as const };
   } finally { await closed; processing = false; }
+}
+
+/** Keep scanning on scanner-equipped hosts; starter photos use isolated pixel reconstruction. */
+export function prepareAvatarPhoto(file: File) {
+  return process.env.STARTER_MODE === "1" && !process.env.CLAMAV_HOST
+    ? reconstructStatusPhoto(file, "avatar")
+    : prepareReadableUpload(file, "avatar");
 }

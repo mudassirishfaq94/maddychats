@@ -1,5 +1,6 @@
 import { guardReadableUploadBudget } from "@/server/upload-budget";
-import { prepareReadableUpload, UploadSafetyError } from "@/server/upload-safety";
+import { UploadSafetyError } from "@/server/upload-safety";
+import { prepareAvatarPhoto } from "@/server/status-photo";
 import { readUploadForm } from "@/server/http";
 import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
@@ -55,7 +56,7 @@ export async function PATCH(
   let uploadedImage = false;
   if (req.headers.get("content-type")?.includes("multipart/form-data")) {
     const budget = await guardReadableUploadBudget(me.id); if (budget) return budget;
-    const oversized = guardUploadSize(req);
+    const oversized = guardUploadSize(req, true);
     if (oversized) return oversized;
     let form: FormData;
     try { form = await readUploadForm(req); }
@@ -64,7 +65,7 @@ export async function PATCH(
     if (!(file instanceof File)) return jsonError(422, "Choose an image.");
     if (file.size > 2 * 1024 * 1024) return jsonError(413, "Background images must be 2 MB or smaller after resizing.");
     let prepared;
-    try { prepared = await prepareReadableUpload(file, "avatar"); }
+    try { prepared = await prepareAvatarPhoto(file); }
     catch (error) { return jsonError(error instanceof UploadSafetyError ? error.status : 500, error instanceof UploadSafetyError ? error.message : "Upload failed."); }
     uploadedImage = true;
     body = { backgroundStyle: `data:${prepared.mimeType};base64,${prepared.buffer.toString("base64")}`, backgroundOpacity: 100 };

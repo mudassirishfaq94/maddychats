@@ -1,5 +1,6 @@
 import { guardReadableUploadBudget } from "@/server/upload-budget";
-import { prepareReadableUpload, UploadSafetyError } from "@/server/upload-safety";
+import { UploadSafetyError } from "@/server/upload-safety";
+import { prepareAvatarPhoto } from "@/server/status-photo";
 import { readUploadForm } from "@/server/http";
 import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
@@ -13,7 +14,7 @@ import { generateStoredName, LIMITS, saveBuffer } from "@/server/storage";
 export const runtime = "nodejs";
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const blocked = guardSameOrigin(req); if (blocked) return blocked;
-  const oversized = guardUploadSize(req); if (oversized) return oversized;
+  const oversized = guardUploadSize(req, true); if (oversized) return oversized;
   const me = await getSessionUser(); if (!me) return jsonError(401, "Not authenticated.");
   const { id } = await params; const ctx = await getGroupWithActor(id, me.id);
   if (!ctx) return jsonError(404, "Group not found.");
@@ -23,7 +24,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const entry = form.get("file"); if (!entry || typeof entry === "string") return jsonError(422, "Choose an image.");
   const file = entry as File; if (file.size > LIMITS.avatar) return jsonError(413, "That image is too large.");
   let prepared;
-  try { prepared = await prepareReadableUpload(file, "avatar"); }
+  try { prepared = await prepareAvatarPhoto(file); }
   catch (error) { return jsonError(error instanceof UploadSafetyError ? error.status : 500, error instanceof UploadSafetyError ? error.message : "Upload failed."); }
   const storedName = generateStoredName(prepared.extension);
   await saveBuffer("avatars", storedName, prepared.buffer);

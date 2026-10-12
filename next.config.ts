@@ -22,6 +22,9 @@ const nextConfig: NextConfig = {
   // The isolated photo worker imports ESM and native libraries outside route tracing.
   outputFileTracingIncludes: {
     "/api/status": ["scripts/reconstruct-status-photo.mjs", "node_modules/sharp/**/*", "node_modules/@img/**/*"],
+    "/api/upload/avatar": ["scripts/reconstruct-status-photo.mjs", "node_modules/sharp/**/*", "node_modules/@img/**/*"],
+    "/api/groups/*/avatar": ["scripts/reconstruct-status-photo.mjs", "node_modules/sharp/**/*", "node_modules/@img/**/*"],
+    "/api/conversations/*/background": ["scripts/reconstruct-status-photo.mjs", "node_modules/sharp/**/*", "node_modules/@img/**/*"],
   },
   poweredByHeader: false,
   // Cached compiler output retained old styles/version metadata across releases.

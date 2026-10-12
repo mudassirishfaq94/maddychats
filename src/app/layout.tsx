@@ -28,8 +28,8 @@ export const metadata: Metadata = {
   applicationName: "Circlo",
   manifest: "/manifest.webmanifest",
   icons: {
-    icon: "/icons/circlo-mark.svg",
-    apple: "/icons/circlo-192.png",
+    icon: "/icons/circlo-mark.svg?v=linked-c-2",
+    apple: "/icons/circlo-192.png?v=linked-c-2",
   },
   title: {
     default: "Circlo — Your circle. Your secrets. Sealed.",

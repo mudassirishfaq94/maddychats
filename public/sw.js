@@ -1,4 +1,4 @@
-const CACHE_NAME = "ziptalk-offline-v1";
+const CACHE_NAME = "circlo-offline-linked-c-v2";
 const OFFLINE_URL = "/offline.html";
 
 self.addEventListener("install", (event) => {
@@ -10,7 +10,7 @@ self.addEventListener("activate", (event) => {
   event.waitUntil(Promise.all([
     clients.claim(),
     caches.keys().then(keys => Promise.all(keys
-      .filter(key => key.startsWith("ziptalk-offline-") && key !== CACHE_NAME)
+      .filter(key => (key.startsWith("ziptalk-offline-") || key.startsWith("circlo-offline-")) && key !== CACHE_NAME)
       .map(key => caches.delete(key)))),
   ]));
 });

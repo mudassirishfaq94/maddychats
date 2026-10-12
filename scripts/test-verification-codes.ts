@@ -30,7 +30,7 @@ async function main() {
     const user=(await findUserById(id!))!;
     assert(await issueEmailVerification(user));
     assert.deepEqual(mail[0].to,[user.email]);
-    assert(mail[0].html.includes("/brand/circlo-email.png") && mail[0].html.includes("#0B1D26") && mail[0].html.includes("10 minutes"));
+    assert(mail[0].html.includes("/brand/circlo-email.png") && mail[0].html.includes("#151719") && mail[0].html.includes("10 minutes"));
     assert.equal(mail[0].html.includes("App by Mudassir"),false);
     assert.equal((await sql.query("select token_hash from email_verification_tokens where user_id=$1",[id])).rows[0].token_hash.includes(lastCode()),false);
     assert.equal(await issueEmailVerification(user),false,"Resend cooldown enforced");

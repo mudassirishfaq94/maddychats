@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser } from "@/server/session";
 import { isUuid } from "@/server/users";
-import { getCommunity, joinCommunity, leaveCommunity, getCommunityMembers, createChannel, listChannels } from "@/server/communities";
+import { getCommunity, getCommunityMembership, joinCommunity, leaveCommunity, getCommunityMembers, createChannel, listChannels } from "@/server/communities";
 import { guardSameOrigin, jsonError, readJson } from "@/server/http";
 
 export const dynamic = "force-dynamic";
@@ -22,11 +22,13 @@ export async function GET(
 
   const community = await getCommunity(id);
   if (!community) return jsonError(404, "Community not found.");
+  const membership = await getCommunityMembership(id, user.id);
+  if (!community.isPublic && !membership) return jsonError(404, "Community not found.");
 
   const members = await getCommunityMembers(id);
   const channelsList = await listChannels(id);
 
-  return NextResponse.json({ community, members, channels: channelsList });
+  return NextResponse.json({ community: { ...community, myRole: membership?.role ?? null }, members, channels: channelsList }, { headers: { "Cache-Control": "private, no-store" } });
 }
 
 /** Join/Leave a community or create a channel */
@@ -61,14 +63,20 @@ export async function POST(
   if (action === "create_channel") {
     const name = data.name ? String(data.name).trim() : "";
     if (!name) return jsonError(422, "Channel name is required.");
+    if (name.length > 100) return jsonError(422, "Channel name must be 100 characters or shorter.");
 
-    const channel = await createChannel({
+    let channel;
+    try { channel = await createChannel({
       communityId: id,
       name,
       description: data.description ? String(data.description).slice(0, 500) : undefined,
       type: data.type ? String(data.type) : "text",
       createdBy: user.id,
-    });
+    }); } catch (error) {
+      if (error instanceof Error && error.message === "community_not_found") return jsonError(404, "Community not found.");
+      if (error instanceof Error && error.message === "community_channel_forbidden") return jsonError(403, "Only community owners and admins can create channels.");
+      throw error;
+    }
 
     return NextResponse.json({ channel }, { status: 201 });
   }

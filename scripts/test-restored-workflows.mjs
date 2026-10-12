@@ -8,6 +8,9 @@ import { testStatusPhoto } from "./test-status-photo.mjs";
 import { testEncryptionDevices } from "./test-encryption-devices.mjs";
 import { testImageViewer } from "./test-image-viewer.mjs";
 import sharp from "sharp";
+import { testProfilePhotos } from "./test-profile-photos.mjs";
+import { resolve } from "node:path";
+import { unlink } from "node:fs/promises";
 
 /** Positive workflows use actual browser keys, recording, storage and database delivery. */
 export async function testRestoredWorkflows(base, pool, owner, peer, password, conversationId, ownedLive = false, jwtSecret) {
@@ -332,6 +335,16 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     assert.equal((await api("/api/auth/me", target.cookies, null, "GET")).status, 401);
     assert.equal((await pool.query("select trusted_at from e2ee_keys where user_id=$1 and device_id=$2", [owner.id, request.device_id])).rows[0].trusted_at, null);
     for (const page of pages.filter(page => !page.isClosed())) assert.deepEqual(await page.evaluate(() => window.__workflowCsp), [], "No CSP violations in the actual workflow");
+    assert.deepEqual(errors, []);
+    if (!ownedLive) {
+      const photos = await testProfilePhotos(base, pool, owner, peer, source, unrelatedCookie, recipient.cookies);
+      await pool.query("delete from conversations where id=$1 and created_by_id=$2", [photos.groupId, owner.id]);
+      for (const file of photos.paths) {
+        const target = resolve(".next/standalone/server/uploads", file);
+        assert(target.startsWith(resolve(".next/standalone/server/uploads") + "/") || target.startsWith(resolve(".next/standalone/server/uploads") + "\\"));
+        await unlink(target); await pool.query("delete from stored_uploads where path=$1", [file]);
+      }
+    }
     assert.deepEqual(errors, []);
     const recovery = jwtSecret ? await testEncryptionDevices(base, pool, owner, peer, password, conversationId, jwtSecret, { device: rejected, contact: recipient }) : {};
     return { ...recovery, ...statusChecks, ...mobileChecks, tryNow: true, refresh: true, codeApproval: true, rejected: true, expired: true, replay: true, wrongAccount: true, revocation: true, sessionRebinding: true, attachment: true, voicePlayback: true, mediaCapabilityRetry: true, voiceContrast: true, scheduler: true, branding: true, registration: true, verificationTokenAndLogin: true, verificationCodeUI: true, failedSendAndLostResponseRetry: true, externalEmailDelivery: false, browserErrors: 0 };
