@@ -86,7 +86,7 @@ export async function testMessageRequests(base, senderCookie, recipientCookie, c
     const hint = await sender.getByRole("status").filter({ hasText: "Waiting for secure delivery." }).boundingBox();
     const input = await sender.getByRole("textbox", { name: "Message text" }).boundingBox();
     assert(hint && input && hint.y + hint.height <= input.y + 2, "Queued status and its actions must remain visible above the composer");
-    const queuedId = await sender.evaluate(async () => {
+    const queuedId = await sender.evaluate(async conversationId => {
       const names = (await indexedDB.databases()).map(database => database.name).filter(name => name?.startsWith("circlo-outbox:"));
       const records = await Promise.all(names.map(name => new Promise((resolve, reject) => {
         const request = indexedDB.open(name);
@@ -97,10 +97,11 @@ export async function testMessageRequests(base, senderCookie, recipientCookie, c
         };
         request.onerror = () => reject(request.error);
       })));
-      const entry = records.flat()[0];
+      // Drafts share this encrypted store; select the conversation's outbox entry.
+      const entry = records.flat().find(record => record.id.startsWith(conversationId + ":"));
       if (!entry?.ciphertext || entry.plain) throw new Error("Queued text must be encrypted at rest");
       return entry.id;
-    });
+    }, conversationId);
     await sender.reload();
     await sender.getByLabel("Queued", { exact: true }).waitFor();
     assert.equal(await sender.getByRole("region", { name: "Conversation", exact: true }).locator("p").filter({ hasText: queuedText }).count(), 1);
