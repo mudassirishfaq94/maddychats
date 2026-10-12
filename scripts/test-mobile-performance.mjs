@@ -102,13 +102,15 @@ export async function testMobilePerformance(base, pool, source, owner, conversat
     // truthy, so it cannot prove an asynchronous IndexedDB transaction finished.
     const persistedDraft = () => heldTab.evaluate(async conversationId => {
       const db = window.__heldOutbox;
-      const read = (store, key) => new Promise((resolve, reject) => {
-        const request = db.transaction(store).objectStore(store).get(key);
+      const record = await new Promise((resolve, reject) => {
+        const request = db.transaction("messages").objectStore("messages").get(`draft:${conversationId}`);
         request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error);
       });
-      const record = await read("messages", `draft:${conversationId}`);
       if (!record) return null;
-      const key = await read("keys", "device");
+      const key = await new Promise((resolve, reject) => {
+        const request = db.transaction("keys").objectStore("keys").get("device");
+        request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error);
+      });
       const bytes = await crypto.subtle.decrypt({ name: "AES-GCM", iv: record.iv, additionalData: new TextEncoder().encode(`draft:${conversationId}`) }, key, record.ciphertext);
       return new TextDecoder().decode(bytes);
     }, conversationId);
