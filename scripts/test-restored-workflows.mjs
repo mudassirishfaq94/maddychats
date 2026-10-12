@@ -286,7 +286,7 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     await composer.fill("Actual scheduled encrypted delivery");
     await source.page.getByRole("button", { name: "Schedule message", exact: true }).click();
     const due = new Date(Date.now() + 15000);
-    const localDate = new Date(due.getTime() - due.getTimezoneOffset() * 60000).toISOString().slice(0, 19);
+    const localDate = new Date(due.getTime() - due.getTimezoneOffset() * 60000).toISOString().slice(0, 19).replace(/:00$/, ""); // Match datetime-local normalization of zero seconds.
     await source.page.locator('input[type="datetime-local"]').fill(localDate);
     const scheduledResponse = source.page.waitForResponse(response => response.url().endsWith(`/conversations/${conversationId}/scheduled`) && response.request().method() === "POST");
     await source.page.getByRole("button", { name: "Schedule", exact: true }).click();

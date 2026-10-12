@@ -165,3 +165,9 @@ and container readiness.
   polling. Replaced that wait with visible message-composer assertions.
 - Integration preserved the newer trusted production origin allowlist instead
   of widening it using caller-controlled Host headers.
+
+- Scheduled-message browser input occasionally included zero seconds, which
+  Chromium normalizes away. Normalize that date-time string before Playwright
+  fill; keep the original future delivery time and real delivery assertions.
+- After the logout regression, create a fresh fixture session before testing
+  realtime access rather than reusing the correctly revoked session.
