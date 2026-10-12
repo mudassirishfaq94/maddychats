@@ -69,6 +69,17 @@ try {
   await browser?.close();
   if(app && app.exitCode===null){const exited=new Promise(done=>app.once('exit',done));app.kill();await exited;}
   await database?.end();
-  if(created) await admin.query(`DROP DATABASE "${name}" WITH (FORCE)`);
+  if(created) {
+    // Socket shutdown may reach PostgreSQL after Pool.end resolves. Never
+    // FORCE-drop a fixture while retiring clients can still receive errors.
+    let connections = 0;
+    for (let attempt = 0; attempt < 100; attempt++) {
+      connections = (await admin.query('SELECT count(*)::int AS n FROM pg_stat_activity WHERE datname=$1', [name])).rows[0].n;
+      if (connections === 0) break;
+      await new Promise(done => setTimeout(done, 50));
+    }
+    assert.equal(connections, 0, 'All fixture connections close before database removal');
+    await admin.query(`DROP DATABASE "${name}"`);
+  }
   await admin.end();
 }
