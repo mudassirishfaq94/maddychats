@@ -1,3 +1,4 @@
+import { safeError } from "@/server/safe-error";
 import { readUploadForm } from "@/server/http";
 import { after, NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
@@ -276,7 +277,7 @@ export async function POST(req: NextRequest) {
       return jsonError(413, "That file is too large.");
     }
     if ((err as Error)?.message === "storage_budget") return jsonError(507, "Chat storage is full. No attachment was sent.");
-    console.error("[maddy-chats] attachment upload failed:", err);
+    console.error("[maddy-chats] attachment upload failed:", safeError(err));
     return jsonError(500, "Upload failed. Please try again.");
   }
 }

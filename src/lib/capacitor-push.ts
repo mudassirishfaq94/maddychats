@@ -1,4 +1,5 @@
 import { isNativeApp } from "@/lib/native-platform";
+import { notificationPath } from "@/lib/notification-navigation";
 
 /**
  * Capacitor Push Notifications — Android native push via FCM.
@@ -47,7 +48,6 @@ export async function registerCapacitorPush(): Promise<string | null> {
       PushNotifications.addListener("registration", (token) => {
         clearTimeout(timeout);
         PushNotifications.removeAllListeners();
-        console.log("[capacitor-push] FCM token:", token.value.slice(0, 20) + "...");
         resolve(token.value);
       });
 
@@ -86,24 +86,11 @@ export function setupNotificationTapListener(): void {
   if (!isCapacitor()) return;
 
   import("@capacitor/push-notifications").then(({ PushNotifications }) => {
-    PushNotifications.addListener("pushNotificationReceived", (notification) => {
-      console.log("[capacitor-push] Notification received:", notification.title);
-    });
-
     PushNotifications.addListener("pushNotificationActionPerformed", (action) => {
       const url = (action as any).notification?.data?.url;
       if (url && typeof window !== "undefined") {
-        try {
-          const target = new URL(url);
-          if (target.protocol === "ziptalks:" && target.hostname === "chat") {
-            const conversationId = target.pathname.split("/").filter(Boolean)[0];
-            window.location.href = conversationId
-              ? `/app/chats/${conversationId}${target.search}`
-              : "/app/chats";
-            return;
-          }
-        } catch { /* The existing browser URL fallback handles malformed data. */ }
-        window.location.href = url;
+        const target = notificationPath(url, window.location.origin);
+        if (target) window.location.href = target;
       }
     });
   });

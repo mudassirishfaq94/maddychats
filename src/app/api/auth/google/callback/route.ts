@@ -1,3 +1,4 @@
+import { safeError } from "@/server/safe-error";
 import { withPasswordCapacity } from "@/server/password-capacity";
 import { createGoogleEmailProof, GOOGLE_EMAIL_PROOF_COOKIE, GOOGLE_EMAIL_PROOF_TTL } from "@/server/google-email-proof";
 import { requestIsSecure } from "@/server/http";
@@ -153,7 +154,7 @@ async function handleGET(req: NextRequest) {
   try {
     return await handleGoogleCallback(req);
   } catch (error) {
-    console.error("[maddy-chats] Google sign-in failed:", error);
+    console.error("[maddy-chats] Google sign-in failed:", safeError(error));
     return redirectError("google_failed");
   }
 }

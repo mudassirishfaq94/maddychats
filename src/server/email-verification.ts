@@ -5,6 +5,7 @@ import { emailVerificationTokens, users, type UserRow } from "@/db/schema";
 import { clientUrl, jwtSecret } from "./config";
 import { verificationEmail } from "./verification-email-template";
 import { rateLimit } from "./rate-limit";
+import { safeError } from "./safe-error";
 
 const TTL_MS = 10 * 60 * 1000;
 const codeHash = (userId: string, code: string) => createHmac("sha256", jwtSecret()).update(`email-verification:${userId}:${code}`).digest("hex");
@@ -42,7 +43,7 @@ export async function issueEmailVerification(user: UserRow): Promise<boolean> {
     // cooldown even on failure, preventing provider-error retry floods.
     return response.ok;
   } catch (error) {
-    console.error("[circlo] email verification unavailable", error instanceof Error ? error.message : "unknown error");
+    console.error("[circlo] email verification unavailable", safeError(error));
     return false;
   }
 }

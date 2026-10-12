@@ -1,3 +1,4 @@
+import { safeError } from "@/server/safe-error";
 import { and, eq, lte, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { conversations, scheduledMessages, messages, users } from "@/db/schema";
@@ -189,7 +190,7 @@ export async function processScheduledMessages(): Promise<{
 
       processed++;
     } catch (err) {
-      console.error(`[scheduled-messages] Failed to process ${scheduled.id}:`, err);
+      console.error(`[scheduled-messages] Failed to process ${scheduled.id}:`, safeError(err));
       failed++;
     }
   }

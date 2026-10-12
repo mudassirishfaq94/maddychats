@@ -2755,6 +2755,10 @@ export function ChatView({
                     }));
                   }, 100);
                   queueDraftPersistence();
+                  // Clearing has no encryption cost. Retire the saved draft
+                  // immediately rather than leaving the old text recoverable
+                  // until a debounce fires on a busy mobile browser.
+                  if (!value) persistDraft();
                   growComposer();
                   if (e.target.value.trim()) noteTyping();
                   else signalTyping(false);
