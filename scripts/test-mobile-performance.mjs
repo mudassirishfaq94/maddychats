@@ -79,6 +79,7 @@ export async function testMobilePerformance(base, pool, source, owner, conversat
     await page.evaluate(() => sessionStorage.setItem("hold-draft-decrypt", "1"));
     await page.reload(); await composer.waitFor();
     await page.waitForFunction(() => window.__draftDecryptHeld === true);
+    await composer.fill("New input while restoration is pending");
     await composer.fill("");
     await page.waitForFunction(() => window.__draftDecryptReleased === true);
     await page.waitForTimeout(200);
