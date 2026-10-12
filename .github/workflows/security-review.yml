@@ -2,7 +2,6 @@ name: Circlo security reconnaissance
 on:
   push:
     branches: ['codex/security-review-20261013']
-    paths: ['.github/workflows/security-review.yml', 'scripts/security-recon.py']
 permissions:
   contents: read
 jobs:
