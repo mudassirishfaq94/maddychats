@@ -48,8 +48,15 @@ async function main() {
       const challenge = response.headers.getSetCookie().find((value) => value.startsWith("maddy_mfa_challenge="))?.split(";")[0]; assert(challenge);
       const verified = await api("/api/auth/mfa", challenge, "POST", { code: new TOTP({ secret: mfa, algorithm: "SHA1", digits: 6, period: 30 }).generate() }); assert.equal(verified.status, 200, await verified.clone().text()); return sessionCookie(verified);
     };
-    const aliceCookie = await login(alice.username), bobCookie = await login(bob.username), noMfaCookie = await login(owner.username);
+    let aliceCookie = await login(alice.username);
+    const bobCookie = await login(bob.username), noMfaCookie = await login(owner.username);
+    const ownProfile = await api("/api/users/me", aliceCookie);
+    assert.equal(ownProfile.status, 200);
+    assert(ownProfile.headers.get("cache-control")?.includes("no-store"), "Private profile responses cannot be cached");
+
     assert.equal((await api("/api/admin/users", aliceCookie, "PATCH", { userId: target.id, action: "role", role: "admin" })).status, 403);
+    assert.equal((await api("/api/admin/stats", noMfaCookie)).status, 403, "Admin reads require MFA enrollment");
+    assert.equal((await api("/api/e2ee/signal/send", aliceCookie, "POST", {})).status, 503, "Experimental send cannot bypass production policies");
     assert.equal((await api("/api/admin/users", noMfaCookie, "PATCH", { userId: target.id, action: "role", role: "moderator" })).status, 403, "Admin writes require MFA enrollment");
     const factorSecret = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ";
     const recovery = "11111111-22222222-33333333-44444444", recoveryHash = createHash("sha256").update(recovery.replace(/-/g, "")).digest("hex");
@@ -93,6 +100,8 @@ async function main() {
     assert.equal((await api(`/api/admin/messages/${message.id}`, ownerCookie, "DELETE", {})).status, 200);
     assert((await sql.query("select deleted_at from messages where id=$1", [message.id])).rows[0].deleted_at);
     assert.equal((await sql.query("select count(*)::int n from realtime_events where payload->>'type'='message:deleted' and payload->'message'->>'id'=$1", [message.id])).rows[0].n, 2, "Moderation and recipient notifications commit together");
+    const htmlName = "<img src=x onerror='window.__circloXss=1'>";
+    await sql.query("update users set display_name=$1 where id=$2", [htmlName, bob.id]);
     if (process.env.REMAINING_BROWSER_TESTS === "1") {
       const { chromium } = await import("playwright");
       const browser = await chromium.launch({ headless: true });
@@ -107,6 +116,11 @@ async function main() {
           assert.equal(response?.status(), 200);
           await page.getByRole("heading", { level: 1 }).waitFor();
           if (!path.endsWith("audit")) await page.getByText("Administrative changes require two-factor authentication and a recent sign-in.").waitFor();
+          if (path.endsWith("users")) {
+            await page.getByText(htmlName, { exact: true }).waitFor();
+            assert.equal(await page.locator('img[src="x"]').count(), 0, "Profile markup is rendered as text");
+            assert.equal(await page.evaluate(() => "__circloXss" in window), false, "Profile payload never executes");
+          }
           assert.deepEqual(errors, [], `Admin browser errors on ${path}`);
           page.off("pageerror", record);
         }
@@ -114,6 +128,15 @@ async function main() {
       } finally { await browser.close(); }
       console.log("Four authenticated administrative browser pages passed");
     }
+    await sql.query("insert into rate_limit_buckets(key,window_started_at,count) values($1,now(),240) on conflict(key) do update set window_started_at=now(),count=240", [`api-write:${alice.id}`]);
+    const limitedWrite = await api("/api/privacy/settings", aliceCookie, "PUT", { readReceipts: false }, { "x-forwarded-for": "198.51.100.55" });
+    assert.equal(limitedWrite.status, 429, "Account limiter cannot be bypassed with a different claimed IP");
+    assert(limitedWrite.headers.get("retry-after"));
+    assert.equal((await api("/api/auth/logout", aliceCookie, "POST", {})).status, 200, "Logout remains available under mutation throttling");
+    await sql.query("insert into rate_limit_buckets(key,window_started_at,count) values($1,now(),25) on conflict(key) do update set window_started_at=now(),count=25", [`login-account:${alice.id}`]);
+    assert.equal((await api("/api/auth/login", "", "POST", { identifier: alice.username, password }, { "x-forwarded-for": "198.51.100.56" })).status, 429, "Distributed login attempts share an account budget");
+    await sql.query("delete from rate_limit_buckets where key = any($1::text[])", [[`login-account:${alice.id}`, `api-write:${alice.id}`]]);
+    aliceCookie = await login(alice.username); // The logout assertion revoked the previous session.
     await sql.query("alter table rate_limit_buckets rename to unavailable_rate_limits");
     try { assert.equal((await api("/api/auth/login", "", "POST", { identifier: alice.username, password })).status, 429, "Shared rate limit outage fails closed"); }
     finally { await sql.query("alter table unavailable_rate_limits rename to rate_limit_buckets"); }

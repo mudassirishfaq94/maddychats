@@ -94,12 +94,20 @@ jobs:
         run: npm run test:scanner
       - run: npm run lint
       - run: npm run typecheck
-      - name: Production build
+      - name: Production build with fake secret canaries
+        env:
+          RESEND_API_KEY: circlo-audit-resend-canary-20261013
+          GOOGLE_CLIENT_SECRET: circlo-audit-google-canary-20261013
+          JWT_SECRET: circlo-audit-jwt-canary-at-least-thirty-two-chars
         run: npm run build
+      - name: Browser credential exposure regression
+        run: node scripts/check-client-secrets.mjs
       - name: Prepare account-security database
         run: |
           createdb item1_security_test
           npm run db:migrate
+      - name: Data API role isolation
+        run: npx tsx scripts/test-data-api-boundary.ts
       - name: Unit and isolated integration suites
         run: npm test
       - name: Session, password-reset and mobile retry regressions
@@ -110,6 +118,8 @@ jobs:
           node scripts/test-login-backoff.mjs
       - name: Verification-code security and provider integration
         run: npm run test:verification && npm run test:verification-template && npm run test:send
+      - name: Landing page regression
+        run: node scripts/check-landing.mjs
       - name: Production container build and readiness smoke test
         shell: bash
         run: |

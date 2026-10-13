@@ -6,7 +6,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   try {
     await requireAdmin();
   } catch (error) {
-    if (error instanceof Error && ["UNAUTHENTICATED", "FORBIDDEN"].includes(error.message)) notFound();
+    if (error instanceof Error && ["UNAUTHENTICATED", "FORBIDDEN", "ADMIN_MFA_REQUIRED"].includes(error.message)) notFound();
     throw error;
   }
   return <AdminShell>{children}</AdminShell>;

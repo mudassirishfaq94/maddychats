@@ -9,7 +9,7 @@ export function jsonError(
 ): NextResponse {
   return NextResponse.json(
     { error: message, ...(fields ? { fields } : {}) },
-    { status },
+    { status, headers: { "Cache-Control": "private, no-store" } },
   );
 }
 
@@ -21,19 +21,26 @@ export function jsonError(
 const MAX_JSON_BODY_BYTES = 64 * 1024;
 
 /** Enforce real streamed bytes, including chunked requests with no length. */
-export async function readBoundedBody(req: Request, limit: number): Promise<Uint8Array> {
+export async function readBoundedBody(req: Request, limit: number, timeoutMs = 30_000): Promise<Uint8Array> {
   const reader = req.body?.getReader();
   if (!reader) return new Uint8Array();
   const chunks: Uint8Array[] = []; let size = 0;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      reject(new Error("body_read_timeout"));
+      void reader.cancel().catch(() => {});
+    }, timeoutMs);
+  });
   try {
     while (true) {
-      const { done, value } = await reader.read();
+      const { done, value } = await Promise.race([reader.read(), deadline]);
       if (done) break;
       size += value.byteLength;
-      if (size > limit) { await reader.cancel(); throw new Error("body_too_large"); }
+      if (size > limit) { void reader.cancel().catch(() => {}); throw new Error("body_too_large"); }
       chunks.push(value);
     }
-  } finally { reader.releaseLock(); }
+  } finally { clearTimeout(timer); reader.releaseLock(); }
   const result = new Uint8Array(size); let offset = 0;
   for (const chunk of chunks) { result.set(chunk, offset); offset += chunk.length; }
   return result;

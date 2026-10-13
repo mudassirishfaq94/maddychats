@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { REFRESH_COOKIE, SESSION_COOKIE } from "@/server/config";
 import { verifySessionToken } from "@/server/jwt";
 import { rotateDeviceSession, setDeviceCookies } from "@/server/device-sessions";
-import { guardSameOrigin } from "@/server/http";
+import { guardSameOrigin, jsonError } from "@/server/http";
 import { contentSecurityPolicy } from "@/lib/content-security-policy";
 import { randomBytes } from "node:crypto";
+import { rateLimit } from "@/server/rate-limit";
 
 /**
  * Request-time interception (Next.js 16 "Proxy" convention — the successor
@@ -33,6 +34,21 @@ export async function proxy(req: NextRequest) {
       req.cookies.set(SESSION_COOKIE, token);
       req.cookies.set(REFRESH_COOKIE, credentials.refresh);
       claims = await verifySessionToken(token);
+    }
+  }
+
+  // Backstop for authenticated mutations and administrative reads without a route-specific limiter.
+  // Account-bound keys cannot be evaded by spoofing forwarding headers.
+  // Auth endpoints retain their own limits; logout must always remain available.
+  const mutation = ["POST", "PUT", "PATCH", "DELETE"].includes(req.method);
+  if (claims && pathname.startsWith("/api/") && !pathname.startsWith("/api/auth/") && (mutation || pathname.startsWith("/api/admin/"))) {
+    const blocked = guardSameOrigin(req);
+    if (blocked) return blocked;
+    const limit = await rateLimit(`api-write:${claims.sub}`, 240, 60_000);
+    if (!limit.allowed) {
+      const response = jsonError(429, "Too many requests. Please wait before trying again.");
+      response.headers.set("Retry-After", String(limit.retryAfterSeconds));
+      return response;
     }
   }
 

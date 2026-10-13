@@ -27,6 +27,7 @@ const nextConfig: NextConfig = {
     "/api/conversations/*/background": ["scripts/reconstruct-status-photo.mjs", "node_modules/sharp/**/*", "node_modules/@img/**/*"],
   },
   poweredByHeader: false,
+  productionBrowserSourceMaps: false,
   // Cached compiler output retained old styles/version metadata across releases.
   // Keep development caching, but compile production releases from current source.
   experimental: { turbopackFileSystemCacheForBuild: false },
@@ -49,6 +50,10 @@ const nextConfig: NextConfig = {
       {
         source: "/brand/:path*",
         headers: [{ key: "Cache-Control", value: "public, max-age=3600, must-revalidate" }],
+      },
+      {
+        source: "/api/:path*",
+        headers: [{ key: "Cache-Control", value: "private, no-store" }],
       },
       { source: "/stickers/:path*", headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }] },
       { source: "/gifs/:path*", headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }] },

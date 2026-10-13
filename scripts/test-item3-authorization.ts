@@ -107,7 +107,8 @@ async function main() {
     assert(!adminHtml.includes("Admin Dashboard v1.0"), "Regular users never receive the admin shell");
     assert.equal((await api("/api/admin/stats", bobCookie)).status, 403);
     await sql.query("update users set role='moderator' where id=$1", [bob.id]);
-    assert((await (await api("/app/admin", bobCookie)).text()).includes("Admin Dashboard v1.0"), "Authorized moderators retain their admin shell");
+    assert(!(await (await api("/app/admin", bobCookie)).text()).includes("Admin Dashboard v1.0"), "Moderators without enrolled MFA do not receive the admin shell");
+    assert.equal((await api("/api/admin/stats", bobCookie)).status, 403, "Moderators must enroll MFA before administrative reads");
     await sql.query("update users set role='user' where id=$1", [bob.id]);
     assert.equal((await api("/api/admin/stats", bobCookie)).status, 403, "Role changes are checked freshly");
     assert.equal((await api(`/api/conversations/${conversation.id}`, aliceCookie, "DELETE", undefined, { "sec-fetch-site": "cross-site" })).status, 403);
