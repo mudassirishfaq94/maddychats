@@ -1,3 +1,4 @@
+import { publicKeyFingerprint } from "@/server/device-inventory";
 import { and, eq, gt, isNull } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
@@ -62,6 +63,7 @@ export async function POST(req: NextRequest) {
         sessionId: deviceLinkRequests.sessionId,
         sourceDeviceId: deviceLinkRequests.sourceDeviceId,
         codeHash: deviceLinkRequests.codeHash,
+        fingerprint: deviceLinkRequests.fingerprint,
       })
       .from(deviceLinkRequests)
       .where(and(
@@ -88,11 +90,12 @@ export async function POST(req: NextRequest) {
     if (!sourceDevice || !sourceDevice.trustedAt) return "source" as const;
 
     const [target] = await tx
-      .select({ id: e2eeKeys.id, deviceName: e2eeKeys.deviceName, country: e2eeKeys.country })
+      .select({ id: e2eeKeys.id, deviceName: e2eeKeys.deviceName, country: e2eeKeys.country, publicKey: e2eeKeys.publicKey, sessionId: e2eeKeys.sessionId })
       .from(e2eeKeys)
       .where(and(eq(e2eeKeys.userId, user.id), eq(e2eeKeys.deviceId, deviceId)))
       .for("update");
     if (!target) return "unknown" as const;
+    if (target.sessionId !== sessionId || publicKeyFingerprint(target.publicKey) !== request.fingerprint) return "code" as const;
 
     await tx
       .update(e2eeKeys)

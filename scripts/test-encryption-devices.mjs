@@ -65,7 +65,7 @@ export async function testEncryptionDevices(base, pool, owner, peer, password, c
     const before = (await pool.query("select id,text,encrypted from messages where conversation_id=$1 order by id", [conversationId])).rows;
     const wrapsBefore = (await pool.query("select count(*)::int as n from e2ee_conversation_keys where conversation_id=$1", [conversationId])).rows[0].n;
     await device.page.reload(); await device.page.getByLabel("This device fingerprint").waitFor();
-    await device.page.getByRole("button", { name: "I cannot access a trusted device", exact: true }).click();
+    await device.page.getByRole("button", { name: "Emergency recovery: no trusted device or recovery file", exact: true }).click();
     const section = device.page.locator("#encryption-devices");
     await section.getByLabel("Encryption recovery confirmation").fill("RESET ENCRYPTION TRUST");
     await section.getByLabel("Current password", { exact: true }).fill(password);
@@ -109,7 +109,7 @@ export async function testEncryptionDevices(base, pool, owner, peer, password, c
     await device.page.context().addCookies([{ name: "maddy_session", value: freshToken, url: base, httpOnly: true, sameSite: "Lax" }]);
     await device.page.goto(base + "/app/profile#encryption-devices");
     await device.page.getByText(/No trusted encryption device is registered/).waitFor();
-    await device.page.getByRole("button", { name: "I cannot access a trusted device", exact: true }).click();
+    await device.page.getByRole("button", { name: "Emergency recovery: no trusted device or recovery file", exact: true }).click();
     await device.page.getByLabel("Encryption recovery confirmation").fill("RESET ENCRYPTION TRUST");
     const enrollment = device.page.waitForResponse(r => r.url().endsWith("/api/e2ee/devices/approve") && r.request().postDataJSON()?.action === "challenge");
     const enrollmentProof = device.page.waitForResponse(r => r.url().endsWith("/api/e2ee/devices/approve") && r.request().postDataJSON()?.action === "approve");

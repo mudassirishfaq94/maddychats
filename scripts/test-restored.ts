@@ -1,3 +1,4 @@
+import { testDeviceRecoveryUI } from "./test-device-recovery-ui.mjs";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
@@ -39,6 +40,7 @@ async function main() {
     let output = ""; server.stdout?.on("data", d => output += d); server.stderr?.on("data", d => output += d);
     for (let i = 0; i < 100; i++) { try { if ((await fetch(base + "/api/health")).status === 204) break; } catch {} await new Promise(r => setTimeout(r, 200)); }
     try {
+      await testDeviceRecoveryUI(base, pool);
       console.log(await testRestoredWorkflows(base, pool, accounts[0], accounts[1], password, conversation!, false, "disposable-restored-workflows-only-secret-at-least-thirty-two"));
     }
     catch (error) { console.error(output.slice(-5000)); throw error; }

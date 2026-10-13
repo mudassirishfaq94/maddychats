@@ -6,6 +6,8 @@ import { guardSameOrigin, jsonError } from "@/server/http";
 import { contentSecurityPolicy } from "@/lib/content-security-policy";
 import { randomBytes } from "node:crypto";
 import { rateLimit } from "@/server/rate-limit";
+import { clientUrl } from "@/server/config";
+import { canonicalDestination } from "@/server/canonical-domain";
 
 /**
  * Request-time interception (Next.js 16 "Proxy" convention — the successor
@@ -21,6 +23,10 @@ import { rateLimit } from "@/server/rate-limit";
 const PROTECTED_PREFIXES = ["/app"];
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
+  if (req.method === "GET" || req.method === "HEAD") {
+    const destination = canonicalDestination(req.headers.get("host"), pathname, req.nextUrl.search, clientUrl(), process.env.RENDER_EXTERNAL_URL);
+    if (destination) return NextResponse.redirect(destination, 307);
+  }
   const publicMetadata = ["/api/app-version", "/api/auth/methods"].includes(pathname);
 
   let token = req.cookies.get(SESSION_COOKIE)?.value;

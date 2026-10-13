@@ -1,4 +1,5 @@
 "use client";
+import { restoredBundle, storedChatKeys } from "@/lib/device-recovery-file";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -88,10 +89,11 @@ export function useE2EE(userId: string | undefined) {
     messageCacheKeyRef.current = null;
 
     async function init() {
-      const deviceId = generateDeviceId();
-      const stored = localStorage.getItem(`e2ee_keypair_${userId}`);
+      const recovered = restoredBundle(activeUserId);
+      const deviceId = recovered?.deviceId ?? generateDeviceId();
+      const stored = recovered?.keypair ?? localStorage.getItem(`e2ee_keypair_${userId}`);
       const recoveryStorageKey = `e2ee_recovery_${userId}_${deviceId}`;
-      let recoverySecret = localStorage.getItem(recoveryStorageKey);
+      let recoverySecret = recovered?.secret ?? localStorage.getItem(recoveryStorageKey);
 
       let keyPair: CryptoKeyPair;
       let publicKeyStr: string;
@@ -298,7 +300,7 @@ export function useE2EE(userId: string | undefined) {
   const rememberSendingKey = useCallback(async (conversationId: string, key: CryptoKey) => {
     if (!userId || !keyPairRef.current) throw new Error("Device keys are not ready");
     const storageKey = `e2ee_sentkeys_${userId}_${conversationId}`;
-    const saved = JSON.parse(localStorage.getItem(storageKey) ?? "[]") as Array<{ fingerprint: string; wrapped: string }>;
+    const saved = storedChatKeys(userId, storageKey);
     const fingerprint = await conversationFingerprint(key);
     if (saved.some(entry => entry.fingerprint === fingerprint)) return;
     const wrapped = await encryptKeyForUser(key, keyPairRef.current.publicKey);
@@ -311,7 +313,7 @@ export function useE2EE(userId: string | undefined) {
     if (!userId || !keyPairRef.current || typeof localStorage === "undefined") return [];
     let saved: Array<{ wrapped?: string }> = [];
     try {
-      saved = JSON.parse(localStorage.getItem(`e2ee_sentkeys_${userId}_${conversationId}`) ?? "[]") as Array<{ wrapped?: string }>;
+      saved = storedChatKeys(userId, `e2ee_sentkeys_${userId}_${conversationId}`);
     } catch {
       return [];
     }
@@ -778,9 +780,18 @@ export function useE2EE(userId: string | undefined) {
    * copy for a new Android device by itself. An already-authorized device
    * must wrap its key to the new device's public key.
    */
-  const syncKnownConversations = useCallback(async (conversationId?: string): Promise<string> => {
+  const syncKnownConversations = useCallback(async function synchronize(conversationId?: string): Promise<string> {
     if (!state.initialized || !userId || !state.publicKey) throw new Error("Device keys are not ready. Use a trusted device that can already read this chat.");
-    if (!conversationId) throw new Error("Open the chat you want to restore first.");
+    if (!conversationId) {
+      const response = await e2eeRequest("/api/e2ee/devices/sync", { cache: "no-store" });
+      if (!response.ok) throw new Error("Only a trusted browser can synchronize chat keys. Reload and try again.");
+      const { conversationIds } = await response.json() as { conversationIds: string[] };
+      let shared = 0;
+      for (const id of conversationIds) {
+        try { await synchronize(id); shared++; } catch { /* Other chats may still have recoverable keys. */ }
+      }
+      return `Synchronized ${shared} of ${conversationIds.length} recent chats. Chats whose keys are missing here must be restored from another participant. Open older chats and use Restore my other devices there.`;
+    }
     // Recovery shares existing keys only, and never creates a replacement key.
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 30000);

@@ -226,9 +226,9 @@ async function main() {
     await sql.query("update device_sessions set previous_valid_until=now()-interval '1 second' where id=$1", [claims.sid]);
     assert.equal((await api("/api/auth/me", oldRefresh)).status, 401); assert.equal((await api("/api/auth/me", firstRotated)).status, 401, "Replay revokes the device's access token too");
     aliceCookie = await login(alice.username); const secondDevice = await login(alice.username);
-    const devices = await (await api("/api/privacy/devices", aliceCookie)).json(); assert.equal(devices.devices.length, 2); assert.equal(devices.devices.filter((device: { current: boolean }) => device.current).length, 1); assert(!JSON.stringify(devices).includes("refreshHash"));
+    const devices = await (await api("/api/privacy/devices", aliceCookie)).json(); const sessions = [...devices.unboundSessions, ...devices.devices.flatMap((device: { sessions: { current: boolean }[] }) => device.sessions)]; assert.equal(sessions.length, 2); assert.equal(sessions.filter((session: { current: boolean }) => session.current).length, 1); assert(!JSON.stringify(devices).includes("refreshHash"));
     const bobDevices = await (await api("/api/privacy/devices", bobCookie)).json();
-    assert.equal((await api("/api/privacy/devices", aliceCookie, "DELETE", { id: bobDevices.devices[0].id })).status, 404);
+    assert.equal((await api("/api/privacy/devices", aliceCookie, "DELETE", { id: bobDevices.currentSessionId })).status, 404);
     assert.equal((await api("/api/privacy/devices", aliceCookie, "DELETE", { allOthers: true }, { origin: "https://outside.invalid", "sec-fetch-site": "cross-site" })).status, 403);
     assert.equal((await api("/api/privacy/devices", aliceCookie, "DELETE", { allOthers: true })).status, 200);
     assert.equal((await api("/api/auth/me", secondDevice)).status, 401); assert.equal((await api("/api/auth/me", aliceCookie)).status, 200);

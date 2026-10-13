@@ -1,7 +1,7 @@
-import { and, desc, eq, gt, isNull } from "drizzle-orm";
+import { and, desc, eq, gt, isNull, sql } from "drizzle-orm";
 import { createHash } from "node:crypto";
 import { db } from "@/db";
-import { deviceLinkRequests, deviceSessions, e2eeKeys } from "@/db/schema";
+import { deviceLinkRequests, deviceSessions, e2eeKeys, users } from "@/db/schema";
 import { browserLabel, countryFlag, countryName, platformLabel } from "./device-meta";
 
 /** A browser session that is currently signed in and still valid. */
@@ -60,14 +60,16 @@ export async function deviceInventory(userId: string, currentSessionId: string |
       createdAt: e2eeKeys.createdAt,
       lastUsedAt: e2eeKeys.lastUsedAt,
       deviceName: e2eeKeys.deviceName,
-      country: e2eeKeys.country,
+      country: sql<string | null>`coalesce(${e2eeKeys.country}, ${users.country})`,
       platform: e2eeKeys.platform,
+      browser: deviceSessions.userAgent,
       publicKey: e2eeKeys.publicKey,
       sessionId: e2eeKeys.sessionId,
       ipCountry: e2eeKeys.ipCountry,
       ipCountryAt: e2eeKeys.ipCountryAt,
     })
-    .from(e2eeKeys)
+    .from(e2eeKeys).innerJoin(users, eq(users.id, e2eeKeys.userId))
+    .leftJoin(deviceSessions, and(eq(deviceSessions.id, e2eeKeys.sessionId), eq(deviceSessions.userId, e2eeKeys.userId)))
     .where(eq(e2eeKeys.userId, userId))
     .orderBy(e2eeKeys.createdAt);
 
@@ -119,10 +121,10 @@ export async function deviceInventory(userId: string, currentSessionId: string |
     const liveSessions = sessionsByDevice.get(key.deviceId) ?? [];
     // Older rows predate platform capture, so fall back to the browser that
     // registered them before giving up and reporting an unknown device.
-    const platform = key.platform || platformLabel(liveSessions[0]?.userAgent);
+    const platform = key.platform || platformLabel(key.browser);
     return {
       deviceId: key.deviceId,
-      label: key.deviceName ?? browserLabel(liveSessions[0]?.userAgent) ?? platform,
+      label: key.deviceName ?? browserLabel(key.browser) ?? platform,
       platform,
       trusted: Boolean(key.trustedAt),
       trustedAt: key.trustedAt ? key.trustedAt.toISOString() : null,

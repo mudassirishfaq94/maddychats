@@ -8,7 +8,7 @@ import { isUuid } from "@/server/users";
 import { publishToConversation } from "@/server/realtime";
 import { rateLimit } from "@/server/rate-limit";
 import { detectCountry } from "@/server/country";
-import { platformLabel } from "@/server/device-meta";
+import { browserLabel, platformLabel, COUNTRY_NAMES } from "@/server/device-meta";
 
 const MAX_DEVICE_NAME = 60;
 
@@ -60,7 +60,7 @@ export async function GET(req: NextRequest) {
     publicKey: key.publicKey,
     createdAt: key.createdAt,
     lastUsedAt: key.lastUsedAt,
-  } : { ...key, sessionState: key.sessionRevokedAt ? "revoked" : key.sessionExpiresAt ? (key.sessionExpiresAt.getTime() <= Date.now() ? "expired" : "active") : "unknown" });
+  } : { ...key, deviceName: key.deviceName ?? browserLabel(key.browser) ?? key.platform, country: key.country ?? user.country, sessionState: key.sessionRevokedAt ? "revoked" : key.sessionExpiresAt ? (key.sessionExpiresAt.getTime() <= Date.now() ? "expired" : "active") : "unknown" });
 
   return NextResponse.json({ keys }, { headers: { "Cache-Control": "no-store" } });
 }
@@ -165,4 +165,22 @@ export async function POST(req: NextRequest) {
     })));
   }
   return NextResponse.json({ success: true, pendingApproval: !registered?.trustedAt, needsSessionBinding: Boolean(sessionId && registered?.sessionId !== sessionId) });
+}
+
+/** Labels describe this browser; they never grant encryption trust. */
+export async function PATCH(req: NextRequest) {
+  const blocked = guardSameOrigin(req);
+  if (blocked) return blocked;
+  const user = await getSessionUser();
+  if (!user) return jsonError(401, "Not authenticated.");
+  const sessionId = await getSessionDeviceId();
+  if (!sessionId) return jsonError(409, "Sign in again.");
+  if (!(await rateLimit(`device-label:${user.id}`, 10, 60000)).allowed) return jsonError(429, "Please wait before editing again.");
+  const body = await readJson(req);
+  if (typeof body?.deviceId !== "string" || typeof body.deviceName !== "string" || body.deviceName.trim().length > 60 ||
+      typeof body.country !== "string" || (body.country !== "" && !Object.hasOwn(COUNTRY_NAMES, body.country))) return jsonError(422, "Choose a country and a device name of up to 60 characters.");
+  const changed = await db.update(e2eeKeys).set({ deviceName: body.deviceName.trim() || null, country: body.country || null })
+    .where(and(eq(e2eeKeys.userId, user.id), eq(e2eeKeys.deviceId, body.deviceId), eq(e2eeKeys.sessionId, sessionId))).returning({ id: e2eeKeys.id });
+  if (!changed.length) return jsonError(403, "You can only label the encryption device bound to this browser session.");
+  return NextResponse.json({ success: true }, { headers: { "Cache-Control": "private, no-store" } });
 }

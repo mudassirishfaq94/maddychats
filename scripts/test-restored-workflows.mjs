@@ -67,12 +67,12 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
       assert.equal(identity.headers()["set-cookie"], undefined, "Valid identity responses cannot overwrite a newer login");
       const desired = JSON.parse(Buffer.from(device.cookies.match(/maddy_session=([^;]+)/)[1].split(".")[1], "base64url")).sid;
       const actual = await device.page.request.get(base + "/api/privacy/devices");
-      assert.equal((await actual.json()).devices.find(row => row.current)?.id, desired, "A delayed identity response preserves the newer browser session");
+      assert.equal((await actual.json()).currentSessionId, desired, "A delayed identity response preserves the newer browser session");
     }
     await profile(device.page);
     const sessions = await (await api("/api/privacy/devices", device.cookies, null, "GET")).json();
-    const current = sessions.devices.find(session => session.current); assert(current);
-    return current.id;
+    assert(sessions.currentSessionId);
+    return sessions.currentSessionId;
   };
   try {
     const registrationContext = await browser.newContext({ serviceWorkers: "block" });
@@ -216,8 +216,9 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     await target.page.getByRole("button", { name: "Try now", exact: true }).click();
     await target.page.waitForURL("**/app/profile#encryption-devices");
     await target.page.getByLabel("This device fingerprint").waitFor();
-    await target.page.getByRole("button", { name: "Request device linking", exact: true }).click();
-    const code = await target.page.getByLabel("Device linking code").innerText();
+    const targetDeviceId = (await pool.query("select device_id from e2ee_keys where user_id=$1 and trusted_at is null order by created_at desc limit 1", [owner.id])).rows[0].device_id;
+    const legacyRequest = await api("/api/e2ee/devices/link", target.cookies, { deviceId: targetDeviceId }); assert.equal(legacyRequest.status, 201);
+    const code = (await legacyRequest.json()).code;
     const [request] = (await pool.query("select id,device_id,fingerprint,session_id from device_link_requests where user_id=$1 and status='pending'", [owner.id])).rows;
     assert(request); assert.match(code, /^[A-F0-9]{16}$/);
     const sourceId = (await pool.query("select device_id from e2ee_keys where user_id=$1 and trusted_at is not null", [owner.id])).rows[0].device_id;
@@ -230,7 +231,7 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     const proofResponse = source.page.waitForResponse(response => response.url().endsWith("/api/e2ee/devices/approve") && response.request().postDataJSON()?.action === "approve");
     await source.page.getByRole("button", { name: "Approve encryption device", exact: true }).click();
     const proof = (await proofResponse).request().postDataJSON();
-    await source.page.getByText(/Device approved\. Restore/).waitFor();
+    await source.page.getByText(/Device approved\./).waitFor();
     assert.equal((await pool.query("select status from device_link_requests where id=$1", [request.id])).rows[0].status, "approved");
     assert.equal((await api("/api/e2ee/devices/approve", source.cookies, challenge)).status, 409);
     assert.equal((await api("/api/e2ee/devices/approve", source.cookies, proof)).status, 409);
@@ -328,16 +329,15 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     assert.equal((await api(`/api/conversations/${conversationId}/scheduled`, unrelatedCookie, { text: job.text, encrypted: true, scheduledFor: new Date(Date.now() + 60000).toISOString() })).status, 404);
     // Rejected and expired requests remain untrusted.
     const rejected = await login(owner); await profile(rejected.page);
-    await rejected.page.getByRole("button", { name: "Request device linking" }).click(); await rejected.page.getByLabel("Device linking code").waitFor();
+    const rejectedId = (await pool.query("select device_id from e2ee_keys where user_id=$1 and trusted_at is null order by created_at desc limit 1", [owner.id])).rows[0].device_id;
+    assert.equal((await api("/api/e2ee/devices/link", rejected.cookies, { deviceId: rejectedId })).status, 201);
     const [rejectRequest] = (await pool.query("select id,device_id,fingerprint from device_link_requests where user_id=$1 and status='pending'", [owner.id])).rows;
     await profile(source.page); await refresh(source.page); await source.page.getByRole("button", { name: "Reject device linking", exact: true }).click();
     await source.page.getByText("Device linking rejected. No encryption access was granted.", { exact: true }).waitFor();
     assert.equal((await pool.query("select status from device_link_requests where id=$1", [rejectRequest.id])).rows[0].status, "rejected");
     const pendingSession = await renewSession(rejected);
     assert.equal((await pool.query("select trusted_at from e2ee_keys where user_id=$1 and session_id=$2", [owner.id, pendingSession])).rows[0].trusted_at, null, "Rebinding an untrusted key never approves it");
-    const renewedLink = rejected.page.waitForResponse(response => response.url().endsWith("/api/e2ee/devices/link") && response.request().method() === "POST");
-    await rejected.page.getByRole("button", { name: "Request device linking" }).click();
-    const renewal = await renewedLink; assert.equal(renewal.status(), 201);
+    const renewal = await api("/api/e2ee/devices/link", rejected.cookies, { deviceId: rejectedId }); assert.equal(renewal.status, 201);
     const renewedRequest = await renewal.json();
     const expired = (await pool.query("update device_link_requests set expires_at=now()-interval '1 second' where id=$1 and user_id=$2 and status='pending' returning id,device_id,fingerprint", [renewedRequest.id, owner.id])).rows[0];
     assert(expired); assert.equal((await api("/api/e2ee/devices/approve", source.cookies, { ...challenge, linkId: expired.id, targetDeviceId: expired.device_id, targetFingerprint: expired.fingerprint })).status, 409);

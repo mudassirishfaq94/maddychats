@@ -1,7 +1,10 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useSharedE2EE } from "@/components/providers/e2ee-provider";
 import { e2eeRequest } from "@/lib/e2ee-request";
+import { DeviceIdentityEditor } from "./device-identity-editor";
+import { DeviceRecovery } from "./device-recovery";
+import { browserLabel, countryName } from "@/server/device-meta";
 import { FreshAuthentication } from "./fresh-authentication";
 
 type Device = { deviceId: string; trustedAt: string | null; publicKey: string; fingerprint: string; browser: string | null; sessionExpiresAt: string | null; sessionRevokedAt: string | null; lastUsedAt: string | null; sessionState: string; deviceName?: string | null; country?: string | null; platform?: string | null; };
@@ -22,7 +25,8 @@ export function EncryptionDevices() {
   const [confirmation, setConfirmation] = useState("");
   const [password, setPassword] = useState("");
   const [mfaCode, setMfaCode] = useState("");
-  const { waitForDeviceRegistration } = encryption;
+  const { waitForDeviceRegistration, syncKnownConversations } = encryption;
+  const knownTrusted = useRef<Set<string> | null>(null);
 
   const refresh = useCallback(async (signal?: AbortSignal) => {
     await waitForDeviceRegistration();
@@ -38,7 +42,16 @@ export function EncryptionDevices() {
     const linkData = await linkResponse.json() as { requests: LinkRequest[] };
     setLinks(linkData.requests);
     setDevices(rows);
-  }, [waitForDeviceRegistration]);
+    const trusted = new Set(rows.filter(row => row.trustedAt).map(row => row.deviceId));
+    const added = knownTrusted.current && [...trusted].some(id => !knownTrusted.current!.has(id));
+    const currentJustApproved = knownTrusted.current && !knownTrusted.current.has(encryption.deviceId) && trusted.has(encryption.deviceId);
+    knownTrusted.current = trusted;
+    if (currentJustApproved) { window.location.reload(); return; }
+    if (added && trusted.has(encryption.deviceId)) {
+      setStatus("Device linked. Synchronizing existing chat keys…");
+      void syncKnownConversations().then(summary => setStatus("Device approved. " + summary)).catch(cause => setStatus(cause instanceof Error ? cause.message : "Retry key synchronization."));
+    }
+  }, [waitForDeviceRegistration, encryption.deviceId, syncKnownConversations]);
 
   useEffect(() => {
     if (!encryption.initialized) return;
@@ -52,13 +65,13 @@ export function EncryptionDevices() {
   const current = devices.find(device => device.deviceId === encryption.deviceId);
 
   useEffect(() => {
-    if (!current || current.trustedAt) return;
+    if (!current || (current.trustedAt && !Object.values(issued).some(item => new Date(item.expiresAt).getTime() > Date.now()))) return;
     const controller = new AbortController();
     const timer = window.setInterval(() => {
       if (document.visibilityState === "visible" && !busy) void refresh(controller.signal).catch(() => {});
     }, 5000);
     return () => { clearInterval(timer); controller.abort(); };
-  }, [current, busy, refresh]);
+  }, [current, busy, refresh, issued]);
 
   /** A trusted device mints a short-lived code that names one target device. */
   function generateCode(targetDeviceId: string) {
@@ -97,21 +110,23 @@ export function EncryptionDevices() {
 
   return <section id="encryption-devices" className="card-flat rounded-2xl p-5">
     <h2 className="font-semibold">Encryption devices</h2>
-    <p className="mt-1 text-sm text-[var(--muted)]">Approve a new device from a trusted device, then open the chat there and use Restore my other devices. Reload the new device after approval.</p>
-    {current && <div className="mt-3 text-sm"><p>This device: {current.trustedAt ? "Trusted" : "Waiting for approval"}</p><p className="mt-1 text-xs">Device ID: {current.deviceId}</p>{current.deviceName ? <p className="mt-1 text-xs text-[var(--muted)]">Device name: {current.deviceName}</p> : null}{current.country ? <p className="mt-1 text-xs text-[var(--muted)]">Country: {current.country}</p> : null}<code className="mt-1 block break-all select-all text-xs" aria-label="This device fingerprint">{current.fingerprint}</code></div>}
+    <p className="mt-1 text-sm text-[var(--muted)]">Use a one-time linking code from a trusted browser. Keep that browser open while existing chat keys synchronize. Save a recovery file so you can recover without resetting everyone else.</p>
+    {current && <div className="mt-3 text-sm"><p>This device: {current.trustedAt ? "Trusted" : "Waiting for approval"}</p><p className="mt-1 text-xs">Device ID: {current.deviceId}</p>{current.deviceName ? <p className="mt-1 text-xs text-[var(--muted)]">Device name: {current.deviceName}</p> : null}<p className="mt-1 text-xs text-[var(--muted)]">Country: {current.country ? countryName(current.country) : "Not provided — set Country in your profile"}</p><code className="mt-1 block break-all select-all text-xs" aria-label="This device fingerprint">{current.fingerprint}</code></div>}
     {current && !current.trustedAt && <p className="mt-3 text-sm text-[var(--muted)]">This browser cannot approve devices. Open Profile on a device marked Trusted and compare the fingerprint shown here.</p>}
-    <p className="mt-3 text-sm text-[var(--muted)]">Trust belongs to this account and this browser&apos;s saved encryption key, not the laptop or phone itself. Signing in again in the same browser keeps its approval; a different browser, or clearing browser storage, creates a new device that needs linking once. Approval permits key sharing; it does not mean every chat key has synchronized.</p>
+    <p className="mt-3 text-sm text-[var(--muted)]">Trust belongs to this account and this browser&apos;s saved encryption key, not the laptop or phone itself. Signing in again in the same browser keeps its approval; a different browser, a different website address, or clearing browser storage creates a new device that needs linking once. Approval permits key sharing; it does not mean every chat key has synchronized.</p>
     <h3 className="mt-4 text-sm font-semibold">Trusted devices for this account</h3>
     {devices.some(device => device.trustedAt) ? <ul className="mt-2 space-y-3">{devices.filter(device => device.trustedAt).map(device => <li key={device.deviceId} className="rounded-xl border border-[var(--border)] p-3 text-xs">
       <p className="font-semibold">{device.deviceId === encryption.deviceId ? "This browser — Trusted" : "Trusted encryption key"}</p>
       <p className="mt-1 break-all">Device ID: {device.deviceId}</p>
-      <p className="mt-1 break-words">{(device.deviceName ?? device.browser) || "Older registration: browser information unavailable. Match this ID on your original browser."}</p>
-      {device.country ? <p className="mt-1 text-xs text-[var(--muted)]">Country: {device.country}</p> : null}
+      <p className="mt-1 break-words">{(device.deviceName ?? browserLabel(device.browser) ?? device.platform) || "Older registration: browser information unavailable. Match this ID on your original browser."}</p>
+      {device.country ? <p className="mt-1 text-xs text-[var(--muted)]">Country: {countryName(device.country)}</p> : null}
       <p className="mt-1">Last key use: {device.lastUsedAt ? new Date(device.lastUsedAt).toLocaleString() : "Not recorded"}</p>
       <p className="mt-1">{device.sessionRevokedAt ? "Session revoked. This key cannot be used until you sign in and refresh its status." : device.sessionState === "expired" ? "Session expired. Sign in again on the original browser." : "Can approve only from the browser that still holds this private key."}</p>
     </li>)}</ul> : <p className="mt-2 text-sm">No trusted encryption device is registered for this account. Use secure recovery below to enroll this browser.</p>}
+    {current && <DeviceIdentityEditor key={current.deviceId} deviceId={current.deviceId} name={current.deviceName} country={current.country} onSaved={refresh} />}
+    <DeviceRecovery />
     {current && !current.trustedAt && <div className="mt-4 rounded-xl border border-[var(--border)] p-3">
-      <button type="button" className="btn btn-secondary" disabled={busy} onClick={() => setRecoveryOpen(previous => !previous)}>I cannot access a trusted device</button>
+      <button type="button" className="btn btn-secondary" disabled={busy} onClick={() => setRecoveryOpen(previous => !previous)}>Emergency recovery: no trusted device or recovery file</button>
       {recoveryOpen && <div className="mt-3 text-sm">
         <p>First try the original browser where this account&apos;s chats still open. If its keys are gone, securely enroll this browser after confirming your identity. This signs out all other browsers and removes their encryption approval; sign in and approve them again individually.</p>
         <p className="mt-2">Old messages stay encrypted and are not deleted. Lost private keys cannot be recovered by signing in. A participant who can still read the chat must verify your changed encryption identity and send an encrypted reply. Alternatively, re-approve an original browser that still has its keys, then use Restore my other devices there. New conversations can start after recovery; existing chats may remain waiting for key synchronization.</p>
@@ -140,8 +155,8 @@ export function EncryptionDevices() {
     <ul className="mt-3 space-y-3">{devices.filter(device => !device.trustedAt && device.deviceId !== encryption.deviceId).map(device => <li key={device.deviceId} className="border-t border-[var(--border)] pt-3">
       <p className="text-sm break-all">New device: {device.deviceId}</p>
       <code className="mt-1 block break-all select-all text-xs">{device.fingerprint}</code>
-      <p className="mt-1 text-xs break-words">{(device.deviceName ?? device.browser) || "Browser not recorded"}</p>
-      {device.country ? <p className="mt-1 text-xs text-[var(--muted)]">Country: {device.country}</p> : null}
+      <p className="mt-1 text-xs break-words">{(device.deviceName ?? browserLabel(device.browser) ?? device.platform) || "Browser not recorded"}</p>
+      {device.country ? <p className="mt-1 text-xs text-[var(--muted)]">Country: {countryName(device.country)}</p> : null}
       <p className="mt-1 text-xs">{device.sessionRevokedAt ? "Signed out / revoked — sign in on that browser before linking." : "Waiting for approval — chat keys are not yet synchronized."}</p>
       {!current?.trustedAt && <p className="mt-2 text-xs text-[var(--muted)]">Approval is available on a trusted browser for this account. Use the device list above or secure recovery.</p>}
       {current?.trustedAt && <>
@@ -158,11 +173,12 @@ export function EncryptionDevices() {
       <button type="button" className="btn btn-secondary mt-2" disabled={busy || !current?.trustedAt || !verified.includes(device.deviceId)} onClick={() => {
         setBusy(true); setStatus("");
         const link = links.find(link => link.deviceId === device.deviceId && link.status === "pending");
-        void encryption.approveDevice(device.deviceId, device.fingerprint, link ? { linkId: link.id, code: codes[link.id] ?? "", decision: "approve" } : undefined).then(async () => { await refresh(); setVerified([]); setStatus("Device approved. Restore each chat from a device that can already read it, then reload the new device."); }).catch(cause => setStatus(cause instanceof Error ? cause.message : "Approval failed.")).finally(() => setBusy(false));
+        void encryption.approveDevice(device.deviceId, device.fingerprint, link ? { linkId: link.id, code: codes[link.id] ?? "", decision: "approve" } : undefined).then(async () => { await refresh(); setVerified([]); setStatus("Device approved. Existing chat keys are synchronizing from this browser."); }).catch(cause => setStatus(cause instanceof Error ? cause.message : "Approval failed.")).finally(() => setBusy(false));
       }}>Approve encryption device</button>
       {!verified.includes(device.deviceId) && <p className="mt-1 text-xs text-[var(--muted)]">Compare the fingerprint on both browsers and check the box to enable approval.</p>}
       </>}
     </li>)}</ul>
+    {current?.trustedAt && <button type="button" className="btn btn-secondary mt-3 mr-2" disabled={busy} onClick={() => { setBusy(true); setStatus("Synchronizing existing chat keys…"); void syncKnownConversations().then(setStatus).catch(error => setStatus(error.message)).finally(() => setBusy(false)); }}>Sync chat keys to linked devices</button>}
     <button type="button" className="btn btn-secondary mt-3" disabled={busy || !encryption.initialized} onClick={() => { setBusy(true); setStatus("Checking device approval…"); void refresh().then(() => { setStatus("Encryption devices refreshed."); window.dispatchEvent(new Event("maddy:message-request-keys")); }).catch(cause => setStatus(cause instanceof Error ? cause.message : "Unable to load devices.")).finally(() => setBusy(false)); }}>{busy ? "Checking devices…" : "Refresh encryption devices"}</button>
     <p className="mt-3 text-xs text-[var(--muted)]">Clearing all browser data removes local keys and drafts. If no trusted device retains a message key, we cannot recover that message.</p>
   </section>;
