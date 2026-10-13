@@ -13,6 +13,10 @@ export interface SafeUser {
   createdAt: string;
   updatedAt: string;
   lastSeenAt: string | null;
+  /** Free-text label the owner gave this browser/device. */
+  deviceName: string | null;
+  /** IANA country the owner chose for this account. */
+  country: string | null;
 }
 
 /**

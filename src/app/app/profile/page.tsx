@@ -9,6 +9,7 @@ import {
   CalendarDays,
   Clock,
   Fingerprint,
+  Globe,
   Mail,
 } from "lucide-react";
 import { getSessionUser } from "@/server/session";
@@ -60,6 +61,8 @@ export default async function ProfilePage({
     { icon: AtSign, label: "Username", value: `@${user.username}` },
     { icon: CalendarDays, label: "Member since", value: formatDate(user.createdAt) },
     { icon: Clock, label: "Last seen", value: timeAgo(user.lastSeenAt) },
+    { icon: Fingerprint, label: "Device name", value: user.deviceName ?? "Not set" },
+    { icon: Globe, label: "Country", value: user.country ?? "Not set" },
   ];
 
   return (

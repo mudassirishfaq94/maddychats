@@ -21,6 +21,8 @@ export function toSafeUser(user: UserRow): SafeUser {
     createdAt: user.createdAt.toISOString(),
     updatedAt: user.updatedAt.toISOString(),
     lastSeenAt: user.lastSeenAt ? user.lastSeenAt.toISOString() : null,
+    deviceName: user.deviceName ?? null,
+    country: user.country ?? null,
   };
 }
 
