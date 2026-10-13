@@ -62,7 +62,7 @@ function parsePrekey(value: unknown, signed: boolean): PublicPrekey | null {
   const keyId = input.keyId;
   const publicKey = publicValue(input.publicKey);
   const signature = signed ? publicValue(input.signature) : undefined;
-  if (!Number.isInteger(keyId) || !publicKey || (signed && !signature)) return null;
+  if (typeof keyId !== "number" || !Number.isInteger(keyId) || keyId < 0 || keyId > 0xffff_ffff || !publicKey || (signed && !signature)) return null;
   return { keyId: keyId as number, publicKey, ...(signature ? { signature } : {}) };
 }
 
@@ -74,6 +74,7 @@ function parsePrekey(value: unknown, signed: boolean): PublicPrekey | null {
 export async function POST(req: NextRequest) {
   const blocked = guardSameOrigin(req);
   if (blocked) return blocked;
+  if (process.env.STARTER_MODE === "1") return jsonError(503, "Experimental key provisioning is paused.");
   const user = await getSessionUser();
   if (!user) return jsonError(401, "Not authenticated.");
 
@@ -82,7 +83,7 @@ export async function POST(req: NextRequest) {
   const deviceId = publicValue(data.deviceId);
   const identityKey = publicValue(data.identityKey);
   const signingKey = publicValue(data.signingKey);
-  const registrationId = typeof data.registrationId === "number" && Number.isInteger(data.registrationId)
+  const registrationId = typeof data.registrationId === "number" && Number.isInteger(data.registrationId) && data.registrationId >= 0 && data.registrationId <= 0x7fff_ffff
     ? data.registrationId
     : null;
   const protocolDeviceId = typeof data.protocolDeviceId === "number" && Number.isInteger(data.protocolDeviceId) && data.protocolDeviceId > 0 && data.protocolDeviceId <= 0x7fff_ffff

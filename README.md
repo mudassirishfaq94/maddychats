@@ -1,12 +1,14 @@
-# ZipTalk
+# Circlo
 
-ZipTalk is a full-stack direct-messaging application built with Next.js,
+Circlo is a full-stack direct-messaging application built with Next.js,
 React, TypeScript, PostgreSQL, and Drizzle ORM. It supports persistent private
 conversations, realtime delivery and presence, typing indicators, read
 receipts, reactions, replies, search, notifications, private attachments, and
 responsive light/dark themes.
 
-For a free Vercel + Neon production setup, see [DEPLOYMENT.md](./DEPLOYMENT.md).
+For the production Docker VPS + Supabase setup, see [DEPLOYMENT.md](./DEPLOYMENT.md).
+Upload hardening, device sessions, staged CSP, and mobile profiling are documented
+in [Tasks 4–6](./docs/ITEMS4_6_HARDENING_AND_PERFORMANCE.md).
 
 ## Tech stack
 
@@ -20,7 +22,7 @@ For a free Vercel + Neon production setup, see [DEPLOYMENT.md](./DEPLOYMENT.md).
 
 ## Prerequisites
 
-- Node.js 20 or newer
+- Node.js 22 LTS
 - npm
 - PostgreSQL 15 or newer
 
@@ -45,7 +47,7 @@ Configure `.env` with local values. Never commit this file.
 | Variable | Required | Purpose |
 | --- | --- | --- |
 | `DATABASE_URL` | Yes | Server-only PostgreSQL connection string |
-| `SESSION_TTL_DAYS` | No | Persistent login lifetime in days (default: 365, maximum: 3650) |
+| `SESSION_TTL_DAYS` | No | Absolute device lifetime in days (default: 30, maximum: 90); access JWTs last 15 minutes |
 | `JWT_SECRET` | Production | Secret of at least 32 characters used to sign sessions |
 | `PORT` | No | Application port; defaults to `3000` |
 | `CLIENT_URL` | Recommended | Canonical application origin |
@@ -69,7 +71,7 @@ Create the database, then apply the schema:
 
 ```bash
 createdb maddy_chats
-npx drizzle-kit push
+npm run db:migrate
 ```
 
 Start the development server:
@@ -89,7 +91,7 @@ Open [http://localhost:3000](http://localhost:3000).
 | `npm start` | Run the production build |
 | `npm run typecheck` | Run TypeScript checks |
 | `npm run lint` | Run ESLint |
-| `npx drizzle-kit push` | Apply the current schema to the database |
+| `npm run db:migrate` | Apply the versioned migration journal |
 | `npx drizzle-kit generate` | Generate schema migration files |
 
 ## Development seed
@@ -124,9 +126,10 @@ the server. Private media is served through authenticated routes that verify
 conversation membership.
 
 Realtime updates use the authenticated `/api/realtime/stream` Server-Sent
-Events endpoint. The current event bus and presence store are process-local;
-multi-instance deployments should replace them with shared infrastructure such
-as Redis pub/sub.
+Events endpoint. Realtime events and rate-limit buckets are persisted in
+PostgreSQL. Presence remains process-local, so production uses one web replica.
+Docker Compose runs an independent scheduled-message worker and private
+readiness checks. The deployment guide includes backup and restoration steps.
 
 ## Testing
 
@@ -138,15 +141,12 @@ npm run lint
 npm run build
 ```
 
-With the application and a test database running, execute the smoke suite:
-
-```bash
-./scripts/smoke-test.sh http://localhost:3000
-```
-
-The smoke suite creates isolated test accounts and exercises authentication,
-profiles, conversations, realtime events, messages, reactions, uploads,
-authorization, search, notifications, and persistence.
+The `Quality` workflow also runs dependency audits and isolated integration
+tests on every pull request. Follow [the quality-gate guide](./docs/ITEM3_QUALITY_GATES.md)
+to prepare disposable local databases and run `npm test`. The supported suites
+exercise authentication/MFA, authorization, private media, migrations,
+scheduling, readiness and backup restoration. The old manual smoke script
+predates email verification and is not the supported automated test command.
 
 ## Production checklist
 

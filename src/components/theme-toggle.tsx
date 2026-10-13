@@ -29,11 +29,11 @@ export function ThemeToggle({ className }: { className?: string }) {
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
-    const stored = (localStorage.getItem("maddy-theme") as Theme) || "light";
+    const stored = (localStorage.getItem("maddy-theme") as Theme) || "dark";
     const timer = window.setTimeout(() => setTheme(stored), 0);
     const mq = window.matchMedia("(prefers-color-scheme: light)");
     const onChange = (e: MediaQueryListEvent) => {
-      const current = (localStorage.getItem("maddy-theme") as Theme) || "light";
+      const current = (localStorage.getItem("maddy-theme") as Theme) || "dark";
       if (current === "system") applyTheme(e.matches ? "light" : "dark");
     };
     mq.addEventListener("change", onChange);
@@ -60,7 +60,7 @@ export function ThemeToggle({ className }: { className?: string }) {
     try {
       localStorage.setItem("maddy-theme", next);
     } catch {
-      // private mode — theme applies for this session only
+      // private mode â€” theme applies for this session only
     }
     applyTheme(next);
     setOpen(false);

@@ -1,5 +1,5 @@
 import { SignJWT, jwtVerify } from "jose";
-import { SESSION_TTL_SECONDS, jwtSecret } from "./config";
+import { ACCESS_TTL_SECONDS, SESSION_TTL_SECONDS, jwtSecret } from "./config";
 
 const ISSUER = "maddy-chats";
 const AUDIENCE = "maddy-chats-web";
@@ -13,21 +13,27 @@ export interface SessionClaims {
   iat: number;
   /** Signed millisecond issuance time for precise logout revocation. */
   iatMs: number;
+  authTime: number;
+  mfaTime: number;
+  sid?: string;
 }
 
 export async function signSessionToken(
   userId: string,
   username: string,
+  authTime = 0,
+  mfaTime = 0,
+  sid?: string,
 ): Promise<string> {
   const nowMs = Date.now();
   const now = Math.floor(nowMs / 1000);
-  return new SignJWT({ usr: username, iatMs: nowMs })
+  return new SignJWT({ usr: username, iatMs: nowMs, authTime, mfaTime, ...(sid ? { sid } : {}) })
     .setProtectedHeader({ alg: "HS256", typ: "JWT" })
     .setSubject(userId)
     .setIssuer(ISSUER)
     .setAudience(AUDIENCE)
     .setIssuedAt(now)
-    .setExpirationTime(now + SESSION_TTL_SECONDS)
+    .setExpirationTime(now + (sid ? ACCESS_TTL_SECONDS : SESSION_TTL_SECONDS))
     .sign(jwtSecret());
 }
 
@@ -54,6 +60,9 @@ export async function verifySessionToken(
       usr: payload.usr,
       iat: payload.iat,
       iatMs: payload.iatMs,
+      mfaTime: typeof payload.mfaTime === "number" && Number.isFinite(payload.mfaTime) ? payload.mfaTime : 0,
+      authTime: typeof payload.authTime === "number" && Number.isFinite(payload.authTime) ? payload.authTime : 0,
+      sid: typeof payload.sid === "string" ? payload.sid : undefined,
     };
   } catch {
     return null;

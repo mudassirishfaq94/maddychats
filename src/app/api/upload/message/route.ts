@@ -1,3 +1,4 @@
+import { readUploadForm } from "@/server/http";
 import { after, NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { conversations, messageAttachments, messages } from "@/db/schema";
@@ -14,6 +15,7 @@ import { publishToUsers } from "@/server/realtime";
 import { onlineMembersOf } from "@/server/presence";
 import {
   getMembership,
+  getConversationForUser,
   getMessageDTO,
   markMessageDelivered,
   memberIdsOf,
@@ -26,8 +28,9 @@ import {
   LIMITS,
   saveBuffer,
   validateUpload,
+  sanitizeName,
 } from "@/server/storage";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -39,7 +42,7 @@ export const runtime = "nodejs";
 export async function POST(req: NextRequest) {
   const blocked = guardSameOrigin(req);
   if (blocked) return blocked;
-  const oversized = guardUploadSize(req);
+  const oversized = guardUploadSize(req, true);
   if (oversized) return oversized;
 
   const rl = await rateLimit(
@@ -51,12 +54,13 @@ export async function POST(req: NextRequest) {
 
   const me = await getSessionUser();
   if (!me) return jsonError(401, "Not authenticated.");
+  if (!(await rateLimit(`encrypted-upload:${me.id}`, 10, 60000)).allowed) return jsonError(429, "Too many uploads. Try again later.");
 
   let form: FormData;
   try {
-    form = await req.formData();
-  } catch {
-    return jsonError(400, "Invalid upload.");
+    form = await readUploadForm(req);
+  } catch (error) {
+    return jsonError(error instanceof Error && error.message === "body_too_large" ? 413 : 400, "Invalid or oversized upload.");
   }
 
   const conversationId = String(form.get("conversationId") ?? "");
@@ -64,6 +68,13 @@ export async function POST(req: NextRequest) {
 
   const membership = await getMembership(conversationId, me.id);
   if (!membership) return jsonError(404, "Conversation not found.");
+  const [conversation] = await db.select().from(conversations).where(eq(conversations.id, conversationId));
+  if (!conversation || conversation.deletedAt) return jsonError(404, "Conversation not found.");
+  if (conversation.type === "dm") {
+    const detail = await getConversationForUser(conversationId, me.id);
+    if (detail?.requestPending || detail?.awaitingApproval) return jsonError(403, "Send one text introduction, then wait for approval before sharing attachments.");
+  }
+  if (conversation.adminOnlyMessaging && !["owner", "admin"].includes(membership.role)) return jsonError(403, "Only group admins can send messages.");
 
   // Blocking is enforced server-side, never in the UI alone.
   const members = await memberIdsOf(conversationId);
@@ -118,11 +129,16 @@ export async function POST(req: NextRequest) {
       const originalMime =
         origTypes[i]?.trim().toLowerCase().split(";")[0] ??
         "application/octet-stream";
+      if (!/^[a-z0-9.+-]+\/[a-z0-9.+-]+$/.test(originalMime) || originalMime.length > 100) return jsonError(422, "Invalid media type.");
+      if (file.size < 29 || file.size > LIMITS.file) return jsonError(413, "Invalid encrypted attachment size.");
+      const metadataCheck = validateUpload(file.name, originalMime, file.size, "message");
+      if (!metadataCheck.ok) return jsonError(422, metadataCheck.error);
+      if (!wrappedKeys[i] || wrappedKeys[i]!.length > 16384) return jsonError(422, "An encrypted media key is required.");
       let kind: "image" | "video" | "file" | "audio" = "file";
       if (originalMime.startsWith("audio/")) kind = "audio";
       else if (originalMime.startsWith("image/")) kind = "image";
       else if (originalMime.startsWith("video/")) kind = "video";
-      const safeName = file.name.replace(/[\r\n\u0000]/g, "").slice(0, 200);
+      const safeName = sanitizeName(file.name);
       prepared.push({
         file,
         storedName: generateStoredName(""),
@@ -159,6 +175,7 @@ export async function POST(req: NextRequest) {
   }
 
   const written: string[] = [];
+  let committed = false;
   try {
     const messageType: string = prepared.every((p) => p.kind === "image")
       ? "image"
@@ -169,6 +186,12 @@ export async function POST(req: NextRequest) {
           : "file";
 
     const created = await db.transaction(async (tx) => {
+      // Serialize quota reservations with the attachment inserts, including concurrent senders.
+      await tx.execute(sql`select pg_advisory_xact_lock(847221904)`);
+      const usage = await tx.execute<{ bytes: string }>(sql`select coalesce(sum(size),0)::text as bytes from message_attachments`);
+      const budgetMb = Number(process.env.CHAT_STORAGE_BUDGET_MB ?? "400");
+      const budget = (Number.isFinite(budgetMb) && budgetMb > 0 ? budgetMb : 400) * 1024 * 1024;
+      if (Number(usage.rows[0]?.bytes ?? 0) + prepared.reduce((total, item) => total + item.file.size, 0) > budget) throw new Error("storage_budget");
       const now = new Date();
       const rows = await tx
         .insert(messages)
@@ -214,6 +237,7 @@ export async function POST(req: NextRequest) {
       return message;
     });
 
+    committed = true;
     // Conversation ordering.
     const now = new Date();
     await db
@@ -247,10 +271,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ message: dto }, { status: 201 });
   } catch (err) {
     // Best-effort cleanup of partial writes.
-    await Promise.all(written.map((p) => deleteStored(p)));
+    if (!committed) await Promise.all(written.map((p) => deleteStored(p)));
     if ((err as Error)?.message === "too_large") {
       return jsonError(413, "That file is too large.");
     }
+    if ((err as Error)?.message === "storage_budget") return jsonError(507, "Chat storage is full. No attachment was sent.");
     console.error("[maddy-chats] attachment upload failed:", err);
     return jsonError(500, "Upload failed. Please try again.");
   }

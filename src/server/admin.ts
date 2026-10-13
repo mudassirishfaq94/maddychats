@@ -3,7 +3,7 @@
  * Audit trail: every admin action is logged immutably.
  */
 
-import { eq, sql } from "drizzle-orm";
+import { eq, inArray, asc } from "drizzle-orm";
 import { db } from "@/db";
 import { users, adminAuditLog } from "@/db/schema";
 import { getSessionUser } from "./session";
@@ -73,88 +73,42 @@ export async function auditLog(input: {
   });
 }
 
-/** Suspend a user (temporary or permanent) */
-export async function suspendUser(
-  adminId: string,
-  targetUserId: string,
-  options: {
-    reason: string;
-    until?: Date; // null = permanent
-  },
-): Promise<void> {
-  // Prevent self-suspension
-  if (adminId === targetUserId) return;
+export type AdminTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+export async function lockAdminSubjects(tx: AdminTransaction, actorId: string, subjectId: string) {
+  const rows = await tx.select({ id: users.id, role: users.role }).from(users).where(inArray(users.id, [actorId, subjectId])).orderBy(asc(users.id)).for("update");
+  return { actor: rows.find((row) => row.id === actorId), target: rows.find((row) => row.id === subjectId) };
+}
 
-  // Prevent suspending other admins (only super admin can)
-  const targetRole = await getUserRole(targetUserId);
-  if (targetRole === "admin") return;
-
-  await db
-    .update(users)
-    .set({
-      suspendedAt: new Date(),
-      suspendedUntil: options.until ?? null,
-      suspensionReason: options.reason,
-      suspendedBy: adminId,
-      // Revoke all sessions
-      tokenInvalidBeforeAt: new Date(),
-    })
-    .where(eq(users.id, targetUserId));
-
-  await auditLog({
-    adminId,
-    action: "user_suspended",
-    targetUserId,
-    details: {
-      reason: options.reason,
-      until: options.until?.toISOString() ?? "permanent",
-    },
+/** Changes and their audit record commit together; actor/target locks prevent
+ * concurrent role changes from invalidating the permission decision. */
+export async function suspendUser(adminId: string, targetUserId: string, options: { reason: string; until?: Date }) {
+  await db.transaction(async (tx) => {
+    const { actor, target } = await lockAdminSubjects(tx, adminId, targetUserId);
+    if (!target) throw new Error("NOT_FOUND");
+    if (!actor || !["admin", "moderator"].includes(actor.role) || adminId === targetUserId || target.role === "admin" || (actor.role === "moderator" && target.role !== "user")) throw new Error("FORBIDDEN");
+    await tx.update(users).set({ suspendedAt: new Date(), suspendedUntil: options.until ?? null, suspensionReason: options.reason, suspendedBy: adminId, tokenInvalidBeforeAt: new Date() }).where(eq(users.id, targetUserId));
+    await tx.insert(adminAuditLog).values({ adminId, action: "user_suspended", targetUserId, details: { actorUserId: adminId, subjectUserId: targetUserId, reason: options.reason, until: options.until?.toISOString() ?? null } });
   });
 }
 
-/** Unsuspend a user */
-export async function unsuspendUser(
-  adminId: string,
-  targetUserId: string,
-): Promise<void> {
-  await db
-    .update(users)
-    .set({
-      suspendedAt: null,
-      suspendedUntil: null,
-      suspensionReason: null,
-      suspendedBy: null,
-    })
-    .where(eq(users.id, targetUserId));
-
-  await auditLog({
-    adminId,
-    action: "user_unsuspended",
-    targetUserId,
+export async function unsuspendUser(adminId: string, targetUserId: string) {
+  await db.transaction(async (tx) => {
+    const { actor, target } = await lockAdminSubjects(tx, adminId, targetUserId);
+    if (!target) throw new Error("NOT_FOUND");
+    if (!actor || !["admin", "moderator"].includes(actor.role) || target.role === "admin" || (actor.role === "moderator" && target.role !== "user")) throw new Error("FORBIDDEN");
+    // Never clear the revocation watermark when restoring an account.
+    await tx.update(users).set({ suspendedAt: null, suspendedUntil: null, suspensionReason: null, suspendedBy: null }).where(eq(users.id, targetUserId));
+    await tx.insert(adminAuditLog).values({ adminId, action: "user_unsuspended", targetUserId, details: { actorUserId: adminId, subjectUserId: targetUserId } });
   });
 }
 
-/** Change a user's role */
-export async function setUserRole(
-  adminId: string,
-  targetUserId: string,
-  newRole: "user" | "moderator" | "admin",
-): Promise<void> {
-  // Prevent self-demotion
-  if (adminId === targetUserId && newRole !== "admin") return;
-
-  const oldRole = await getUserRole(targetUserId);
-
-  await db
-    .update(users)
-    .set({ role: newRole })
-    .where(eq(users.id, targetUserId));
-
-  await auditLog({
-    adminId,
-    action: "role_changed",
-    targetUserId,
-    details: { from: oldRole, to: newRole },
+export async function setUserRole(adminId: string, targetUserId: string, newRole: "user" | "moderator" | "admin") {
+  await db.transaction(async (tx) => {
+    const { actor, target } = await lockAdminSubjects(tx, adminId, targetUserId);
+    if (!target) throw new Error("NOT_FOUND");
+    if (!actor || actor.role !== "admin" || target.role === "admin" || adminId === targetUserId) throw new Error("FORBIDDEN");
+    await tx.update(users).set({ role: newRole, tokenInvalidBeforeAt: new Date() }).where(eq(users.id, targetUserId));
+    await tx.insert(adminAuditLog).values({ adminId, action: "role_changed", targetUserId, details: { actorUserId: adminId, subjectUserId: targetUserId, from: target.role, to: newRole } });
   });
 }
 

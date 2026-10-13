@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect, notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { db } from "@/db";
@@ -44,9 +45,9 @@ export default async function InvitePage({
             <p className="mt-2 text-sm text-[var(--muted)]">
               This invite link has expired. Ask the group admin for a new one.
             </p>
-            <a href="/app/chats" className="mt-4 inline-block text-sm font-medium text-[var(--accent)]">
+            <Link href="/app/chats" className="mt-4 inline-block text-sm font-medium text-[var(--accent)]">
               Back to chats
-            </a>
+            </Link>
           </div>
         </div>
       </AppShell>
@@ -63,9 +64,9 @@ export default async function InvitePage({
             <p className="mt-2 text-sm text-[var(--muted)]">
               This invite link has been used too many times. Ask for a new one.
             </p>
-            <a href="/app/chats" className="mt-4 inline-block text-sm font-medium text-[var(--accent)]">
+            <Link href="/app/chats" className="mt-4 inline-block text-sm font-medium text-[var(--accent)]">
               Back to chats
-            </a>
+            </Link>
           </div>
         </div>
       </AppShell>
@@ -87,9 +88,9 @@ export default async function InvitePage({
           <p className="mt-2 text-sm text-[var(--muted)]">
             {result.error || "Something went wrong."}
           </p>
-          <a href="/app/chats" className="mt-4 inline-block text-sm font-medium text-[var(--accent)]">
+          <Link href="/app/chats" className="mt-4 inline-block text-sm font-medium text-[var(--accent)]">
             Back to chats
-          </a>
+          </Link>
         </div>
       </div>
     </AppShell>

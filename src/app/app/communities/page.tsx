@@ -38,20 +38,26 @@ export default function CommunitiesPage() {
   const [newDesc, setNewDesc] = useState("");
   const [creating, setCreating] = useState(false);
   const [tab, setTab] = useState<"my" | "browse">("my");
+  const [error, setError] = useState<string | null>(null);
+  const [retry, setRetry] = useState(0);
+  const [joining, setJoining] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch("/api/communities")
-      .then((r) => r.json())
+    const controller = new AbortController();
+    fetch("/api/communities", { signal: controller.signal })
+      .then(async r => { if (!r.ok) throw new Error("Could not load communities. Please try again."); return r.json(); })
       .then((data) => {
         setMyCommunities(data.myCommunities ?? []);
         setPublicCommunities(data.publicCommunities ?? []);
       })
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, []);
+      .catch((cause: Error) => { if (!controller.signal.aborted) setError(cause.message); })
+      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+    return () => controller.abort();
+  }, [retry]);
 
   async function handleCreate() {
-    if (!newName.trim()) return;
+    if (!newName.trim() || creating) return;
+    setError(null);
     setCreating(true);
     try {
       const res = await fetch("/api/communities", {
@@ -59,6 +65,7 @@ export default function CommunitiesPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: newName.trim(), description: newDesc.trim() || undefined }),
       });
+      if (!res.ok) { const data = await res.json().catch(() => null); throw new Error(data?.error ?? "Could not create the community. Please try again."); }
       if (res.ok) {
         const data = await res.json();
         setMyCommunities((prev) => [{ ...data.community, memberCount: 1, channelCount: 0, myRole: "owner" }, ...prev]);
@@ -66,16 +73,20 @@ export default function CommunitiesPage() {
         setNewName("");
         setNewDesc("");
       }
-    } catch {}
-    setCreating(false);
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Connection interrupted. Please try again."); }
+    finally { setCreating(false); }
   }
 
   async function handleJoin(communityId: string) {
+    if (joining) return;
+    setJoining(communityId); setError(null);
+    try {
     const res = await fetch(`/api/communities/${communityId}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "join" }),
     });
+    if (!res.ok) { const data = await res.json().catch(() => null); throw new Error(data?.error ?? "Could not join the community. Please try again."); }
     if (res.ok) {
       const community = publicCommunities.find((c) => c.id === communityId);
       if (community) {
@@ -83,18 +94,21 @@ export default function CommunitiesPage() {
         setPublicCommunities((prev) => prev.filter((c) => c.id !== communityId));
       }
     }
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Connection interrupted. Please try again."); }
+    finally { setJoining(null); }
   }
 
   const communities = tab === "my" ? myCommunities : publicCommunities;
 
   return (
     <div className="mx-auto h-full w-full max-w-3xl overflow-y-auto px-4 py-6 sm:px-6">
+      {error && !showCreate ? <div role="alert" className="mb-4 rounded-xl border border-[var(--border)] p-3 text-sm"><p>{error}</p><button type="button" className="btn btn-secondary mt-2" onClick={() => { setError(null); setLoading(true); setRetry(value => value + 1); }}>Try again</button></div> : null}
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Link
             href="/app"
-            className="flex h-10 min-w-[44px] items-center justify-center rounded-full text-[var(--muted)] hover:bg-[color-mix(in_srgb,var(--muted)_12%,transparent)]"
+            className="flex h-11 min-w-[44px] items-center justify-center rounded-full text-[var(--muted)] hover:bg-[color-mix(in_srgb,var(--muted)_12%,transparent)]"
             aria-label="Back"
           >
             <ArrowLeft className="h-5 w-5" />
@@ -109,7 +123,7 @@ export default function CommunitiesPage() {
         <button
           type="button"
           onClick={() => setShowCreate(true)}
-          className="flex h-10 min-w-[44px] items-center justify-center rounded-full bg-[var(--accent)] text-white"
+          className="flex h-11 min-w-[44px] items-center justify-center rounded-full bg-[var(--action)] text-[var(--action-fg)]"
           aria-label="Create community"
         >
           <Plus className="h-5 w-5" />
@@ -124,7 +138,7 @@ export default function CommunitiesPage() {
             type="button"
             onClick={() => setTab(t)}
             className={`rounded-full px-4 py-1.5 text-xs font-semibold transition-colors ${
-              tab === t ? "bg-[var(--accent)] text-white" : "bg-[var(--surface-2)] text-[var(--muted)]"
+              tab === t ? "bg-[var(--action)] text-[var(--action-fg)]" : "bg-[var(--surface-2)] text-[var(--muted)]"
             }`}
           >
             {t === "my" ? `My Communities (${myCommunities.length})` : `Browse (${publicCommunities.length})`}
@@ -186,9 +200,10 @@ export default function CommunitiesPage() {
                   <button
                     type="button"
                     onClick={() => void handleJoin(community.id)}
-                    className="shrink-0 rounded-xl bg-[var(--accent)] px-3 py-1.5 text-xs font-semibold text-white"
+                    disabled={joining !== null}
+                    className="shrink-0 rounded-xl bg-[var(--action)] px-3 py-1.5 text-xs font-semibold text-[var(--action-fg)]"
                   >
-                    Join
+                    {joining === community.id ? "Joining…" : "Join"}
                   </button>
                 )}
                 {community.myRole && (
@@ -212,6 +227,7 @@ export default function CommunitiesPage() {
                 <X className="h-4 w-4" />
               </button>
             </div>
+            {error ? <p role="alert" className="mt-3 text-sm">{error}</p> : null}
             <div className="mt-4 space-y-3">
               <input
                 value={newName}
@@ -236,7 +252,7 @@ export default function CommunitiesPage() {
                 type="button"
                 onClick={handleCreate}
                 disabled={!newName.trim() || creating}
-                className="rounded-xl bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+                className="rounded-xl bg-[var(--action)] px-4 py-2 text-sm font-medium text-[var(--action-fg)] disabled:opacity-50"
               >
                 {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create"}
               </button>

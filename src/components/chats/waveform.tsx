@@ -128,10 +128,10 @@ export function Waveform({
               "rounded-full transition-[background-color] duration-100",
               isPlayed
                 ? own
-                  ? "bg-white"
+                  ? "bg-[var(--bubble-own-fg)]"
                   : "bg-[var(--accent)]"
                 : own
-                  ? "bg-white/30"
+                  ? "bg-[var(--bubble-own-sub)]"
                   : "bg-[color-mix(in_srgb,var(--muted)_40%,transparent)]",
             )}
             style={{

@@ -1,5 +1,7 @@
 "use client";
 
+import Image from "next/image";
+
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -241,7 +243,7 @@ export function ConversationDetails({
         {group.type === "group" ? (
           <div className="border-b border-[var(--border)] px-4 py-5">
             <div className="flex flex-col items-center gap-2">
-              {group.avatarUrl ? <img src={group.avatarUrl} alt="" className="h-16 w-16 rounded-full object-cover" /> : <span className="flex h-16 w-16 items-center justify-center rounded-full bg-[var(--accent-soft)]"><Users className="h-7 w-7 text-[var(--accent-fg)]" /></span>}
+              {group.avatarUrl ? <Image unoptimized width={1200} height={1200} src={group.avatarUrl} alt="" className="h-16 w-16 rounded-full object-cover" /> : <span className="flex h-16 w-16 items-center justify-center rounded-full bg-[var(--accent-soft)]"><Users className="h-7 w-7 text-[var(--accent-fg)]" /></span>}
               <span className="text-base font-semibold">{group.name}</span>
               <span className="text-xs text-[var(--muted)]">{group.members.length} members · {group.members.filter((m) => m.role === "owner" || m.role === "admin").length} admins</span>
               {group.description ? <p className="text-center text-xs text-[var(--muted)]">{group.description}</p> : null}
@@ -1305,6 +1307,7 @@ function DraggableBackgroundPreview({
         role="slider"
         aria-label="Background image position"
         aria-valuetext={`${Math.round(position.x)}% horizontal, ${Math.round(position.y)}% vertical`}
+        aria-valuenow={Math.round(position.x)}
         aria-valuemin={0}
         aria-valuemax={100}
         tabIndex={0}

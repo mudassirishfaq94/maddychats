@@ -1,6 +1,9 @@
 # ZipTalk Engineering Audit
 
 Date: 2026-09-04  
+Historical findings; current completion and release status is tracked in
+[remaining project work](./docs/REMAINING_PROJECT_WORK.md).
+
 Scope: 148 TypeScript/TSX/CSS files (~18,046 lines), 58 API route modules, database schema and migrations, authentication, uploads, realtime, PWA/deployment configuration, and principal chat UI paths.
 
 ## Executive summary

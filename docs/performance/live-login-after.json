@@ -1,0 +1,20 @@
+{
+  "version": "e94aa2058655d74cc6f9c3839a021054a90adf15",
+  "scope": "Three sequential logins of temporary owned accounts; no production load test",
+  "samples": [
+    {
+      "elapsedMs": 2358.6252999999997,
+      "serverTiming": "rate_limit;dur=59.39, lookup;dur=60.55, password_queue;dur=0.01, password_work;dur=1421.63, eligibility;dur=58.12, session_persist;dur=70.09, jwt;dur=1.32, session_setup;dur=131.65, handler_total;dur=1675.55"
+    },
+    {
+      "elapsedMs": 2903.5126,
+      "serverTiming": "rate_limit;dur=366.01, lookup;dur=48.54, password_queue;dur=0.00, password_work;dur=1463.56, eligibility;dur=48.50, session_persist;dur=49.91, jwt;dur=0.62, session_setup;dur=99.90, handler_total;dur=1979.13"
+    },
+    {
+      "elapsedMs": 2150.671699999999,
+      "serverTiming": "rate_limit;dur=49.63, lookup;dur=48.44, password_queue;dur=0.00, password_work;dur=1570.41, eligibility;dur=48.38, session_persist;dur=49.78, jwt;dur=0.70, session_setup;dur=99.66, handler_total;dur=1768.80"
+    }
+  ],
+  "fixtureCleanup": true,
+  "bcryptCost": 12
+}

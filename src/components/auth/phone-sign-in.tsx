@@ -2,7 +2,7 @@
 
 import { useRef, useState, type FormEvent } from "react";
 import { Loader2, Phone, ShieldCheck, UserRound } from "lucide-react";
-import { RecaptchaVerifier, signInWithPhoneNumber, type ConfirmationResult } from "firebase/auth";
+import type { RecaptchaVerifier, ConfirmationResult } from "firebase/auth";
 import { firebasePhoneAuth, firebasePhoneAuthConfigured } from "@/lib/firebase-client";
 import { Field } from "./field";
 
@@ -16,7 +16,7 @@ export function PhoneSignIn({ next = "/app", signup = false }: { next?: string; 
   const [stage, setStage] = useState<"phone" | "code" | "profile">("phone");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const configured = firebasePhoneAuthConfigured();
+  const configured = process.env.NEXT_PUBLIC_STARTER_MODE !== "1" && firebasePhoneAuthConfigured();
 
   async function sendCode(e: FormEvent) {
     e.preventDefault();
@@ -27,7 +27,9 @@ export function PhoneSignIn({ next = "/app", signup = false }: { next?: string; 
     }
     setPending(true);
     try {
-      const auth = firebasePhoneAuth();
+      const [auth, { RecaptchaVerifier, signInWithPhoneNumber }] = await Promise.all([
+        firebasePhoneAuth(), import("firebase/auth"),
+      ]);
       verifier.current?.clear();
       verifier.current = new RecaptchaVerifier(auth, "phone-recaptcha", { size: "invisible" });
       confirmation.current = await signInWithPhoneNumber(auth, phone.trim(), verifier.current);
@@ -52,10 +54,11 @@ export function PhoneSignIn({ next = "/app", signup = false }: { next?: string; 
         body: JSON.stringify({ idToken, ...(profile ? { displayName, username } : {}) }),
       });
       let response = await complete(signup || stage === "profile");
-      const data = await response.json().catch(() => null) as { error?: string; needsProfile?: boolean; fields?: Record<string, string> } | null;
+      const data = await response.json().catch(() => null) as { error?: string; needsProfile?: boolean; mfaRequired?: boolean; fields?: Record<string, string> } | null;
       if (response.status === 409 && data?.needsProfile) { setStage("profile"); return; }
       if (!response.ok) { setError(data?.fields?.username ?? data?.error ?? "Phone sign-in failed."); return; }
-      window.location.assign(next.startsWith("/") ? next : "/app");
+      const target = next.startsWith("/") && !next.startsWith("//") ? next : "/app";
+      window.location.assign(data?.mfaRequired ? `/login?mfa=1&next=${encodeURIComponent(target)}` : target);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message.replace(/^Firebase: /, "") : "The verification code was invalid or expired.");
     } finally { setPending(false); }

@@ -38,7 +38,7 @@ export function AudioMessage({
   /** When given (E2EE voice), bytes are fetched + decrypted client-side. */
   attachment?: AttachmentDTO;
 }) {
-  const [transcript, setTranscript] = useState(initialTranscript ?? null);
+  const [transcript, setTranscript] = useState(attachment?.encrypted ? null : initialTranscript ?? null);
   const [transcribing, setTranscribing] = useState(false);
   const resolved = useEncryptedAttachmentUrl(attachment);
   // Encrypted voice resolves to a decrypted object URL; local previews pass src.
@@ -64,10 +64,10 @@ export function AudioMessage({
         className={cn(
           "flex items-center gap-3 rounded-2xl px-4 py-3",
           own
-            ? "rounded-br-md text-white/70"
+            ? "rounded-br-md text-[var(--bubble-own-fg)]"
             : "rounded-bl-md border border-[var(--border)] bg-[var(--bubble-other-bg)]",
         )}
-        style={own ? { background: "var(--bubble-own-bg)" } : undefined}
+        style={own ? { background: "var(--voice-own-bg)" } : undefined}
       >
         <Loader2 className="h-4 w-4 animate-spin opacity-70" />
         <span className="text-xs opacity-80">Loading voice message…</span>
@@ -84,10 +84,10 @@ export function AudioMessage({
         className={cn(
           "flex items-center gap-3 rounded-2xl px-4 py-3",
           own
-            ? "rounded-br-md text-white/70"
+            ? "rounded-br-md text-[var(--bubble-own-fg)]"
             : "rounded-bl-md border border-[var(--border)] bg-[var(--bubble-other-bg)]",
         )}
-        style={own ? { background: "var(--bubble-own-bg)" } : undefined}
+        style={own ? { background: "var(--voice-own-bg)" } : undefined}
       >
         <Mic2 className="h-4 w-4 opacity-50" />
         <span className="text-xs opacity-70">Voice message unavailable</span>
@@ -117,7 +117,7 @@ export function AudioMessage({
             ? "rounded-br-md"
             : "rounded-bl-md border border-[var(--border)] bg-[var(--bubble-other-bg)]",
         )}
-        style={own ? { background: "var(--bubble-own-bg)" } : undefined}
+        style={own ? { background: "var(--voice-own-bg)" } : undefined}
       >
         {/* Play/Pause button */}
         <button
@@ -128,8 +128,8 @@ export function AudioMessage({
           className={cn(
             "flex h-10 w-10 shrink-0 items-center justify-center rounded-full shadow-sm transition-all active:scale-95",
             own
-              ? "bg-white/20 text-white hover:bg-white/30"
-              : "bg-[var(--accent)] text-white hover:brightness-110",
+              ? "bg-[var(--bubble-own-fg)]/10 text-[var(--bubble-own-fg)] hover:bg-[var(--bubble-own-fg)]/20"
+              : "bg-[var(--action)] text-[var(--action-fg)] hover:brightness-110",
           )}
         >
           {loading ? (
@@ -159,7 +159,7 @@ export function AudioMessage({
               onClick={cyclePlaybackRate}
               className={cn(
                 "rounded-full px-1.5 py-0.5 text-[0.6rem] font-bold tabular-nums transition-colors",
-                own ? "bg-white/15 text-white/80 hover:bg-white/25" : "bg-[var(--accent-soft)] text-[var(--accent-fg)]",
+                own ? "bg-[var(--bubble-own-fg)]/10 text-[var(--bubble-own-fg)] hover:bg-[var(--bubble-own-fg)]/20" : "bg-[var(--accent-soft)] text-[var(--accent-fg)]",
               )}
               aria-label={`Playback speed ${playbackRate} times. Change speed`}
               title="Change playback speed"
@@ -169,7 +169,7 @@ export function AudioMessage({
             <span
               className={cn(
                 "text-[0.65rem] tabular-nums",
-                own ? "text-white/60" : "text-[var(--muted)]",
+                own ? "text-[var(--bubble-own-sub)]" : "text-[var(--muted)]",
               )}
             >
               {playing || currentTime > 0
@@ -179,7 +179,7 @@ export function AudioMessage({
             <span
               className={cn(
                 "flex items-center gap-1 text-[0.6rem] font-medium uppercase tracking-wide",
-                own ? "text-white/45" : "text-[var(--muted)]",
+                own ? "text-[var(--bubble-own-sub)]" : "text-[var(--muted)]",
               )}
             >
               <Mic2 className="h-2.5 w-2.5" />
@@ -190,7 +190,7 @@ export function AudioMessage({
             <span
               className={cn(
                 "mt-1 flex items-center gap-1 text-[0.58rem] font-medium uppercase tracking-wide",
-                own ? "text-white/40" : "text-[var(--muted)]",
+                own ? "text-[var(--bubble-own-sub)]" : "text-[var(--muted)]",
               )}
             >
               <Lock className="h-2.5 w-2.5" />
@@ -199,10 +199,10 @@ export function AudioMessage({
           ) : null}
 
           {/* Transcript */}
-          {transcript ? (
+          {!attachment?.encrypted && transcript ? (
             <p className={cn(
               "mt-2 border-t pt-2 text-[0.75rem] leading-relaxed",
-              own ? "border-white/15 text-white/70" : "border-[var(--border)] text-[var(--muted)]",
+              own ? "border-[var(--bubble-own-fg)]/20 text-[var(--bubble-own-fg)]" : "border-[var(--border)] text-[var(--muted)]",
             )}>
               {transcript}
             </p>
@@ -227,7 +227,7 @@ export function AudioMessage({
               disabled={transcribing}
               className={cn(
                 "mt-2 flex items-center gap-1.5 border-t pt-2 text-[0.65rem] font-medium transition-colors",
-                own ? "border-white/15 text-white/50 hover:text-white/70" : "border-[var(--border)] text-[var(--muted)] hover:text-[var(--text)]",
+                own ? "border-[var(--bubble-own-fg)]/20 text-[var(--bubble-own-sub)] hover:text-[var(--bubble-own-fg)]" : "border-[var(--border)] text-[var(--muted)] hover:text-[var(--text)]",
               )}
             >
               {transcribing ? <Loader2 className="h-3 w-3 animate-spin" /> : <Captions className="h-3 w-3" />}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -24,6 +24,7 @@ interface CommunityDetail {
   isPublic: boolean;
   memberCount: number;
   channelCount: number;
+  myRole?: string | null;
 }
 
 interface Member {
@@ -47,7 +48,6 @@ interface Channel {
 
 export default function CommunityDetailPage() {
   const params = useParams();
-  const router = useRouter();
   const communityId = params.id as string;
 
   const [community, setCommunity] = useState<CommunityDetail | null>(null);
@@ -57,21 +57,26 @@ export default function CommunityDetailPage() {
   const [showCreateChannel, setShowCreateChannel] = useState(false);
   const [newChannelName, setNewChannelName] = useState("");
   const [creating, setCreating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [retry, setRetry] = useState(0);
 
   useEffect(() => {
-    fetch(`/api/communities/${communityId}`)
-      .then((r) => r.json())
+    const controller = new AbortController();
+    fetch(`/api/communities/${communityId}`, { signal: controller.signal })
+      .then(async r => { if (!r.ok) throw new Error(r.status === 404 ? "Community not found or access unavailable." : "Could not load this community. Please try again."); return r.json(); })
       .then((data) => {
         setCommunity(data.community);
         setMembers(data.members ?? []);
         setChannels(data.channels ?? []);
       })
-      .catch(() => router.push("/app/communities"))
-      .finally(() => setLoading(false));
-  }, [communityId, router]);
+      .catch((cause: Error) => { if (!controller.signal.aborted) setError(cause.message); })
+      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+    return () => controller.abort();
+  }, [communityId, retry]);
 
   async function handleCreateChannel() {
-    if (!newChannelName.trim()) return;
+    if (!newChannelName.trim() || creating) return;
+    setError(null);
     setCreating(true);
     try {
       const res = await fetch(`/api/communities/${communityId}`, {
@@ -79,14 +84,15 @@ export default function CommunityDetailPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "create_channel", name: newChannelName.trim() }),
       });
+      if (!res.ok) { const data = await res.json().catch(() => null); throw new Error(data?.error ?? "Could not create the channel. Please try again."); }
       if (res.ok) {
         const data = await res.json();
         setChannels((prev) => [...prev, data.channel]);
         setShowCreateChannel(false);
         setNewChannelName("");
       }
-    } catch {}
-    setCreating(false);
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Connection interrupted. Please try again."); }
+    finally { setCreating(false); }
   }
 
   if (loading) {
@@ -100,7 +106,8 @@ export default function CommunityDetailPage() {
   if (!community) {
     return (
       <div className="flex h-full flex-col items-center justify-center px-8 text-center">
-        <p className="text-sm text-[var(--muted)]">Community not found.</p>
+        <p role="alert" className="text-sm text-[var(--muted)]">{error ?? "Community not found."}</p>
+        <button type="button" className="btn btn-secondary mt-3" onClick={() => { setLoading(true); setError(null); setRetry(value => value + 1); }}>Try again</button>
         <Link href="/app/communities" className="mt-3 text-sm font-medium text-[var(--accent)]">
           Back to communities
         </Link>
@@ -110,6 +117,7 @@ export default function CommunityDetailPage() {
 
   return (
     <div className="mx-auto h-full w-full max-w-3xl overflow-y-auto px-4 py-6 sm:px-6">
+      {error && !showCreateChannel ? <p role="alert" className="mb-4 text-sm">{error}</p> : null}
       {/* Header */}
       <div className="flex items-center gap-3">
         <Link
@@ -136,14 +144,14 @@ export default function CommunityDetailPage() {
       <div className="mt-6">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-bold">Channels</h2>
-          <button
+          {community.myRole === "owner" || community.myRole === "admin" ? <button
             type="button"
             onClick={() => setShowCreateChannel(true)}
-            className="flex h-8 min-w-[44px] items-center justify-center rounded-full bg-[var(--accent)] text-white"
+            className="flex h-11 w-11 items-center justify-center rounded-full bg-[var(--action)] text-[var(--action-fg)]"
             aria-label="Create channel"
           >
             <Plus className="h-4 w-4" />
-          </button>
+          </button> : null}
         </div>
 
         {channels.length === 0 ? (
@@ -198,6 +206,7 @@ export default function CommunityDetailPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="card-glass w-full max-w-sm rounded-3xl p-6 animate-fade-up">
             <h3 className="text-base font-bold">Create Channel</h3>
+            {error ? <p role="alert" className="mt-3 text-sm">{error}</p> : null}
             <div className="mt-4">
               <input
                 value={newChannelName}
@@ -216,7 +225,7 @@ export default function CommunityDetailPage() {
                 type="button"
                 onClick={handleCreateChannel}
                 disabled={!newChannelName.trim() || creating}
-                className="rounded-xl bg-[var(--accent)] px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+                className="rounded-xl bg-[var(--action)] px-4 py-2 text-sm font-medium text-[var(--action-fg)] disabled:opacity-50"
               >
                 {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create"}
               </button>

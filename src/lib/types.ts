@@ -13,6 +13,10 @@ export interface SafeUser {
   createdAt: string;
   updatedAt: string;
   lastSeenAt: string | null;
+  /** Free-text label the owner gave this browser/device. */
+  deviceName: string | null;
+  /** IANA country the owner chose for this account. */
+  country: string | null;
 }
 
 /**
@@ -119,7 +123,8 @@ export interface MessageDTO {
   /** True when text holds E2EE ciphertext — decrypt client-side with the conversation key. */
   encrypted: boolean;
   /** Client-only optimistic state; never persisted. */
-  sendStatus?: "sending" | "sent" | "failed";
+  sendStatus?: "sending" | "sent" | "failed" | "queued";
+  queueReason?: string;
 }
 
 export interface ConversationSummary {
@@ -172,6 +177,9 @@ export interface ConversationDetail {
   blocked: boolean;
   requestPending: boolean;
   requestInitiatorId: string | null;
+  /** Sender-side first-contact gate; recipient consent is independent of encryption. */
+  awaitingApproval?: boolean;
+  introductionSent?: boolean;
   createdAt: string;
   updatedAt: string;
   lastMessageAt: string | null;
@@ -226,6 +234,8 @@ export interface RealtimeConversationEvent {
     | "conversation:new"
     | "conversation:delete"
     | "conversation:accepted"
+    | "conversation:encryption-ready"
+    | "conversation:keys-shared"
     | "group:created"
     | "group:member-added"
     | "group:member-removed"

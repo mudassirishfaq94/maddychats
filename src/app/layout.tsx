@@ -1,41 +1,42 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import Script from "next/script";
-import { Inter, Space_Grotesk } from "next/font/google";
+import { headers } from "next/headers";
+import { Inter, Sora } from "next/font/google";
 import { AuthProvider } from "@/components/providers/auth-provider";
-import { E2EEProvider } from "@/components/providers/e2ee-provider";
-import { RealtimeProvider } from "@/components/providers/realtime-provider";
 import { HostedAppUpdates } from "@/components/hosted-app-updates";
 import { CapacitorDeepLinks } from "@/components/capacitor-deep-links";
 import { PwaUpdatePrompt } from "@/components/pwa-update-prompt";
 import { NativeAppBridge } from "@/components/native-app-bridge";
+import { PerformanceMonitor } from "@/components/performance-monitor";
+import { getSessionUser } from "@/server/session";
 import "./globals.css";
 
 const inter = Inter({
   subsets: ["latin"],
   variable: "--font-sans",
-  display: "swap",
+  display: "optional",
 });
 
-const spaceGrotesk = Space_Grotesk({
+const sora = Sora({
   subsets: ["latin"],
   variable: "--font-display",
-  display: "swap",
+  display: "optional",
 });
 
 export const metadata: Metadata = {
   applicationName: "Circlo",
   manifest: "/manifest.webmanifest",
   icons: {
-    icon: "/icons/ziptalk-192.png",
-    apple: "/icons/ziptalk-192.png",
+    icon: "/icons/circlo-mark.svg?v=linked-c-2",
+    apple: "/icons/circlo-192.png?v=linked-c-2",
   },
   title: {
-    default: "Circlo — Your people, your conversations.",
+    default: "Circlo — Your circle. Your secrets. Sealed.",
     template: "%s · Circlo",
   },
   description:
-    "Circlo is a real-time chat application by Mudassir Ishfaq.",
+    "Your circle. Your secrets. Sealed. Connect through end-to-end encrypted conversations with Circlo.",
   authors: [{ name: "Mudassir Ishfaq" }],
   creator: "Mudassir Ishfaq",
   appleWebApp: { capable: true, title: "Circlo", statusBarStyle: "black-translucent" },
@@ -47,20 +48,22 @@ export const viewport: Viewport = {
   viewportFit: "cover",
   // Keeps the composer visible when the mobile keyboard opens.
   interactiveWidget: "resizes-content",
-  themeColor: "#2563EB",
+  themeColor: "#151719",
 };
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+export default async function RootLayout({ children }: { children: ReactNode }) {
+  const [requestHeaders, initialUser] = await Promise.all([headers(), getSessionUser()]);
+  const nonce = requestHeaders.get("x-nonce") ?? undefined;
   return (
     <html
       lang="en"
-      className={`${inter.variable} ${spaceGrotesk.variable}`}
+      className={`${inter.variable} ${sora.variable}`}
       suppressHydrationWarning
     >
       <body>
-        <Script src="/theme-init.js" strategy="beforeInteractive" />
-        <AuthProvider>
-          <E2EEProvider><RealtimeProvider>{children}</RealtimeProvider></E2EEProvider>
+        <Script src="/theme-init.js" strategy="beforeInteractive" nonce={nonce} />
+        <AuthProvider initialUser={initialUser}>
+          <PerformanceMonitor>{children}</PerformanceMonitor>
           <CapacitorDeepLinks />
           <PwaUpdatePrompt />
           <HostedAppUpdates />

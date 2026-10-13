@@ -1,5 +1,7 @@
 "use client";
 
+import Image from "next/image";
+
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ArrowLeft, Loader2, Search, X } from "lucide-react";
@@ -190,7 +192,7 @@ export function ForwardDialog({
                     className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-[var(--surface-2)] active:bg-[var(--surface)]"
                   >
                     {conv.type === "group" && conv.avatarUrl ? (
-                      <img
+                      <Image unoptimized width={1200} height={1200}
                         src={conv.avatarUrl}
                         alt=""
                         className="h-11 w-11 shrink-0 rounded-full object-cover"

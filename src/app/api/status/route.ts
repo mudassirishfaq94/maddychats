@@ -1,12 +1,16 @@
+import { guardReadableUploadBudget } from "@/server/upload-budget";
+import { prepareReadableUpload, UploadSafetyError } from "@/server/upload-safety";
+import { reconstructStatusPhoto } from "@/server/status-photo";
+import { readUploadForm } from "@/server/http";
 import { NextRequest, NextResponse } from "next/server";
-import { inArray } from "drizzle-orm";
+import { inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import { guardSameOrigin, guardUploadSize, jsonError, readJson } from "@/server/http";
 import { publishToUsers } from "@/server/realtime";
 import { getSessionUser } from "@/server/session";
 import { createStatus, listVisibleStatuses, visibleRecipientIds } from "@/server/status";
-import { deleteStored, generateStoredName, saveBuffer, validateUpload } from "@/server/storage";
+import { deleteStored, generateStoredName, saveBuffer } from "@/server/storage";
 
 export const runtime = "nodejs";
 export async function GET() {
@@ -23,17 +27,36 @@ export async function POST(req: NextRequest) {
   let mediaPath: string | null = null; let mediaMimeType: string | null = null;
 
   if (contentType.includes("multipart/form-data")) {
-    const tooLarge = guardUploadSize(req); if (tooLarge) return tooLarge;
-    let form: FormData; try { form = await req.formData(); } catch { return jsonError(400, "Invalid upload."); }
+    const budget = await guardReadableUploadBudget(me.id); if (budget) return budget;
+    const tooLarge = guardUploadSize(req, true); if (tooLarge) return tooLarge;
+    let form: FormData; try { form = await readUploadForm(req); } catch (error) { return jsonError(error instanceof Error && error.message === "body_too_large" ? 413 : 400, "Invalid or oversized upload."); }
     type = "image"; text = String(form.get("caption") ?? "").trim().slice(0, 500) || null;
     privacy = form.get("privacy") === "selected" ? "selected" : "all";
-    try { selectedUserIds = JSON.parse(String(form.get("selectedUserIds") ?? "[]")); } catch { return jsonError(422, "Invalid selected users."); }
+    try { const selected: unknown = JSON.parse(String(form.get("selectedUserIds") ?? "[]")); if (!Array.isArray(selected) || !selected.every((id) => typeof id === "string")) return jsonError(422, "Invalid selected users."); selectedUserIds = selected; } catch { return jsonError(422, "Invalid selected users."); }
     const entry = form.get("file"); if (!entry || typeof entry === "string") return jsonError(422, "Choose a file.");
-    const file = entry as File; const check = validateUpload(file.name, file.type, file.size, "message");
-    if (!check.ok || (check.kind !== "image" && check.kind !== "video")) return jsonError(422, check.ok ? "Status media must be an image or video." : check.error);
-    type = check.kind;
-    const storedName = generateStoredName(check.extension); const buffer = Buffer.from(await file.arrayBuffer());
-    mediaPath = await saveBuffer("statuses", storedName, buffer); mediaMimeType = file.type;
+    let prepared;
+    try {
+      const file = entry as File;
+      // Scanner-equipped installations retain scanning. The starter can only
+      // publish reconstructed raster photos; raw readable uploads stay closed.
+      if (process.env.STARTER_MODE === "1" && !process.env.CLAMAV_HOST) prepared = await reconstructStatusPhoto(file);
+      else prepared = await prepareReadableUpload(file, "message");
+    }
+    catch (error) { return jsonError(error instanceof UploadSafetyError ? error.status : 500, error instanceof UploadSafetyError ? error.message : "Upload failed."); }
+    if (prepared.kind !== "image" && prepared.kind !== "video") return jsonError(422, "Status media must be an image or video.");
+    type = prepared.kind;
+    const storedName = generateStoredName(prepared.extension);
+    try {
+      mediaPath = await db.transaction(async tx => {
+        await tx.execute(sql`select pg_advisory_xact_lock(847221905)`);
+        const inventory = await tx.execute<{ count: string }>(sql`select count(*)::text as count from stored_uploads where path like 'statuses/%'`);
+        // At most 150 MB at the hard 3 MB/file limit; separate headroom from chat.
+        if (Number(inventory.rows[0]?.count ?? 0) >= 50) throw new UploadSafetyError(503, "Photo status storage is full. Try again after older updates expire.");
+        return saveBuffer("statuses", storedName, prepared.buffer);
+      });
+    } catch (error) { return jsonError(error instanceof UploadSafetyError ? error.status : 503, error instanceof UploadSafetyError ? error.message : "Photo storage is unavailable. Try again later."); }
+    mediaMimeType = prepared.mimeType;
+
   } else {
     const body = await readJson(req); if (!body) return jsonError(400, "Invalid request body.");
     type = "text"; text = typeof body.text === "string" ? body.text.trim() : "";

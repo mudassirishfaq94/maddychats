@@ -1,5 +1,10 @@
 # Circlo: safe Render and Supabase cutover
 
+Earlier runbook. Render + Supabase is the selected production target again;
+use [the verified cutover plan](./docs/RENDER_DEPLOYMENT_CUTOVER.md) and
+[DEPLOYMENT.md](./DEPLOYMENT.md) for current deployment and restoration steps.
+Production remains on Neon until a consistent, verified cutover is complete.
+
 This runbook deliberately does **not** perform database changes. Neon remains
 the source of truth until the verification steps below pass. Do not add a
 Render pre-deploy command that runs Drizzle migrations for this cutover.

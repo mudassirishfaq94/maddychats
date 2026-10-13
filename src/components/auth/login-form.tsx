@@ -1,5 +1,7 @@
 "use client";
 
+import { navigateWithReload } from "@/lib/navigation";
+
 import { useState, type FormEvent } from "react";
 import Link from "next/link";
 import { AlertTriangle, AtSign, Eye, EyeOff, Loader2, Lock } from "lucide-react";
@@ -14,14 +16,16 @@ export function LoginForm({ next }: { next?: string }) {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [pending, setPending] = useState(false);
+  const [verificationRequired, setVerificationRequired] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const target = next && next.startsWith("/") ? next : "/app";
+  const target = next && next.startsWith("/") && !next.startsWith("//") && !/[\\\u0000-\u0020]/.test(next) ? next : "/app";
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setFormError(null);
+    setVerificationRequired(false);
 
     const parsed = loginSchema.safeParse({ identifier, password });
     if (!parsed.success) {
@@ -34,14 +38,16 @@ export function LoginForm({ next }: { next?: string }) {
     const result = await signIn(parsed.data);
     setPending(false);
 
+    if (result.mfaRequired) { navigateWithReload(`/login?mfa=1&next=${encodeURIComponent(target)}`); return; }
     if (!result.ok) {
+      setVerificationRequired(Boolean(result.verificationRequired));
       setFormError(result.error ?? "Sign in failed.");
       if (result.fields) setErrors(result.fields);
       return;
     }
     // Full navigation: guarantees the just-set session cookie accompanies the
     // first request to /app in every embedding context (incl. iframes).
-    window.location.assign(target);
+    navigateWithReload(target);
   }
 
   return (
@@ -52,7 +58,7 @@ export function LoginForm({ next }: { next?: string }) {
           className="flex items-start gap-3 rounded-xl border border-[color-mix(in_srgb,var(--danger)_35%,transparent)] bg-[color-mix(in_srgb,var(--danger)_10%,transparent)] px-4 py-3 text-sm text-[var(--danger)]"
         >
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-          <span>{formError}</span>
+          <span>{formError} {verificationRequired ? <Link href="/verify-email" className="underline">Resend verification email</Link> : null}</span>
         </div>
       ) : null}
 

@@ -1,63 +1,31 @@
 @import "tailwindcss";
 
 /* ==========================================================================
-   Circlo — a calm green conversation system.
+   Circlo â€” a private circle in ink and mint.
    ========================================================================== */
 
 :root {
-  --bg: #ffffff;
-  --surface: #ffffff;
-  --surface-2: #f3f4f6;
-  --text: #0f172a;
-  --muted: #475569;
-  --border: #e5e7eb;
-  --border-strong: #cbd5e1;
-  --input-bg: #f3f4f6;
-  --action: #2563eb;
-  --action-fg: #ffffff;
-  --accent: #2563eb;
-  --accent-soft: rgba(37, 99, 235, 0.13);
-  --accent-fg: #1d4ed8;
-  --ring: rgba(37, 99, 235, 0.22);
-  --success: #059669;
-  --danger: #dc2626;
-  --warning: #d97706;
-  --shadow-lg: 0 16px 40px -22px rgba(0, 0, 0, 0.28);
-
-  /* Message bubbles */
-  --bubble-other-bg: #f3f4f6;
-  --bubble-own-bg: #dbeafe;
-  --bubble-own-fg: #0f172a;
-  --bubble-own-sub: #475569;
-  --grad-send: #2563eb;
+  --bg: #F5F2ED; --surface: #FFFDFA; --surface-2: #ECE7E1;
+  --text: #242329; --muted: #625D68; --border: #D9D2CA; --border-strong: #8F8493;
+  --input-bg: #ECE7E1; --action: #C9A77B; --action-fg: #17191D;
+  --accent: #74543A; --accent-soft: rgba(116, 84, 58, 0.09); --accent-fg: #74543A;
+  --brand-mark: #000000; --brand-key: #000000; --ring: rgba(116, 84, 58, 0.25);
+  --success: #496A5A; --danger: #A63E49; --warning: #795A22;
+  --shadow-lg: 0 18px 50px -25px rgba(36, 35, 41, 0.18);
+  --bubble-other-bg: #FFFDFA; --bubble-own-bg: #E4DDE9; --voice-own-bg: #E4DDE9;
+  --bubble-own-fg: #242329; --bubble-own-sub: #625D68; --grad-send: #C9A77B;
   color-scheme: light;
 }
-
 html:not(.light) {
-  --bg: #121212;
-  --surface: #1e1e1e;
-  --surface-2: #2d2d2d;
-  --text: #e5e7eb;
-  --muted: #9ca3af;
-  --border: #3f3f46;
-  --border-strong: #52525b;
-  --input-bg: #1e1e1e;
-  --action: #3b82f6;
-  --action-fg: #ffffff;
-  --accent: #3b82f6;
-  --accent-soft: rgba(59, 130, 246, 0.16);
-  --accent-fg: #93c5fd;
-  --ring: rgba(59, 130, 246, 0.28);
-  --success: #34d399;
-  --danger: #f87171;
-  --warning: #fbbf24;
-  --shadow-lg: 0 18px 44px -20px rgba(0, 0, 0, 0.7);
-
-  --bubble-other-bg: #1e1e1e;
-  --bubble-own-bg: #1e3a8a;
-  --bubble-own-fg: #e5e7eb;
-  --bubble-own-sub: #bfdbfe;
-  --grad-send: #3b82f6;
+  --bg: #151719; --surface: #1E2126; --surface-2: #24272D;
+  --text: #ECEAE6; --muted: #A9A8B3; --border: #41434B; --border-strong: #74717F;
+  --input-bg: #24272D; --action: #C9A77B; --action-fg: #17191D;
+  --accent: #C9A77B; --accent-soft: rgba(201, 167, 123, 0.09); --accent-fg: #C9A77B;
+  --brand-mark: #FFFFFF; --brand-key: #FFFFFF; --ring: rgba(201, 167, 123, 0.25);
+  --success: #8DB5A2; --danger: #D87878; --warning: #D2B784;
+  --shadow-lg: 0 24px 60px -25px rgba(0, 0, 0, 0.4);
+  --bubble-other-bg: #24272D; --bubble-own-bg: #343042; --voice-own-bg: #343042;
+  --bubble-own-fg: #ECEAE6; --bubble-own-sub: #A9A8B3; --grad-send: #C9A77B;
   color-scheme: dark;
 }
 
@@ -123,7 +91,7 @@ body {
 /* Conversation pattern stays scoped to the message canvas. */
 .chat-message-area {
   background-color: var(--bg);
-  background-image: url("/patterns/maddy-doodles-light.svg");
+  background-image: none;
   background-repeat: repeat;
   background-position: center top;
   background-size: clamp(290px, 34vw, 360px) auto;
@@ -132,12 +100,12 @@ body {
 }
 
 html.light .chat-message-area {
-  background-image: url("/patterns/maddy-doodles-light.svg");
+  background-image: none;
 }
 
 html:not(.light) .chat-message-area {
   background-color: var(--bg);
-  background-image: url("/patterns/maddy-doodles-dark.svg");
+  background-image: none;
 }
 
 ::selection {
@@ -375,6 +343,7 @@ html:not(.light) .chat-message-area {
 .circlo-drift { animation: circlo-drift 6s ease-in-out infinite; }
 
 .circlo-shell {
+  height: 100dvh;
   background: radial-gradient(circle at 14% 0%, color-mix(in srgb, var(--accent) 9%, transparent), transparent 20rem), var(--bg);
 }
 
@@ -471,15 +440,7 @@ html:not(.light) .chat-message-area {
   }
 }
 
-/* PWA keyboard handling — ensure composer stays visible */
-@supports (padding: env(safe-area-inset-bottom)) {
-  /* When keyboard is open on iOS PWA, reduce bottom padding */
-  @media (display-mode: standalone) {
-    .chat-composer {
-      padding-bottom: max(env(safe-area-inset-bottom), 0.5rem);
-    }
-  }
-}
+/* AppShell reserves the navigation safe area. Do not add it to textarea height. */
 
 /* Typing indicator bounce animation */
 @keyframes typingBounce {
@@ -492,3 +453,28 @@ html:not(.light) .chat-message-area {
 
 /* Composer uses its existing surface; no extra focus rectangle. */
 .chat-composer:focus, .chat-composer:focus-visible { outline: none !important; box-shadow: none !important; border: 0 !important; }
+.composer-row .composer-icon { width: 44px; height: 44px; min-width: 44px; max-width: 44px; min-height: 44px; max-height: 44px; flex: 0 0 44px; align-self: flex-end; }
+
+/* Keep icon geometry consistent without adding animation to the chat canvas. */
+svg.lucide { stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.brand-panel {
+  background: radial-gradient(ellipse at 0% 90%, var(--accent-soft), transparent 65%), var(--surface);
+}
+.landing-grid {
+  background-image: linear-gradient(var(--border) 1px, transparent 1px), linear-gradient(90deg, var(--border) 1px, transparent 1px);
+  background-size: 64px 64px;
+  mask-image: linear-gradient(to bottom, black, transparent);
+  opacity: .22;
+}
+.brand-orbit { border: 1px solid var(--border); border-radius: 50%; }
+.brand-orbit::after {
+  content: ""; position: absolute; width: 9px; height: 9px; border-radius: 50%;
+  background: var(--action); top: 14%; right: 14%; box-shadow: 0 0 20px var(--accent-soft);
+}
+
+/* Retain searchable history while skipping offscreen layout and paint. */
+.message-history-row { content-visibility: auto; }
+@media (pointer: coarse) {
+  .chat-composer, .field-input, input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), textarea, select { font-size: 16px; }
+  .dialog-backdrop { padding: .5rem; }
+}

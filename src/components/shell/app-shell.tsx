@@ -40,10 +40,10 @@ export function AppShell({
       <header className="z-40 flex h-14 w-full min-w-0 shrink-0 items-center gap-0.5 overflow-visible border-b border-[var(--border)] bg-[var(--surface)] px-2 sm:gap-1 sm:px-4">
         <Link href="/app" aria-label="Circlo home" className="mr-0.5 shrink-0 sm:mr-3">
           <span className="flex items-center sm:hidden">
-            <LogoWordmark size={25} byline />
+            <LogoWordmark size={25} />
           </span>
           <span className="hidden items-center sm:flex">
-            <LogoWordmark size={26} byline />
+            <LogoWordmark size={26} />
           </span>
         </Link>
 

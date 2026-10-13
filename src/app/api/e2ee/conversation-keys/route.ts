@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and, sql, isNotNull } from "drizzle-orm";
 import { db } from "@/db";
 import { e2eeConversationKeys, e2eeKeyHistory, e2eeKeys } from "@/db/schema";
 import { getSessionUser } from "@/server/session";
+import { publishToConversation } from "@/server/realtime";
 import { getMembership } from "@/server/chat";
 import { guardSameOrigin, jsonError, readJson } from "@/server/http";
 
@@ -82,7 +83,7 @@ export async function POST(req: NextRequest) {
   if (!membership) return jsonError(404, "Conversation not found.");
 
   const [senderDevice] = await db.select({ id: e2eeKeys.id }).from(e2eeKeys)
-    .where(and(eq(e2eeKeys.userId, user.id), eq(e2eeKeys.deviceId, senderDeviceId))).limit(1);
+    .where(and(eq(e2eeKeys.userId, user.id), eq(e2eeKeys.deviceId, senderDeviceId), isNotNull(e2eeKeys.trustedAt))).limit(1);
   if (!senderDevice) return jsonError(403, "Unknown sender encryption device.");
 
   // Verify the exact recipient device exists and belongs to the target user.
@@ -90,7 +91,7 @@ export async function POST(req: NextRequest) {
   const [targetKey] = await db
     .select({ id: e2eeKeys.id })
     .from(e2eeKeys)
-    .where(and(eq(e2eeKeys.userId, targetUserId), eq(e2eeKeys.deviceId, recipientDeviceId)))
+    .where(and(eq(e2eeKeys.userId, targetUserId), eq(e2eeKeys.deviceId, recipientDeviceId), isNotNull(e2eeKeys.trustedAt)))
     .limit(1);
 
   if (!targetKey) return jsonError(404, "Target user has no registered device key.");
@@ -100,6 +101,7 @@ export async function POST(req: NextRequest) {
 
   // There is one key copy per sender-device/recipient-device pair. Serialize
   // replacement and preserve the previous copy before updating it.
+  let changed = false;
   const newVersion = await db.transaction(async tx => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${conversationId}:${targetUserId}:${senderDeviceId}:${recipientDeviceId}`}, 0))`);
     const [existing] = await tx.select().from(e2eeConversationKeys).where(and(
@@ -113,6 +115,7 @@ export async function POST(req: NextRequest) {
     // to avoid treating every chat open as a key rotation.
     if (existing?.keyFingerprint === keyFingerprint) return existing.keyVersion;
     const version = (existing?.keyVersion ?? 0) + 1;
+    changed = true;
     if (existing) {
       await tx.insert(e2eeKeyHistory).values({
         conversationId, userId: targetUserId, deviceId: senderDeviceId, recipientDeviceId,
@@ -131,5 +134,6 @@ export async function POST(req: NextRequest) {
     return version;
   });
 
+  if (changed) await publishToConversation(conversationId, { type: "conversation:keys-shared", conversationId });
   return NextResponse.json({ success: true, keyVersion: newVersion });
 }

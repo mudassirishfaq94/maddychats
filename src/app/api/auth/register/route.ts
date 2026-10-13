@@ -1,3 +1,5 @@
+import { withPasswordCapacity } from "@/server/password-capacity";
+import { issueEmailVerification } from "@/server/email-verification";
 import { NextRequest, NextResponse } from "next/server";
 import { fieldErrors, registerSchema } from "@/lib/schemas";
 import { hashPassword } from "@/server/password";
@@ -5,7 +7,6 @@ import {
   createUser,
   findUserByEmail,
   findUserByUsername,
-  toSafeUser,
 } from "@/server/users";
 import { AUTH_RATE_LIMIT, rateLimit } from "@/server/rate-limit";
 import {
@@ -13,14 +14,11 @@ import {
   guardSameOrigin,
   jsonError,
   readJson,
-  requestIsSecure,
 } from "@/server/http";
-import { SESSION_COOKIE } from "@/server/config";
-import { createSessionToken, sessionCookieOptions } from "@/server/session";
 
 export const dynamic = "force-dynamic";
 
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   const blocked = guardSameOrigin(req);
   if (blocked) return blocked;
 
@@ -65,8 +63,9 @@ export async function POST(req: NextRequest) {
     user = await createUser({ displayName, username, email, passwordHash });
   } catch (err) {
     // Unique-constraint race safety net (concurrent registrations).
-    const code = (err as { code?: string })?.code;
-    const constraint = String((err as { constraint?: string })?.constraint ?? "");
+    const failure = err as { code?: string; constraint?: string; cause?: { code?: string; constraint?: string } };
+    const code = failure.code ?? failure.cause?.code;
+    const constraint = String(failure.constraint ?? failure.cause?.constraint ?? "");
     if (code === "23505") {
       if (constraint.includes("email")) {
         return jsonError(409, "An account with this email already exists.", {
@@ -81,16 +80,8 @@ export async function POST(req: NextRequest) {
     return jsonError(500, "Something went wrong. Please try again.");
   }
 
-  // TEMPORARY COMPATIBILITY MODE: outbound verification is unavailable in the
-  // current production deployment. Keep registration usable until the Circlo
-  // mail provider is configured, then restore `issueEmailVerification` and
-  // the verification-required response before enforcing verification again.
-  const token = await createSessionToken(user.id, user.username);
-  const response = NextResponse.json({ user: toSafeUser(user) }, { status: 201 });
-  response.cookies.set(
-    SESSION_COOKIE,
-    token,
-    sessionCookieOptions(requestIsSecure(req)),
-  );
-  return response;
+  const delivered = await issueEmailVerification(user);
+  return NextResponse.json({ verificationRequired: true, emailSent: delivered }, { status: 201 });
 }
+
+export const POST = withPasswordCapacity(handlePOST);

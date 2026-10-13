@@ -1,3 +1,7 @@
+import { guardReadableUploadBudget } from "@/server/upload-budget";
+import { UploadSafetyError } from "@/server/upload-safety";
+import { prepareAvatarPhoto } from "@/server/status-photo";
+import { readUploadForm } from "@/server/http";
 import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
@@ -7,7 +11,6 @@ import { getSessionUser } from "@/server/session";
 import { getMembership } from "@/server/chat";
 
 import { CHAT_BACKGROUNDS } from "@/lib/chat-backgrounds";
-import { validateUpload } from "@/server/storage";
 
 const VALID_PRESETS = CHAT_BACKGROUNDS.map((p) => p.key);
 
@@ -50,19 +53,23 @@ export async function PATCH(
   if (!membership) return jsonError(404, "Conversation not found.");
 
   let body: Record<string, unknown> | null;
+  let uploadedImage = false;
   if (req.headers.get("content-type")?.includes("multipart/form-data")) {
-    const oversized = guardUploadSize(req);
+    const budget = await guardReadableUploadBudget(me.id); if (budget) return budget;
+    const oversized = guardUploadSize(req, true);
     if (oversized) return oversized;
     let form: FormData;
-    try { form = await req.formData(); }
-    catch { return jsonError(400, "Invalid image upload."); }
+    try { form = await readUploadForm(req); }
+    catch (error) { return jsonError(error instanceof Error && error.message === "body_too_large" ? 413 : 400, "Invalid or oversized image upload."); }
     const file = form.get("file");
     if (!(file instanceof File)) return jsonError(422, "Choose an image.");
     if (file.size > 2 * 1024 * 1024) return jsonError(413, "Background images must be 2 MB or smaller after resizing.");
-    const checked = validateUpload(file.name, file.type, file.size, "avatar");
-    if (!checked.ok) return jsonError(422, checked.error);
-    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) return jsonError(422, "Use a JPG, PNG, or WebP image.");
-    body = { backgroundStyle: `data:${file.type};base64,${Buffer.from(await file.arrayBuffer()).toString("base64")}`, backgroundOpacity: 100 };
+    let prepared;
+    try { prepared = await prepareAvatarPhoto(file); }
+    catch (error) { return jsonError(error instanceof UploadSafetyError ? error.status : 500, error instanceof UploadSafetyError ? error.message : "Upload failed."); }
+    uploadedImage = true;
+    body = { backgroundStyle: `data:${prepared.mimeType};base64,${prepared.buffer.toString("base64")}`, backgroundOpacity: 100 };
+
   } else {
     body = await readJson(req);
   }
@@ -86,6 +93,8 @@ export async function PATCH(
     typeof body.backgroundPositionY === "number"
       ? Math.min(100, Math.max(0, Math.round(body.backgroundPositionY)))
       : undefined;
+
+  if (backgroundStyle?.startsWith("data:") && !uploadedImage) return jsonError(422, "Use the image upload button for backgrounds.");
 
   // Validate background style
   if (backgroundStyle !== null) {

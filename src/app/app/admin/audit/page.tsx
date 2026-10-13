@@ -8,7 +8,7 @@ interface AuditEntry {
   action: string;
   details: Record<string, any> | null;
   createdAt: string;
-  admin: { id: string; displayName: string; username: string };
+  admin: { id: string; displayName: string; username: string } | null;
 }
 
 export default function AdminAuditPage() {
@@ -66,8 +66,8 @@ export default function AdminAuditPage() {
                       {new Date(entry.createdAt).toLocaleString()}
                     </td>
                     <td className="px-4 py-2.5">
-                      <span className="font-medium">{entry.admin.displayName}</span>
-                      <span className="ml-1 text-[var(--muted)]">@{entry.admin.username}</span>
+                      <span className="font-medium">{entry.admin?.displayName ?? "Deleted account"}</span>
+                      {entry.admin && <span className="ml-1 text-[var(--muted)]">@{entry.admin.username}</span>}
                     </td>
                     <td className="px-4 py-2.5">
                       <span className="inline-flex rounded-full bg-[var(--surface-2)] px-2 py-0.5 text-[0.65rem] font-medium">

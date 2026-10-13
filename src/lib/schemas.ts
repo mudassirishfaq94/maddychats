@@ -1,5 +1,9 @@
 import { z } from "zod";
 
+// Configure before creating shared client schemas: Zod's eval probe itself
+// produces CSP violations even when the resulting exception is caught.
+z.config({ jitless: true });
+
 /**
  * Shared request-validation schemas. Safe for BOTH the client bundle and the
  * server — no Node-only imports live here.

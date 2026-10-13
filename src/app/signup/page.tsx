@@ -1,3 +1,4 @@
+import { verificationDeliveryConfigured } from "@/server/email-verification";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import type { Metadata } from "next";
@@ -30,9 +31,10 @@ export default async function SignupPage() {
         </>
       }
     >
+      {!verificationDeliveryConfigured() && <p className="mb-4 text-sm text-[var(--muted)]">Email accounts need verification before sign-in. Email delivery is currently unavailable; Google sign-in is also available.</p>}
       <RegisterForm />
       <GoogleSignIn />
-      <PhoneSignIn signup />
+      {process.env.STARTER_MODE !== "1" ? <PhoneSignIn signup /> : null}
     </AuthLayout>
   );
 }

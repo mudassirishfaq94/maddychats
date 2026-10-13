@@ -1,7 +1,6 @@
 "use client";
 
-import { getApp, getApps, initializeApp, type FirebaseApp } from "firebase/app";
-import { getAuth, type Auth } from "firebase/auth";
+import type { Auth } from "firebase/auth";
 
 /** Firebase's public web configuration is safe to ship to the browser. */
 function firebaseConfig() {
@@ -13,12 +12,15 @@ function firebaseConfig() {
   };
 }
 
-export function firebasePhoneAuth(): Auth {
+export async function firebasePhoneAuth(): Promise<Auth> {
   const config = firebaseConfig();
   if (!config.apiKey || !config.authDomain || !config.projectId || !config.appId) {
     throw new Error("Phone sign-in has not been configured yet.");
   }
-  const app: FirebaseApp = getApps().length ? getApp() : initializeApp(config);
+  const [{ getApp, getApps, initializeApp }, { getAuth }] = await Promise.all([
+    import("firebase/app"), import("firebase/auth"),
+  ]);
+  const app = getApps().length ? getApp() : initializeApp(config);
   return getAuth(app);
 }
 

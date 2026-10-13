@@ -1,3 +1,4 @@
+import { MfaForm } from "@/components/auth/mfa-form";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import type { Metadata } from "next";
@@ -13,17 +14,15 @@ export const dynamic = "force-dynamic";
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string; error?: string }>;
+  searchParams: Promise<{ next?: string; error?: string; mfa?: string; reauth?: string; emailProof?: string }>;
 }) {
-  // Already signed in? Skip straight to the app.
+  const { next, error, mfa, reauth, emailProof } = await searchParams;
   const user = await getSessionUser();
-  if (user) redirect("/app");
-
-  const { next, error } = await searchParams;
+  if (user && mfa !== "1" && reauth !== "1") redirect("/app");
   const googleError = error === "google_not_configured"
     ? "Google sign-in needs to be configured by the site owner."
-    : error === "google_email_exists"
-      ? "An account already uses that email. Sign in with your password."
+    : (error === "google_email_exists" || error === "google_link_required")
+      ? "An account already uses that email. Sign in with your existing password, then link Google in your profile."
       : error?.startsWith("google_")
         ? "Google sign-in could not be completed. Please try again."
         : null;
@@ -45,9 +44,12 @@ export default async function LoginPage({
       }
     >
       {googleError ? <p role="alert" className="mb-4 rounded-xl border border-[color-mix(in_srgb,var(--danger)_35%,transparent)] bg-[color-mix(in_srgb,var(--danger)_10%,transparent)] px-4 py-3 text-sm text-[var(--danger)]">{googleError}</p> : null}
-      <LoginForm next={next} />
-      <GoogleSignIn next={next} />
-      <PhoneSignIn next={next} />
+      {mfa === "1" ? <MfaForm next={next} /> : <>
+        {process.env.STARTER_MODE === "1" ? <p className="mb-4 text-sm text-[var(--muted)]">{emailProof === "google" ? "Google verified your email. Enter your existing password to continue." : "New here? Continue with Google. If password sign-in asks for verification, continue with Google first, then enter your existing password."}</p> : null}
+        <LoginForm next={next} />
+        <GoogleSignIn next={next} />
+        {process.env.STARTER_MODE !== "1" ? <PhoneSignIn next={next} /> : null}
+      </>}
     </AuthLayout>
   );
 }

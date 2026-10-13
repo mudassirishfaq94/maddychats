@@ -1,0 +1,1782 @@
+{
+  "timestamp": "2026-10-11T09:30:54.307Z",
+  "profile": "steady",
+  "target": "http://127.0.0.1:3190",
+  "environment": "local production standalone build; generator and database on same machine",
+  "hardware": {
+    "platform": "win32",
+    "logicalCpus": 12,
+    "totalMemoryMiB": 16109.1796875
+  },
+  "fixture": {
+    "users": 200,
+    "conversations": 1000,
+    "messages": 50000,
+    "publicCommunities": 1000,
+    "bcryptCost": 12,
+    "appPoolMax": 5
+  },
+  "thirdPartyConnectionsBlocked": true,
+  "k6Version": "k6.exe v2.2.0 (commit/00a9a1b7f5, go1.26.5, windows/amd64)",
+  "thresholdsPassed": false,
+  "exitCode": 99,
+  "measurements": [
+    {
+      "stage": "preflight",
+      "action": "preflight",
+      "requests": 1,
+      "p95Ms": 4.4518,
+      "p99Ms": 4.4518,
+      "failureRate": 0,
+      "statuses": {
+        "204": 1
+      },
+      "semanticFailures": 0,
+      "passes": true
+    },
+    {
+      "stage": "preflight",
+      "action": "all",
+      "requests": 1,
+      "p95Ms": 4.4518,
+      "p99Ms": 4.4518,
+      "failureRate": 0,
+      "statuses": {
+        "204": 1
+      },
+      "semanticFailures": 0,
+      "passes": true
+    },
+    {
+      "stage": "ramp_100",
+      "action": "main_screen",
+      "requests": 146,
+      "p95Ms": 913.0307,
+      "p99Ms": 981.5296,
+      "failureRate": 0,
+      "statuses": {
+        "200": 146
+      },
+      "semanticFailures": 0,
+      "passes": false
+    },
+    {
+      "stage": "ramp_100",
+      "action": "all",
+      "requests": 694,
+      "p95Ms": 2686.9369,
+      "p99Ms": 3294.7125,
+      "failureRate": 0,
+      "statuses": {
+        "200": 586,
+        "201": 108
+      },
+      "semanticFailures": 0,
+      "passes": false
+    },
+    {
+      "stage": "ramp_100",
+      "action": "chat_list",
+      "requests": 145,
+      "p95Ms": 1849.7703,
+      "p99Ms": 2104.1224,
+      "failureRate": 0,
+      "statuses": {
+        "200": 145
+      },
+      "semanticFailures": 0,
+      "passes": false
+    },
+    {
+      "stage": "ramp_100",
+      "action": "history",
+      "requests": 134,
+      "p95Ms": 3282.731,
+      "p99Ms": 3408.5654,
+      "failureRate": 0,
+      "statuses": {
+        "200": 134
+      },
+      "semanticFailures": 0,
+      "passes": false
+    },
+    {
+      "stage": "ramp_100",
+      "action": "send_message",
+      "requests": 108,
+      "p95Ms": 1965.0849,
+      "p99Ms": 2099.2553,
+      "failureRate": 0,
+      "statuses": {
+        "201": 108
+      },
+      "semanticFailures": 0,
+      "passes": false
+    },
+    {
+      "stage": "ramp_100",
+      "action": "confirm_message",
+      "requests": 86,
+      "p95Ms": 3191.5651,
+      "p99Ms": 3379.4244,
+      "failureRate": 0,
+      "statuses": {
+        "200": 86
+      },
+      "semanticFailures": 0,
+      "passes": false
+    },
+    {
+      "stage": "ramp_100",
+      "action": "communities",
+      "requests": 75,
+      "p95Ms": 2047.0418,
+      "p99Ms": 2120.8798,
+      "failureRate": 0,
+      "statuses": {
+        "200": 75
+      },
+      "semanticFailures": 0,
+      "passes": false
+    },
+    {
+      "stage": "hold_100",
+      "action": "all",
+      "requests": 5458,
+      "p95Ms": 2678.969,
+      "p99Ms": 3562.1712,
+      "failureRate": 0,
+      "statuses": {
+        "200": 4548,
+        "201": 910
+      },
+      "semanticFailures": 0,
+      "passes": false
+    },
+    {
+      "stage": "hold_100",
+      "action": "main_screen",
+      "requests": 912,
+      "p95Ms": 2592.0752,
+      "p99Ms": 3021.7901,
+      "failureRate": 0,
+      "statuses": {
+        "200": 912
+      },
+      "semanticFailures": 0,
+      "passes": false
+    },
+    {
+      "stage": "hold_100",
+      "action": "communities",
+      "requests": 900,
+      "p95Ms": 1579.2253,
+      "p99Ms": 2211.6265,
+      "failureRate": 0,
+      "statuses": {
+        "200": 900
+      },
+      "semanticFailures": 0,
+      "passes": false
+    },
+    {
+      "stage": "hold_100",
+      "action": "send_message",
+      "requests": 910,
+      "p95Ms": 1962.2985,
+      "p99Ms": 2541.2966,
+      "failureRate": 0,
+      "statuses": {
+        "201": 910
+      },
+      "semanticFailures": 0,
+      "passes": false
+    },
+    {
+      "stage": "hold_100",
+      "action": "chat_list",
+      "requests": 913,
+      "p95Ms": 2560.8219,
+      "p99Ms": 2706.9339,
+      "failureRate": 0,
+      "statuses": {
+        "200": 913
+      },
+      "semanticFailures": 0,
+      "passes": false
+    },
+    {
+      "stage": "hold_100",
+      "action": "confirm_message",
+      "requests": 903,
+      "p95Ms": 2860.9829,
+      "p99Ms": 3678.0045,
+      "failureRate": 0,
+      "statuses": {
+        "200": 903
+      },
+      "semanticFailures": 0,
+      "passes": false
+    },
+    {
+      "stage": "hold_100",
+      "action": "history",
+      "requests": 920,
+      "p95Ms": 3462.6717,
+      "p99Ms": 3887.9659,
+      "failureRate": 0,
+      "statuses": {
+        "200": 920
+      },
+      "semanticFailures": 0,
+      "passes": false
+    },
+    {
+      "stage": "ramp_0",
+      "action": "all",
+      "requests": 654,
+      "p95Ms": 1567.8466,
+      "p99Ms": 1704.1165,
+      "failureRate": 0,
+      "statuses": {
+        "200": 537,
+        "201": 117
+      },
+      "semanticFailures": 0,
+      "passes": false
+    },
+    {
+      "stage": "ramp_0",
+      "action": "send_message",
+      "requests": 117,
+      "p95Ms": 1072.9355,
+      "p99Ms": 1097.2436,
+      "failureRate": 0,
+      "statuses": {
+        "201": 117
+      },
+      "semanticFailures": 0,
+      "passes": false
+    },
+    {
+      "stage": "ramp_0",
+      "action": "communities",
+      "requests": 154,
+      "p95Ms": 1062.2183,
+      "p99Ms": 1090.4642,
+      "failureRate": 0,
+      "statuses": {
+        "200": 154
+      },
+      "semanticFailures": 0,
+      "passes": false
+    },
+    {
+      "stage": "ramp_0",
+      "action": "confirm_message",
+      "requests": 145,
+      "p95Ms": 1698.1073,
+      "p99Ms": 1779.0082,
+      "failureRate": 0,
+      "statuses": {
+        "200": 145
+      },
+      "semanticFailures": 0,
+      "passes": false
+    },
+    {
+      "stage": "ramp_0",
+      "action": "history",
+      "requests": 82,
+      "p95Ms": 1223.6985,
+      "p99Ms": 1674.8407,
+      "failureRate": 0,
+      "statuses": {
+        "200": 82
+      },
+      "semanticFailures": 0,
+      "passes": false
+    },
+    {
+      "stage": "ramp_0",
+      "action": "main_screen",
+      "requests": 78,
+      "p95Ms": 521.2286,
+      "p99Ms": 634.1114,
+      "failureRate": 0,
+      "statuses": {
+        "200": 78
+      },
+      "semanticFailures": 0,
+      "passes": false
+    },
+    {
+      "stage": "ramp_0",
+      "action": "chat_list",
+      "requests": 78,
+      "p95Ms": 776.7764,
+      "p99Ms": 806.9903,
+      "failureRate": 0,
+      "statuses": {
+        "200": 78
+      },
+      "semanticFailures": 0,
+      "passes": false
+    },
+    {
+      "stage": "ramp_down",
+      "action": "all",
+      "requests": 10,
+      "p95Ms": 44.0758,
+      "p99Ms": 44.0758,
+      "failureRate": 0,
+      "statuses": {
+        "200": 9,
+        "201": 1
+      },
+      "semanticFailures": 0,
+      "passes": true
+    },
+    {
+      "stage": "ramp_down",
+      "action": "send_message",
+      "requests": 1,
+      "p95Ms": 31.1876,
+      "p99Ms": 31.1876,
+      "failureRate": 0,
+      "statuses": {
+        "201": 1
+      },
+      "semanticFailures": 0,
+      "passes": true
+    },
+    {
+      "stage": "ramp_down",
+      "action": "communities",
+      "requests": 7,
+      "p95Ms": 28.7207,
+      "p99Ms": 28.7207,
+      "failureRate": 0,
+      "statuses": {
+        "200": 7
+      },
+      "semanticFailures": 0,
+      "passes": true
+    },
+    {
+      "stage": "ramp_down",
+      "action": "confirm_message",
+      "requests": 2,
+      "p95Ms": 44.0758,
+      "p99Ms": 44.0758,
+      "failureRate": 0,
+      "statuses": {
+        "200": 2
+      },
+      "semanticFailures": 0,
+      "passes": true
+    }
+  ],
+  "summary": {
+    "root_group": {
+      "name": "",
+      "path": "",
+      "id": "d41d8cd98f00b204e9800998ecf8427e",
+      "groups": [],
+      "checks": []
+    },
+    "options": {
+      "summaryTrendStats": [
+        "avg",
+        "med",
+        "p(90)",
+        "p(95)",
+        "p(99)",
+        "max"
+      ],
+      "summaryTimeUnit": "",
+      "noColor": true
+    },
+    "state": {
+      "isStdOutTTY": false,
+      "isStdErrTTY": false,
+      "testRunDurationMs": 251440.6617
+    },
+    "metrics": {
+      "http_req_duration{action:send_message}": {
+        "thresholds": {
+          "p(95)<500": {
+            "ok": false
+          }
+        },
+        "type": "trend",
+        "contains": "time",
+        "values": {
+          "p(99)": 2478.2783500000023,
+          "max": 2792.6661,
+          "avg": 984.6698651408464,
+          "med": 1072.7096999999999,
+          "p(90)": 1683.6718999999998,
+          "p(95)": 1890.5050999999999
+        }
+      },
+      "http_reqs": {
+        "contains": "default",
+        "values": {
+          "rate": 27.11176447719315,
+          "count": 6817
+        },
+        "type": "counter"
+      },
+      "http_req_failed{stage:hold_100}": {
+        "type": "rate",
+        "contains": "default",
+        "values": {
+          "rate": 0,
+          "passes": 0,
+          "fails": 5458
+        },
+        "thresholds": {
+          "rate<0.01": {
+            "ok": true
+          }
+        }
+      },
+      "http_req_duration{action:history}": {
+        "type": "trend",
+        "contains": "time",
+        "values": {
+          "med": 1812.963,
+          "p(90)": 3075.091,
+          "p(95)": 3393.239125,
+          "p(99)": 3861.964500000001,
+          "max": 4003.1868,
+          "avg": 1647.7260370598601
+        },
+        "thresholds": {
+          "p(95)<500": {
+            "ok": false
+          }
+        }
+      },
+      "http_req_failed{action:communities}": {
+        "type": "rate",
+        "contains": "default",
+        "values": {
+          "rate": 0,
+          "passes": 0,
+          "fails": 1136
+        },
+        "thresholds": {
+          "rate<0.01": {
+            "ok": true
+          }
+        }
+      },
+      "http_req_failed{action:send_message}": {
+        "type": "rate",
+        "contains": "default",
+        "values": {
+          "rate": 0,
+          "passes": 0,
+          "fails": 1136
+        },
+        "thresholds": {
+          "rate<0.01": {
+            "ok": true
+          }
+        }
+      },
+      "http_req_blocked": {
+        "values": {
+          "avg": 0.338799222531906,
+          "med": 0,
+          "p(90)": 1.77984,
+          "p(95)": 2.1847199999999996,
+          "p(99)": 2.8847240000000003,
+          "max": 5.9341
+        },
+        "type": "trend",
+        "contains": "time"
+      },
+      "http_req_failed{action:chat_list}": {
+        "type": "rate",
+        "contains": "default",
+        "values": {
+          "passes": 0,
+          "fails": 1136,
+          "rate": 0
+        },
+        "thresholds": {
+          "rate<0.01": {
+            "ok": true
+          }
+        }
+      },
+      "http_req_receiving": {
+        "type": "trend",
+        "contains": "time",
+        "values": {
+          "p(99)": 2.1471640000000023,
+          "max": 10.554,
+          "avg": 0.5817715564031078,
+          "med": 0.5618,
+          "p(90)": 1.2227200000000003,
+          "p(95)": 1.5523399999999998
+        }
+      },
+      "http_req_duration{action:confirm_message}": {
+        "values": {
+          "p(99)": 3632.4088850000007,
+          "max": 3968.5194,
+          "avg": 1476.8947325704225,
+          "med": 1653.83805,
+          "p(90)": 2357.7138,
+          "p(95)": 2810.9869
+        },
+        "thresholds": {
+          "p(95)<500": {
+            "ok": false
+          }
+        },
+        "type": "trend",
+        "contains": "time"
+      },
+      "journey_failed": {
+        "thresholds": {
+          "rate<0.01": {
+            "ok": true
+          }
+        },
+        "type": "rate",
+        "contains": "default",
+        "values": {
+          "rate": 0,
+          "passes": 0,
+          "fails": 6816
+        }
+      },
+      "http_req_sending": {
+        "type": "trend",
+        "contains": "time",
+        "values": {
+          "avg": 0.08270435675517089,
+          "med": 0,
+          "p(90)": 0.5229400000000005,
+          "p(95)": 0.66922,
+          "p(99)": 1.0370519999999999,
+          "max": 2.5516
+        }
+      },
+      "vus_max": {
+        "type": "gauge",
+        "contains": "default",
+        "values": {
+          "value": 100,
+          "min": 100,
+          "max": 100
+        }
+      },
+      "http_req_duration{action:main_screen}": {
+        "type": "trend",
+        "contains": "time",
+        "values": {
+          "p(95)": 2552.7870249999996,
+          "p(99)": 2982.1550650000036,
+          "max": 3088.2894,
+          "avg": 874.1911834507038,
+          "med": 493.16395,
+          "p(90)": 2135.4877
+        },
+        "thresholds": {
+          "p(95)<500": {
+            "ok": false
+          }
+        }
+      },
+      "http_req_failed{action:main_screen}": {
+        "type": "rate",
+        "contains": "default",
+        "values": {
+          "rate": 0,
+          "passes": 0,
+          "fails": 1136
+        },
+        "thresholds": {
+          "rate<0.01": {
+            "ok": true
+          }
+        }
+      },
+      "iterations": {
+        "type": "counter",
+        "contains": "default",
+        "values": {
+          "count": 1136,
+          "rate": 4.517964565951506
+        }
+      },
+      "http_req_duration{action:communities}": {
+        "values": {
+          "avg": 623.9365025528175,
+          "med": 550.8836,
+          "p(90)": 1329.4475499999999,
+          "p(95)": 1536.89355,
+          "p(99)": 2199.544095000001,
+          "max": 2547.5734
+        },
+        "thresholds": {
+          "p(95)<500": {
+            "ok": false
+          }
+        },
+        "type": "trend",
+        "contains": "time"
+      },
+      "http_req_duration{action:chat_list}": {
+        "values": {
+          "p(90)": 2340.0163000000002,
+          "p(95)": 2532.7016000000003,
+          "p(99)": 2700.8153,
+          "max": 2771.0265,
+          "avg": 1216.6733781690132,
+          "med": 1300.13245
+        },
+        "thresholds": {
+          "p(95)<500": {
+            "ok": false
+          }
+        },
+        "type": "trend",
+        "contains": "time"
+      },
+      "http_req_failed{action:history}": {
+        "contains": "default",
+        "values": {
+          "rate": 0,
+          "passes": 0,
+          "fails": 1136
+        },
+        "thresholds": {
+          "rate<0.01": {
+            "ok": true
+          }
+        },
+        "type": "rate"
+      },
+      "http_req_duration{expected_response:true}": {
+        "type": "trend",
+        "contains": "time",
+        "values": {
+          "med": 1095.4603,
+          "p(90)": 2265.7125800000003,
+          "p(95)": 2617.9812599999996,
+          "p(99)": 3432.260208,
+          "max": 4003.1868,
+          "avg": 1137.1824294851122
+        }
+      },
+      "data_sent": {
+        "values": {
+          "count": 5234428,
+          "rate": 20817.74667871867
+        },
+        "type": "counter",
+        "contains": "data"
+      },
+      "http_req_failed": {
+        "type": "rate",
+        "contains": "default",
+        "values": {
+          "fails": 6817,
+          "rate": 0,
+          "passes": 0
+        },
+        "thresholds": {
+          "rate<0.01": {
+            "ok": true
+          }
+        }
+      },
+      "http_req_tls_handshaking": {
+        "type": "trend",
+        "contains": "time",
+        "values": {
+          "avg": 0,
+          "med": 0,
+          "p(90)": 0,
+          "p(95)": 0,
+          "p(99)": 0,
+          "max": 0
+        }
+      },
+      "checks": {
+        "contains": "default",
+        "values": {
+          "rate": 1,
+          "passes": 6816,
+          "fails": 0
+        },
+        "type": "rate"
+      },
+      "http_req_failed{action:confirm_message}": {
+        "type": "rate",
+        "contains": "default",
+        "values": {
+          "rate": 0,
+          "passes": 0,
+          "fails": 1136
+        },
+        "thresholds": {
+          "rate<0.01": {
+            "ok": true
+          }
+        }
+      },
+      "http_req_duration{stage:hold_100}": {
+        "type": "trend",
+        "contains": "time",
+        "values": {
+          "max": 4003.1868,
+          "avg": 1257.2968877794071,
+          "med": 1248.9494,
+          "p(90)": 2323.15716,
+          "p(95)": 2673.810349999998,
+          "p(99)": 3557.0069430000026
+        },
+        "thresholds": {
+          "p(95)<500": {
+            "ok": false
+          }
+        }
+      },
+      "vus": {
+        "type": "gauge",
+        "contains": "default",
+        "values": {
+          "value": 1,
+          "min": 1,
+          "max": 100
+        }
+      },
+      "iteration_duration": {
+        "type": "trend",
+        "contains": "time",
+        "values": {
+          "p(99)": 24202.703350000007,
+          "max": 25142.3464,
+          "avg": 19090.554363908446,
+          "med": 20017.666299999997,
+          "p(90)": 22817.089099999997,
+          "p(95)": 23462.549925
+        }
+      },
+      "http_req_duration": {
+        "type": "trend",
+        "contains": "time",
+        "values": {
+          "avg": 1137.1824294851122,
+          "med": 1095.4603,
+          "p(90)": 2265.7125800000003,
+          "p(95)": 2617.9812599999996,
+          "p(99)": 3432.260208,
+          "max": 4003.1868
+        },
+        "thresholds": {
+          "p(95)<500": {
+            "ok": false
+          }
+        }
+      },
+      "http_req_connecting": {
+        "type": "trend",
+        "contains": "time",
+        "values": {
+          "med": 0,
+          "p(90)": 1.5205000000000004,
+          "p(95)": 1.95906,
+          "p(99)": 2.630816000000001,
+          "max": 5.303,
+          "avg": 0.28827186445650566
+        }
+      },
+      "http_req_waiting": {
+        "type": "trend",
+        "contains": "time",
+        "values": {
+          "med": 1094.9643,
+          "p(90)": 2264.6879000000004,
+          "p(95)": 2615.494939999999,
+          "p(99)": 3431.917656,
+          "max": 4003.1868,
+          "avg": 1136.5179535719503
+        }
+      },
+      "data_received": {
+        "values": {
+          "count": 151478564,
+          "rate": 602442.5921243111
+        },
+        "type": "counter",
+        "contains": "data"
+      }
+    }
+  },
+  "databaseSamples": [
+    {
+      "seconds": 5.232,
+      "freeMemoryMiB": 5466.2890625,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 10.022,
+      "freeMemoryMiB": 5293.03515625,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 15.029,
+      "freeMemoryMiB": 5347.546875,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": "IO",
+          "wait_event": "WalWrite",
+          "count": 1
+        },
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 2
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 9
+        }
+      ]
+    },
+    {
+      "seconds": 20.038,
+      "freeMemoryMiB": 5308.8359375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 2
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 9
+        },
+        {
+          "state": "idle",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        }
+      ]
+    },
+    {
+      "seconds": 25.038,
+      "freeMemoryMiB": 5352.2421875,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 3
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 9
+        }
+      ]
+    },
+    {
+      "seconds": 30.04,
+      "freeMemoryMiB": 5140.48828125,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 2
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 10
+        }
+      ]
+    },
+    {
+      "seconds": 35.041,
+      "freeMemoryMiB": 4937.9140625,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 40.045,
+      "freeMemoryMiB": 5071.56640625,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": "IO",
+          "wait_event": "WalWrite",
+          "count": 1
+        },
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 9
+        },
+        {
+          "state": "idle",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        }
+      ]
+    },
+    {
+      "seconds": 45.049,
+      "freeMemoryMiB": 5030.1484375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 2
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 10
+        }
+      ]
+    },
+    {
+      "seconds": 50.053,
+      "freeMemoryMiB": 5073.42578125,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 2
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 10
+        }
+      ]
+    },
+    {
+      "seconds": 55.066,
+      "freeMemoryMiB": 5073.203125,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 60.069,
+      "freeMemoryMiB": 5094.20703125,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 65.071,
+      "freeMemoryMiB": 5065.0859375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 70.077,
+      "freeMemoryMiB": 4928.74609375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 75.078,
+      "freeMemoryMiB": 4772.36328125,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 80.079,
+      "freeMemoryMiB": 4789.77734375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 85.084,
+      "freeMemoryMiB": 4870.21484375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 90.086,
+      "freeMemoryMiB": 4906.43359375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 1
+        },
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 10
+        }
+      ]
+    },
+    {
+      "seconds": 95.091,
+      "freeMemoryMiB": 4984.87890625,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 100.098,
+      "freeMemoryMiB": 5007.60546875,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 10
+        },
+        {
+          "state": "idle",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        }
+      ]
+    },
+    {
+      "seconds": 105.111,
+      "freeMemoryMiB": 5010.44140625,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 110.113,
+      "freeMemoryMiB": 5020.4296875,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 115.119,
+      "freeMemoryMiB": 5048.98828125,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": "IO",
+          "wait_event": "WalWrite",
+          "count": 1
+        },
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 2
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 9
+        }
+      ]
+    },
+    {
+      "seconds": 120.119,
+      "freeMemoryMiB": 4998.8125,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 125.129,
+      "freeMemoryMiB": 4906.34765625,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 3
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 9
+        }
+      ]
+    },
+    {
+      "seconds": 130.128,
+      "freeMemoryMiB": 4912.74609375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 135.131,
+      "freeMemoryMiB": 4961.015625,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 140.134,
+      "freeMemoryMiB": 5001.1328125,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 145.138,
+      "freeMemoryMiB": 5013.37109375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 150.15,
+      "freeMemoryMiB": 4996.91015625,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 155.156,
+      "freeMemoryMiB": 4942.72265625,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 160.158,
+      "freeMemoryMiB": 4945.49609375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 165.175,
+      "freeMemoryMiB": 4999.56640625,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 170.174,
+      "freeMemoryMiB": 4938.0859375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 175.186,
+      "freeMemoryMiB": 4917.30859375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 180.188,
+      "freeMemoryMiB": 4960.05859375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 2
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 10
+        }
+      ]
+    },
+    {
+      "seconds": 185.198,
+      "freeMemoryMiB": 4868.7578125,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 190.203,
+      "freeMemoryMiB": 4838.578125,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 195.206,
+      "freeMemoryMiB": 4895.41015625,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 200.207,
+      "freeMemoryMiB": 4923.09765625,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": "IO",
+          "wait_event": "WalWrite",
+          "count": 1
+        },
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 10
+        }
+      ]
+    },
+    {
+      "seconds": 205.218,
+      "freeMemoryMiB": 4970.58984375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 3
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 9
+        }
+      ]
+    },
+    {
+      "seconds": 210.224,
+      "freeMemoryMiB": 4988.48046875,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 2
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 10
+        }
+      ]
+    },
+    {
+      "seconds": 215.225,
+      "freeMemoryMiB": 4979.59765625,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 220.232,
+      "freeMemoryMiB": 5015.05859375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 225.245,
+      "freeMemoryMiB": 5022.859375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 10
+        },
+        {
+          "state": "idle",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        }
+      ]
+    },
+    {
+      "seconds": 230.249,
+      "freeMemoryMiB": 5047.453125,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 2
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 10
+        }
+      ]
+    },
+    {
+      "seconds": 235.26,
+      "freeMemoryMiB": 5046.671875,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 2
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 10
+        }
+      ]
+    },
+    {
+      "seconds": 240.262,
+      "freeMemoryMiB": 5046.78515625,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 245.27,
+      "freeMemoryMiB": 5052.05078125,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 250.28,
+      "freeMemoryMiB": 5075.37109375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 6
+        }
+      ]
+    }
+  ],
+  "serverErrorLines": []
+}

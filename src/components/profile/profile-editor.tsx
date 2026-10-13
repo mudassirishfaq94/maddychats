@@ -168,7 +168,7 @@ export function ProfileEditor({ user }: { user: SafeUser }) {
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold">Profile photo</p>
           <p className="mt-0.5 text-xs leading-relaxed text-[var(--muted)]">
-            JPG, PNG, WEBP or GIF · up to 3 MB
+            Static JPG, PNG or WebP · up to 3 MB
           </p>
         </div>
         <button
@@ -176,7 +176,7 @@ export function ProfileEditor({ user }: { user: SafeUser }) {
           onClick={() => avatarInputRef.current?.click()}
           disabled={avatarBusy}
           aria-label="Change profile photo"
-          className="flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl bg-[var(--accent)] px-3 text-xs font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-60"
+          className="flex h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-[var(--action)] px-3 text-xs font-semibold text-[var(--action-fg)] transition-opacity hover:opacity-90 disabled:opacity-60"
         >
           {avatarBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
           <span className="hidden min-[370px]:inline">Change</span>
@@ -184,7 +184,7 @@ export function ProfileEditor({ user }: { user: SafeUser }) {
         <input
           ref={avatarInputRef}
           type="file"
-          accept="image/*"
+          accept="image/jpeg,image/png,image/webp"
           className="hidden"
           onChange={(e) => {
             const f = e.target.files?.[0];

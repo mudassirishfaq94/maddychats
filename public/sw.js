@@ -1,4 +1,4 @@
-const CACHE_NAME = "ziptalk-offline-v1";
+const CACHE_NAME = "circlo-offline-linked-c-v2";
 const OFFLINE_URL = "/offline.html";
 
 self.addEventListener("install", (event) => {
@@ -10,7 +10,7 @@ self.addEventListener("activate", (event) => {
   event.waitUntil(Promise.all([
     clients.claim(),
     caches.keys().then(keys => Promise.all(keys
-      .filter(key => key.startsWith("ziptalk-offline-") && key !== CACHE_NAME)
+      .filter(key => (key.startsWith("ziptalk-offline-") || key.startsWith("circlo-offline-")) && key !== CACHE_NAME)
       .map(key => caches.delete(key)))),
   ]));
 });
@@ -36,7 +36,7 @@ self.addEventListener("message", (event) => {
 
 /**
  * Web Push handler. Without this the browser drops every incoming push
- * silently — notifications never appear on desktop or Android, and Android
+ * silently â€” notifications never appear on desktop or Android, and Android
  * shows no heads-up banner because no Notification is ever constructed.
  *
  * Payload (from /api web-push sender):
@@ -59,8 +59,8 @@ self.addEventListener("push", (event) => {
     await self.registration.showNotification(data.title || "New message", {
       body: data.body || "New message",
       tag: data.tag || "message",
-      icon: data.icon || "/icons/ziptalk-192.png",
-      badge: "/icons/ziptalk-192.png",
+      icon: data.icon || "/icons/circlo-192.png",
+      badge: "/icons/circlo-192.png",
       data: { url },
       renotify: Boolean(data.tag),
       requireInteraction: false,

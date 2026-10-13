@@ -59,6 +59,7 @@ export default async function ChatPage({
 
   return (
     <ChatView
+      key={detail.id}
       conversationId={detail.id}
       me={me}
       other={other}

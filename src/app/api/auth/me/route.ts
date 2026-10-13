@@ -1,28 +1,14 @@
-import { NextRequest, NextResponse } from "next/server";
-import { SESSION_COOKIE } from "@/server/config";
-import {
-  createSessionToken,
-  getSessionUserWithPresence,
-  sessionCookieOptions,
-} from "@/server/session";
-import { jsonError, requestIsSecure } from "@/server/http";
+import { NextResponse } from "next/server";
+import { getSessionUserWithPresence } from "@/server/session";
+import { jsonError } from "@/server/http";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(req: NextRequest) {
+export async function GET() {
   const user = await getSessionUserWithPresence();
-  if (!user) {
-    return jsonError(401, "Not authenticated.");
-  }
-  // Rolling persistence: every successful session check renews the signed
-  // cookie. Browser/app restarts therefore keep the user logged in, while
-  // explicit logout still revokes all previously issued tokens server-side.
-  const token = await createSessionToken(user.id, user.username);
-  const response = NextResponse.json({ user });
-  response.cookies.set(
-    SESSION_COOKIE,
-    token,
-    sessionCookieOptions(requestIsSecure(req)),
-  );
-  return response;
+  if (!user) return jsonError(401, "Not authenticated.");
+  // Identity reads must not overwrite a newer login with an older in-flight
+  // session cookie. Proxy rotates expired access through the refresh token,
+  // preserving session ID, authentication times, MFA and absolute expiry.
+  return NextResponse.json({ user }, { headers: { "Cache-Control": "no-store" } });
 }

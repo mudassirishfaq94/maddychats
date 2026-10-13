@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, sql, isNotNull } from "drizzle-orm";
 import { db } from "@/db";
 import { e2eeConversationKeys, e2eeKeys } from "@/db/schema";
 import { getMembership } from "@/server/chat";
@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
     if (existing) return false;
 
     const [sender] = await tx.select({ id: e2eeKeys.id }).from(e2eeKeys)
-      .where(and(eq(e2eeKeys.userId, user.id), eq(e2eeKeys.deviceId, deviceId)))
+      .where(and(eq(e2eeKeys.userId, user.id), eq(e2eeKeys.deviceId, deviceId), isNotNull(e2eeKeys.trustedAt)))
       .limit(1);
     if (!sender) throw new Error("Unknown sender encryption device.");
 
@@ -67,7 +67,7 @@ export async function POST(req: NextRequest) {
         throw new Error("A key recipient is not a conversation member.");
       }
       const [recipient] = await tx.select({ id: e2eeKeys.id }).from(e2eeKeys)
-        .where(and(eq(e2eeKeys.userId, share.targetUserId), eq(e2eeKeys.deviceId, share.targetDeviceId)))
+        .where(and(eq(e2eeKeys.userId, share.targetUserId), eq(e2eeKeys.deviceId, share.targetDeviceId), isNotNull(e2eeKeys.trustedAt)))
         .limit(1);
       if (!recipient) throw new Error("A key recipient device is not registered.");
     }

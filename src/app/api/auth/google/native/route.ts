@@ -1,14 +1,14 @@
+import { withPasswordCapacity } from "@/server/password-capacity";
+import { rateLimit } from "@/server/rate-limit";
+import { beginSignIn } from "@/server/authentication";
 import { randomBytes } from "crypto";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import { and, eq, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { notificationPreferences, oauthAccounts, users } from "@/db/schema";
-import { SESSION_COOKIE } from "@/server/config";
 import { hashPassword } from "@/server/password";
-import { createSessionToken, sessionCookieOptions } from "@/server/session";
-import { jsonError, readJson, requestIsSecure } from "@/server/http";
-import { toSafeUser } from "@/server/users";
+import { jsonError, readJson, guardSameOrigin, clientIp } from "@/server/http";
 import { verifyGoogleMobileHandoff } from "@/server/google-mobile-handoff";
 import { findUserById } from "@/server/users";
 import { createHash, timingSafeEqual } from "crypto";
@@ -22,7 +22,10 @@ const googleKeys = createRemoteJWKSet(new URL("https://www.googleapis.com/oauth2
  * Google ID token; this endpoint verifies it server-side and issues the same
  * HttpOnly ZipTalk session cookie as the web OAuth callback.
  */
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
+  const blocked = guardSameOrigin(req);
+  if (blocked) return blocked;
+  if (!(await rateLimit(`google-native:${clientIp(req)}`, 25, 10 * 60 * 1000)).allowed) return jsonError(429, "Too many sign-in attempts.");
   const body = await readJson(req) as { idToken?: unknown } | null;
   const ticket = typeof (body as { ticket?: unknown } | null)?.ticket === "string" ? (body as { ticket: string }).ticket : null;
   const verifier = typeof (body as { verifier?: unknown } | null)?.verifier === "string" ? (body as { verifier: string }).verifier : null;
@@ -34,9 +37,7 @@ export async function POST(req: NextRequest) {
     }
     const user = await findUserById(handoff.userId);
     if (!user || user.username !== handoff.username) return jsonError(401, "Google mobile sign-in expired.");
-    const response = NextResponse.json({ user: toSafeUser(user) });
-    response.cookies.set(SESSION_COOKIE, await createSessionToken(user.id, user.username), sessionCookieOptions(requestIsSecure(req)));
-    return response;
+    return beginSignIn(req, user);
   }
   const idToken = typeof body?.idToken === "string" ? body.idToken : null;
   if (!idToken) return jsonError(422, "Google ID token is required.");
@@ -53,6 +54,7 @@ export async function POST(req: NextRequest) {
   } catch {
     return jsonError(401, "Google could not verify this sign-in.");
   }
+  if (typeof claims.iat !== "number" || claims.iat * 1000 < Date.now() - 5 * 60 * 1000 || claims.iat * 1000 > Date.now() + 30_000) return jsonError(401, "Request a fresh Google sign-in credential.");
   if (!claims.sub || typeof claims.email !== "string" || claims.email_verified !== true) {
     return jsonError(401, "Google account email is not verified.");
   }
@@ -65,8 +67,7 @@ export async function POST(req: NextRequest) {
     const [emailOwner] = await db.select().from(users)
       .where(sql`lower(${users.email}) = ${claims.email.toLowerCase()}`).limit(1);
     if (emailOwner) {
-      await db.insert(oauthAccounts).values({ userId: emailOwner.id, provider: "google", providerAccountId: claims.sub }).onConflictDoNothing();
-      user = emailOwner;
+      return jsonError(409, "An account already uses this email. Sign in with its existing method, then link Google from profile settings.");
     }
   }
   if (!user) {
@@ -78,11 +79,12 @@ export async function POST(req: NextRequest) {
       if (!taken) break;
       username = `${base.slice(0, 14)}${randomBytes(3).toString("hex")}`;
     }
+    const passwordHash = await hashPassword(randomBytes(32).toString("base64url"));
     user = await db.transaction(async (tx) => {
       const [created] = await tx.insert(users).values({
         displayName: typeof claims.name === "string" ? claims.name.slice(0, 50) : username,
-        username, email: claims.email!.toLowerCase(),
-        passwordHash: await hashPassword(randomBytes(32).toString("base64url")),
+        username, email: claims.email!.toLowerCase(), emailVerifiedAt: new Date(),
+        passwordHash,
         avatarUrl: typeof claims.picture === "string" ? claims.picture : null,
       }).returning();
       await tx.insert(notificationPreferences).values({ userId: created.id });
@@ -91,9 +93,10 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  const response = NextResponse.json({ user: toSafeUser(user) });
-  response.cookies.set(SESSION_COOKIE, await createSessionToken(user.id, user.username), sessionCookieOptions(requestIsSecure(req)));
-  return response;
+  if (!user.emailVerifiedAt && user.email.toLowerCase() === claims.email.toLowerCase()) {
+    await db.update(users).set({ emailVerifiedAt: new Date() }).where(eq(users.id, user.id));
+  }
+  return beginSignIn(req, user);
 }
 
 /** The web OAuth client id is public and required by Android Credential Manager. */
@@ -102,3 +105,5 @@ export async function GET() {
   if (!clientId) return jsonError(503, "Google sign-in is not configured.");
   return NextResponse.json({ clientId });
 }
+
+export const POST = withPasswordCapacity(handlePOST);
