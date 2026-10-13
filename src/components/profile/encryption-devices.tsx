@@ -10,7 +10,13 @@ import { FreshAuthentication } from "./fresh-authentication";
 type Device = { deviceId: string; trustedAt: string | null; publicKey: string; fingerprint: string; browser: string | null; sessionExpiresAt: string | null; sessionRevokedAt: string | null; lastUsedAt: string | null; sessionState: string; deviceName?: string | null; country?: string | null; platform?: string | null; };
 type LinkRequest = { id: string; deviceId: string; fingerprint: string; status: string; expiresAt: string };
 
-export function EncryptionDevices() {
+function maskEmail(email: string) {
+  const [local, domain] = email.split("@");
+  if (!local || !domain) return "your verified email";
+  return `${local.slice(0, 1)}${local.length > 1 ? "•••" : "••"}@${domain}`;
+}
+
+export function EncryptionDevices({ recoveryEmail }: { recoveryEmail?: string }) {
   const encryption = useSharedE2EE();
   const [devices, setDevices] = useState<Device[]>([]);
   const [verified, setVerified] = useState<string[]>([]);
@@ -25,6 +31,8 @@ export function EncryptionDevices() {
   const [confirmation, setConfirmation] = useState("");
   const [password, setPassword] = useState("");
   const [mfaCode, setMfaCode] = useState("");
+  const [emailRecoveryCode, setEmailRecoveryCode] = useState("");
+  const [emailRecoveryCodeSent, setEmailRecoveryCodeSent] = useState(false);
   const { waitForDeviceRegistration, syncKnownConversations } = encryption;
   const knownTrusted = useRef<Set<string> | null>(null);
 
@@ -63,6 +71,27 @@ export function EncryptionDevices() {
   }, [encryption.initialized, refresh]);
 
   const current = devices.find(device => device.deviceId === encryption.deviceId);
+
+  async function sendRecoveryEmailCode() {
+    if (!current || !current.fingerprint) return;
+    setBusy(true);
+    setStatus("Sending a one-time recovery code to your verified email…");
+    try {
+      const response = await e2eeRequest("/api/e2ee/devices/recovery-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ deviceId: current.deviceId, fingerprint: current.fingerprint }),
+      });
+      const data = await response.json() as { error?: string; expiresInSeconds?: number };
+      if (!response.ok) throw new Error(data.error ?? "Unable to send a recovery code.");
+      setEmailRecoveryCodeSent(true);
+      setStatus("Recovery code sent. It expires in 10 minutes and works once.");
+    } catch (cause) {
+      setStatus(cause instanceof Error ? cause.message : "Unable to send a recovery code.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   useEffect(() => {
     if (!current || (current.trustedAt && !Object.values(issued).some(item => new Date(item.expiresAt).getTime() > Date.now()))) return;
@@ -128,18 +157,24 @@ export function EncryptionDevices() {
     {current && !current.trustedAt && <div className="mt-4 rounded-xl border border-[var(--border)] p-3">
       <button type="button" className="btn btn-secondary" disabled={busy} onClick={() => setRecoveryOpen(previous => !previous)}>Emergency recovery: no trusted device or recovery file</button>
       {recoveryOpen && <div className="mt-3 text-sm">
-        <p>First try the original browser where this account&apos;s chats still open. If its keys are gone, securely enroll this browser after confirming your identity. This signs out all other browsers and removes their encryption approval; sign in and approve them again individually.</p>
-        <p className="mt-2">Old messages stay encrypted and are not deleted. Lost private keys cannot be recovered by signing in. A participant who can still read the chat must verify your changed encryption identity and send an encrypted reply. Alternatively, re-approve an original browser that still has its keys, then use Restore my other devices there. New conversations can start after recovery; existing chats may remain waiting for key synchronization.</p>
+        <p>First try the original browser where this account&apos;s chats still open. If none is trusted, this recovery enrolls only the browser you have open and revokes other devices&apos; sessions and encryption approvals. You will need to sign in and approve those devices again individually.</p>
+        <p className="mt-2">This proves control of your account and email; it cannot restore private keys or messages removed when an account was deleted. Old messages remain encrypted. A participant or original browser that can still read them must approve the changed identity or restore the original chat keys.</p>
+        {recoveryEmail ? <div className="my-3 rounded-xl border border-[var(--border)] p-3">
+          <p className="text-xs">Confirm your verified email: <strong>{maskEmail(recoveryEmail)}</strong></p>
+          <p className="mt-1 text-xs text-[var(--muted)]">You must also have signed in again within the last five minutes. If needed, use the sign-in link below and choose Google.</p>
+          <button type="button" className="btn btn-secondary mt-2" disabled={busy} onClick={() => void sendRecoveryEmailCode()}>{emailRecoveryCodeSent ? "Send another recovery code" : "Send recovery code"}</button>
+          <label className="mt-3 block text-xs">Six-digit email recovery code<input className="field-input mt-1 w-full tracking-[0.3em]" aria-label="Email recovery code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={emailRecoveryCode} onChange={event => setEmailRecoveryCode(event.target.value.replace(/\D/g, "").slice(0, 6))} /></label>
+        </div> : <p className="my-3 text-xs text-[var(--muted)]">This account has no verified email available for recovery. Use the password and recent sign-in options below, or verify an email in account settings first.</p>}
         <FreshAuthentication password={password} code={mfaCode} onPassword={setPassword} onCode={setMfaCode} returnTo="/app/profile#encryption-devices" />
         <label className="block text-xs">Type RESET ENCRYPTION TRUST to confirm<input className="field-input mt-1 w-full" aria-label="Encryption recovery confirmation" value={confirmation} maxLength={30} onChange={event => setConfirmation(event.target.value)} /></label>
-        <button type="button" className="btn btn-secondary mt-3" disabled={busy || confirmation !== "RESET ENCRYPTION TRUST"} onClick={() => {
-          setBusy(true); setStatus("Verifying identity and this browser's private key…");
-          void encryption.approveDevice(current.deviceId, current.fingerprint, { decision: "recover", confirmation, password, mfaCode }).then(async () => {
-            setPassword(""); setMfaCode(""); setConfirmation(""); setRecoveryOpen(false); await refresh();
+        <button type="button" className="btn btn-secondary mt-3" disabled={busy || confirmation !== "RESET ENCRYPTION TRUST" || Boolean(recoveryEmail && emailRecoveryCode.length !== 6)} onClick={() => {
+          setBusy(true); setStatus("Verifying your email, sign-in, and this browser's private key…");
+          void encryption.approveDevice(current.deviceId, current.fingerprint, { decision: "recover", confirmation, password, mfaCode, ...(recoveryEmail ? { emailCode: emailRecoveryCode } : {}) }).then(async () => {
+            setPassword(""); setMfaCode(""); setEmailRecoveryCode(""); setConfirmation(""); setRecoveryOpen(false); await refresh();
             setStatus("This browser is trusted. Reload to resume secure sending. Existing chats still need their original keys restored from a participant or browser that can read them.");
             window.dispatchEvent(new Event("maddy:message-request-keys"));
           }).catch(cause => setStatus(cause instanceof Error ? cause.message : "Recovery could not be verified.")).finally(() => setBusy(false));
-        }}>Recover encryption on this browser</button>
+        }}>{recoveryEmail ? "Confirm email and recover this browser" : "Recover encryption on this browser"}</button>
       </div>}
     </div>}
     {current && !current.trustedAt && <div className="mt-3 rounded-xl border border-[var(--border)] p-3 text-sm">

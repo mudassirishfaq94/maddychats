@@ -24,7 +24,7 @@ import { TwoFactorAuth } from "@/components/profile/two-factor-auth";
 import { EncryptionDevices } from "@/components/profile/encryption-devices";
 import { Devices } from "@/components/profile/devices";
 import { db } from "@/db";
-import { oauthAccounts } from "@/db/schema";
+import { oauthAccounts, users } from "@/db/schema";
 import { Avatar } from "@/components/avatar";
 import { formatDate, timeAgo } from "@/lib/utils";
 
@@ -43,6 +43,7 @@ export default async function ProfilePage({
     .select({ provider: oauthAccounts.provider })
     .from(oauthAccounts)
     .where(eq(oauthAccounts.userId, user.id));
+  const [accountSecurity] = await db.select({ emailVerifiedAt: users.emailVerifiedAt }).from(users).where(eq(users.id, user.id)).limit(1);
   const providers = new Set(identities.map((identity) => identity.provider));
   const initialMethods = {
     email: !user.email.endsWith("@auth.maddychats.invalid"),
@@ -111,7 +112,7 @@ export default async function ProfilePage({
           <AuthenticationMethods initialMethods={initialMethods} notice={notice} />
           <TwoFactorAuth />
           <Devices />
-              <EncryptionDevices />
+              <EncryptionDevices recoveryEmail={accountSecurity?.emailVerifiedAt && !user.email.endsWith("@auth.maddychats.invalid") ? user.email : undefined} />
           <NotificationPreferences />
           <PrivacySettings />
           <LoginHistory />

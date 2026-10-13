@@ -10,6 +10,7 @@ import { guardSameOrigin, jsonError, readJson, requestIsSecure } from "@/server/
 import { rateLimit } from "@/server/rate-limit";
 import { isUuid } from "@/server/users";
 import { verifyFreshAuthentication } from "@/server/authentication";
+import { consumeDeviceRecoveryEmailCode } from "@/server/device-recovery-email";
 
 export const dynamic = "force-dynamic";
 const digest = (value: string) => createHash("sha256").update(value).digest("hex");
@@ -23,6 +24,7 @@ export async function POST(req: NextRequest) {
   if (!user) return jsonError(401, "Not authenticated.");
   if (!(await rateLimit(`e2ee-approval:${user.id}`, 20, 60000)).allowed) return jsonError(429, "Too many approval attempts. Please wait.");
   const body = await readJson(req) as Record<string, unknown> | null;
+  let emailRecoveryRequired = false;
   if (body?.action === "challenge") {
     const binding = body.decision === "bind-session";
     const recovery = body.decision === "recover";
@@ -33,6 +35,8 @@ export async function POST(req: NextRequest) {
       if (body.confirmation !== "RESET ENCRYPTION TRUST") return jsonError(422, "Confirm that your old trusted devices are unavailable. Historical keys will not be replaced.");
       if (!(await rateLimit(`e2ee-recovery:${user.id}`, 5, 600000)).allowed) return jsonError(429, "Too many recovery attempts. Please wait.");
       if (!(await verifyFreshAuthentication(user.id, body))) return jsonError(403, "Confirm your identity: sign in again, or provide your password and authenticator/recovery code when enabled.");
+      const [account] = await db.select({ emailVerifiedAt: users.emailVerifiedAt }).from(users).where(eq(users.id, user.id)).limit(1);
+      emailRecoveryRequired = Boolean(account?.emailVerifiedAt && !user.email.endsWith("@auth.maddychats.invalid"));
     }
     if (typeof body.sourceDeviceId !== "string" || typeof body.targetDeviceId !== "string" || typeof body.targetFingerprint !== "string") return jsonError(422, "Device IDs and verified fingerprint are required.");
     const [source] = await db.select().from(e2eeKeys).where(and(eq(e2eeKeys.userId, user.id), eq(e2eeKeys.deviceId, body.sourceDeviceId), ...(selfProof ? [] : [isNotNull(e2eeKeys.trustedAt)]))).limit(1);
@@ -42,6 +46,19 @@ export async function POST(req: NextRequest) {
     // Fingerprint is SHA-256 of the encoded public key, exactly as displayed on both devices.
     const targetHash = digest(target.publicKey);
     if (body.targetFingerprint !== targetHash) return jsonError(409, "Device fingerprint changed. Verify it again.");
+    if (recovery && emailRecoveryRequired) {
+      if (typeof body.emailCode !== "string" || !/^\d{6}$/.test(body.emailCode)) return jsonError(422, "Enter the six-digit code sent to your verified email address.");
+      const codeLimit = await rateLimit(`e2ee-recovery-email-verify:${user.id}`, 5, 10 * 60 * 1000);
+      if (!codeLimit.allowed) return jsonError(429, "Too many incorrect recovery codes. Request a new code after the limit resets.");
+      const consumed = await consumeDeviceRecoveryEmailCode({
+        userId: user.id,
+        deviceId: target.deviceId,
+        sessionId: sessionId!,
+        fingerprint: targetHash,
+        code: body.emailCode as string,
+      });
+      if (!consumed) return jsonError(403, "That recovery code is invalid, expired, or was already used. Request a fresh code and try again.");
+    }
     let linkId: string | undefined;
     const decision = body.decision === "reject" ? "reject" : "approve";
     if (typeof body.linkId === "string") {

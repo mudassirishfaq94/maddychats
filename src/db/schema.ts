@@ -147,6 +147,23 @@ export const emailVerificationTokens = pgTable(
   (table) => [index("email_verification_tokens_user_idx").on(table.userId)],
 );
 
+/** One-time mailbox proof for explicit lost-device trust recovery. */
+export const deviceRecoveryEmailCodes = pgTable(
+  "device_recovery_email_codes",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+    deviceId: text("device_id").notNull(),
+    sessionId: uuid("session_id").references(() => deviceSessions.id, { onDelete: "cascade" }).notNull(),
+    fingerprint: text("fingerprint").notNull(),
+    codeHash: text("code_hash").notNull().unique(),
+    expiresAt: timestamp("expires_at", { withTimezone: true, mode: "date" }).notNull(),
+    usedAt: timestamp("used_at", { withTimezone: true, mode: "date" }),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+  },
+  (table) => [index("device_recovery_email_codes_user_created_idx").on(table.userId, table.createdAt)],
+);
+
 /** Shared fixed-window counters used by every application instance. */
 export const rateLimitBuckets = pgTable(
   "rate_limit_buckets",
