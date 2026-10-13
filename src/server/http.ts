@@ -13,12 +13,44 @@ export function jsonError(
   );
 }
 
+/** Admit a short-lived admin challenge and return one for the next retry. */
+export function adminChallengeRequired(reason?: string): NextResponse {
+  return NextResponse.json(
+    { error: "Administrative re-verification required.", reason: reason ?? undefined },
+    { status: 403 },
+  );
+}
+
 /**
  * JSON request bodies are hard-capped at 64 KB — every JSON schema in this
  * app is far smaller, so anything bigger is abusive and gets rejected before
  * it is ever parsed.
  */
 const MAX_JSON_BODY_BYTES = 64 * 1024;
+
+/** Enforce real streamed bytes, including chunked requests with no length. */
+export async function readBoundedBody(req: Request, limit: number): Promise<Uint8Array> {
+  const reader = req.body?.getReader();
+  if (!reader) return new Uint8Array();
+  const chunks: Uint8Array[] = []; let size = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > limit) { await reader.cancel(); throw new Error("body_too_large"); }
+      chunks.push(value);
+    }
+  } finally { reader.releaseLock(); }
+  const result = new Uint8Array(size); let offset = 0;
+  for (const chunk of chunks) { result.set(chunk, offset); offset += chunk.length; }
+  return result;
+}
+
+export async function readUploadForm(req: Request): Promise<FormData> {
+  const bytes = await readBoundedBody(req, 4 * 1024 * 1024);
+  return new Response(new Uint8Array(bytes), { headers: { "content-type": req.headers.get("content-type") ?? "" } }).formData();
+}
 
 /** Parses a JSON request body; returns null on malformed/oversized input. */
 export async function readJson(
@@ -29,7 +61,7 @@ export async function readJson(
     return null;
   }
   try {
-    const data: unknown = await req.json();
+    const data: unknown = JSON.parse(new TextDecoder().decode(await readBoundedBody(req, MAX_JSON_BODY_BYTES)));
     if (data && typeof data === "object" && !Array.isArray(data)) {
       return data as Record<string, unknown>;
     }
@@ -44,12 +76,20 @@ export async function readJson(
  * 4 MB (including form overhead); larger direct-to-storage uploads can be
  * added later without changing the private media-serving contract.
  */
-export function guardUploadSize(req: NextRequest): NextResponse | null {
+export function guardUploadSize(req: NextRequest, enabledMedia = false): NextResponse | null {
+  if (process.env.STARTER_MODE === "1" && !(enabledMedia && process.env.CHAT_MEDIA_ENABLED === "1")) {
+    return jsonError(503, "Uploads and voice messages are paused. Text chat is available.");
+  }
   const length = Number(req.headers.get("content-length"));
   if (Number.isFinite(length) && length > 4 * 1024 * 1024) {
     return jsonError(413, "Upload too large.");
   }
   return null;
+}
+
+/** Block cross-origin browser requests, delegating to the existing origin policy. */
+export function requireSameOrigin(req: NextRequest): NextResponse | null {
+  return guardSameOrigin(req);
 }
 
 /** Best-effort client IP for rate limiting. */
@@ -81,6 +121,9 @@ const DEV_HOST_PATTERN = /^(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\]|.*\.local|
  *  4. Host heuristic — any non-local public host is assumed TLS.
  */
 export function requestIsSecure(req: NextRequest): boolean {
+  // Deployment configuration is authoritative. Forwarding headers supplied by
+  // a caller must never downgrade cookies on the configured HTTPS deployment.
+  if (process.env.NODE_ENV === "production" && clientUrl().startsWith("https://")) return true;
   const hint = req.headers.get("x-secure-context");
   if (hint === "1") return true;
 
@@ -135,6 +178,10 @@ export function requestIsSecure(req: NextRequest): boolean {
  * The client is same-origin, so browser requests must carry an Origin whose
  * host matches this server (or CLIENT_URL). Non-browser clients without an
  * Origin header are unaffected; cross-origin browser calls are rejected.
+ *
+ * This helper is deliberately narrow: it only rejects cross-origin browser
+ * requests that carry an Origin header. It does not grant access to any route
+ * that the route handler itself does not authorize.
  */
 export function guardSameOrigin(req: NextRequest): NextResponse | null {
   // Fetch Metadata is supplied by modern browsers even in cases where Origin
@@ -146,11 +193,16 @@ export function guardSameOrigin(req: NextRequest): NextResponse | null {
   if (!origin) return null;
   try {
     const o = new URL(origin);
-    const allowed = new Set<string>();
-    const host = req.headers.get("host");
-    if (host) allowed.add(host);
-    allowed.add(new URL(clientUrl()).host);
-    if (allowed.has(o.host)) return null;
+    if (o.username || o.password || o.origin === "null") throw new Error("invalid_origin");
+    const allowed = new Set([new URL(clientUrl()).origin]);
+    // Render's built-in service URL remains a supported first-party alias
+    // when CLIENT_URL is the custom domain. This value comes from the host's
+    // server environment, never from the request's Host header.
+    if (process.env.RENDER_EXTERNAL_URL) allowed.add(new URL(process.env.RENDER_EXTERNAL_URL).origin);
+    // Development can use either loopback alias; production uses CLIENT_URL
+    // exclusively, never a caller-controlled Host or X-Forwarded-Host header.
+    if (process.env.NODE_ENV !== "production") allowed.add(req.nextUrl.origin);
+    if (allowed.has(o.origin) && origin === o.origin) return null;
   } catch {
     // fall through to rejection
   }

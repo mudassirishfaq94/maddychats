@@ -9,6 +9,7 @@ import {
   CalendarDays,
   Clock,
   Fingerprint,
+  Globe,
   Mail,
 } from "lucide-react";
 import { getSessionUser } from "@/server/session";
@@ -20,6 +21,8 @@ import { PrivacySettings } from "@/components/profile/privacy-settings";
 import { LoginHistory } from "@/components/profile/login-history";
 import { AccountDataSection } from "@/components/profile/account-data";
 import { TwoFactorAuth } from "@/components/profile/two-factor-auth";
+import { EncryptionDevices } from "@/components/profile/encryption-devices";
+import { Devices } from "@/components/profile/devices";
 import { db } from "@/db";
 import { oauthAccounts } from "@/db/schema";
 import { Avatar } from "@/components/avatar";
@@ -58,6 +61,8 @@ export default async function ProfilePage({
     { icon: AtSign, label: "Username", value: `@${user.username}` },
     { icon: CalendarDays, label: "Member since", value: formatDate(user.createdAt) },
     { icon: Clock, label: "Last seen", value: timeAgo(user.lastSeenAt) },
+    { icon: Fingerprint, label: "Device name", value: user.deviceName ?? "Not set" },
+    { icon: Globe, label: "Country", value: user.country ?? "Not set" },
   ];
 
   return (
@@ -84,7 +89,7 @@ export default async function ProfilePage({
         style={{ "--d": "80ms" } as React.CSSProperties}
       >
         <Avatar user={user} size={92} ring />
-        <div className="min-w-0 flex-1">
+        <div className="w-full min-w-0 flex-1">
           <div className="flex min-w-0 flex-col items-center gap-3 sm:flex-row sm:flex-wrap sm:items-center">
             <h1 className="max-w-full break-words font-display text-2xl font-bold sm:text-3xl">{user.displayName}</h1>
             <span className="badge badge-accent">
@@ -92,7 +97,7 @@ export default async function ProfilePage({
               Online
             </span>
           </div>
-          <p className="mt-1.5 text-[var(--muted)]">@{user.username}</p>
+          <p className="mt-1.5 break-all text-[var(--muted)]">@{user.username}</p>
           <p className="mt-3 max-w-lg text-sm leading-relaxed text-[var(--muted)]">
             {user.bio ?? "No bio yet — hit Edit profile to introduce yourself."}
           </p>
@@ -105,6 +110,8 @@ export default async function ProfilePage({
           <ProfileEditor user={user} />
           <AuthenticationMethods initialMethods={initialMethods} notice={notice} />
           <TwoFactorAuth />
+          <Devices />
+              <EncryptionDevices />
           <NotificationPreferences />
           <PrivacySettings />
           <LoginHistory />
