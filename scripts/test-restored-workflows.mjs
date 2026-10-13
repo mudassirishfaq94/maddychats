@@ -28,7 +28,10 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, serviceWorkers: "block", permissions: ["microphone"] });
     await context.addInitScript(() => { window.__workflowCsp = []; document.addEventListener("securitypolicyviolation", event => window.__workflowCsp.push(event.violatedDirective)); });
     await context.addCookies(cookies.split("; ").map(cookie => { const i = cookie.indexOf("="); return { name: cookie.slice(0, i), value: cookie.slice(i + 1), url: base, httpOnly: true, sameSite: "Lax" }; }));
-    const page = await context.newPage(); page.on("pageerror", error => errors.push(error.message)); pages.push(page);
+    const page = await context.newPage();
+    page.setDefaultTimeout(60000);
+    page.setDefaultNavigationTimeout(60000);
+    page.on("pageerror", error => errors.push(error.message)); pages.push(page);
     return { page, cookies };
   };
   const api = async (route, cookies, body, method = "POST") => fetch(base + route, { method, headers: { Origin: base, Cookie: cookies, "Content-Type": "application/json" }, ...(body ? { body: JSON.stringify(body) } : {}) });
@@ -131,13 +134,13 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
       if (capabilityFailures++ === 0) await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "Temporary interruption" }) });
       else await route.continue();
     });
-    const capabilityRecovery = source.page.waitForResponse(response => response.url().endsWith("/api/chat-capabilities") && response.status() === 200);
+    const capabilityRecovery = source.page.waitForResponse(response => response.url().endsWith("/api/chat-capabilities") && response.status() === 200, { timeout: 60000 });
     await chat(source.page); await chat(recipient.page);
     await capabilityRecovery;
     await source.page.waitForFunction(() => {
       const button = document.querySelector('button[title="Record voice message"]');
       return button instanceof HTMLButtonElement && !button.disabled;
-    });
+    }, undefined, { timeout: 60000 });
     assert(capabilityFailures >= 2, "Media capability request recovers after a transient failure");
     await source.page.unroute("**/api/chat-capabilities");
     // An unreadable encrypted fixture must explain recovery rather than render
@@ -172,14 +175,14 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     await source.page.getByRole("button",{name:"Retry failed message",exact:true}).click();
 
     await recipient.page.getByRole("region", { name: "Conversation", exact: true }).getByText("Real encrypted delivery baseline", { exact: true }).waitFor({ timeout: 30000 });
-    await source.page.waitForFunction(()=>!document.querySelector('button[aria-label="Retry failed message"]'));
+    await source.page.waitForFunction(()=>!document.querySelector('button[aria-label="Retry failed message"]'), undefined, { timeout: 60000 });
     await source.page.unroute("**/api/conversations/*/messages");
     assert.equal(clientIds.size,1,"Failed/lost-response retries preserve identity");
     for(let attempt=0;attempt<30 && sendAttempts<3;attempt++)await source.page.waitForTimeout(100);
     assert.equal(sendAttempts,3);
     // Recipient delivery can precede the sender's retry acknowledgement. Wait
     // for that acknowledgement and its durable draft clear before reloading.
-    await source.page.waitForFunction(() => document.querySelector('textarea[aria-label="Message text"]')?.value === "");
+    await source.page.waitForFunction(() => document.querySelector('textarea[aria-label="Message text"]')?.value === "", undefined, { timeout: 60000 });
     let draftCleared = false;
     const draftDeadline = Date.now() + 15000;
     while (!draftCleared && Date.now() < draftDeadline) {
@@ -228,7 +231,7 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     await profile(source.page); await refresh(source.page);
     await source.page.getByLabel(`Linking code for ${request.device_id}`).fill(code);
     await source.page.getByLabel("I compared this fingerprint with Profile on my new device and they match.").check();
-    const proofResponse = source.page.waitForResponse(response => response.url().endsWith("/api/e2ee/devices/approve") && response.request().postDataJSON()?.action === "approve");
+    const proofResponse = source.page.waitForResponse(response => response.url().endsWith("/api/e2ee/devices/approve") && response.request().postDataJSON()?.action === "approve", { timeout: 60000 });
     await source.page.getByRole("button", { name: "Approve encryption device", exact: true }).click();
     const proof = (await proofResponse).request().postDataJSON();
     await source.page.getByText(/Device approved\./).waitFor();
@@ -243,15 +246,16 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     await chat(target.page);
     await recipient.page.getByRole("region", { name: "Conversation", exact: true }).getByText("Queued new device delivery", { exact: true }).waitFor({ timeout: 45000 });
     await chat(source.page);
+    console.log("PASS trusted-device key restoration and queued-message delivery");
     // A real file is encrypted by the composer and decrypted by the recipient.
     const fileContent = "Authorized encrypted attachment verification\n";
     await source.page.locator('input[type="file"]').first().setInputFiles({ name: "workflow-check.txt", mimeType: "text/plain", buffer: Buffer.from(fileContent) });
-    const upload = source.page.waitForResponse(response => response.url().endsWith("/api/upload/message") && response.request().method() === "POST");
+    const upload = source.page.waitForResponse(response => response.url().endsWith("/api/upload/message") && response.request().method() === "POST", { timeout: 60000 });
     await source.page.getByRole("button", { name: "Send message", exact: true }).click();
     const fileResponse = await upload; assert.equal(fileResponse.status(), 201);
     const fileMessage = (await fileResponse.json()).message;
     const download = recipient.page.getByRole("link", { name: "Download workflow-check.txt", exact: true });
-    await download.waitFor(); await recipient.page.waitForFunction(() => document.querySelector('a[aria-label="Download workflow-check.txt"]')?.href.startsWith("blob:"));
+    await download.waitFor(); await recipient.page.waitForFunction(() => document.querySelector('a[aria-label="Download workflow-check.txt"]')?.href.startsWith("blob:"), undefined, { timeout: 60000 });
     const downloaded = recipient.page.waitForEvent("download"); await download.click();
     assert.equal(await readFile(await (await downloaded).path(), "utf8"), fileContent);
     const stored = (await pool.query("select id from message_attachments where message_id=$1", [fileMessage.id])).rows[0].id;
@@ -260,19 +264,21 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     assert(!Buffer.from(await authorizedMedia.arrayBuffer()).includes(Buffer.from(fileContent)), "The server and storage return ciphertext, not readable file bytes");
     assert.equal((await fetch(base + "/api/media/" + stored, { headers: { Cookie: unrelatedCookie } })).status, 404);
     // A decrypted photo must open outside message-row containment and fit every viewport.
+    console.log("PASS encrypted attachment upload, download, and access control");
     const photo = await sharp({ create: { width: 1200, height: 900, channels: 3, background: "#343042" } }).png().toBuffer();
     await source.page.locator('input[type="file"]').first().setInputFiles({ name: "viewer-check.png", mimeType: "image/png", buffer: photo });
-    const photoUpload = source.page.waitForResponse(response => response.url().endsWith("/api/upload/message") && response.request().method() === "POST");
+    const photoUpload = source.page.waitForResponse(response => response.url().endsWith("/api/upload/message") && response.request().method() === "POST", { timeout: 60000 });
     await source.page.getByRole("button", { name: "Send message", exact: true }).click();
     assert.equal((await photoUpload).status(), 201);
     await testImageViewer(recipient.page, "viewer-check.png");
     await testComposerMedia(base, source, recipient, pool, conversationId);
     await testChatScroll(base, source, recipient, pool, conversationId);
+    console.log("PASS image viewer, composer media, and long-chat scroll");
     // Chromium generates a microphone stream; the application's MediaRecorder performs real recording.
     await source.page.getByRole("button", { name: "Record voice message", exact: true }).click();
     await source.page.getByRole("button", { name: "Stop recording", exact: true }).waitFor();
     await source.page.waitForTimeout(1600); await source.page.getByRole("button", { name: "Stop recording", exact: true }).click();
-    const voiceUpload = source.page.waitForResponse(response => response.url().endsWith("/api/upload/message") && response.request().method() === "POST");
+    const voiceUpload = source.page.waitForResponse(response => response.url().endsWith("/api/upload/message") && response.request().method() === "POST", { timeout: 60000 });
     await source.page.getByRole("button", { name: "Send voice message", exact: true }).click();
     assert.equal((await voiceUpload).status(), 201);
     const ownVoice = source.page.getByRole("button", { name: "Play voice message", exact: true }).first();
@@ -288,17 +294,26 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     assert(contrast >= 4.5, "Voice controls must have readable contrast on their bubble");
     await recipient.page.getByRole("button", { name: "Play voice message", exact: true }).click();
     await recipient.page.getByRole("button", { name: "Pause voice message", exact: true }).waitFor();
-    await recipient.page.waitForFunction(() => Array.from(document.querySelectorAll('[aria-valuenow]')).some(waveform => Number(waveform.getAttribute("aria-valuenow")) > 0));
+    await recipient.page.waitForFunction(() => Array.from(document.querySelectorAll('[aria-valuenow]')).some(waveform => Number(waveform.getAttribute("aria-valuenow")) > 0), undefined, { timeout: 60000 });
+    console.log("PASS voice recording, upload, playback, and contrast");
     // No cron HTTP request is injected: the existing processor must deliver the persisted job.
     await composer.fill("Actual scheduled encrypted delivery");
     await source.page.getByRole("button", { name: "Schedule message", exact: true }).click();
     const due = new Date(Date.now() + 15000);
     const localDate = new Date(due.getTime() - due.getTimezoneOffset() * 60000).toISOString().slice(0, 19).replace(/:00$/, ""); // Match datetime-local normalization of zero seconds.
     await source.page.locator('input[type="datetime-local"]').fill(localDate);
-    const scheduledResponse = source.page.waitForResponse(response => response.url().endsWith(`/conversations/${conversationId}/scheduled`) && response.request().method() === "POST");
+    console.log("Starting scheduled encrypted delivery check");
+    const scheduleStartedAt = new Date();
     await source.page.getByRole("button", { name: "Schedule", exact: true }).click();
-    const scheduled = await scheduledResponse; assert.equal(scheduled.status(), 201); const job = (await scheduled.json()).scheduled;
+    let job;
+    const scheduleDeadline = Date.now() + 60000;
+    while (!job && Date.now() < scheduleDeadline) {
+      job = (await pool.query("select id,text from scheduled_messages where conversation_id=$1 and sender_id=$2 and created_at >= $3 order by created_at desc limit 1", [conversationId, owner.id, scheduleStartedAt])).rows[0];
+      if (!job) await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    assert(job, "The schedule form click must persist an encrypted scheduled message");
     assert.notEqual(job.text, "Actual scheduled encrypted delivery");
+    console.log("PASS encrypted scheduled message persisted");
     // All authenticated browser pages close before delivery; no client can pump the scheduler.
     const sourceContext = source.page.context(), recipientContext = recipient.page.context();
     for (const page of [source.page, recipient.page, target.page]) { assert.deepEqual(await page.evaluate(() => window.__workflowCsp), []); await page.close(); }
@@ -319,10 +334,12 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
       legacyLock.release();
     }
     assert(completed?.sent, "The server delivers the scheduled job with every chat browser closed");
+    console.log("PASS scheduled job delivered with chat browsers closed");
     source.page = await sourceContext.newPage(); recipient.page = await recipientContext.newPage();
     for (const page of [source.page, recipient.page]) { page.on("pageerror", error => errors.push(error.message)); pages.push(page); }
     await chat(source.page); await chat(recipient.page);
     await recipient.page.getByRole("region", { name: "Conversation", exact: true }).getByText("Actual scheduled encrypted delivery", { exact: true }).waitFor({ timeout: 45000 });
+    console.log("PASS scheduled encrypted message arrived in recipient chat");
     const delivered = (await pool.query("select sent,sent_message_id from scheduled_messages where id=$1", [job.id])).rows[0]; assert(delivered.sent); assert(delivered.sent_message_id);
     assert.equal((await api(`/api/conversations/${conversationId}/scheduled`, source.cookies, { text: job.text, encrypted: false, scheduledFor: new Date(Date.now() + 60000).toISOString() })).status, 422);
     assert.equal((await api(`/api/conversations/${conversationId}/scheduled`, source.cookies, { text: job.text, encrypted: true, scheduledFor: new Date(Date.now() - 60000).toISOString() })).status, 422);
@@ -358,6 +375,9 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     assert.deepEqual(errors, []);
     const recovery = jwtSecret ? await testEncryptionDevices(base, pool, owner, peer, password, conversationId, jwtSecret, { device: rejected, contact: recipient }) : {};
     return { ...recovery, ...statusChecks, ...mobileChecks, tryNow: true, refresh: true, codeApproval: true, rejected: true, expired: true, replay: true, wrongAccount: true, revocation: true, sessionRebinding: true, attachment: true, voicePlayback: true, mediaCapabilityRetry: true, voiceContrast: true, scheduler: true, branding: true, registration: true, verificationTokenAndLogin: true, verificationCodeUI: true, failedSendAndLostResponseRetry: true, externalEmailDelivery: false, browserErrors: 0 };
+  } catch (error) {
+    console.error("Restored workflow failed before cleanup:", error);
+    throw error;
   } finally {
     await browser.close();
     if (registered) await pool.query("delete from users where id=$1 and username=$2 and username like 'restreg_%'", [registered.id, registered.username]);

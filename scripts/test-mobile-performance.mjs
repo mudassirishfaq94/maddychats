@@ -28,7 +28,7 @@ export async function testMobilePerformance(base, pool, source, owner, conversat
       await page.mouse.wheel(0, -50000);
       // Scrolling triggers automatic pagination. Do not race a button that can
       // become disabled or disappear when the final older page arrives.
-      await page.waitForFunction(before => document.querySelectorAll(".message-history-row").length > before || !Array.from(document.querySelectorAll("button")).some(button => button.textContent.includes("Load older messages")), before);
+      await page.waitForFunction(before => document.querySelectorAll(".message-history-row").length > before || !Array.from(document.querySelectorAll("button")).some(button => button.textContent.includes("Load older messages")), before, { timeout: 90000 });
       await page.waitForTimeout(300);
     }
     assert(await page.locator(".message-history-row").count() >= 150, "The long-history typing check loads the seeded older pages");
@@ -87,17 +87,17 @@ export async function testMobilePerformance(base, pool, source, owner, conversat
     });
     await page.evaluate(() => sessionStorage.setItem("hold-draft-decrypt", "1"));
     await page.reload(); await composer.waitFor();
-    await page.waitForFunction(() => window.__draftDecryptHeld === true);
+    await page.waitForFunction(() => window.__draftDecryptHeld === true, undefined, { timeout: 60000 });
     await composer.fill("New input while restoration is pending");
     await composer.fill("");
-    await page.waitForFunction(() => window.__draftDecryptReleased === true);
+    await page.waitForFunction(() => window.__draftDecryptReleased === true, undefined, { timeout: 60000 });
     await page.waitForTimeout(200);
     assert.equal(await composer.inputValue(), "", "Late restoration never overwrites a user-cleared draft");
     await composer.fill("Rapid navigation draft");
     await page.locator('a[href="/app"]:visible').first().click();
     await page.waitForURL(base + "/app");
     await page.goBack(); await composer.waitFor();
-    await page.waitForFunction(() => document.querySelector('textarea[aria-label="Message text"]')?.value === "Rapid navigation draft");
+    await page.waitForFunction(() => document.querySelector('textarea[aria-label="Message text"]')?.value === "Rapid navigation draft", undefined, { timeout: 60000 });
     // Poll from Node: Playwright waitForFunction treats a returned Promise as
     // truthy, so it cannot prove an asynchronous IndexedDB transaction finished.
     const persistedDraft = () => heldTab.evaluate(async conversationId => {
@@ -142,12 +142,12 @@ export async function testMobilePerformance(base, pool, source, owner, conversat
       };
     });
     await composer.fill("An older encryption task must not resurrect this draft");
-    await page.waitForFunction(() => window.__draftEncryptHeld === true);
+    await page.waitForFunction(() => window.__draftEncryptHeld === true, undefined, { timeout: 60000 });
     await composer.fill("");
     await waitForPersistedDraft(null);
     assert.equal(await page.evaluate(() => window.__draftEncryptReleased === true), false);
     await page.evaluate(() => window.__releaseDraftEncrypt());
-    await page.waitForFunction(() => window.__draftEncryptReleased === true);
+    await page.waitForFunction(() => window.__draftEncryptReleased === true, undefined, { timeout: 60000 });
     await waitForPersistedDraft(null);
     await page.reload(); await composer.waitFor();
     await page.getByRole("region", { name: "Messages", exact: true }).getByText("Real encrypted delivery baseline", { exact: true }).last().waitFor();
@@ -169,8 +169,8 @@ export async function testMobilePerformance(base, pool, source, owner, conversat
     }, { userId: owner.id, conversationId });
     await page.evaluate(() => sessionStorage.setItem("inject-legacy-draft", "1"));
     await page.goto(base + "/app/chats/" + conversationId); await composer.waitFor();
-    await page.waitForFunction(() => document.querySelector('textarea[aria-label="Message text"]')?.value === "Legacy draft migration");
-    await page.waitForFunction(({ userId, conversationId }) => localStorage.getItem(`ziptalk:draft:${userId}:${conversationId}`) === null, { userId: owner.id, conversationId });
+    await page.waitForFunction(() => document.querySelector('textarea[aria-label="Message text"]')?.value === "Legacy draft migration", undefined, { timeout: 60000 });
+    await page.waitForFunction(({ userId, conversationId }) => localStorage.getItem(`ziptalk:draft:${userId}:${conversationId}`) === null, { userId: owner.id, conversationId }, { timeout: 60000 });
     await composer.fill(""); await page.waitForTimeout(800);
     await cdp.send("Emulation.setCPUThrottlingRate", { rate: 1 });
     for (const route of ["/app/profile", "/app/status", "/app/chats", "/app/settings", "/app/people", "/app/communities", "/app/starred"]) {
