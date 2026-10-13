@@ -66,6 +66,10 @@ export const users = pgTable(
       withTimezone: true,
       mode: "date",
     }),
+    /** Free-text label the owner gave this browser/device. */
+    deviceName: text("device_name"),
+    /** IANA country the owner chose for this account. */
+    country: text("country"),
   },
   (table) => [
     uniqueIndex("users_username_lower_unique").on(sql`lower(${table.username})`),
@@ -1227,6 +1231,11 @@ export const e2eeKeys = pgTable(
     trustedAt: timestamp("trusted_at", { withTimezone: true, mode: "date" }),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
     lastUsedAt: timestamp("last_used_at", { withTimezone: true, mode: "date" }),
+    deviceName: text("device_name"),
+    country: text("country"),
+    platform: text("platform"),
+    ipCountry: text("ip_country"),
+    ipCountryAt: timestamp("ip_country_at", { withTimezone: true, mode: "date" }),
   },
   (table) => [
     unique("e2ee_keys_user_device_unique").on(table.userId, table.deviceId),
@@ -1373,9 +1382,12 @@ export const deviceLinkRequests = pgTable("device_link_requests", {
   userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   sessionId: uuid("session_id").notNull().references(() => deviceSessions.id, { onDelete: "cascade" }),
   deviceId: text("device_id").notNull(),
+  /** Device that issued the code, recorded by id so trust survives re-login. */
+  sourceDeviceId: text("source_device_id"),
   fingerprint: text("fingerprint").notNull(),
   codeHash: text("code_hash").notNull(),
   status: text("status").notNull().default("pending"),
   expiresAt: timestamp("expires_at", { withTimezone: true, mode: "date" }).notNull(),
+  usedAt: timestamp("used_at", { withTimezone: true, mode: "date" }),
   createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
 }, table => [index("device_link_owner_idx").on(table.userId, table.expiresAt)]);

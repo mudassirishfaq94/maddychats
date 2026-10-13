@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
     await tx.update(deviceLinkRequests).set({ status: "revoked" }).where(and(eq(deviceLinkRequests.userId, user.id), eq(deviceLinkRequests.deviceId, deviceId), eq(deviceLinkRequests.status, "pending")));
     const code = randomBytes(8).toString("hex").toUpperCase();
     const fingerprint = createHash("sha256").update(device.publicKey).digest("hex");
-    const [request] = await tx.insert(deviceLinkRequests).values({ userId: user.id, sessionId, deviceId, fingerprint, codeHash: createHash("sha256").update(code).digest("hex"), expiresAt: new Date(Date.now() + 5 * 60000) }).returning({ id: deviceLinkRequests.id, expiresAt: deviceLinkRequests.expiresAt });
+    const [request] = await tx.insert(deviceLinkRequests).values({ userId: user.id, sessionId, deviceId, fingerprint, codeHash: createHash("sha256").update(code).digest("hex"), expiresAt: new Date(Date.now() + 5 * 60000) }).returning({ id: deviceLinkRequests.id, expiresAt: deviceLinkRequests.expiresAt, usedAt: deviceLinkRequests.usedAt });
     return { ...request, code };
   });
   return result ? NextResponse.json(result, { status: 201, headers: { "Cache-Control": "no-store" } }) : jsonError(403, "Request linking from this new device's signed-in browser.");

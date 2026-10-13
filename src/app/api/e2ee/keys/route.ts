@@ -7,6 +7,10 @@ import { guardSameOrigin, jsonError, readJson } from "@/server/http";
 import { isUuid } from "@/server/users";
 import { publishToConversation } from "@/server/realtime";
 import { rateLimit } from "@/server/rate-limit";
+import { detectCountry } from "@/server/country";
+import { platformLabel } from "@/server/device-meta";
+
+const MAX_DEVICE_NAME = 60;
 
 export const dynamic = "force-dynamic";
 
@@ -40,6 +44,9 @@ export async function GET(req: NextRequest) {
       browser: deviceSessions.userAgent,
       sessionExpiresAt: deviceSessions.expiresAt,
       sessionRevokedAt: deviceSessions.revokedAt,
+      deviceName: e2eeKeys.deviceName,
+      country: e2eeKeys.country,
+      platform: e2eeKeys.platform,
     })
     .from(e2eeKeys)
     .leftJoin(deviceSessions, and(eq(deviceSessions.id, e2eeKeys.sessionId), eq(deviceSessions.userId, e2eeKeys.userId)))
@@ -78,6 +85,10 @@ export async function POST(req: NextRequest) {
     return jsonError(422, "deviceId, publicKey, and encryptedPrivateKey are required.");
   }
 
+  // Optional, display-only identity. A label the user chose wins; otherwise the
+  // browser family is derived from the request so the device list is readable.
+  const requestedName = typeof data.deviceName === "string" ? data.deviceName.trim().slice(0, MAX_DEVICE_NAME) : "";
+  const platform = platformLabel(req.headers.get("user-agent"));
   const sessionId = await getSessionDeviceId();
   // Upsert: update if device already registered, insert otherwise
   const [existing] = await db
@@ -99,20 +110,43 @@ export async function POST(req: NextRequest) {
     if (registered && registered.publicKey !== publicKey) {
       return jsonError(409, "A different encryption key is already registered for this device.");
     }
+    // Trust and the session binding are deliberately untouched here. Rebinding
+    // a device to a new session requires the bind-session proof, because the
+    // session binding is what lets this device hand out trust to another one.
+    const detectedCountry = sessionId ? await detectCountry(req) : null;
     await db
       .update(e2eeKeys)
       // The public key is immutable, but a legacy private-key backup can be
       // rewrapped with a device-only recovery secret during client upgrade.
-      .set({ encryptedPrivateKey, lastUsedAt: new Date() })
+      .set({
+        encryptedPrivateKey,
+        lastUsedAt: new Date(),
+        platform,
+        ...(requestedName ? { deviceName: requestedName } : {}),
+        ...(detectedCountry ? { ipCountry: detectedCountry, ipCountryAt: new Date() } : {}),
+      })
       .where(eq(e2eeKeys.id, existing.id));
   } else {
     // Bootstrap only a genuinely new account. An account with lost/revoked
     // keys must explicitly recover; an empty trusted set is not permission.
     // Serialize first registrations so two browsers cannot both bootstrap.
+    const detectedCountry = await detectCountry(req);
     await db.transaction(async tx => {
       await tx.select({ id: users.id }).from(users).where(eq(users.id, user.id)).for("update");
       const [priorDevice] = await tx.select({ id: e2eeKeys.id }).from(e2eeKeys).where(eq(e2eeKeys.userId, user.id)).limit(1);
-      await tx.insert(e2eeKeys).values({ userId: user.id, deviceId, publicKey, encryptedPrivateKey, sessionId, trustedAt: priorDevice ? null : new Date() }).onConflictDoNothing();
+      await tx.insert(e2eeKeys).values({
+        userId: user.id,
+        deviceId,
+        publicKey,
+        encryptedPrivateKey,
+        sessionId,
+        trustedAt: priorDevice ? null : new Date(),
+        deviceName: requestedName || null,
+        platform,
+        country: detectedCountry,
+        ipCountry: detectedCountry,
+        ipCountryAt: detectedCountry ? new Date() : null,
+      }).onConflictDoNothing();
     });
   }
 

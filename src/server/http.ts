@@ -13,6 +13,14 @@ export function jsonError(
   );
 }
 
+/** Admit a short-lived admin challenge and return one for the next retry. */
+export function adminChallengeRequired(reason?: string): NextResponse {
+  return NextResponse.json(
+    { error: "Administrative re-verification required.", reason: reason ?? undefined },
+    { status: 403 },
+  );
+}
+
 /**
  * JSON request bodies are hard-capped at 64 KB — every JSON schema in this
  * app is far smaller, so anything bigger is abusive and gets rejected before
@@ -84,6 +92,11 @@ export function guardUploadSize(req: NextRequest, enabledMedia = false): NextRes
     return jsonError(413, "Upload too large.");
   }
   return null;
+}
+
+/** Block cross-origin browser requests, delegating to the existing origin policy. */
+export function requireSameOrigin(req: NextRequest): NextResponse | null {
+  return guardSameOrigin(req);
 }
 
 /** Best-effort client IP for rate limiting. */
@@ -172,6 +185,10 @@ export function requestIsSecure(req: NextRequest): boolean {
  * The client is same-origin, so browser requests must carry an Origin whose
  * host matches this server (or CLIENT_URL). Non-browser clients without an
  * Origin header are unaffected; cross-origin browser calls are rejected.
+ *
+ * This helper is deliberately narrow: it only rejects cross-origin browser
+ * requests that carry an Origin header. It does not grant access to any route
+ * that the route handler itself does not authorize.
  */
 export function guardSameOrigin(req: NextRequest): NextResponse | null {
   // Fetch Metadata is supplied by modern browsers even in cases where Origin
