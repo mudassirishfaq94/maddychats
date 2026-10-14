@@ -134,7 +134,7 @@ try {
   const warmUser = accounts[0];
   const warmLogin = await fetch(baseUrl + '/api/auth/login', {
     method: 'POST', headers: { Origin: baseUrl, 'Content-Type': 'application/json', 'X-Forwarded-For': warmUser.ip },
-    body: JSON.stringify({ identifier: warmUser.username, password }),
+    body: JSON.stringify({ acceptTerms: true, acceptPrivacy: true, identifier: warmUser.username, password }),
   });
   assert.equal(warmLogin.status, 200);
   assert.equal((await warmLogin.json()).user.id, warmUser.id, 'The app must authenticate against this run\'s fake database.');
@@ -154,7 +154,7 @@ try {
       const account = accounts[i];
       const response = await fetch(baseUrl + '/api/auth/login', {
         method: 'POST', headers: { Origin: baseUrl, 'Content-Type': 'application/json', 'X-Forwarded-For': account.ip },
-        body: JSON.stringify({ identifier: account.username, password }),
+        body: JSON.stringify({ acceptTerms: true, acceptPrivacy: true, identifier: account.username, password }),
       });
       assert.equal(response.status, 200);
       assert.equal((await response.json()).user.id, account.id);

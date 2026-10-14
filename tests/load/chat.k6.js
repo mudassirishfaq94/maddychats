@@ -93,7 +93,7 @@ export default function chatJourney() {
       for (const cookie of account.authCookies) http.cookieJar().set(base, cookie.name, cookie.value);
       signedIn = true;
     } else {
-    const login = http.post(base + '/api/auth/login', JSON.stringify({ identifier: account.username, password: fixture.password }), params('login', account));
+    const login = http.post(base + '/api/auth/login', JSON.stringify({ acceptTerms: true, acceptPrivacy: true, identifier: account.username, password: fixture.password }), params('login', account));
     if (!expect(login, login.status === 200 && json(login)?.user?.id === account.id, 'sign-in succeeds for this account')) {
       sleep(5); return;
     }

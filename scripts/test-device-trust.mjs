@@ -63,7 +63,7 @@ try {
   userId = inserted.rows[0].id;
   record("throwaway account created", Boolean(userId));
 
-  const login = await call("/api/auth/login", { method: "POST", body: { identifier: EMAIL, password: PASSWORD } });
+  const login = await call("/api/auth/login", { method: "POST", body: { acceptTerms: true, acceptPrivacy: true, identifier: EMAIL, password: PASSWORD } });
   record("sign in creates a session", login.status === 200, `status=${login.status} ${login.text.slice(0, 120)}`);
   const sessionA = login.cookies;
   if (!sessionA) throw new Error("no session cookie returned");
@@ -113,7 +113,7 @@ try {
   record("devices expose the browser session list", Array.isArray(rowA?.sessions) && rowA.sessions.length >= 1, JSON.stringify(rowA?.sessions?.length));
 
   // Signing in again must not undo an approval (the reported bug).
-  const reLogin = await call("/api/auth/login", { method: "POST", body: { identifier: EMAIL, password: PASSWORD } });
+  const reLogin = await call("/api/auth/login", { method: "POST", body: { acceptTerms: true, acceptPrivacy: true, identifier: EMAIL, password: PASSWORD } });
   record("same account signs in again", reLogin.status === 200, `status=${reLogin.status}`);
   const sessionB = reLogin.cookies;
   const afterRelogin = await call("/api/privacy/devices", { cookies: sessionB });
@@ -141,8 +141,8 @@ try {
   if (sessionId) {
     // Extra sign-ins provide a session that is neither the one this test uses
     // (sessionId) nor the one it is acting from, so revoking it is safe.
-    const thirdLogin = await call("/api/auth/login", { method: "POST", body: { identifier: EMAIL, password: PASSWORD } });
-    const fourthLogin = await call("/api/auth/login", { method: "POST", body: { identifier: EMAIL, password: PASSWORD } });
+    const thirdLogin = await call("/api/auth/login", { method: "POST", body: { acceptTerms: true, acceptPrivacy: true, identifier: EMAIL, password: PASSWORD } });
+    const fourthLogin = await call("/api/auth/login", { method: "POST", body: { acceptTerms: true, acceptPrivacy: true, identifier: EMAIL, password: PASSWORD } });
     const list = await call("/api/privacy/devices", { cookies: fourthLogin.cookies });
     const unbound = list.json?.unboundSessions ?? [];
     const spare = unbound.find((session) => !session.current && session.id !== sessionId);

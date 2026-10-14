@@ -52,6 +52,8 @@ try {
     return route.continue();
   });
   await page.goto(base+'/login');
+  await page.getByRole('checkbox').nth(0).check();
+  await page.getByRole('checkbox').nth(1).check();
   await page.getByLabel('Email or username',{exact:true}).fill('test@example.invalid');
   await page.getByLabel('Password',{exact:true}).fill('CorrectPassword99!');
   await page.getByRole('button',{name:'Sign in',exact:true}).click();

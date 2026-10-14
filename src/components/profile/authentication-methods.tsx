@@ -60,7 +60,7 @@ export function AuthenticationMethods({
 
       <div className="mt-6 space-y-3">
           <MethodRow icon={Mail} label="Email and password" connected={methods.email}>
-            <span className="text-xs text-[var(--muted)]">Email setup is coming soon</span>
+            <span className="text-xs text-[var(--muted)]">Use the Password section below to request a secure setup link.</span>
           </MethodRow>
           <MethodRow icon={Link2} label="Google" connected={methods.google}>
             <a href="/api/auth/google?mode=link&next=/app/profile" className="btn btn-secondary">Add Google</a>

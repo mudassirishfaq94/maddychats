@@ -8,8 +8,9 @@ import { AlertTriangle, AtSign, Eye, EyeOff, Loader2, Lock } from "lucide-react"
 import { loginSchema, fieldErrors } from "@/lib/schemas";
 import { useAuth } from "@/components/providers/auth-provider";
 import { Field } from "./field";
+import { acceptsPolicies, type PolicyConsent } from "@/lib/policy-consent";
 
-export function LoginForm({ next }: { next?: string }) {
+export function LoginForm({ next, consent }: { next?: string; consent: PolicyConsent }) {
   const { signIn } = useAuth();
 
   const [identifier, setIdentifier] = useState("");
@@ -27,6 +28,7 @@ export function LoginForm({ next }: { next?: string }) {
     setFormError(null);
     setVerificationRequired(false);
 
+    if (!acceptsPolicies(consent)) { setFormError("Agree to both policies before signing in."); return; }
     const parsed = loginSchema.safeParse({ identifier, password });
     if (!parsed.success) {
       setErrors(fieldErrors(parsed.error));
@@ -35,7 +37,7 @@ export function LoginForm({ next }: { next?: string }) {
     setErrors({});
     setPending(true);
 
-    const result = await signIn(parsed.data);
+    const result = await signIn({ ...parsed.data, ...consent });
     setPending(false);
 
     if (result.mfaRequired) { navigateWithReload(`/login?mfa=1&next=${encodeURIComponent(target)}`); return; }
@@ -88,7 +90,7 @@ export function LoginForm({ next }: { next?: string }) {
               type="button"
               onClick={() => setShowPassword((v) => !v)}
               aria-label={showPassword ? "Hide password" : "Show password"}
-              className="flex h-7 w-7 items-center justify-center rounded-lg text-[var(--muted)] transition-colors hover:text-[var(--text)]"
+              className="flex h-11 w-11 items-center justify-center rounded-lg text-[var(--muted)] transition-colors hover:text-[var(--text)]"
             >
               {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             </button>
@@ -104,7 +106,7 @@ export function LoginForm({ next }: { next?: string }) {
         </div>
       </div>
 
-      <button type="submit" disabled={pending} className="btn btn-primary w-full">
+      <button type="submit" disabled={pending || !acceptsPolicies(consent)} className="btn btn-primary w-full">
         {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
         {pending ? "Signing in…" : "Sign in"}
       </button>

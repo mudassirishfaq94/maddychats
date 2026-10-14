@@ -32,6 +32,7 @@ export function GoogleSignIn({ next = "/app", consent }: { next?: string; consen
     <>
       <div className="my-5 flex items-center gap-3"><span className="h-px flex-1 bg-[var(--border)]" /><span className="text-xs text-[var(--muted)]">or</span><span className="h-px flex-1 bg-[var(--border)]" /></div>
       <a
+        role="link"
         href={allowed ? href : undefined}
         aria-disabled={!allowed}
         tabIndex={allowed ? 0 : -1}

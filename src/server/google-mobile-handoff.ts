@@ -1,5 +1,6 @@
 import { SignJWT, jwtVerify } from "jose";
 import { jwtSecret } from "./config";
+import { POLICY_VERSION } from "@/lib/policy-consent";
 
 const ISSUER = "circlo";
 const AUDIENCE = "circlo-google-mobile-handoff";
@@ -10,7 +11,7 @@ export async function createGoogleMobileHandoff(
   username: string,
   codeChallenge: string,
 ): Promise<string> {
-  return new SignJWT({ usr: username, codeChallenge })
+  return new SignJWT({ usr: username, codeChallenge, policyVersion: POLICY_VERSION })
     .setProtectedHeader({ alg: "HS256", typ: "JWT" })
     .setSubject(userId)
     .setIssuer(ISSUER)
@@ -31,6 +32,7 @@ export async function verifyGoogleMobileHandoff(ticket: string): Promise<{
       audience: AUDIENCE,
     });
     if (
+      payload.policyVersion !== POLICY_VERSION ||
       typeof payload.sub !== "string" ||
       typeof payload.usr !== "string" ||
       typeof payload.codeChallenge !== "string"

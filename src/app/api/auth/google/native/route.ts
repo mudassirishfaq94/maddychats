@@ -12,7 +12,7 @@ import { jsonError, readJson, guardSameOrigin, clientIp } from "@/server/http";
 import { verifyGoogleMobileHandoff } from "@/server/google-mobile-handoff";
 import { findUserById } from "@/server/users";
 import { createHash, timingSafeEqual } from "crypto";
-import { policyAcceptance } from "@/lib/policy-consent";
+import { acceptsPolicies, policyAcceptance } from "@/lib/policy-consent";
 
 export const dynamic = "force-dynamic";
 
@@ -27,9 +27,9 @@ async function handlePOST(req: NextRequest) {
   const blocked = guardSameOrigin(req);
   if (blocked) return blocked;
   if (!(await rateLimit(`google-native:${clientIp(req)}`, 25, 10 * 60 * 1000)).allowed) return jsonError(429, "Too many sign-in attempts.");
-  const body = await readJson(req) as { idToken?: unknown } | null;
-  const ticket = typeof (body as { ticket?: unknown } | null)?.ticket === "string" ? (body as { ticket: string }).ticket : null;
-  const verifier = typeof (body as { verifier?: unknown } | null)?.verifier === "string" ? (body as { verifier: string }).verifier : null;
+  const body = await readJson(req) as { idToken?: unknown; ticket?: unknown; verifier?: unknown } | null;
+  const ticket = typeof body?.ticket === "string" ? body.ticket : null;
+  const verifier = typeof body?.verifier === "string" ? body.verifier : null;
   if (ticket && verifier) {
     const handoff = await verifyGoogleMobileHandoff(ticket);
     const actual = createHash("sha256").update(verifier).digest("base64url");
@@ -44,6 +44,7 @@ async function handlePOST(req: NextRequest) {
     if (!(await rateLimit(`google-mobile-handoff:${ticketId}`, 1, 5 * 60 * 1000)).allowed) return jsonError(409, "Google mobile sign-in was already used or could not be verified. Start sign-in again.");
     return beginSignIn(req, user);
   }
+  if (!acceptsPolicies(body)) return jsonError(422, "Agree to both policies before signing in.");
   const idToken = typeof body?.idToken === "string" ? body.idToken : null;
   if (!idToken) return jsonError(422, "Google ID token is required.");
 

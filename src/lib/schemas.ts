@@ -154,7 +154,7 @@ export type NotificationPreferencesInput = z.infer<typeof notificationPreference
 export const REACTION_CHOICES = ["👍", "❤️", "😂", "🎉", "😮", "😢"] as const;
 
 export type RegisterInput = z.infer<typeof registerSchema>;
-export type LoginInput = z.infer<typeof loginSchema>;
+export type LoginInput = z.infer<typeof loginSchema> & { acceptTerms: boolean; acceptPrivacy: boolean };
 export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
 export type ProfileUpdateInput = z.infer<typeof profileUpdateSchema>;
 export type StartConversationInput = z.infer<typeof startConversationSchema>;

@@ -144,13 +144,13 @@ async function main() {
       if (response.status >= 500) throw new Error(`API ${path} failed: ${serverOutput}`);
       return { response, data };
     };
-    assert.equal((await api("/api/auth/login", { identifier: unverified.username, password })).response.status, 403);
+    assert.equal((await api("/api/auth/login", { acceptTerms: true, acceptPrivacy: true, identifier: unverified.username, password })).response.status, 403);
     const token = randomBytes(32).toString("base64url");
     await sql.query("INSERT INTO email_verification_tokens(user_id,token_hash,expires_at) VALUES($1,$2,now()+interval '1 hour')", [unverified.id, createHash("sha256").update(token).digest("hex")]);
     const consumed = await Promise.all([api("/api/auth/verify-email", { token }), api("/api/auth/verify-email", { token })]);
     assert.deepEqual(consumed.map((r) => r.response.status).sort(), [200,400]);
     assert((await sql.query("SELECT email_verified_at FROM users WHERE id=$1", [unverified.id])).rows[0].email_verified_at);
-    assert.equal((await api("/api/auth/login", { identifier: unverified.username, password })).response.status, 200);
+    assert.equal((await api("/api/auth/login", { acceptTerms: true, acceptPrivacy: true, identifier: unverified.username, password })).response.status, 200);
 
     const oldBobCookie = await cookie(bob, false);
     const oldAuthTime = (await verifySessionToken(oldBobCookie.slice("maddy_session=".length)))!.authTime;
@@ -166,7 +166,7 @@ async function main() {
     assert.equal(enrollment.response.status, 200);
     assert.equal(enrollment.data.recoveryCodes.length, 10);
     assert.equal((await api("/api/auth/me", undefined, oldBobCookie, "GET")).response.status, 401, "Old sessions revoked by MFA enrollment");
-    const mfaLogin = await api("/api/auth/login", { identifier: bob.username, password });
+    const mfaLogin = await api("/api/auth/login", { acceptTerms: true, acceptPrivacy: true, identifier: bob.username, password });
     assert.equal(mfaLogin.data.mfaRequired, true);
     const pendingCookie = mfaLogin.response.headers.getSetCookie().find((v) => v.startsWith("maddy_mfa_challenge="))!.split(";")[0];
     const mfaDone = await api("/api/auth/mfa", { code: enrollment.data.recoveryCodes[0] }, pendingCookie);

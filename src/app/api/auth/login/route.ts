@@ -19,6 +19,8 @@ import { newSessionBlockReason } from "@/server/session";
 import { recordLoginAttempt } from "@/server/privacy";
 import { measureLoginStage, withLoginTimings } from "@/server/login-performance";
 
+import { acceptsPolicies } from "@/lib/policy-consent";
+
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
@@ -43,6 +45,7 @@ async function login(req: NextRequest) {
 
   const body = await readJson(req);
   if (!body) return jsonError(400, "Invalid request body.");
+  if (!acceptsPolicies(body)) return jsonError(422, "Agree to the Terms and Conditions and Privacy Policy before signing in.");
 
   const parsed = loginSchema.safeParse(body);
   if (!parsed.success) {

@@ -195,7 +195,7 @@ async function main() {
       .sign(new TextEncoder().encode(testEnv.JWT_SECRET));
     const login = (secret: string, cookie = proof) => fetch(`${starterBase}/api/auth/login`, {
       method: "POST", headers: { Origin: starterBase, "Content-Type": "application/json", Cookie: `maddy_google_email_proof=${cookie}` },
-      body: JSON.stringify({ identifier: "proof_user", password: secret }),
+      body: JSON.stringify({ acceptTerms: true, acceptPrivacy: true, identifier: "proof_user", password: secret }),
     });
     assert.equal((await login("Wrong-password-2026")).status, 401);
     assert.equal((await fresh.query("select email_verified_at from users where id=$1", [proofUser.id])).rows[0].email_verified_at, null);

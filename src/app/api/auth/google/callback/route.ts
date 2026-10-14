@@ -40,6 +40,7 @@ async function handleGoogleCallback(req: NextRequest) {
   const mobile = req.cookies.get("google_oauth_mobile")?.value === "1";
   const mobileChallenge = req.cookies.get("google_oauth_code_challenge")?.value;
   if (!code || !state || !expectedState || state !== expectedState || !nonce || !verifier) return redirectError("google_invalid_state");
+  if (!linking && req.cookies.get("google_oauth_policy")?.value !== POLICY_VERSION) return finishGoogleOAuth(redirectError("consent_required"));
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
   if (!clientId || !clientSecret) return redirectError("google_not_configured");

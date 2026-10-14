@@ -22,7 +22,7 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
   const pages = []; const errors = []; let registered; let unrelatedCookie;
   const registerName = "restreg_" + randomBytes(6).toString("hex");
   const login = async account => {
-    const response = await fetch(base + "/api/auth/login", { method: "POST", headers: { Origin: base, "Content-Type": "application/json" }, body: JSON.stringify({ identifier: account.username, password }) });
+    const response = await fetch(base + "/api/auth/login", { method: "POST", headers: { Origin: base, "Content-Type": "application/json" }, body: JSON.stringify({ acceptTerms: true, acceptPrivacy: true, identifier: account.username, password }) });
     assert.equal(response.status, 200);
     const cookies = response.headers.getSetCookie().filter(cookie => /^(maddy_session|maddy_refresh)=/.test(cookie)).map(cookie => cookie.split(";")[0]).join("; ");
     const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, serviceWorkers: "block", permissions: ["microphone"] });
@@ -59,7 +59,7 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
       oldIdentity = device.page.evaluate(() => fetch("/api/auth/me", { cache: "no-store" }).then(r => r.status));
       await prepared;
     }
-    const response = await api("/api/auth/login", "", { identifier: owner.username, password }); assert.equal(response.status, 200);
+    const response = await api("/api/auth/login", "", { acceptTerms: true, acceptPrivacy: true, identifier: owner.username, password }); assert.equal(response.status, 200);
     device.cookies = response.headers.getSetCookie().filter(cookie => /^(maddy_session|maddy_refresh)=/.test(cookie)).map(cookie => cookie.split(";")[0]).join("; ");
     await device.page.context().addCookies(device.cookies.split("; ").map(cookie => { const i = cookie.indexOf("="); return { name: cookie.slice(0, i), value: cookie.slice(i + 1), url: base, httpOnly: true, sameSite: "Lax" }; }));
     if (releaseIdentity) {
@@ -95,6 +95,18 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     const registrationPage = await registrationContext.newPage();
     pages.push(registrationPage);
     registrationPage.on("pageerror", error => errors.push(error.message));
+    await registrationPage.goto(base + "/login");
+    const signInButton = registrationPage.getByRole("button", { name: "Sign in", exact: true });
+    const googleButton = registrationPage.getByRole("link", { name: "Continue with Google", exact: true });
+    assert.equal(await signInButton.isEnabled(), false);
+    assert.equal(await googleButton.getAttribute("aria-disabled"), "true");
+    await registrationPage.getByRole("checkbox", { name: /Terms and Conditions/ }).check();
+    assert.equal(await signInButton.isEnabled(), false);
+    await registrationPage.getByRole("checkbox", { name: /Privacy Policy/ }).check();
+    assert.equal(await signInButton.isEnabled(), true);
+    assert.match(await googleButton.getAttribute("href"), /terms=1&privacy=1/);
+    await registrationPage.getByRole("checkbox", { name: /Terms and Conditions/ }).uncheck();
+    assert.equal(await signInButton.isEnabled(), false);
     await registrationPage.goto(base + "/signup");
     await registrationPage.getByLabel("Display name", { exact: true }).fill("Workflow registration");
     await registrationPage.getByLabel("Username", { exact: true }).fill(registerName);
@@ -114,7 +126,7 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     assert(acceptance.terms_accepted_at && acceptance.privacy_accepted_at && acceptance.policy_version);
     assert.equal((await api("/api/auth/register", "", registration)).status, 409);
     assert.equal((await api("/api/auth/register", "", { ...registration, email: "invalid" })).status, 422);
-    assert.equal((await api("/api/auth/login", "", { identifier: registerName, password })).status, 403);
+    assert.equal((await api("/api/auth/login", "", { acceptTerms: true, acceptPrivacy: true, identifier: registerName, password })).status, 403);
     // Owned verification-token fixture tests consumption and login, not unavailable external mail delivery.
     const verificationCode = "827194";
     const verificationHash = createHmac("sha256", jwtSecret ?? "disposable-restored-workflows-only-secret-at-least-thirty-two").update(`email-verification:${registered.id}:${verificationCode}`).digest("hex");
@@ -136,9 +148,9 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     await registrationPage.goto(base + "/verify-email?token=" + verificationToken);
     await registrationPage.getByRole("heading", { name: "Email Verified!", exact: true }).waitFor();
     assert.equal((await api("/api/auth/verify-email", "", { token: verificationToken })).status, 400);
-    const verifiedLogin = await api("/api/auth/login", "", { identifier: registerName, password }); assert.equal(verifiedLogin.status, 200);
+    const verifiedLogin = await api("/api/auth/login", "", { acceptTerms: true, acceptPrivacy: true, identifier: registerName, password }); assert.equal(verifiedLogin.status, 200);
     unrelatedCookie = verifiedLogin.headers.getSetCookie().filter(cookie => /^(maddy_session|maddy_refresh)=/.test(cookie)).map(cookie => cookie.split(";")[0]).join("; ");
-    assert.equal((await api("/api/auth/login", "", { identifier: registerName, password: "IncorrectPassword1" })).status, 401);
+    assert.equal((await api("/api/auth/login", "", { acceptTerms: true, acceptPrivacy: true, identifier: registerName, password: "IncorrectPassword1" })).status, 401);
     const source = await login(owner), recipient = await login(peer);
     await profile(source.page); await profile(recipient.page);
     await source.page.getByText("This device: Trusted", { exact: true }).waitFor();

@@ -150,7 +150,7 @@ async function main() {
     process.env.CLIENT_URL="http://127.0.0.1:3200";
     process.env.STARTER_MODE="1"; process.env.RESEND_API_KEY="";
     const { POST: login } = await import("../src/app/api/auth/login/route");
-    const attempt=(value=password)=>login(new NextRequest("http://127.0.0.1:3200/api/auth/login",{method:"POST",headers:{origin:process.env.CLIENT_URL!,"content-type":"application/json","x-forwarded-for":"198.18.7.1"},body:JSON.stringify({identifier:"session_test",password:value})}));
+    const attempt=(value=password)=>login(new NextRequest("http://127.0.0.1:3200/api/auth/login",{method:"POST",headers:{origin:process.env.CLIENT_URL!,"content-type":"application/json","x-forwarded-for":"198.18.7.1"},body:JSON.stringify({ acceptTerms: true, acceptPrivacy: true, identifier:"session_test",password:value})}));
     assert.equal((await attempt("incorrect password")).status,401);
     assert.equal((await attempt()).status,200);
     await local.query("UPDATE users SET suspended_at=now() WHERE id=$1",[id]);

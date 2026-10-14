@@ -85,20 +85,25 @@ async function main() {
       method, headers: { cookie, origin: base, "content-type": "application/json", ...headers },
       body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(15000),
     });
+    for (const acceptance of [{}, { acceptTerms: true }, { acceptPrivacy: true }, { acceptTerms: "true", acceptPrivacy: true }]) {
+      const refused = await api("/api/auth/login", "", "POST", { identifier: "consent-negative-fixture", password, ...acceptance });
+      assert.equal(refused.status, 422, "Both explicit policy acceptances are required server-side");
+      assert.equal(refused.headers.getSetCookie().length, 0, "Missing consent cannot issue a session");
+    }
     const login = async (username: string) => {
-      const response = await api("/api/auth/login", "", "POST", { identifier: username, password });
+      const response = await api("/api/auth/login", "", "POST", { acceptTerms: true, acceptPrivacy: true, identifier: username, password });
       assert.equal(response.status, 200);
       const cookie = response.headers.getSetCookie().find((c) => c.startsWith("maddy_session="))?.split(";")[0];
       assert(cookie); return cookie;
     };
     const aliceCookie = await login(alice.username), bobCookie = await login(bob.username), outsiderCookie = await login(outsider.username);
     const verifier = "a".repeat(43);
-    const ticket = await new SignJWT({ usr: alice.username, codeChallenge: createHash("sha256").update(verifier).digest("base64url") })
+    const ticket = await new SignJWT({ policyVersion: "2026-10-14", usr: alice.username, codeChallenge: createHash("sha256").update(verifier).digest("base64url") })
       .setProtectedHeader({ alg: "HS256", typ: "JWT" }).setSubject(alice.id).setIssuer("circlo").setAudience("circlo-google-mobile-handoff").setIssuedAt().setExpirationTime("120s")
       .sign(new TextEncoder().encode(env.JWT_SECRET));
-    assert.equal((await api("/api/auth/google/native", "", "POST", { ticket, verifier: "b".repeat(43) })).status, 401);
-    assert.equal((await api("/api/auth/google/native", "", "POST", { ticket, verifier })).status, 200);
-    assert.equal((await api("/api/auth/google/native", "", "POST", { ticket, verifier })).status, 409, "Google mobile handoff can establish authentication only once");
+    assert.equal((await api("/api/auth/google/native", "", "POST", { acceptTerms: true, acceptPrivacy: true, ticket, verifier: "b".repeat(43) })).status, 401);
+    assert.equal((await api("/api/auth/google/native", "", "POST", { acceptTerms: true, acceptPrivacy: true, ticket, verifier })).status, 200);
+    assert.equal((await api("/api/auth/google/native", "", "POST", { acceptTerms: true, acceptPrivacy: true, ticket, verifier })).status, 409, "Google mobile handoff can establish authentication only once");
     const pushToken = "disposable-native-push-device-token-no-real-delivery";
     assert.equal((await api("/api/push/register", aliceCookie, "POST", { token: pushToken })).status, 200);
     assert.equal((await api("/api/push/register", bobCookie, "POST", { token: pushToken })).status, 200);
@@ -218,15 +223,15 @@ async function main() {
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
     } finally { await passwordBrowser.close(); }
     assert.equal((await api("/api/auth/me", passwordCookie)).status, 401, "Password changes revoke the old session");
-    assert.equal((await api("/api/auth/login", "", "POST", { identifier: passwordUser.username, password })).status, 401);
-    const newLogin = await api("/api/auth/login", "", "POST", { identifier: passwordUser.username, password: "ChangedPassword92" });
+    assert.equal((await api("/api/auth/login", "", "POST", { acceptTerms: true, acceptPrivacy: true, identifier: passwordUser.username, password })).status, 401);
+    const newLogin = await api("/api/auth/login", "", "POST", { acceptTerms: true, acceptPrivacy: true, identifier: passwordUser.username, password: "ChangedPassword92" });
     assert.equal(newLogin.status, 200);
     const newCookie = newLogin.headers.getSetCookie().find(c => c.startsWith("maddy_session="))!.split(";")[0];
     const recoveryCode = "b".repeat(32);
     await sql.query("insert into user_2fa(user_id,secret,enabled,recovery_code_hashes) values($1,'JBSWY3DPEHPK3PXP',true,$2)", [passwordUser.id, JSON.stringify([createHash("sha256").update(recoveryCode).digest("hex")])]);
     const mfaChange = { currentPassword: "ChangedPassword92", password: "MfaProtectedPassword93", confirmPassword: "MfaProtectedPassword93", mfaCode: "invalid" };
     assert.equal((await api("/api/auth/change-password", newCookie, "POST", mfaChange)).status, 401, "Enabling MFA rejects the previous unverified session");
-    const challengeLogin = await api("/api/auth/login", "", "POST", { identifier: passwordUser.username, password: "ChangedPassword92" });
+    const challengeLogin = await api("/api/auth/login", "", "POST", { acceptTerms: true, acceptPrivacy: true, identifier: passwordUser.username, password: "ChangedPassword92" });
     const challengeCookie = challengeLogin.headers.getSetCookie().find(c => c.startsWith("maddy_mfa_challenge="))!.split(";")[0];
     process.env.DATABASE_URL = url;
     const { generateTOTP } = await import("../src/server/two-factor");

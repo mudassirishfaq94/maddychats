@@ -14,6 +14,9 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(new URL("/login?error=google_invalid_mobile_request", clientUrl()));
   }
   const linking = req.nextUrl.searchParams.get("mode") === "link";
+  if (!linking && (req.nextUrl.searchParams.get("terms") !== "1" || req.nextUrl.searchParams.get("privacy") !== "1")) {
+    return NextResponse.redirect(new URL("/login?error=consent_required", clientUrl()));
+  }
   if (linking && !(await getSessionUser())) {
     return NextResponse.redirect(new URL("/login?next=/app/profile", clientUrl()));
   }

@@ -13,7 +13,7 @@ export async function testEncryptionDevices(base, pool, owner, peer, password, c
   const errors = [];
   const api = (cookies, body) => fetch(base + "/api/e2ee/devices/approve", { method: "POST", headers: { Origin: base, Cookie: cookies, "Content-Type": "application/json" }, body: JSON.stringify(body) });
   const login = async account => {
-    const r = await fetch(base + "/api/auth/login", { method: "POST", headers: { Origin: base, "Content-Type": "application/json" }, body: JSON.stringify({ identifier: account.username, password }) });
+    const r = await fetch(base + "/api/auth/login", { method: "POST", headers: { Origin: base, "Content-Type": "application/json" }, body: JSON.stringify({ acceptTerms: true, acceptPrivacy: true, identifier: account.username, password }) });
     assert.equal(r.status, 200);
     const cookies = r.headers.getSetCookie().filter(c => /^(maddy_session|maddy_refresh)=/.test(c)).map(c => c.split(";")[0]).join("; ");
     const context = await browser.newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: "block" });

@@ -3,9 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import type { Metadata } from "next";
 import { AuthLayout } from "@/components/auth/auth-layout";
-import { LoginForm } from "@/components/auth/login-form";
-import { GoogleSignIn } from "@/components/auth/google-sign-in";
-import { PhoneSignIn } from "@/components/auth/phone-sign-in";
+import { LoginOptions } from "@/components/auth/login-options";
 import { getSessionUser } from "@/server/session";
 
 export const metadata: Metadata = { title: "Sign in" };
@@ -19,7 +17,9 @@ export default async function LoginPage({
   const { next, error, mfa, reauth, emailProof, passwordChanged } = await searchParams;
   const user = await getSessionUser();
   if (user && mfa !== "1" && reauth !== "1") redirect("/app");
-  const googleError = error === "google_not_configured"
+  const googleError = error === "consent_required"
+    ? "Agree to both the Terms and Conditions and Privacy Policy before signing in."
+    : error === "google_not_configured"
     ? "Google sign-in needs to be configured by the site owner."
     : (error === "google_email_exists" || error === "google_link_required")
       ? "An account already uses that email. Sign in with your existing password, then link Google in your profile."
@@ -47,9 +47,7 @@ export default async function LoginPage({
       {passwordChanged === "1" ? <p role="status" className="mb-4 text-sm">Password updated. Sign in again with your new password or Google.</p> : null}
       {mfa === "1" ? <MfaForm next={next} /> : <>
         {process.env.STARTER_MODE === "1" ? <p className="mb-4 text-sm text-[var(--muted)]">{emailProof === "google" ? "Google verified your email. Enter your existing password to continue." : "New here? Continue with Google. If password sign-in asks for verification, continue with Google first, then enter your existing password."}</p> : null}
-        <LoginForm next={next} />
-        <GoogleSignIn next={next} />
-        {process.env.STARTER_MODE !== "1" ? <PhoneSignIn next={next} /> : null}
+        <LoginOptions next={next} phoneEnabled={process.env.STARTER_MODE !== "1"} />
       </>}
     </AuthLayout>
   );

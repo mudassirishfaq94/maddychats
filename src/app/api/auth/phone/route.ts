@@ -2,7 +2,7 @@ import { safeError } from "@/server/safe-error";
 import { withPasswordCapacity } from "@/server/password-capacity";
 import { beginSignIn } from "@/server/authentication";
 import { randomBytes } from "crypto";
-import { policyAcceptance } from "@/lib/policy-consent";
+import { acceptsPolicies, policyAcceptance } from "@/lib/policy-consent";
 import { and, eq } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
@@ -31,6 +31,7 @@ async function handlePOST(req: NextRequest) {
   if (!rl.allowed) return jsonError(429, "Too many attempts. Please try again later.");
 
   const body = await readJson(req);
+  if (!acceptsPolicies(body)) return jsonError(422, "Agree to both policies before signing in.");
   const parsed = phoneAuthSchema.safeParse(body);
   if (!parsed.success) return jsonError(400, "Invalid phone sign-in request.");
 

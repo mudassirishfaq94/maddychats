@@ -11,7 +11,7 @@ export async function testDeviceRecoveryUI(base, pool) {
   const user = (await pool.query("insert into users(username,display_name,email,password_hash,email_verified_at) values($1,$1,$2,$3,now()) returning id", [username, username + "@example.invalid", await bcrypt.hash(password, 12)])).rows[0];
   const errors = [];
   const login = async context => {
-    const response = await context.request.post(base + "/api/auth/login", { data: { identifier: username, password }, headers: { Origin: base } });
+    const response = await context.request.post(base + "/api/auth/login", { data: { acceptTerms: true, acceptPrivacy: true, identifier: username, password }, headers: { Origin: base } });
     assert.equal(response.status(), 200);
   };
   const open = async () => {

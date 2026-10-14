@@ -137,7 +137,7 @@ export function RegisterForm({ consent }: { consent: PolicyConsent }) {
               type="button"
               onClick={() => setShowPassword((v) => !v)}
               aria-label={showPassword ? "Hide password" : "Show password"}
-              className="flex h-7 w-7 items-center justify-center rounded-lg text-[var(--muted)] transition-colors hover:text-[var(--text)]"
+              className="flex h-11 w-11 items-center justify-center rounded-lg text-[var(--muted)] transition-colors hover:text-[var(--text)]"
             >
               {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             </button>
