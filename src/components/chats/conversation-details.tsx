@@ -4,6 +4,7 @@ import Image from "next/image";
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import {
   Download,
   Ban,
@@ -243,7 +244,7 @@ export function ConversationDetails({
         {group.type === "group" ? (
           <div className="border-b border-[var(--border)] px-4 py-5">
             <div className="flex flex-col items-center gap-2">
-              {group.avatarUrl ? <Image unoptimized width={1200} height={1200} src={group.avatarUrl} alt="" className="h-16 w-16 rounded-full object-cover" /> : <span className="flex h-16 w-16 items-center justify-center rounded-full bg-[var(--accent-soft)]"><Users className="h-7 w-7 text-[var(--accent-fg)]" /></span>}
+              {group.avatarUrl ? <Image unoptimized width={64} height={64} src={group.avatarUrl} alt="" className="h-16 w-16 rounded-full object-cover" /> : <span className="flex h-16 w-16 items-center justify-center rounded-full bg-[var(--accent-soft)]"><Users className="h-7 w-7 text-[var(--accent-fg)]" /></span>}
               <span className="text-base font-semibold">{group.name}</span>
               <span className="text-xs text-[var(--muted)]">{group.members.length} members · {group.members.filter((m) => m.role === "owner" || m.role === "admin").length} admins</span>
               {group.description ? <p className="text-center text-xs text-[var(--muted)]">{group.description}</p> : null}
@@ -1375,7 +1376,7 @@ function GroupSettingsPanel({
   onUpdate,
 }: {
   conversationId: string;
-  group: { adminOnlyMessaging: boolean; rules: string | null; announcements: string | null; slowModeSeconds: number; name?: string | null; description?: string | null };
+  group: { adminOnlyMessaging: boolean; rules: string | null; announcements: string | null; slowModeSeconds: number; name?: string | null; description?: string | null; avatarUrl?: string | null };
   busy: boolean;
   onUpdate: (patch: Record<string, unknown>) => void;
 }) {
@@ -1388,6 +1389,10 @@ function GroupSettingsPanel({
   const [description, setDescription] = useState(group.description ?? "");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  // Avatar editing state
+  const [avatarUrl, setAvatarUrl] = useState(group.avatarUrl ?? "");
+  const [isUploading, setIsUploading] = useState(false);
+  const avatarFileRef = useRef<HTMLInputElement>(null);
 
   async function saveSetting(patch: Record<string, unknown>) {
     setSaving(true);
@@ -1407,11 +1412,72 @@ function GroupSettingsPanel({
     setSaving(false);
   }
 
-  // Sync local state from group DB on mount (in case another tab updated settings)
-  useEffect(() => {
+  // Sync local inputs when group name/description change elsewhere (e.g. another tab)
+  const [syncedGroupFields, setSyncedGroupFields] = useState({
+    name: group.name,
+    description: group.description,
+  });
+  if (
+    syncedGroupFields.name !== group.name ||
+    syncedGroupFields.description !== group.description
+  ) {
+    setSyncedGroupFields({ name: group.name, description: group.description });
     setName(group.name ?? "");
     setDescription(group.description ?? "");
-  }, [group.name, group.description]);
+  }
+
+  // Avatar upload handler (POST /api/groups/[id]/avatar with multipart form data)
+  async function handleAvatarUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file || isUploading) return;
+    setIsUploading(true);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch(`/api/groups/${conversationId}/avatar`, { method: "POST", body: form });
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.avatarUrl) {
+        setAvatarUrl(data.avatarUrl);
+        onUpdate({ avatarUrl: data.avatarUrl });
+      }
+    } catch {}
+    setIsUploading(false);
+  }
+
+  // Avatar preview
+  const avatarPreview = avatarUrl ? (
+    <>
+      <Image
+        unoptimized
+        width={128}
+        height={128}
+        src={avatarUrl}
+        alt="Group avatar"
+        className="h-32 w-32 rounded-full object-cover"
+      />
+      <button
+        type="button"
+        disabled={isUploading}
+        onClick={() => avatarFileRef.current?.click()}
+        className="px-2 py-0.5 text-[0.6rem] text-[var(--muted)] rounded border border-[var(--border)] hover:border-[var(--accent)]"
+      >
+        {isUploading ? "Uploading…" : "Change avatar"}
+      </button>
+    </>
+  ) : (
+    <>
+      <div className="mt-1.5 h-32 w-32 rounded-full bg-[var(--surface)] border border-[var(--border)] flex items-center justify-center"><span className="text-[var(--muted)]">No avatar</span></div>
+      <button
+        type="button"
+        disabled={isUploading}
+        onClick={() => avatarFileRef.current?.click()}
+        className="mt-1.5 px-2 py-0.5 text-[0.6rem] text-[var(--muted)] rounded border border-[var(--border)] hover:border-[var(--accent)]"
+      >
+        {isUploading ? "Uploading…" : "Upload avatar"}
+      </button>
+    </>
+  );
 
   return (
     <div className="mt-3">
@@ -1528,6 +1594,19 @@ function GroupSettingsPanel({
               placeholder="Pin important messages for all members..."
               rows={2}
               className="mt-1.5 w-full resize-none rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-2 text-xs text-[var(--text)] placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:outline-none"
+            />
+          </div>
+
+          {/* Avatar */}
+          <div>
+            <span className="text-xs font-medium">Avatar</span>
+            {avatarPreview}
+            <input
+              ref={avatarFileRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif,image/avif"
+              className="hidden"
+              onChange={handleAvatarUpload}
             />
           </div>
         </div>
