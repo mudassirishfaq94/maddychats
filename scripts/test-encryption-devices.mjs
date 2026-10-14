@@ -123,6 +123,12 @@ export async function testEncryptionDevices(base, pool, owner, peer, password, c
     await contact.page.getByRole("textbox", { name: "Message text" }).waitFor();
     const changed = contact.page.getByRole("button", { name: /Encryption device keys changed/ });
     await changed.waitFor(); await changed.click();
+    const verification = contact.page.getByRole("dialog", { name: "Verify encryption device changes", exact: true });
+    const confirmation = verification.getByRole("button", { name: "Approve verified changes", exact: true });
+    assert.equal(await confirmation.isEnabled(), false);
+    const expectedFingerprint = await device.page.getByLabel("This device fingerprint").innerText();
+    assert.equal(await verification.getByText(expectedFingerprint, { exact: true }).count(), 1);
+    await verification.getByRole("checkbox").check(); await confirmation.click();
     await contact.page.getByRole("textbox", { name: "Message text" }).fill("Encrypted recovery verification");
     await contact.page.getByRole("textbox", { name: "Message text" }).press("Enter");
     await device.page.goto(base + "/app/chats/" + conversationId);

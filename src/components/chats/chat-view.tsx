@@ -75,6 +75,7 @@ import { useVoiceRecorder } from "@/hooks/use-voice-recorder";
 import { LongPressTouchable } from "./long-press-touchable";
 import { MobileMessageMenu } from "./mobile-message-menu";
 import { ForwardDialog } from "./forward-dialog";
+import { PeerVerificationDialog, type PeerVerification } from "./peer-verification-dialog";
 const ReportDialog = dynamic(() => import("@/components/profile/report-dialog").then((module) => module.ReportDialog));
 import { E2EEMediaProvider } from "./e2ee-context";
 import { useSharedE2EE } from "@/components/providers/e2ee-provider";
@@ -222,6 +223,7 @@ export function ChatView({
     setSendPendingState(value);
   }, []);
   const [error, setError] = useState<string | null>(null);
+  const [peerReview, setPeerReview] = useState<PeerVerification | null>(null);
   const [draft, setDraftState] = useState("");
   const draftRef = useRef("");
   const draftRevision = useRef(0);
@@ -548,7 +550,7 @@ export function ChatView({
     }));
     if (!prepared.ready) {
       throw new SecureDeliveryWaiting(prepared.trustChanged
-        ? "A participant’s encryption device changed. Verify their safety number before sending."
+        ? "A participant’s encryption device changed. Verify their device fingerprints before sending."
         : encryptionRef.current?.error ?? "Waiting for secure delivery. Your message will send automatically when encryption is ready.");
     }
   }, [conversationId]);
@@ -1858,17 +1860,13 @@ export function ChatView({
         <button
           type="button"
           onClick={() => {
-            if (e2ee.approvePeerKeyChange(conversationId)) {
-              setE2eeState((previous) => ({ ...previous, checking: true, trustChanged: false }));
-              void e2ee.prepareConversation(conversationId).then((prepared) =>
-                setE2eeState((previous) => ({ ...previous, ready: prepared.ready, fingerprint: prepared.fingerprint, checking: false, trustChanged: Boolean(prepared.trustChanged) })),
-              );
-            }
+            void e2ee.getPendingPeerVerification(conversationId).then(setPeerReview)
+              .catch(() => setError("Device details changed. Retry verification before sending."));
           }}
           className="flex items-center gap-2 border-b border-[var(--warning,#f59e0b)] bg-[color-mix(in_srgb,var(--warning,#f59e0b)_10%,var(--surface))] px-4 py-2 text-left"
         >
           <ShieldCheck className="h-4 w-4 shrink-0 text-amber-600" />
-          <span className="min-w-0 flex-1 text-[0.72rem] text-[var(--muted)]">Encryption device keys changed. Verify the safety number with your contact, then approve.</span>
+          <span className="min-w-0 flex-1 text-[0.72rem] text-[var(--muted)]">Encryption device keys changed. Review device fingerprints with your contact before approving.</span>
           <span className="shrink-0 text-[0.65rem] font-bold text-amber-700">Approve</span>
         </button>
       ) : e2eeState.ready && requestAccepted ? (
@@ -2885,6 +2883,18 @@ export function ChatView({
       />
 
       {/* Forward dialog */}
+      {peerReview ? <PeerVerificationDialog key={peerReview.signature} review={peerReview}
+        names={Object.fromEntries(conversation.members.map(member => [member.id, member.displayName]))}
+        onClose={() => setPeerReview(null)} onConfirm={() => {
+          if (!e2ee.approvePeerKeyChange(conversationId, peerReview.signature)) {
+            setPeerReview(null); setError("Device details changed during verification. Review them again."); return;
+          }
+          setPeerReview(null);
+          setE2eeState(previous => ({ ...previous, checking: true, trustChanged: false }));
+          void e2ee.prepareConversation(conversationId).then(prepared =>
+            setE2eeState(previous => ({ ...previous, ready: prepared.ready, fingerprint: prepared.fingerprint, checking: false, trustChanged: Boolean(prepared.trustChanged) })))
+            .catch(() => { setE2eeState(previous => ({ ...previous, ready: false, checking: false })); setError("Secure delivery is waiting. Retry when your connection returns."); });
+        }} /> : null}
       <ForwardDialog
         open={forwardMsg !== null}
         message={forwardMsg}

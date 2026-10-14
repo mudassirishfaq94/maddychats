@@ -147,7 +147,7 @@ export async function testMessageRequests(base, senderCookie, recipientCookie, c
     await sender.getByRole("textbox", { name: "Message text" }).fill("Safety verification must remain required");
     await sender.getByRole("textbox", { name: "Message text" }).press("Enter");
     await sender.getByLabel("Queued", { exact: true }).waitFor();
-    await sender.getByText("A participant’s encryption device changed. Verify their safety number before sending.", { exact: true }).waitFor();
+    await sender.getByText("A participant’s encryption device changed. Verify their device fingerprints before sending.", { exact: true }).waitFor();
     assert.equal(await sender.getByLabel("Failed to send", { exact: true }).count(), 0);
     await sender.getByRole("button", { name: "Cancel queued message", exact: true }).click();
     await sender.getByLabel("Queued", { exact: true }).waitFor({ state: "hidden" });

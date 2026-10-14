@@ -704,7 +704,11 @@ export function useE2EE(userId: string | undefined) {
         pendingTrustRef.current.set(conversationId, trustSignature);
         return { ready: false, fingerprint: null, trustChanged: true };
       }
-      if (ready && trusted === null && typeof localStorage !== "undefined") {
+      // A sender-only DM introduction has not observed the recipient's first
+      // device yet. Pin that first device when it arrives, not an empty set.
+      // An established single-member group, however, must retain its empty
+      // baseline so the next admitted peer still requires verification.
+      if (ready && trusted === null && (trustSignature || groupRevision) && typeof localStorage !== "undefined") {
         localStorage.setItem(trustKey, trustSignature);
       }
       let fingerprint: string | null = null;
@@ -783,10 +787,23 @@ export function useE2EE(userId: string | undefined) {
     [bootstrapConversationKey, getConversationKey, shareKey, rememberSendingKey, state.deviceId, state.publicKey, userId],
   );
 
-  /** Accept a detected device-set change only after out-of-band verification. */
-  const approvePeerKeyChange = useCallback((conversationId: string): boolean => {
+  /** Display the exact pending device identities using Profile's fingerprint format. */
+  const getPendingPeerVerification = useCallback(async (conversationId: string) => {
+    const signature = pendingTrustRef.current.get(conversationId);
+    if (signature === undefined) throw new Error("Device information changed. Retry verification.");
+    const devices = await mapWithConcurrency(signature.split("|").filter(Boolean), 4, async entry => {
+      const [peerUserId, deviceId, publicKey] = entry.split(":");
+      if (!peerUserId || !deviceId || !publicKey) throw new Error("Device information could not be verified.");
+      const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(publicKey));
+      return { userId: peerUserId, deviceId, fingerprint: Array.from(new Uint8Array(hash), byte => byte.toString(16).padStart(2, "0")).join("") };
+    });
+    return { signature, devices };
+  }, []);
+
+  /** Accept only the device set the user actually reviewed, never a newer one. */
+  const approvePeerKeyChange = useCallback((conversationId: string, reviewedSignature: string): boolean => {
     const pending = pendingTrustRef.current.get(conversationId);
-    if (!pendingTrustRef.current.has(conversationId) || pending === undefined || typeof localStorage === "undefined") return false;
+    if (!pendingTrustRef.current.has(conversationId) || pending === undefined || pending !== reviewedSignature || typeof localStorage === "undefined") return false;
     localStorage.setItem(`e2ee_trust_${userId}_${conversationId}`, pending);
     pendingTrustRef.current.delete(conversationId);
     preparedConversationsRef.current.delete(conversationId);
@@ -984,5 +1001,6 @@ export function useE2EE(userId: string | undefined) {
     // Key rotation
     checkRotationNeeded,
     rotateConversationKey,
+    getPendingPeerVerification,
   };
 }
