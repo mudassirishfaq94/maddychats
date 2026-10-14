@@ -53,6 +53,8 @@ export default async function ProfilePage({
   };
   const notice = query.auth_linked === "google"
     ? { kind: "success" as const, text: "Google was connected to this account." }
+    : query.auth_error === "google_link_expired"
+      ? { kind: "error" as const, text: "Google linking expired or your signed-in account changed. Sign in again, then choose Add Google on this profile." }
     : query.auth_error === "google_in_use"
       ? { kind: "error" as const, text: "That Google identity belongs to another Circlo account. Sign out and use Google sign-in to recover it; accounts are not merged automatically." }
       : query.auth_error === "google_already_linked"

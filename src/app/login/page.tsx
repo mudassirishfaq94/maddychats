@@ -44,6 +44,7 @@ export default async function LoginPage({
       }
     >
       {googleError ? <p role="alert" className="mb-4 rounded-xl border border-[color-mix(in_srgb,var(--danger)_35%,transparent)] bg-[color-mix(in_srgb,var(--danger)_10%,transparent)] px-4 py-3 text-sm text-[var(--danger)]">{googleError}</p> : null}
+      {reauth === "1" ? <p role="status" className="mb-4 text-sm">Please sign in again to confirm it is you before continuing with your account security settings.</p> : null}
       {passwordChanged === "1" ? <p role="status" className="mb-4 text-sm">Password updated. Sign in again with your new password or Google.</p> : null}
       {mfa === "1" ? <MfaForm next={next} /> : <>
         {process.env.STARTER_MODE === "1" ? <p className="mb-4 text-sm text-[var(--muted)]">{emailProof === "google" ? "Google verified your email. Enter your existing password to continue." : "New here? Continue with Google. If password sign-in asks for verification, continue with Google first, then enter your existing password."}</p> : null}

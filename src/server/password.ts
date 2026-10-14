@@ -54,6 +54,8 @@ export async function verifyPassword(
   plaintext: string,
   hash: string,
 ): Promise<boolean> {
+  // bcrypt otherwise accepts any suffix after byte 72 of a valid password.
+  if (Buffer.byteLength(plaintext, "utf8") > 72) return false;
   try {
     return await bounded(() => bcrypt.compare(plaintext, hash));
   } catch (error) {

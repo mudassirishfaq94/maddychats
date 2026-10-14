@@ -94,7 +94,7 @@ try {
   await cp('public', '.next/standalone/public', { recursive: true });
   // Fetch, HTTP(S), and socket traffic in the server is restricted to loopback.
   const env = { ...process.env, DATABASE_URL: databaseUrl, REALTIME_DATABASE_URL: databaseUrl,
-    JWT_SECRET: randomBytes(32).toString('hex'), CLIENT_URL: baseUrl, HOSTNAME: '127.0.0.1', PORT: '3191',
+      JWT_SECRET: randomBytes(32).toString('hex'), CLIENT_URL: baseUrl, HOSTNAME: '127.0.0.1', PORT: '3191', CLIENT_IP_TRUSTED_HOPS: '1',
     RESEND_API_KEY: '', VAPID_PRIVATE_KEY: '', VAPID_SUBJECT: '', NEXT_PUBLIC_VAPID_PUBLIC_KEY: '',
     FIREBASE_PRIVATE_KEY: '', FIREBASE_CLIENT_EMAIL: '', FIREBASE_PROJECT_ID: '', GOOGLE_APPLICATION_CREDENTIALS: '',
     GOOGLE_CLIENT_SECRET: '', GOOGLE_CLIENT_ID: '', SUPABASE_SERVICE_ROLE_KEY: '', SUPABASE_URL: '',

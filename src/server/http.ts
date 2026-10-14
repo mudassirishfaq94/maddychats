@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { clientUrl } from "./config";
+import { resolveClientIp } from "./client-ip";
 
 /** Consistent, safe error envelope: never leaks internals. */
 export function jsonError(
@@ -99,11 +100,9 @@ export function requireSameOrigin(req: NextRequest): NextResponse | null {
   return guardSameOrigin(req);
 }
 
-/** Best-effort client IP for rate limiting. */
+/** Deployment-scoped proxy trust for rate limiting and audit records. */
 export function clientIp(req: NextRequest): string {
-  const forwarded = req.headers.get("x-forwarded-for");
-  if (forwarded) return forwarded.split(",")[0].trim();
-  return req.headers.get("x-real-ip") ?? "unknown";
+  return resolveClientIp(req.headers, { render: process.env.RENDER === "true", production: process.env.NODE_ENV === "production", trustedHops: process.env.CLIENT_IP_TRUSTED_HOPS });
 }
 
 /** Hostnames that are always treated as plain-http development. */

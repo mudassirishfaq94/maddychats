@@ -1,6 +1,6 @@
 /** Production HTTP authorization checks, restricted to one disposable loopback DB. */
 import assert from "node:assert/strict";
-import { randomUUID, createHash } from "node:crypto";
+import { randomUUID, createHash, generateKeyPairSync } from "node:crypto";
 import { SignJWT } from "jose";
 import { spawn, type ChildProcess } from "node:child_process";
 import { once } from "node:events";
@@ -67,12 +67,14 @@ async function main() {
     await sql.query("insert into conversation_members(conversation_id,user_id,role) values($1,$2,'owner'),($1,$3,'member')", [group.id, alice.id, bob.id]);
 
     const base = "http://127.0.0.1:3109";
+    const googlePair = generateKeyPairSync("rsa", { modulusLength: 2048 });
+    const googlePublic = { ...googlePair.publicKey.export({ format: "jwk" }), kid: "disposable-google-jwk", alg: "RS256", use: "sig" };
     const env = { ...process.env, NODE_ENV: "production" as const, DATABASE_URL: runtimeUrl.toString(), REALTIME_DATABASE_URL: runtimeUrl.toString(), HOSTNAME: "127.0.0.1", PORT: "3109", CLIENT_URL: base,
-      JWT_SECRET: "item3-disposable-test-secret-at-least-thirty-two-characters", HEALTHCHECK_SECRET: "item3-health", CRON_SECRET: "item3-cron",
+      TEST_GOOGLE_PRIVATE_KEY: googlePair.privateKey.export({ type: "pkcs8", format: "pem" }).toString(), TEST_GOOGLE_PUBLIC_JWK: JSON.stringify(googlePublic), JWT_SECRET: "item3-disposable-test-secret-at-least-thirty-two-characters", GOOGLE_CLIENT_ID: "disposable-google-client", GOOGLE_CLIENT_SECRET: "disposable-google-secret", CLIENT_IP_TRUSTED_HOPS: "1", HEALTHCHECK_SECRET: "item3-health", CRON_SECRET: "item3-cron",
       SUPABASE_URL: "", SUPABASE_SERVICE_ROLE_KEY: "", RESEND_API_KEY: "", VAPID_PRIVATE_KEY: "", FIREBASE_PROJECT_ID: "", FIREBASE_CLIENT_EMAIL: "", FIREBASE_PRIVATE_KEY: "" };
     await cp(resolve(".next/static"), resolve(".next/standalone/.next/static"), { recursive: true });
     await cp(resolve("public"), resolve(".next/standalone/public"), { recursive: true });
-    server = spawn(process.execPath, [resolve(".next/standalone/server.js")], { env, stdio: "pipe", windowsHide: true });
+    server = spawn(process.execPath, ["--require", resolve("scripts/mock-google-provider.cjs"), resolve(".next/standalone/server.js")], { env, stdio: "pipe", windowsHide: true });
     let output = ""; server.stdout?.on("data", (c) => output += c); server.stderr?.on("data", (c) => output += c);
     let ready = false;
     for (let i = 0; i < 100; i++) {
@@ -97,6 +99,63 @@ async function main() {
       assert(cookie); return cookie;
     };
     const aliceCookie = await login(alice.username), bobCookie = await login(bob.username), outsiderCookie = await login(outsider.username);
+    const googleStart = "/api/auth/google?mode=link&next=/app/profile";
+    const startLink = await fetch(base + googleStart, { headers: { Cookie: aliceCookie, Origin: base }, redirect: "manual" });
+    assert.equal(startLink.status, 307);
+    const googleState = new URL(startLink.headers.get("location")!).searchParams.get("state");
+    assert(googleState);
+    const oauthCookies = startLink.headers.getSetCookie().map(cookie => cookie.split(";")[0]).join("; ");
+    assert(oauthCookies.includes("google_oauth_link="));
+    const switchedCallback = await fetch(base + "/api/auth/google/callback?code=disposable-never-exchanged&state=" + googleState, {
+      headers: { Cookie: bobCookie + "; " + oauthCookies }, redirect: "manual",
+    });
+    assert.equal(switchedCallback.status, 307);
+    assert.match(switchedCallback.headers.get("location")!, /auth_error=google_link_expired/, "An account switch rejects linking before contacting Google");
+    assert.equal((await sql.query("select count(*)::int n from oauth_accounts")).rows[0].n, 0);
+    const callbackWithoutBinding = await fetch(base + "/api/auth/google/callback?code=disposable-never-exchanged&state=" + googleState, {
+      headers: { Cookie: aliceCookie + "; " + oauthCookies.split("; ").filter(cookie => !cookie.startsWith("google_oauth_link=")).join("; ") }, redirect: "manual",
+    });
+    assert.match(callbackWithoutBinding.headers.get("location")!, /auth_error=google_link_expired/);
+    const crossSiteStart = await fetch(base + googleStart, { headers: { Cookie: aliceCookie, "sec-fetch-site": "cross-site" }, redirect: "manual" });
+    assert.equal(crossSiteStart.status, 403);
+    process.env.JWT_SECRET = env.JWT_SECRET;
+    const { signSessionToken } = await import("../src/server/jwt");
+    const sid = JSON.parse(Buffer.from(aliceCookie.split("=")[1].split(".")[1], "base64url").toString()).sid;
+    const oldCookie = "maddy_session=" + await signSessionToken(alice.id, alice.username, Date.now() - 360000, 0, sid);
+    const staleStart = await fetch(base + googleStart, { headers: { Cookie: oldCookie, Origin: base }, redirect: "manual" });
+    assert.match(staleStart.headers.get("location")!, /reauth=1/);
+    for (const [stage, ip] of [["start", "198.18.7.55"], ["callback", "198.18.7.56"]]) {
+      await sql.query("insert into rate_limit_buckets(key,window_started_at,count) values($1,now(),25) on conflict(key) do update set count=25,window_started_at=now()", [`google-${stage}:${ip}`]);
+      const oauthUrl: string = stage === "start" ? googleStart : "/api/auth/google/callback?code=disposable-never-exchanged&state=" + googleState;
+      const denied: Response = await fetch(base + oauthUrl, { headers: { Cookie: aliceCookie + "; " + oauthCookies, Origin: base, "x-forwarded-for": ip }, redirect: "manual" });
+      assert.equal(denied.status, 429); assert(denied.headers.get("Retry-After"));
+      assert(!denied.headers.getSetCookie().some(cookie => /^maddy_(session|refresh)=/.test(cookie)));
+    }
+    const oauthRoundTrip = async (mode: string, kind = "valid") => {
+      const start = await fetch(base + "/api/auth/google?terms=1&privacy=1" + mode, { headers: { Cookie: mode ? aliceCookie : "", Origin: base }, redirect: "manual" });
+      assert.equal(start.status, 307);
+      const cookies = start.headers.getSetCookie().map(cookie => cookie.split(";")[0]);
+      const nonce = cookies.find(cookie => cookie.startsWith("google_oauth_nonce="))!.split("=")[1];
+      const state = new URL(start.headers.get("location")!).searchParams.get("state");
+      return fetch(base + "/api/auth/google/callback?code=" + encodeURIComponent(`fixture-${kind}:${nonce}`) + "&state=" + state, {
+        headers: { Cookie: (mode ? aliceCookie + "; " : "") + cookies.join("; "), "sec-fetch-site": "cross-site" }, redirect: "manual",
+      });
+    };
+    for (const kind of ["wrong-nonce", "wrong-audience"]) {
+      const denied = await oauthRoundTrip("&mode=link", kind);
+      assert.match(denied.headers.get("location")!, /error=google_/);
+      assert.equal((await sql.query("select count(*)::int n from oauth_accounts")).rows[0].n, 0);
+    }
+    const linked = await oauthRoundTrip("&mode=link");
+    assert.match(linked.headers.get("location")!, /auth_linked=google/);
+    assert.equal((await sql.query("select user_id from oauth_accounts where provider_account_id='disposable-google-identity'")).rows[0].user_id, alice.id);
+    const signedInWithGoogle = await oauthRoundTrip("");
+    assert.equal(signedInWithGoogle.status, 307);
+    const googleSession = signedInWithGoogle.headers.getSetCookie().find(cookie => cookie.startsWith("maddy_session="));
+    assert(googleSession);
+    assert.equal(JSON.parse(Buffer.from(googleSession.split("=")[1].split(".")[1], "base64url").toString()).sub, alice.id);
+    await sql.query("delete from oauth_accounts where provider_account_id='disposable-google-identity'");
+    console.log("PASS Google OAuth linking/sign-in with verified fixture JWTs; nonce/audience rejection, start/callback quotas, cross-site start rejection and account-bound state. Google responses mocked; no third-party calls.");
     const verifier = "a".repeat(43);
     const ticket = await new SignJWT({ policyVersion: "2026-10-14", usr: alice.username, codeChallenge: createHash("sha256").update(verifier).digest("base64url") })
       .setProtectedHeader({ alg: "HS256", typ: "JWT" }).setSubject(alice.id).setIssuer("circlo").setAudience("circlo-google-mobile-handoff").setIssuedAt().setExpirationTime("120s")

@@ -1,13 +1,24 @@
 import { createHash, randomBytes } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { clientUrl, googleCallbackUrl } from "@/server/config";
-import { requestIsSecure } from "@/server/http";
-import { getSessionUser } from "@/server/session";
+import { clientIp, guardSameOrigin, jsonError, requestIsSecure } from "@/server/http";
+import { getSessionAuthTime, getSessionDeviceId, getSessionUser } from "@/server/session";
+import { recentlyAuthenticated } from "@/server/authentication";
+import { googleLinkBinding } from "@/server/google-link-binding";
+import { AUTH_RATE_LIMIT, rateLimit } from "@/server/rate-limit";
 import { POLICY_VERSION } from "@/lib/policy-consent";
 
 const COOKIE_AGE = 10 * 60;
 
 export async function GET(req: NextRequest) {
+  const blocked = guardSameOrigin(req);
+  if (blocked) return blocked;
+  const limit = await rateLimit(`google-start:${clientIp(req)}`, AUTH_RATE_LIMIT.limit, AUTH_RATE_LIMIT.windowMs);
+  if (!limit.allowed) {
+    const response = jsonError(429, "Too many sign-in attempts. Please wait before retrying.");
+    response.headers.set("Retry-After", String(limit.retryAfterSeconds));
+    return response;
+  }
   const mobile = req.nextUrl.searchParams.get("mobile") === "1";
   const codeChallenge = req.nextUrl.searchParams.get("code_challenge");
   if (mobile && !/^[A-Za-z0-9_-]{43,128}$/.test(codeChallenge ?? "")) {
@@ -17,8 +28,10 @@ export async function GET(req: NextRequest) {
   if (!linking && (req.nextUrl.searchParams.get("terms") !== "1" || req.nextUrl.searchParams.get("privacy") !== "1")) {
     return NextResponse.redirect(new URL("/login?error=consent_required", clientUrl()));
   }
-  if (linking && !(await getSessionUser())) {
-    return NextResponse.redirect(new URL("/login?next=/app/profile", clientUrl()));
+  const linkUser = linking ? await getSessionUser() : null;
+  const linkSessionId = linking ? await getSessionDeviceId() : undefined;
+  if (linking && (!linkUser || !linkSessionId || !recentlyAuthenticated(await getSessionAuthTime()))) {
+    return NextResponse.redirect(new URL("/login?reauth=1&next=/app/profile", clientUrl()));
   }
   const clientId = process.env.GOOGLE_CLIENT_ID;
   if (!clientId || !process.env.GOOGLE_CLIENT_SECRET) {
@@ -40,6 +53,7 @@ export async function GET(req: NextRequest) {
   response.cookies.set("google_oauth_verifier", verifier, options);
   response.cookies.set("google_oauth_next", safeNext, options);
   response.cookies.set("google_oauth_mode", linking ? "link" : "signin", options);
+  response.cookies.set("google_oauth_link", linking ? googleLinkBinding(linkUser!.id, linkSessionId!, state) : "", options);
   response.cookies.set("google_oauth_policy", req.nextUrl.searchParams.get("terms") === "1" && req.nextUrl.searchParams.get("privacy") === "1" ? POLICY_VERSION : "", options);
   if (mobile) {
     response.cookies.set("google_oauth_mobile", "1", options);

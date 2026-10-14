@@ -42,6 +42,8 @@ jobs:
           --health-retries 5
     env:
       NEXT_TELEMETRY_DISABLED: "1"
+      # Isolated loopback fixture gateway supplies one verified forwarding hop.
+      CLIENT_IP_TRUSTED_HOPS: "1"
       PGHOST: 127.0.0.1
       PGPORT: "5432"
       PGUSER: circlo_ci

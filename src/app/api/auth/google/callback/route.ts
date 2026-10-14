@@ -1,8 +1,8 @@
 import { safeError } from "@/server/safe-error";
 import { withPasswordCapacity } from "@/server/password-capacity";
 import { createGoogleEmailProof, GOOGLE_EMAIL_PROOF_COOKIE, GOOGLE_EMAIL_PROOF_TTL } from "@/server/google-email-proof";
-import { requestIsSecure } from "@/server/http";
-import { beginSignIn } from "@/server/authentication";
+import { clientIp, jsonError, requestIsSecure } from "@/server/http";
+import { beginSignIn, recentlyAuthenticated } from "@/server/authentication";
 import { randomBytes } from "crypto";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import { and, eq, sql } from "drizzle-orm";
@@ -12,11 +12,13 @@ import { notificationPreferences, oauthAccounts, users } from "@/db/schema";
 import { POLICY_VERSION, policyAcceptance } from "@/lib/policy-consent";
 import { clientUrl, googleCallbackUrl } from "@/server/config";
 import { hashPassword } from "@/server/password";
-import { getSessionUser, newSessionBlockReason } from "@/server/session";
+import { getSessionAuthTime, getSessionDeviceId, getSessionUser, newSessionBlockReason } from "@/server/session";
+import { matchesGoogleLinkBinding } from "@/server/google-link-binding";
+import { AUTH_RATE_LIMIT, rateLimit } from "@/server/rate-limit";
 import { createGoogleMobileHandoff } from "@/server/google-mobile-handoff";
 
 const googleKeys = createRemoteJWKSet(new URL("https://www.googleapis.com/oauth2/v3/certs"));
-const GOOGLE_OAUTH_COOKIES = ["google_oauth_state", "google_oauth_nonce", "google_oauth_verifier", "google_oauth_next", "google_oauth_mode", "google_oauth_mobile", "google_oauth_code_challenge", "google_oauth_policy"];
+const GOOGLE_OAUTH_COOKIES = ["google_oauth_state", "google_oauth_nonce", "google_oauth_verifier", "google_oauth_next", "google_oauth_mode", "google_oauth_mobile", "google_oauth_code_challenge", "google_oauth_policy", "google_oauth_link"];
 
 function finishGoogleOAuth(response: NextResponse) {
   for (const name of GOOGLE_OAUTH_COOKIES) {
@@ -41,11 +43,26 @@ async function handleGoogleCallback(req: NextRequest) {
   const mobileChallenge = req.cookies.get("google_oauth_code_challenge")?.value;
   if (!code || !state || !expectedState || state !== expectedState || !nonce || !verifier) return redirectError("google_invalid_state");
   if (!linking && req.cookies.get("google_oauth_policy")?.value !== POLICY_VERSION) return finishGoogleOAuth(redirectError("consent_required"));
+  const limit = await rateLimit(`google-callback:${clientIp(req)}`, AUTH_RATE_LIMIT.limit, AUTH_RATE_LIMIT.windowMs);
+  if (!limit.allowed) {
+    const response = jsonError(429, "Too many sign-in attempts. Please start again after waiting.");
+    response.headers.set("Retry-After", String(limit.retryAfterSeconds));
+    return finishGoogleOAuth(response);
+  }
+  // Bind linking to the account and session that opened Google's chooser.
+  const linkUser = linking ? await getSessionUser() : null;
+  if (linking) {
+    const sessionId = await getSessionDeviceId();
+    if (!linkUser || !sessionId || !recentlyAuthenticated(await getSessionAuthTime()) ||
+      !matchesGoogleLinkBinding(req.cookies.get("google_oauth_link")?.value, linkUser.id, sessionId, expectedState)) {
+      return finishGoogleOAuth(NextResponse.redirect(new URL("/app/profile?auth_error=google_link_expired", clientUrl())));
+    }
+  }
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
   if (!clientId || !clientSecret) return redirectError("google_not_configured");
 
-  const tokenResponse = await fetch("https://oauth2.googleapis.com/token", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ code, client_id: clientId, client_secret: clientSecret, redirect_uri: googleCallbackUrl(), grant_type: "authorization_code", code_verifier: verifier }) });
+  const tokenResponse = await fetch("https://oauth2.googleapis.com/token", { method: "POST", signal: AbortSignal.timeout(10000), headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ code, client_id: clientId, client_secret: clientSecret, redirect_uri: googleCallbackUrl(), grant_type: "authorization_code", code_verifier: verifier }) });
   if (!tokenResponse.ok) {
     // Do not log the authorization code, verifier, client secret, or body.
     // The status is sufficient to distinguish Google client/redirect issues
@@ -71,7 +88,7 @@ async function handleGoogleCallback(req: NextRequest) {
   if (claims.nonce !== nonce || !claims.sub || typeof claims.email !== "string" || claims.email_verified !== true) return redirectError("google_unverified");
 
   if (linking) {
-    const currentUser = await getSessionUser();
+    const currentUser = linkUser;
     if (!currentUser) return finishGoogleOAuth(NextResponse.redirect(new URL("/login?next=/app/profile", clientUrl())));
 
     const [identityOwner] = await db
