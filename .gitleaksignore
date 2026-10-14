@@ -6,3 +6,6 @@ fb6cb95b32c092327c6ec44676a7f3afe540c75d:scripts/test-items4-6.ts:generic-api-ke
 fb6cb95b32c092327c6ec44676a7f3afe540c75d:scripts/test-remaining-hardening.ts:generic-api-key:54
 5705bacebbb8dd7a56b5f47ebc6d52d4bf51183d:android/app/google-services.json:gcp-api-key:18
 c26358f526fd64cf53ed2c77502064e0e1354601:signal-bridge/Cargo.lock:generic-api-key:778
+
+# Same reviewed disposable loopback JWT fixture moved by the OAuth regression additions.
+63b5ff7d47792684bc47e42eaeaf448c3503a752:scripts/test-item3-authorization.ts:generic-api-key:73
