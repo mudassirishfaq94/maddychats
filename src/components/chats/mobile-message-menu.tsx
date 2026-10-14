@@ -1,5 +1,6 @@
 "use client";
 
+import { createPortal } from "react-dom";
 import { useEffect, useRef, useState } from "react";
 import {
   Copy,
@@ -58,15 +59,26 @@ function MobileMessageMenuContent({
 
   // Prevent body scroll when menu is open
   useEffect(() => {
-    if (open) {
-      document.body.style.overflow = "hidden";
-    } else {
-      document.body.style.overflow = "";
-    }
-    return () => {
-      document.body.style.overflow = "";
+    const overflow = document.body.style.overflow;
+    const previousFocus = document.activeElement as HTMLElement | null;
+    document.body.style.overflow = "hidden";
+    menuRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
+    const key = (event: KeyboardEvent) => {
+      if (event.key === "Escape") { event.preventDefault(); onClose(); }
+      if (event.key === "Tab") {
+        const buttons = Array.from(menuRef.current?.querySelectorAll<HTMLButtonElement>("button:not(:disabled)") ?? []);
+        if (event.shiftKey && document.activeElement === buttons[0]) { event.preventDefault(); buttons.at(-1)?.focus(); }
+        else if (!event.shiftKey && document.activeElement === buttons.at(-1)) { event.preventDefault(); buttons[0]?.focus(); }
+      }
     };
-  }, [open]);
+    const resize = () => { if (innerWidth >= 640) onClose(); };
+    document.addEventListener("keydown", key); window.addEventListener("resize", resize);
+    return () => {
+      document.removeEventListener("keydown", key); window.removeEventListener("resize", resize);
+      document.body.style.overflow = overflow;
+      if (previousFocus?.isConnected) previousFocus.focus();
+    };
+  }, [onClose]);
 
   if (!open) return null;
 
@@ -93,8 +105,8 @@ function MobileMessageMenuContent({
     onClose();
   }
 
-  return (
-    <div className="fixed inset-0 z-[200] flex items-end justify-center sm:hidden">
+  return createPortal(
+    <div role="dialog" aria-modal="true" aria-label="Message options" className="fixed inset-0 z-[200] flex items-end justify-center sm:hidden">
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/50 backdrop-blur-sm"
@@ -105,7 +117,7 @@ function MobileMessageMenuContent({
       {/* Menu */}
       <div
         ref={menuRef}
-        className="relative w-full max-w-lg rounded-t-3xl bg-[var(--surface)] px-2 pb-[env(safe-area-inset-bottom)] pt-3 shadow-2xl animate-slide-up"
+        className="relative max-h-[85dvh] w-full max-w-lg overflow-y-auto rounded-t-3xl bg-[var(--surface)] px-2 pb-[env(safe-area-inset-bottom)] pt-3 shadow-2xl animate-slide-up"
       >
         {/* Drag handle */}
         <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-[var(--muted)] opacity-40" />
@@ -179,7 +191,8 @@ function MobileMessageMenuContent({
               <button
                 type="button"
                 onClick={handleCopy}
-                className="flex flex-col items-center gap-1.5 rounded-2xl py-3 transition-colors hover:bg-[var(--surface-2)]"
+                disabled={!text}
+                className="flex flex-col items-center gap-1.5 rounded-2xl py-3 transition-colors hover:bg-[var(--surface-2)] disabled:opacity-40"
               >
                 <span className="flex h-12 w-12 items-center justify-center rounded-full bg-[var(--surface-2)]">
                   {copied ? (
@@ -284,6 +297,6 @@ function MobileMessageMenuContent({
           </div>
         )}
       </div>
-    </div>
+    </div>, document.body
   );
 }

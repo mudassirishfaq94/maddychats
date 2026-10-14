@@ -293,7 +293,7 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     const fileContent = "Authorized encrypted attachment verification\n";
     await source.page.locator('input[type="file"]').first().setInputFiles({ name: "workflow-check.txt", mimeType: "text/plain", buffer: Buffer.from(fileContent) });
     const upload = source.page.waitForResponse(response => response.url().endsWith("/api/upload/message") && response.request().method() === "POST", { timeout: 60000 });
-    await source.page.getByRole("button", { name: "Send message", exact: true }).click();
+    await source.page.getByRole("button", { name: "Send attachments", exact: true }).click();
     const fileResponse = await upload; assert.equal(fileResponse.status(), 201);
     const fileMessage = (await fileResponse.json()).message;
     const download = recipient.page.getByRole("link", { name: "Download workflow-check.txt", exact: true });
@@ -309,17 +309,32 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     console.log("PASS encrypted attachment upload, download, and access control");
     const photo = await sharp({ create: { width: 1200, height: 900, channels: 3, background: "#343042" } }).png().toBuffer();
     await source.page.locator('input[type="file"]').first().setInputFiles({ name: "viewer-check.png", mimeType: "image/png", buffer: photo });
+    await source.page.getByRole("textbox", { name: "Attachment caption", exact: true }).fill("An encrypted photo caption");
     const photoUpload = source.page.waitForResponse(response => response.url().endsWith("/api/upload/message") && response.request().method() === "POST", { timeout: 60000 });
-    await source.page.getByRole("button", { name: "Send message", exact: true }).click();
-    assert.equal((await photoUpload).status(), 201);
+    await source.page.getByRole("button", { name: "Send attachments", exact: true }).click();
+    const photoResponse = await photoUpload; assert.equal(photoResponse.status(), 201);
+    const photoMessage = (await photoResponse.json()).message; assert(photoMessage.encrypted); assert(!photoMessage.text.includes("An encrypted photo caption"));
+    await recipient.page.getByText("An encrypted photo caption", { exact: true }).waitFor();
     await testImageViewer(recipient.page, "viewer-check.png");
     await testComposerMedia(base, source, recipient, pool, conversationId);
     await testChatScroll(base, source, recipient, pool, conversationId);
     console.log("PASS image viewer, composer media, and long-chat scroll");
     // Chromium generates a microphone stream; the application's MediaRecorder performs real recording.
-    await source.page.getByRole("button", { name: "Record voice message", exact: true }).click();
+    await source.page.evaluate(() => {
+      const original = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+      window.polishMicrophoneCalls = 0;
+      navigator.mediaDevices.getUserMedia = async constraints => { window.polishMicrophoneCalls++; return original(constraints); };
+      const button = document.querySelector('button[aria-label="Record voice message"]'); button.click(); button.click();
+    });
     await source.page.getByRole("button", { name: "Stop recording", exact: true }).waitFor();
+    assert.equal(await source.page.evaluate(() => window.polishMicrophoneCalls), 1, "Rapid microphone clicks must share one permission request and stream");
     await source.page.waitForTimeout(1600); await source.page.getByRole("button", { name: "Stop recording", exact: true }).click();
+    const studio = source.page.getByRole("region", { name: "Voice message studio", exact: true });
+    for (const width of [320, 360, 390]) {
+      await source.page.setViewportSize({ width, height: 844 });
+      assert(await studio.evaluate(element => element.scrollWidth <= element.clientWidth + 1), "Recorded voice review must fit narrow phones");
+    }
+    await source.page.screenshot({ path: ".freebuff/performance/voice-review-polish.png" });
     const voiceUpload = source.page.waitForResponse(response => response.url().endsWith("/api/upload/message") && response.request().method() === "POST", { timeout: 60000 });
     await source.page.getByRole("button", { name: "Send voice message", exact: true }).click();
     assert.equal((await voiceUpload).status(), 201);

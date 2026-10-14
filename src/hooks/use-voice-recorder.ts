@@ -32,6 +32,8 @@ export function useVoiceRecorder(): UseVoiceRecorderReturn {
   const streamRef = useRef<MediaStream | null>(null);
   const segmentStartedAtRef = useRef(0);
   const elapsedMsRef = useRef(0);
+  const startRequest = useRef(0);
+  const starting = useRef(false);
 
   const updateDuration = useCallback(() => {
     const activeMs = mediaRecorderRef.current?.state === "recording"
@@ -53,6 +55,8 @@ export function useVoiceRecorder(): UseVoiceRecorderReturn {
     chunksRef.current = [];
   }, []);
   useEffect(() => () => {
+    startRequest.current += 1;
+    starting.current = false;
     if (mediaRecorderRef.current) { mediaRecorderRef.current.onstop = null; mediaRecorderRef.current.ondataavailable = null; }
     cleanup();
   }, [cleanup]);
@@ -61,6 +65,7 @@ export function useVoiceRecorder(): UseVoiceRecorderReturn {
   }, [audioUrl]);
 
   const startRecording = useCallback(async () => {
+    if (starting.current || mediaRecorderRef.current) return;
     setError(null);
     setAudioBlob(null);
     setAudioUrl(null);
@@ -82,11 +87,14 @@ export function useVoiceRecorder(): UseVoiceRecorderReturn {
       return;
     }
 
+    starting.current = true;
+    const request = ++startRequest.current;
     try {
       // Use simple constraints for maximum compatibility.
       // Do NOT pre-check permissions.query() — it is unreliable and often
       // returns 'denied' even when the user has granted access (known browser bug).
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (request !== startRequest.current) { stream.getTracks().forEach(track => track.stop()); return; }
 
       streamRef.current = stream;
       chunksRef.current = [];
@@ -137,6 +145,8 @@ export function useVoiceRecorder(): UseVoiceRecorderReturn {
         updateDuration();
       }, 200);
     } catch (err) {
+      if (request !== startRequest.current) return;
+      cleanup();
       const name = (err as DOMException).name || "";
       const message = (err as Error).message || "";
       console.error("[voice-recorder] Error:", name, message, err);
@@ -175,6 +185,8 @@ export function useVoiceRecorder(): UseVoiceRecorderReturn {
         setError("Could not start recording: " + (message || name || "Unknown error") + ". Please try again.");
       }
       setState("idle");
+    } finally {
+      if (request === startRequest.current) starting.current = false;
     }
   }, [cleanup, updateDuration]);
 
@@ -204,13 +216,17 @@ export function useVoiceRecorder(): UseVoiceRecorderReturn {
     if (mediaRecorderRef.current && (mediaRecorderRef.current.state === "recording" || mediaRecorderRef.current.state === "paused")) {
       if (mediaRecorderRef.current.state === "recording") {
         elapsedMsRef.current += Date.now() - segmentStartedAtRef.current;
-        updateDuration();
       }
       mediaRecorderRef.current.stop();
+      // stop() makes the recorder inactive synchronously. Count the final
+      // segment once, rather than adding it again in updateDuration().
+      updateDuration();
     }
   }, [updateDuration]);
 
   const cancelRecording = useCallback(() => {
+    startRequest.current += 1;
+    starting.current = false;
     if (mediaRecorderRef.current) {
       mediaRecorderRef.current.ondataavailable = null;
       mediaRecorderRef.current.onstop = null;

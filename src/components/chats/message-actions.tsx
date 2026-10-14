@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import {
   Check,
   Copy,
@@ -16,6 +16,7 @@ import {
   StarOff,
   Trash2,
 } from "lucide-react";
+import { MessagePopover } from "./message-popover";
 import { REACTION_CHOICES } from "@/lib/schemas";
 import { cn } from "@/lib/utils";
 
@@ -29,6 +30,7 @@ export function MessageActions({
   align,
   starred,
   pinned,
+  textAvailable,
   onReply,
   onReact,
   onCopy,
@@ -47,6 +49,7 @@ export function MessageActions({
   align: "left" | "right";
   starred: boolean;
   pinned: boolean;
+  textAvailable: boolean;
   onReply: () => void;
   onReact: (emoji: string) => void;
   onCopy: () => void;
@@ -63,29 +66,8 @@ export function MessageActions({
   const [pickerOpen, setPickerOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [copied, setCopied] = useState(false);
-  const wrapRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    function onDoc(e: MouseEvent) {
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) {
-        setPickerOpen(false);
-        setMenuOpen(false);
-      }
-    }
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") {
-        setPickerOpen(false);
-        setMenuOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", onDoc);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDoc);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, []);
-
+  const reactionRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLButtonElement>(null);
   if (deleted) return null;
 
   function handleCopy() {
@@ -100,7 +82,6 @@ export function MessageActions({
 
   return (
     <div
-      ref={wrapRef}
       className={cn(
         "absolute top-1/2 z-20 flex -translate-y-1/2 items-center gap-1",
         "opacity-0 transition-opacity duration-150 focus-within:opacity-100 group-hover:opacity-100",
@@ -115,6 +96,9 @@ export function MessageActions({
       <div className="relative">
         <button
           type="button"
+          ref={reactionRef}
+          aria-expanded={pickerOpen}
+          aria-haspopup="dialog"
           aria-label="Add reaction"
           title="React"
           onClick={() => {
@@ -126,7 +110,7 @@ export function MessageActions({
           <SmilePlus className="h-3.5 w-3.5" />
         </button>
         {pickerOpen ? (
-          <div className="card-glass absolute bottom-[calc(100%+8px)] left-1/2 z-30 flex -translate-x-1/2 gap-0.5 rounded-2xl p-1.5 animate-fade-up">
+          <MessagePopover anchor={reactionRef} label="Message reactions" onClose={() => setPickerOpen(false)} className="flex flex-wrap gap-0.5">
             {REACTION_CHOICES.map((emoji) => (
               <button
                 key={emoji}
@@ -141,13 +125,16 @@ export function MessageActions({
                 {emoji}
               </button>
             ))}
-          </div>
+          </MessagePopover>
         ) : null}
       </div>
 
       <div className="relative">
         <button
           type="button"
+          ref={menuRef}
+          aria-expanded={menuOpen}
+          aria-haspopup="dialog"
           aria-label="More actions"
           title="More"
           onClick={() => {
@@ -163,12 +150,7 @@ export function MessageActions({
           )}
         </button>
         {menuOpen ? (
-          <div
-            className={cn(
-              "card-glass absolute bottom-[calc(100%+8px)] z-30 w-44 rounded-2xl p-1 animate-fade-up",
-              align === "right" ? "right-0" : "left-0",
-            )}
-          >
+          <MessagePopover anchor={menuRef} label="Message actions" onClose={() => setMenuOpen(false)} className="w-56">
             <button
               type="button"
               onClick={() => {
@@ -216,6 +198,7 @@ export function MessageActions({
             <button
               type="button"
               onClick={handleCopy}
+              disabled={!textAvailable}
               className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-xs text-[var(--muted)] transition-colors hover:bg-[color-mix(in_srgb,var(--muted)_10%,transparent)] hover:text-[var(--text)]"
             >
               <Copy className="h-3.5 w-3.5" />
@@ -237,6 +220,8 @@ export function MessageActions({
             ) : null}
 
             <div className="my-1 border-t border-[var(--border)]" />
+
+            {own && textAvailable ? <button type="button" onClick={() => { onEdit(); setMenuOpen(false); }} className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-xs text-[var(--muted)] hover:bg-[var(--surface-2)]"><Pencil className="h-3.5 w-3.5" />Edit message</button> : null}
 
             <button
               type="button"
@@ -263,7 +248,7 @@ export function MessageActions({
                 Delete for everyone
               </button>
             ) : null}
-          </div>
+          </MessagePopover>
         ) : null}
       </div>
     </div>

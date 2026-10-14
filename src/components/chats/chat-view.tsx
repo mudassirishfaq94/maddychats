@@ -70,7 +70,7 @@ import { CHAT_BACKGROUNDS, chatBubbleTheme, isBackgroundImage } from "@/lib/chat
 import { getPattern } from "@/lib/chat-patterns";
 const MediaPicker = dynamic(() => import("./media-picker").then((module) => module.MediaPicker));
 import { AudioMessage } from "./audio-message";
-import { RecordingWaveform } from "./waveform";
+import { VoiceComposer } from "./voice-composer";
 import { useVoiceRecorder } from "@/hooks/use-voice-recorder";
 import { LongPressTouchable } from "./long-press-touchable";
 import { MobileMessageMenu } from "./mobile-message-menu";
@@ -1022,20 +1022,24 @@ export function ChatView({
       if (sendPendingRef.current) return;
       setSendPending(true);
       setError(null);
+      const uploadSignal = attachments.begin();
       try {
         await prepareEncryptedSend();
+        if (uploadSignal.aborted) return;
         const result = await attachments.upload(
           conversationId,
           text,
           replyTo?.id ?? null,
           encryptPendingFile,
           (plain) => e2ee.encrypt(plain, conversationId),
+          uploadSignal,
         );
         if (!result.ok) {
           if (result.error !== "Upload cancelled.") setError(result.error);
           return;
         }
         const created = result.message;
+        setReplyTo(null);
         setItems((prev) =>
           prev.some((m) => m.id === created.id) ? prev : [...prev, created],
         );
@@ -1043,8 +1047,9 @@ export function ChatView({
         nearBottomRef.current = true;
         scrollToBottom(true);
       } catch (cause) {
-        setError(cause instanceof Error ? cause.message : "Encryption failed before upload.");
+        if (!uploadSignal.aborted) setError(cause instanceof Error ? cause.message : "Encryption failed before upload.");
       } finally {
+        attachments.finish();
         setSendPending(false);
       }
       return;
@@ -1175,49 +1180,28 @@ export function ChatView({
   }
 
   async function sendVoiceMessage() {
-    if (!recorder.audioBlob || sendPendingRef.current) return;
+    if (!recorder.audioBlob || sendPendingRef.current || !canCompose) return;
     setSendPending(true);
     setError(null);
+    const signal = attachments.begin();
     try {
       const ext = recorder.audioBlob.type.includes("webm") ? ".webm" : recorder.audioBlob.type.includes("mp4") ? ".m4a" : ".ogg";
-      const file = new File([recorder.audioBlob], `voice${ext}`, {
-        type: recorder.audioBlob.type,
-      });
-      const form = new FormData();
-      form.append("conversationId", conversationId);
-      // E2EE: encrypt the audio bytes before they reach the server.
+      const file = new File([recorder.audioBlob], `voice${ext}`, { type: recorder.audioBlob.type });
       await prepareEncryptedSend();
-      const enc = await encryptPendingFile(file);
-      form.append("encrypted", "true");
-      form.append("files", enc.file, file.name);
-      form.append("keys", enc.wrappedKey);
-      form.append("origTypes", enc.originalMime);
-      if (replyTo?.id) form.append("replyToMessageId", replyTo.id);
-
-      const res = await fetch("/api/upload/message", {
-        method: "POST",
-        body: form,
-      });
-      const data = (await res.json().catch(() => null)) as {
-        message?: MessageDTO;
-        error?: string;
-      } | null;
-      if (!res.ok || !data?.message) {
-        setError(data?.error ?? "Voice message failed to send.");
-        return;
-      }
-      const created = data.message;
-      setItems((prev) =>
-        prev.some((m) => m.id === created.id) ? prev : [...prev, created],
-      );
+      if (signal.aborted) return;
+      const result = await attachments.upload(conversationId, "", replyTo?.id ?? null,
+        encryptPendingFile, undefined, signal, [{ id: "voice", file, previewUrl: null }]);
+      if (!result.ok) { if (result.error !== "Upload cancelled.") setError(result.error); return; }
+      setItems(prev => prev.some(m => m.id === result.message.id) ? prev : [...prev, result.message]);
       setReplyTo(null);
       recorder.clearRecording();
       nearBottomRef.current = true;
       scrollToBottom(true);
       router.refresh();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Network error. Voice message was not sent.");
+      if (!signal.aborted) setError(cause instanceof Error ? cause.message : "Network error. Your recording is still here.");
     } finally {
+      attachments.finish();
       setSendPending(false);
     }
   }
@@ -2508,6 +2492,7 @@ export function ChatView({
                               align={own ? "right" : "left"}
                               starred={msg.starred}
                               pinned={msg.pinned}
+                              textAvailable={Boolean(copyableText(msg))}
                               onReply={() => {
                                 setReplyTo(msg);
                                 composerRef.current?.focus();
@@ -2619,6 +2604,14 @@ export function ChatView({
         <AttachmentPreviews
           pending={attachments.pending}
           progress={attachments.progress}
+          phase={attachments.phase}
+          busy={sendPending}
+          caption={draftRef.current}
+          error={error}
+          onCaptionChange={setDraft}
+          onCaptionInput={value => { draftRevision.current += 1; draftRef.current = value; queueDraftPersistence(); }}
+          onSend={() => void send()}
+          onClear={attachments.clear}
           onRemove={attachments.removeFile}
           onCancel={attachments.cancel}
         />
@@ -2627,78 +2620,7 @@ export function ChatView({
 
         {/* Voice recording UI */}
         {recorder.state !== "idle" ? (
-          <div className="mb-2 flex items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--card-2)] px-4 py-3">
-            {recorder.state === "recording" || recorder.state === "paused" ? (
-              <>
-                <span className={cn("flex h-3 w-3 rounded-full bg-red-500", recorder.state === "recording" && "animate-pulse")} />
-                <RecordingWaveform active={recorder.state === "recording"} height={24} className="min-w-0 flex-1" />
-                <span className="shrink-0 text-sm font-medium tabular-nums">
-                  {formatDuration(recorder.duration)}
-                </span>
-                <span className="hidden items-center gap-1 text-[0.65rem] font-medium text-[var(--muted)] sm:flex" title="Recording continues hands-free">
-                  <Lock className="h-3 w-3" /> Hands-free
-                </span>
-                <button
-                  type="button"
-                  onClick={() => recorder.cancelRecording()}
-                  className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl text-[var(--muted)] hover:bg-[var(--surface-2)]"
-                  aria-label="Cancel recording"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => recorder.state === "recording" ? recorder.pauseRecording() : recorder.resumeRecording()}
-                  className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full border border-[var(--border)] text-[var(--text)] hover:bg-[var(--surface-2)]"
-                  aria-label={recorder.state === "recording" ? "Pause recording" : "Resume recording"}
-                >
-                  {recorder.state === "recording" ? <Pause className="h-4 w-4 fill-current" /> : <Play className="h-4 w-4 fill-current" />}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => recorder.stopRecording()}
-                  className="flex h-10 w-10 min-h-[44px] min-w-[44px] items-center justify-center rounded-full bg-red-500 text-white transition-transform active:scale-95"
-                  aria-label="Stop recording"
-                >
-                  <StopCircle className="h-5 w-5" />
-                </button>
-              </>
-            ) : (
-              <>
-                {/* Recorded — preview */}
-                {recorder.audioUrl ? (
-                  <div className="min-w-0 flex-1">
-                    <AudioMessage
-                      src={recorder.audioUrl}
-                      own={true}
-                      sender={me}
-                      duration={recorder.duration}
-                    />
-                  </div>
-                ) : null}
-                <button
-                  type="button"
-                  onClick={() => recorder.clearRecording()}
-                  className="flex h-9 items-center gap-1.5 rounded-xl px-3 text-sm text-[var(--muted)] hover:bg-[var(--surface-2)]"
-                >
-                  <Trash2 className="h-4 w-4" />
-                  <span className="hidden sm:inline">Delete</span>
-                </button>
-                <button
-                  type="submit"
-                  disabled={sendPending}
-                  className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--accent)] text-white transition-transform active:scale-95"
-                  aria-label="Send voice message"
-                >
-                  {sendPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Send className="h-4 w-4" />
-                  )}
-                </button>
-              </>
-            )}
-          </div>
+          <VoiceComposer recorder={recorder} me={me} sending={sendPending} phase={attachments.phase} progress={attachments.progress} onSend={() => void sendVoiceMessage()} onCancelUpload={attachments.cancel} />
         ) : (
           <div className="composer-row flex items-end gap-1 rounded-[24px] bg-[var(--input-bg)] p-1.5">
             <AttachButton
@@ -2726,7 +2648,7 @@ export function ChatView({
                 <MediaPicker
                   anchor={mediaPickerAnchor}
                   mediaDisabled={mediaPaused || sendPending || !canCompose || awaitingApproval}
-                  onFile={file => attachments.addFiles([file])}
+                  onFile={file => { setShowEmoji(false); attachments.addFiles([file]); }}
                   onEmoji={(emoji) => {
                     setDraft((prev) => prev + emoji);
                     growComposer();

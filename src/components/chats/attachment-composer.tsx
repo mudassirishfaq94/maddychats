@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Loader2, Paperclip, X } from "lucide-react";
+import { Paperclip } from "lucide-react";
 import type { MessageDTO } from "@/lib/types";
-import { humanSize } from "./attachments";
+export { AttachmentReview as AttachmentPreviews } from "./attachment-review";
 import { cn } from "@/lib/utils";
 
 export interface PendingFile {
@@ -23,6 +23,9 @@ export function useAttachmentUpload() {
   const [pending, setPending] = useState<PendingFile[]>([]);
   const [progress, setProgress] = useState<number | null>(null);
   const xhrRef = useRef<XMLHttpRequest | null>(null);
+  const operation = useRef<AbortController | null>(null);
+  const pendingRef = useRef<PendingFile[]>([]);
+  const [phase, setPhase] = useState<"encrypting" | "uploading" | "finishing" | null>(null);
 
   const previewUrls = useRef(new Set<string>());
   useEffect(() => {
@@ -30,40 +33,53 @@ export function useAttachmentUpload() {
     return () => {
       for (const url of urls) URL.revokeObjectURL(url);
       urls.clear();
+      operation.current?.abort();
       xhrRef.current?.abort();
     };
   }, []);
 
   function addFiles(files: FileList | File[]) {
-    const list = Array.from(files).slice(0, 5 - pending.length).map(file => {
-      const previewUrl = file.type.startsWith("image/") ? URL.createObjectURL(file) : null;
+    const list = Array.from(files).slice(0, 5 - pendingRef.current.length).map(file => {
+      const previewUrl = /^(image|video|audio)\//.test(file.type) ? URL.createObjectURL(file) : null;
       if (previewUrl) previewUrls.current.add(previewUrl);
       return { id: `${file.name}-${file.size}-${Math.random().toString(36).slice(2)}`, file, previewUrl };
     });
-    setPending(prev => [...prev, ...list]);
+    pendingRef.current = [...pendingRef.current, ...list];
+    setPending(pendingRef.current);
   }
 
   function removeFile(id: string) {
-    setPending((prev) => {
-      const target = prev.find((p) => p.id === id);
-      if (target?.previewUrl) { URL.revokeObjectURL(target.previewUrl); previewUrls.current.delete(target.previewUrl); }
-      return prev.filter((p) => p.id !== id);
-    });
+    const target = pendingRef.current.find(p => p.id === id);
+    if (target?.previewUrl) { URL.revokeObjectURL(target.previewUrl); previewUrls.current.delete(target.previewUrl); }
+    pendingRef.current = pendingRef.current.filter(p => p.id !== id);
+    setPending(pendingRef.current);
   }
 
   function clear() {
     for (const url of previewUrls.current) URL.revokeObjectURL(url);
     previewUrls.current.clear();
+    pendingRef.current = [];
     setPending([]);
     setProgress(null);
+    setPhase(null);
   }
 
   /** Cancels an in-flight upload. */
   function cancel() {
+    operation.current?.abort();
     xhrRef.current?.abort();
     xhrRef.current = null;
     setProgress(null);
+    setPhase(null);
   }
+
+  function begin() {
+    operation.current?.abort();
+    operation.current = new AbortController();
+    setPhase("encrypting");
+    return operation.current.signal;
+  }
+  function finish() { setPhase(null); setProgress(null); }
 
   function upload(
     conversationId: string,
@@ -75,14 +91,18 @@ export function useAttachmentUpload() {
       originalMime: string;
     }>,
     encryptText?: (plain: string) => Promise<string>,
+    signal: AbortSignal = begin(),
+    files: PendingFile[] = pendingRef.current,
   ): Promise<{ ok: true; message: MessageDTO } | { ok: false; error: string }> {
     return new Promise((resolve) => {
-      if (pending.length === 0) {
+      const selected = [...files];
+      if (selected.length === 0) {
         resolve({ ok: false, error: "No files selected." });
         return;
       }
       (async () => {
         try {
+      signal.throwIfAborted();
       const form = new FormData();
       form.append("conversationId", conversationId);
       if (replyToMessageId) form.append("replyToMessageId", replyToMessageId);
@@ -91,31 +111,37 @@ export function useAttachmentUpload() {
         // E2EE mode: every file is encrypted client-side before upload; the
         // server stores only ciphertext plus a conversation-wrapped key.
         form.append("encrypted", "true");
-        for (const p of pending) {
+        for (const p of selected) {
           const out = await encryptFile(p.file);
+          signal.throwIfAborted();
           form.append("files", out.file, p.file.name);
           form.append("keys", out.wrappedKey);
           form.append("origTypes", out.originalMime);
         }
         if (text) {
-          const encryptedCaption = encryptText
-            ? await encryptText(text)
-            : text;
+          if (!encryptText) throw new Error("Caption encryption is required.");
+          const encryptedCaption = await encryptText(text);
           form.append("text", encryptedCaption);
         }
       } else {
         if (text) form.append("text", text);
-        pending.forEach((p) => form.append("files", p.file, p.file.name));
+        selected.forEach((p) => form.append("files", p.file, p.file.name));
       }
 
+      signal.throwIfAborted();
       const xhr = new XMLHttpRequest();
       xhrRef.current = xhr;
       xhr.open("POST", "/api/upload/message");
       xhr.responseType = "json";
+      xhr.timeout = 180000;
+      const abort = () => xhr.abort();
+      signal.addEventListener("abort", abort, { once: true });
+      xhr.onloadend = () => signal.removeEventListener("abort", abort);
 
       xhr.upload.onprogress = (e) => {
-        if (e.lengthComputable) {
-          setProgress(Math.round((e.loaded / e.total) * 100));
+        if (e.lengthComputable && e.total > 0) {
+          setProgress(Math.max(0, Math.min(100, Math.round((e.loaded / e.total) * 100))));
+          if (e.loaded >= e.total) setPhase("finishing");
         }
       };
       xhr.onload = () => {
@@ -134,6 +160,7 @@ export function useAttachmentUpload() {
           });
         }
       };
+      xhr.ontimeout = () => { xhrRef.current = null; finish(); resolve({ ok: false, error: "The upload timed out. Your files and caption are still here. Check this chat before retrying." }); };
       xhr.onerror = () => {
         xhrRef.current = null;
         setProgress(null);
@@ -145,103 +172,19 @@ export function useAttachmentUpload() {
         resolve({ ok: false, error: "Upload cancelled." });
       };
 
+      setPhase("uploading");
       setProgress(0);
       xhr.send(form);
         } catch {
           xhrRef.current = null;
           setProgress(null);
-          resolve({ ok: false, error: "Encryption failed before upload." });
+          resolve({ ok: false, error: signal.aborted ? "Upload cancelled." : "Encryption failed before upload." });
         }
       })();
     });
   }
 
-  return { pending, addFiles, removeFile, clear, cancel, upload, progress };
-}
-
-/** Preview strip shown above the composer while files are staged. */
-export function AttachmentPreviews({
-  pending,
-  progress,
-  onRemove,
-  onCancel,
-}: {
-  pending: PendingFile[];
-  progress: number | null;
-  onRemove: (id: string) => void;
-  onCancel: () => void;
-}) {
-  if (pending.length === 0) return null;
-  const uploading = progress !== null;
-
-  return (
-    <div className="mb-2 rounded-2xl border border-[var(--border)] bg-[var(--card-2)] p-2.5">
-      <div className="flex flex-wrap gap-2">
-        {pending.map((p) => (
-          <div
-            key={p.id}
-            className="group relative flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--card)] p-1.5 pr-2.5"
-          >
-            {p.previewUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={p.previewUrl}
-                alt={p.file.name}
-                className="h-10 w-10 rounded-lg object-cover"
-              />
-            ) : (
-              <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-[color-mix(in_srgb,var(--accent)_14%,transparent)]">
-                <Paperclip className="h-4 w-4 text-[var(--accent)]" />
-              </span>
-            )}
-            <span className="min-w-0 max-w-[9rem]">
-              <span className="block truncate text-xs font-medium">
-                {p.file.name}
-              </span>
-              <span className="block text-[0.65rem] text-[var(--muted)]">
-                {humanSize(p.file.size)}
-              </span>
-            </span>
-            {!uploading ? (
-              <button
-                type="button"
-                onClick={() => onRemove(p.id)}
-                aria-label={`Remove ${p.file.name}`}
-                className="ml-1 flex h-5 w-5 items-center justify-center rounded-full bg-[var(--card-2)] text-[var(--muted)] transition-colors hover:text-[var(--danger)]"
-              >
-                <X className="h-3 w-3" />
-              </button>
-            ) : null}
-          </div>
-        ))}
-      </div>
-
-      {uploading ? (
-        <div className="mt-2.5 flex items-center gap-3">
-          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[var(--border)]">
-            <div
-              className="h-full rounded-full transition-[width] duration-150"
-              style={{
-                width: `${progress}%`,
-                background: "var(--accent)",
-              }}
-            />
-          </div>
-          <span className="flex items-center gap-1.5 text-xs tabular-nums text-[var(--muted)]">
-            <Loader2 className="h-3 w-3 animate-spin" />
-            {progress}%
-          </span>
-          <button
-            type="button"
-            onClick={onCancel}
-            className="text-xs font-semibold text-[var(--danger)] hover:opacity-80"
-          >
-            Cancel
-          </button>
-        </div>
-      ) : null}
-    </div>
-  );
+  return { pending, addFiles, removeFile, clear, cancel, begin, finish, upload, progress, phase };
 }
 
 /** Paperclip trigger + hidden multi-file input (works on mobile). */
@@ -262,7 +205,7 @@ export function AttachButton({
         type="file"
         multiple
         // Mobile browsers show camera/photo/file options for these types.
-        accept="image/*,.pdf,.txt,.md,.csv,.json,.zip,.doc,.docx,.xls,.xlsx,.ppt,.pptx,audio/*,video/mp4"
+        accept="image/*,.pdf,.txt,.md,.csv,.json,.zip,.doc,.docx,.xls,.xlsx,.ppt,.pptx,audio/*,video/mp4,video/webm,video/quicktime,video/ogg,video/x-msvideo"
         className="hidden"
         onChange={(e) => {
           if (e.target.files?.length) onFiles(e.target.files);

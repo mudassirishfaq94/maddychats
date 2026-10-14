@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
+import { MessagePopover } from "./message-popover";
 import { useRouter } from "next/navigation";
 import {
   Archive,
@@ -43,32 +44,25 @@ export function ChatActionsMenu({
   const [confirmClear, setConfirmClear] = useState(false);
   const [blocked, setBlocked] = useState(conversation.blocked);
   const [exporting, setExporting] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const close = (event: MouseEvent) => {
-      if (!ref.current?.contains(event.target as Node)) {
-        setOpen(false);
-        setConfirmClear(false);
-      }
-    };
-    if (open) document.addEventListener("mousedown", close);
-    return () => document.removeEventListener("mousedown", close);
-  }, [open]);
+  const [error, setError] = useState<string | null>(null);
+  const anchor = useRef<HTMLButtonElement>(null);
 
   async function control(action: Control) {
     setBusy(true);
+    setError(null);
     try {
       const response = await fetch(`/api/conversations/${conversationId}/controls`, {
-        method: "POST",
+        method: "POST", signal: AbortSignal.timeout(15000),
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action }),
       });
-      if (!response.ok) return;
+      if (!response.ok) throw new Error(response.status === 401 ? "Sign in again, then retry." : "That action could not be completed. Please retry.");
       setOpen(false);
       setConfirmClear(false);
       if (action === "clear") router.push("/app/chats");
       router.refresh();
+      return true;
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Check your connection and retry."); return false;
     } finally {
       setBusy(false);
     }
@@ -77,12 +71,15 @@ export function ChatActionsMenu({
   async function toggleBlock() {
     if (!other) return;
     setBusy(true);
+    setError(null);
     try {
-      const response = await fetch(`/api/users/${other.id}/block`, { method: blocked ? "DELETE" : "POST" });
-      if (!response.ok) return;
+      const response = await fetch(`/api/users/${other.id}/block`, { method: blocked ? "DELETE" : "POST", signal: AbortSignal.timeout(15000) });
+      if (!response.ok) throw new Error(response.status === 401 ? "Sign in again, then retry." : "That action could not be completed. Please retry.");
       setBlocked((value) => !value);
       setOpen(false);
       router.refresh();
+      return true;
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Check your connection and retry."); return false;
     } finally {
       setBusy(false);
     }
@@ -90,32 +87,34 @@ export function ChatActionsMenu({
 
   async function setDisappearing(seconds: number) {
     setBusy(true);
+    setError(null);
     try {
       const response = await fetch(`/api/conversations/${conversationId}/controls`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
+        method: "POST", signal: AbortSignal.timeout(15000), headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "setDisappearing", disappearingSeconds: seconds }),
       });
-      if (response.ok) { setOpen(false); router.refresh(); }
-    } finally { setBusy(false); }
+      if (!response.ok) throw new Error("The timer could not be saved. Please retry.");
+      setOpen(false); router.refresh();
+    } catch { setError("The timer could not be saved. Check your connection and retry."); } finally { setBusy(false); }
   }
 
   async function exportChat() {
     setExporting(true);
+    setError(null);
     try {
-      const response = await fetch(`/api/conversations/${conversationId}/export`);
-      if (!response.ok) return;
+      const response = await fetch(`/api/conversations/${conversationId}/export`, { signal: AbortSignal.timeout(15000) });
+      if (!response.ok) throw new Error(response.status === 401 ? "Sign in again, then retry." : "That action could not be completed. Please retry.");
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url; link.download = `circlo-chat-${conversationId}.json`; link.click();
       URL.revokeObjectURL(url);
       setOpen(false);
-    } finally { setExporting(false); }
+    } catch { setError("The export could not be downloaded. Check your connection and retry."); } finally { setExporting(false); }
   }
 
   async function closeChat() {
-    await control("archive");
-    router.push("/app/chats");
+    if (await control("archive")) router.push("/app/chats");
   }
 
   const item = "flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition-colors hover:bg-[color-mix(in_srgb,var(--muted)_10%,transparent)]";
@@ -124,10 +123,11 @@ export function ChatActionsMenu({
   const openReport = () => { setOpen(false); onReport(); };
 
   return (
-    <div ref={ref} className="relative shrink-0">
+    <div className="relative shrink-0">
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
+        ref={anchor}
         aria-label="Chat options"
         aria-expanded={open}
         className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full text-[var(--muted)] transition-colors hover:bg-[color-mix(in_srgb,var(--muted)_12%,transparent)] hover:text-[var(--text)]"
@@ -136,7 +136,9 @@ export function ChatActionsMenu({
       </button>
 
       {open ? (
-        <div role="menu" className="card-glass absolute right-0 top-[calc(100%+6px)] z-50 w-64 rounded-2xl p-1.5 shadow-xl">
+        <MessagePopover anchor={anchor} role="menu" label="Chat options" onClose={() => { setOpen(false); setConfirmClear(false); }} className="w-64">
+          {error ? <p role="alert" className="m-1 rounded-xl bg-[var(--surface-2)] p-3 text-xs text-[var(--danger)]">{error}</p> : null}
+          <fieldset disabled={busy || exporting} className="contents">
           <button type="button" role="menuitem" className={item} onClick={openInfo}>
             <Info className="h-4 w-4" />
             {conversation.type === "group" ? "Group info" : "Contact info"}
@@ -192,7 +194,8 @@ export function ChatActionsMenu({
           <button type="button" role="menuitem" className={`${item} text-[var(--muted)]`} onClick={() => void closeChat()}>
             <XCircle className="h-4 w-4" /> Close chat
           </button>
-        </div>
+          </fieldset>
+        </MessagePopover>
       ) : null}
     </div>
   );

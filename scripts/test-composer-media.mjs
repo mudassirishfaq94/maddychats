@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
+import { testChatPolish } from "./test-chat-polish.mjs";
 
 /** Owned conversation only: actual UI staging, encryption and recipient animation. */
 export async function testComposerMedia(base, source, recipient, pool, conversationId) {
   const page = source.page, previous = page.viewportSize();
   const input = page.getByRole("textbox", { name: "Message text", exact: true });
   try {
+    await testChatPolish(page, recipient.page);
     for (const width of [320, 360, 390, 412, 1280]) {
       await page.setViewportSize({ width, height: 740 }); await input.fill("Short draft");
       await page.waitForTimeout(180);
@@ -49,7 +51,7 @@ export async function testComposerMedia(base, source, recipient, pool, conversat
       const name = kind === "GIFs" ? "circlo-orbit.gif" : "circlo-hello.webp";
       await page.getByRole("img", { name, exact: true }).waitFor();
       const upload = page.waitForResponse(r => r.url().endsWith("/api/upload/message") && r.request().method() === "POST");
-      await page.getByRole("button", { name: "Send message", exact: true }).click(); const response = await upload; assert.equal(response.status(), 201);
+      await page.getByRole("button", { name: "Send attachments", exact: true }).click(); const response = await upload; assert.equal(response.status(), 201);
       const result = await response.json(); const id = (await pool.query("select id from message_attachments where message_id=$1", [result.message.id])).rows[0].id;
       const cookies = (await recipient.page.context().cookies()).map(c => c.name + "=" + c.value).join("; ");
       const encrypted = await fetch(base + "/api/media/" + id, { headers: { Cookie: cookies } }); assert.equal(encrypted.status, 200);
