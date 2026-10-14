@@ -36,6 +36,12 @@ export async function PATCH(
   if ("adminOnlyMessaging" in data) {
     patch.adminOnlyMessaging = Boolean(data.adminOnlyMessaging);
   }
+  if ("name" in data) {
+    patch.name = String(data.name).slice(0, 200);
+  }
+  if ("description" in data) {
+    patch.description = data.description ? String(data.description).slice(0, 5000) : null;
+  }
   if ("rules" in data) {
     patch.rules = data.rules ? String(data.rules).slice(0, 2000) : null;
   }

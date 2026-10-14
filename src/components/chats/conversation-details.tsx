@@ -1375,7 +1375,7 @@ function GroupSettingsPanel({
   onUpdate,
 }: {
   conversationId: string;
-  group: { adminOnlyMessaging: boolean; rules: string | null; announcements: string | null; slowModeSeconds: number };
+  group: { adminOnlyMessaging: boolean; rules: string | null; announcements: string | null; slowModeSeconds: number; name?: string | null; description?: string | null };
   busy: boolean;
   onUpdate: (patch: Record<string, unknown>) => void;
 }) {
@@ -1384,6 +1384,8 @@ function GroupSettingsPanel({
   const [announcements, setAnnouncements] = useState(group.announcements ?? "");
   const [slowMode, setSlowMode] = useState(group.slowModeSeconds);
   const [adminOnly, setAdminOnly] = useState(group.adminOnlyMessaging);
+  const [name, setName] = useState(group.name ?? "");
+  const [description, setDescription] = useState(group.description ?? "");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
@@ -1404,6 +1406,12 @@ function GroupSettingsPanel({
     } catch {}
     setSaving(false);
   }
+
+  // Sync local state from group DB on mount (in case another tab updated settings)
+  useEffect(() => {
+    setName(group.name ?? "");
+    setDescription(group.description ?? "");
+  }, [group.name, group.description]);
 
   return (
     <div className="mt-3">
@@ -1432,6 +1440,35 @@ function GroupSettingsPanel({
               disabled={busy}
               label="Admin-only messaging"
               size="small"
+            />
+          </div>
+
+          {/* Name */}
+          <div>
+            <span className="text-xs font-medium">Group name</span>
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              onBlur={() => void saveSetting({ name: name.trim() || null })}
+              placeholder="e.g. Study group, Book club, Gaming squad..."
+              className="mt-1.5 w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-2 text-xs text-[var(--text)] placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:outline-none"
+            />
+          </div>
+
+          {/* Description */}
+          <div>
+            <span className="text-xs font-medium">Description</span>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              onBlur={() => {
+                if (description !== (group.description ?? "")) {
+                  void saveSetting({ description: description.trim() || null });
+                }
+              }}
+              placeholder="Tell members what this group is about..."
+              rows={3}
+              className="mt-1.5 w-full resize-none rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-2 text-xs text-[var(--text)] placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:outline-none"
             />
           </div>
 
