@@ -49,7 +49,7 @@ export default async function LandingPage() {
             <Link href="#features" className="hidden text-sm text-[var(--muted)] hover:text-[var(--text)] lg:block">Features</Link><Link href="#privacy" className="hidden text-sm text-[var(--muted)] hover:text-[var(--text)] md:block">Privacy</Link><Link href="#roadmap" className="hidden text-sm text-[var(--muted)] hover:text-[var(--text)] lg:block">What’s next</Link>
             <ThemeToggle />
             <Link href="/login" className="hidden text-sm font-semibold sm:block">Log in</Link>
-            <Link href="/signup" className="btn btn-primary text-xs sm:text-sm">Get started <ArrowUpRight className="h-4 w-4" /></Link>
+            <Link href="/signup" className="btn btn-primary min-h-11! px-3! text-xs! sm:px-5! sm:text-sm!"><span className="sm:hidden">Join</span><span className="hidden sm:inline">Get started</span><ArrowUpRight className="hidden h-4 w-4 sm:block" /></Link>
           </div>
         </nav>
       </header>
