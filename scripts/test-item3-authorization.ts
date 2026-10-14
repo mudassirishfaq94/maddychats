@@ -119,6 +119,18 @@ async function main() {
     assert.equal((await sql.query("select count(*)::int n from communities where name='Must not create'")).rows[0].n, 0);
     await sql.query("delete from rate_limit_buckets where key in ($1,$2)", [creationKey, mutationKey]);
     const historyPath = `/api/conversations/${conversation.id}/messages`;
+    assert.equal((await api("/api/reports", outsiderCookie, "POST", { type: "message", reason: "spam", targetMessageId: message.id })).status, 404, "Only visible messages can be reported");
+    assert.equal((await api("/api/reports", bobCookie, "POST", { type: "message", reason: "invalid-reason", targetMessageId: message.id })).status, 422);
+    const reportResponse = await api("/api/reports", bobCookie, "POST", { type: "message", reason: "spam", targetMessageId: message.id, targetUserId: outsider.id });
+    assert.equal(reportResponse.status, 201);
+    assert.equal((await reportResponse.json()).targetUserId, alice.id, "Message reports derive the sender instead of accepting a forged accusation target");
+    const revokedConversation = (await sql.query("insert into conversations(type,name,created_by_id) values('group','Revoked edit fixture',$1) returning id", [alice.id])).rows[0];
+    await sql.query("insert into conversation_members(conversation_id,user_id,role) values($1,$2,'owner')", [revokedConversation.id, alice.id]);
+    const revokedMessage = (await sql.query("insert into messages(conversation_id,sender_id,text) values($1,$2,'unchanged-after-removal') returning id", [revokedConversation.id, bob.id])).rows[0];
+    assert.equal((await api(`/api/messages/${revokedMessage.id}`, bobCookie, "PATCH", { text: "unauthorized-edit", encrypted: true })).status, 404);
+    assert.equal((await sql.query("select text from messages where id=$1", [revokedMessage.id])).rows[0].text, "unchanged-after-removal", "A removed sender cannot mutate a message before the endpoint rejects membership");
+    assert.equal((await api(`/api/messages/${revokedMessage.id}`, bobCookie, "DELETE", { mode: "for_everyone" })).status, 404);
+    assert.equal((await sql.query("select deleted_at from messages where id=$1", [revokedMessage.id])).rows[0].deleted_at, null, "Removed senders cannot delete conversation messages for everyone");
     assert.equal((await api(historyPath)).status, 401);
     assert.equal((await api(historyPath, outsiderCookie)).status, 404);
     assert.equal((await api(`/api/conversations/${conversation.id}`, outsiderCookie)).status, 404);

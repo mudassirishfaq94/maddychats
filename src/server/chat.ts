@@ -900,46 +900,40 @@ export async function editMessage(
   text: string,
   encrypted = false,
 ): Promise<MessageRow | "not_found" | "forbidden" | "deleted"> {
-  const rows = await db
-    .select()
-    .from(messages)
-    .where(eq(messages.id, messageId))
-    .limit(1);
-  const msg = rows[0];
-  if (!msg) return "not_found";
-  if (msg.senderId !== userId) return "forbidden";
-  if (msg.deletedAt) return "deleted";
-
-  const now = new Date();
-  const updated = await db
-    .update(messages)
-    .set({ text, editedAt: now, updatedAt: now, encrypted })
-    .where(eq(messages.id, messageId))
-    .returning();
-  return updated[0];
+  return db.transaction(async tx => {
+    const [found] = await tx.select({ message: messages, membership: conversationMembers }).from(messages)
+      .innerJoin(conversationMembers, and(eq(conversationMembers.conversationId, messages.conversationId), eq(conversationMembers.userId, userId)))
+      .where(eq(messages.id, messageId)).limit(1).for("update", { of: conversationMembers });
+    if (!found) return "not_found";
+    const msg = found.message;
+    if (msg.senderId !== userId) return "forbidden";
+    if (msg.deletedAt) return "deleted";
+    if ((msg.expiresAt && msg.expiresAt <= new Date()) || (found.membership.clearedAt && msg.createdAt <= found.membership.clearedAt)) return "not_found";
+    const now = new Date();
+    const [updated] = await tx.update(messages).set({ text, editedAt: now, updatedAt: now, encrypted })
+      .where(and(eq(messages.id, messageId), eq(messages.senderId, userId), isNull(messages.deletedAt))).returning();
+    return updated ?? "deleted";
+  });
 }
 
 export async function softDeleteMessage(
   messageId: string,
   userId: string,
 ): Promise<MessageRow | "not_found" | "forbidden"> {
-  const rows = await db
-    .select()
-    .from(messages)
-    .where(eq(messages.id, messageId))
-    .limit(1);
-  const msg = rows[0];
-  if (!msg) return "not_found";
-  if (msg.senderId !== userId) return "forbidden";
-  if (msg.deletedAt) return msg;
-
-  const now = new Date();
-  const updated = await db
-    .update(messages)
-    .set({ deletedAt: now, updatedAt: now })
-    .where(eq(messages.id, messageId))
-    .returning();
-  return updated[0];
+  return db.transaction(async tx => {
+    const [found] = await tx.select({ message: messages, membership: conversationMembers }).from(messages)
+      .innerJoin(conversationMembers, and(eq(conversationMembers.conversationId, messages.conversationId), eq(conversationMembers.userId, userId)))
+      .where(eq(messages.id, messageId)).limit(1).for("update", { of: conversationMembers });
+    if (!found) return "not_found";
+    const msg = found.message;
+    if (msg.senderId !== userId) return "forbidden";
+    if ((msg.expiresAt && msg.expiresAt <= new Date()) || (found.membership.clearedAt && msg.createdAt <= found.membership.clearedAt)) return "not_found";
+    if (msg.deletedAt) return msg;
+    const now = new Date();
+    const [updated] = await tx.update(messages).set({ deletedAt: now, updatedAt: now })
+      .where(and(eq(messages.id, messageId), eq(messages.senderId, userId))).returning();
+    return updated ?? "not_found";
+  });
 }
 
 /* ------------------------------ read receipts ------------------------------ */
