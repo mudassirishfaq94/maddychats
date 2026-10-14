@@ -2,6 +2,7 @@ import { safeError } from "@/server/safe-error";
 import { withPasswordCapacity } from "@/server/password-capacity";
 import { beginSignIn } from "@/server/authentication";
 import { randomBytes } from "crypto";
+import { policyAcceptance } from "@/lib/policy-consent";
 import { and, eq } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
@@ -55,6 +56,8 @@ async function handlePOST(req: NextRequest) {
     if (!displayName || !username) {
       return NextResponse.json({ needsProfile: true }, { status: 409 });
     }
+    const acceptance = policyAcceptance(body);
+    if (!acceptance) return jsonError(422, "Agree to the Terms and Conditions and Privacy Policy first.");
     if (await findUserByUsername(username)) {
       return jsonError(409, "This username is taken.", { username: "This username is taken" });
     }
@@ -70,6 +73,7 @@ async function handlePOST(req: NextRequest) {
           username,
           email: placeholderEmail,
           passwordHash,
+          ...acceptance,
         }).returning();
         await tx.insert(notificationPreferences).values({ userId: created[0].id });
         await tx.insert(oauthAccounts).values({

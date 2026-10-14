@@ -43,6 +43,7 @@ export function ForgotPasswordForm() {
       });
       const data = (await res.json().catch(() => null)) as {
         delivered?: boolean;
+        ok?: boolean;
         reason?: string;
         message?: string;
         error?: string;
@@ -55,7 +56,7 @@ export function ForgotPasswordForm() {
           message: data?.error ?? "Something went wrong. Please try again.",
         });
         if (data?.fields) setErrors(data.fields);
-      } else if (data?.delivered) {
+      } else if (data?.ok) {
         setState({ kind: "delivered" });
       } else setState({ kind: "error", message: "The reset email could not be sent." });
     } catch {
@@ -79,7 +80,7 @@ export function ForgotPasswordForm() {
               </h3>
               <p className="mt-1.5 text-sm leading-relaxed text-[var(--muted)]">
                 If an account exists for <strong className="text-[var(--text)]">{email}</strong>,
-                a reset link is on its way.
+                a reset email has been requested. Check your inbox and spam folder; the one-time link expires in one hour.
               </p>
             </div>
           </div>

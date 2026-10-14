@@ -32,7 +32,7 @@ async function register(name: string): Promise<{ id: string; cookie: string; nam
       username: `${name.toLowerCase().replace(/\s+/g, "_")}_${ts}`,
       email: `${name.toLowerCase().replace(/\s+/g, ".")}.${ts}@e2ee.local`,
       password: "QaPassword123!",
-      confirmPassword: "QaPassword123!",
+      confirmPassword: "QaPassword123!", acceptTerms: true, acceptPrivacy: true,
     }),
   });
   const body = await res.json() as { user: { id: string }; error?: string };

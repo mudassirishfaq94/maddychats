@@ -4,7 +4,7 @@ import { randomUUID, createHash } from "node:crypto";
 import { SignJWT } from "jose";
 import { spawn, type ChildProcess } from "node:child_process";
 import { once } from "node:events";
-import { mkdir, writeFile, unlink, readFile } from "node:fs/promises";
+import { mkdir, writeFile, unlink, readFile, cp } from "node:fs/promises";
 import { resolve, join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { Pool } from "pg";
@@ -70,6 +70,8 @@ async function main() {
     const env = { ...process.env, NODE_ENV: "production" as const, DATABASE_URL: runtimeUrl.toString(), REALTIME_DATABASE_URL: runtimeUrl.toString(), HOSTNAME: "127.0.0.1", PORT: "3109", CLIENT_URL: base,
       JWT_SECRET: "item3-disposable-test-secret-at-least-thirty-two-characters", HEALTHCHECK_SECRET: "item3-health", CRON_SECRET: "item3-cron",
       SUPABASE_URL: "", SUPABASE_SERVICE_ROLE_KEY: "", RESEND_API_KEY: "", VAPID_PRIVATE_KEY: "", FIREBASE_PROJECT_ID: "", FIREBASE_CLIENT_EMAIL: "", FIREBASE_PRIVATE_KEY: "" };
+    await cp(resolve(".next/static"), resolve(".next/standalone/.next/static"), { recursive: true });
+    await cp(resolve("public"), resolve(".next/standalone/public"), { recursive: true });
     server = spawn(process.execPath, [resolve(".next/standalone/server.js")], { env, stdio: "pipe", windowsHide: true });
     let output = ""; server.stdout?.on("data", (c) => output += c); server.stderr?.on("data", (c) => output += c);
     let ready = false;
@@ -180,6 +182,60 @@ async function main() {
     assert((await sql.query("select deleted_at from messages where id=$1", [message.id])).rows[0].deleted_at);
     await sql.query("update users set token_invalid_before_at=now()+interval '1 second' where id=$1", [bob.id]);
     assert.equal((await api(historyPath, bobCookie)).status, 401);
+    const passwordUser = await account("item3_password_ui");
+    await sql.query("insert into oauth_accounts(user_id,provider,provider_account_id) values($1,'google','disposable-password-ui-google')", [passwordUser.id]);
+    const passwordCookie = await login(passwordUser.username);
+    const changeBody = { currentPassword: password, password: "ChangedPassword92", confirmPassword: "ChangedPassword92" };
+    assert.equal((await api("/api/auth/change-password", "", "POST", changeBody)).status, 401);
+    assert.equal((await api("/api/auth/change-password", passwordCookie, "POST", changeBody, { origin: "https://attacker.example.invalid" })).status, 403);
+    const { chromium } = await import("playwright");
+    const passwordBrowser = await chromium.launch();
+    try {
+      const context = await passwordBrowser.newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: "block" });
+      const [cookieName, cookieValue] = passwordCookie.split("=");
+      await context.addCookies([{ name: cookieName, value: cookieValue, url: base, httpOnly: true, sameSite: "Lax" }]);
+      const page = await context.newPage();
+      await page.goto(base + "/app/profile#account-security");
+      await page.getByRole("button", { name: "Email me a password setup link", exact: true }).waitFor();
+      let resetRequested = false;
+      await page.route("**/api/auth/forgot-password", async route => {
+        assert.equal(route.request().postDataJSON().email, passwordUser.username + "@example.invalid");
+        resetRequested = true; await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true }) });
+      });
+      await page.getByRole("button", { name: "Email me a password setup link", exact: true }).click();
+      await page.getByRole("status").filter({ hasText: "reset email has been requested" }).waitFor();
+      assert(resetRequested); await page.unroute("**/api/auth/forgot-password");
+      await page.getByLabel("Current Circlo password", { exact: true }).fill("WrongPassword91");
+      await page.getByLabel("New password", { exact: true }).fill("ChangedPassword92");
+      await page.getByLabel("Confirm new password", { exact: true }).fill("ChangedPassword92");
+      await page.getByRole("button", { name: "Change password", exact: true }).click();
+      await page.getByRole("status").filter({ hasText: "current password is incorrect" }).waitFor();
+      assert.equal((await sql.query("select password_hash from users where id=$1", [passwordUser.id])).rows[0].password_hash, passwordHash);
+      await page.getByLabel("Current Circlo password", { exact: true }).fill(password);
+      await page.getByRole("button", { name: "Change password", exact: true }).click();
+      await page.waitForURL("**/login?passwordChanged=1");
+      await page.getByRole("status").filter({ hasText: "Password updated" }).waitFor();
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+    } finally { await passwordBrowser.close(); }
+    assert.equal((await api("/api/auth/me", passwordCookie)).status, 401, "Password changes revoke the old session");
+    assert.equal((await api("/api/auth/login", "", "POST", { identifier: passwordUser.username, password })).status, 401);
+    const newLogin = await api("/api/auth/login", "", "POST", { identifier: passwordUser.username, password: "ChangedPassword92" });
+    assert.equal(newLogin.status, 200);
+    const newCookie = newLogin.headers.getSetCookie().find(c => c.startsWith("maddy_session="))!.split(";")[0];
+    const recoveryCode = "b".repeat(32);
+    await sql.query("insert into user_2fa(user_id,secret,enabled,recovery_code_hashes) values($1,'JBSWY3DPEHPK3PXP',true,$2)", [passwordUser.id, JSON.stringify([createHash("sha256").update(recoveryCode).digest("hex")])]);
+    const mfaChange = { currentPassword: "ChangedPassword92", password: "MfaProtectedPassword93", confirmPassword: "MfaProtectedPassword93", mfaCode: "invalid" };
+    assert.equal((await api("/api/auth/change-password", newCookie, "POST", mfaChange)).status, 401, "Enabling MFA rejects the previous unverified session");
+    const challengeLogin = await api("/api/auth/login", "", "POST", { identifier: passwordUser.username, password: "ChangedPassword92" });
+    const challengeCookie = challengeLogin.headers.getSetCookie().find(c => c.startsWith("maddy_mfa_challenge="))!.split(";")[0];
+    process.env.DATABASE_URL = url;
+    const { generateTOTP } = await import("../src/server/two-factor");
+    const mfaLogin = await api("/api/auth/mfa", challengeCookie, "POST", { code: generateTOTP("JBSWY3DPEHPK3PXP", Math.floor(Date.now() / 30000)) });
+    assert.equal(mfaLogin.status, 200);
+    const mfaCookie = mfaLogin.headers.getSetCookie().find(c => c.startsWith("maddy_session="))!.split(";")[0];
+    assert.equal((await api("/api/auth/change-password", mfaCookie, "POST", mfaChange)).status, 403, "Correct current password does not bypass enabled MFA");
+    assert.equal((await api("/api/auth/change-password", mfaCookie, "POST", { ...mfaChange, mfaCode: recoveryCode })).status, 200);
+    console.log("PASS mobile profile password UI: Google setup option, wrong-password rejection without mutation, successful change, old-session revocation, new-password login, CSRF and MFA enforcement.");
     console.log("Authorization checks passed: membership, CSRF, blocking, group roles, cursor boundaries, private media, deletion, and session revocation");
   } finally {
     if (server && server.exitCode === null && server.signalCode === null) {

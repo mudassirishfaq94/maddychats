@@ -106,7 +106,7 @@ async function main() {
     globalThis.fetch = (async (_url: unknown, init: RequestInit) => { mail = String(init.body); return new Response("{}", { status: 200 }); }) as typeof fetch;
     let registered;
     try {
-      registered = await register(new NextRequest("http://localhost:3107/api/auth/register", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username: "item1_new", displayName: "New User", email: "new@example.invalid", password, confirmPassword: password }) }));
+      registered = await register(new NextRequest("http://localhost:3107/api/auth/register", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username: "item1_new", displayName: "New User", email: "new@example.invalid", password, confirmPassword: password, acceptTerms: true, acceptPrivacy: true }) }));
     } finally { globalThis.fetch = savedFetch; process.env.RESEND_API_KEY = ""; }
     assert.equal(registered.status, 201);
     assert.equal((await registered.json()).verificationRequired, true);

@@ -117,7 +117,7 @@ jobs:
           npx tsx scripts/test-session-query.ts
           node scripts/test-login-backoff.mjs
       - name: Verification-code security and provider integration
-        run: npm run test:verification && npx tsx scripts/test-recovery-email.ts && npm run test:verification-template && npm run test:send
+        run: npm run test:verification && npx tsx scripts/test-recovery-email.ts && npx tsx scripts/test-password-reset.ts && npm run test:verification-template && npm run test:send
       - name: Landing page regression
         run: node scripts/check-landing.mjs
       - name: Production container build and readiness smoke test

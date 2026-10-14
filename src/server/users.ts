@@ -87,6 +87,9 @@ export async function createUser(input: {
   username: string;
   email: string;
   passwordHash: string;
+  termsAcceptedAt?: Date;
+  privacyAcceptedAt?: Date;
+  policyVersion?: string;
 }): Promise<UserRow> {
   return db.transaction(async (tx) => {
     const rows = await tx
@@ -96,6 +99,9 @@ export async function createUser(input: {
         username: input.username.trim(),
         email: input.email.trim().toLowerCase(),
         passwordHash: input.passwordHash,
+        termsAcceptedAt: input.termsAcceptedAt,
+        privacyAcceptedAt: input.privacyAcceptedAt,
+        policyVersion: input.policyVersion,
       })
       .returning();
     await tx.insert(notificationPreferences).values({ userId: rows[0].id });

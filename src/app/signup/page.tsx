@@ -3,15 +3,14 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import type { Metadata } from "next";
 import { AuthLayout } from "@/components/auth/auth-layout";
-import { RegisterForm } from "@/components/auth/register-form";
-import { GoogleSignIn } from "@/components/auth/google-sign-in";
-import { PhoneSignIn } from "@/components/auth/phone-sign-in";
+import { SignupOptions } from "@/components/auth/signup-options";
 import { getSessionUser } from "@/server/session";
 
 export const metadata: Metadata = { title: "Sign up" };
 export const dynamic = "force-dynamic";
 
-export default async function SignupPage() {
+export default async function SignupPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
+  const query = await searchParams;
   const user = await getSessionUser();
   if (user) redirect("/app");
 
@@ -32,9 +31,8 @@ export default async function SignupPage() {
       }
     >
       {!verificationDeliveryConfigured() && <p className="mb-4 text-sm text-[var(--muted)]">Email accounts need verification before sign-in. Email delivery is currently unavailable; Google sign-in is also available.</p>}
-      <RegisterForm />
-      <GoogleSignIn />
-      {process.env.STARTER_MODE !== "1" ? <PhoneSignIn signup /> : null}
+      {query.error === "consent_required" ? <p role="alert" className="mb-4 text-sm">Please agree to both policies below, then continue with Google to create your account.</p> : null}
+      <SignupOptions phoneEnabled={process.env.STARTER_MODE !== "1"} />
     </AuthLayout>
   );
 }

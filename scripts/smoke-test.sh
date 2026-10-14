@@ -55,16 +55,16 @@ echo "[1] health"
 check "GET /api/health" 200 "$(code - GET /api/health)"
 
 echo "[2] registration + validation"
-code - POST /api/auth/register "{\"displayName\":\"QA Alice\",\"username\":\"$U1\",\"email\":\"$EMAIL1\",\"password\":\"$PASSW\",\"confirmPassword\":\"$PASSW\"}" > /dev/null
-code - POST /api/auth/register "{\"displayName\":\"QA Bob\",\"username\":\"$U2\",\"email\":\"$EMAIL2\",\"password\":\"$PASSW\",\"confirmPassword\":\"$PASSW\"}" > /dev/null
-code - POST /api/auth/register "{\"displayName\":\"QA Out\",\"username\":\"$U3\",\"email\":\"$EMAIL3\",\"password\":\"$PASSW\",\"confirmPassword\":\"$PASSW\"}" > /dev/null
+code - POST /api/auth/register "{\"displayName\":\"QA Alice\",\"username\":\"$U1\",\"email\":\"$EMAIL1\",\"password\":\"$PASSW\",\"acceptTerms\":true,\"acceptPrivacy\":true,\"confirmPassword\":\"$PASSW\"}" > /dev/null
+code - POST /api/auth/register "{\"displayName\":\"QA Bob\",\"username\":\"$U2\",\"email\":\"$EMAIL2\",\"password\":\"$PASSW\",\"acceptTerms\":true,\"acceptPrivacy\":true,\"confirmPassword\":\"$PASSW\"}" > /dev/null
+code - POST /api/auth/register "{\"displayName\":\"QA Out\",\"username\":\"$U3\",\"email\":\"$EMAIL3\",\"password\":\"$PASSW\",\"acceptTerms\":true,\"acceptPrivacy\":true,\"confirmPassword\":\"$PASSW\"}" > /dev/null
 login() { curl -s -c "$1" -o /dev/null -w "%{http_code}" --max-time 25 -X POST "$BASE/api/auth/login" "${HEADERS[@]}" -d "{\"identifier\":\"$2\",\"password\":\"$PASSW\"}"; }
 check "login A" 200 "$(login /tmp/qa_a.jar "$U1")"
 check "login B" 200 "$(login /tmp/qa_b.jar "$U2")"
 check "login O" 200 "$(login /tmp/qa_o.jar "$U3")"
-check "duplicate email rejected" 409 "$(code - POST /api/auth/register "{\"displayName\":\"QA Dup\",\"username\":\"${U1}x\",\"email\":\"$EMAIL1\",\"password\":\"$PASSW\",\"confirmPassword\":\"$PASSW\"}")"
-check "duplicate username rejected" 409 "$(code - POST /api/auth/register "{\"displayName\":\"QA Dup\",\"username\":\"$U1\",\"email\":\"x$EMAIL1\",\"password\":\"$PASSW\",\"confirmPassword\":\"$PASSW\"}")"
-check "short password rejected" 422 "$(code - POST /api/auth/register "{\"displayName\":\"QA Dup\",\"username\":\"${U1}y\",\"email\":\"y$EMAIL1\",\"password\":\"short\",\"confirmPassword\":\"short\"}")"
+check "duplicate email rejected" 409 "$(code - POST /api/auth/register "{\"displayName\":\"QA Dup\",\"username\":\"${U1}x\",\"email\":\"$EMAIL1\",\"password\":\"$PASSW\",\"acceptTerms\":true,\"acceptPrivacy\":true,\"confirmPassword\":\"$PASSW\"}")"
+check "duplicate username rejected" 409 "$(code - POST /api/auth/register "{\"displayName\":\"QA Dup\",\"username\":\"$U1\",\"email\":\"x$EMAIL1\",\"password\":\"$PASSW\",\"acceptTerms\":true,\"acceptPrivacy\":true,\"confirmPassword\":\"$PASSW\"}")"
+check "short password rejected" 422 "$(code - POST /api/auth/register "{\"displayName\":\"QA Dup\",\"username\":\"${U1}y\",\"email\":\"y$EMAIL1\",\"password\":\"short\",\"acceptTerms\":true,\"acceptPrivacy\":true,\"confirmPassword\":\"short\"}")"
 check "wrong password rejected" 401 "$(code - POST /api/auth/login "{\"identifier\":\"$U1\",\"password\":\"nope-nope-nope\"}")"
 check "SQL injection login rejected" 401 "$(code - POST /api/auth/login "{\"identifier\":\"' OR 1=1 --\",\"password\":\"$PASSW\"}")"
 

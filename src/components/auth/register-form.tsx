@@ -18,6 +18,7 @@ import { fieldErrors, registerSchema } from "@/lib/schemas";
 import { useAuth } from "@/components/providers/auth-provider";
 import { cn } from "@/lib/utils";
 import { Field } from "./field";
+import type { PolicyConsent } from "@/lib/policy-consent";
 
 function passwordScore(pw: string): number {
   if (!pw) return 0;
@@ -31,7 +32,7 @@ function passwordScore(pw: string): number {
 
 const METER_LABELS = ["Too short", "Okay", "Good", "Strong", "Excellent"];
 
-export function RegisterForm() {
+export function RegisterForm({ consent }: { consent: PolicyConsent }) {
   const { signUp } = useAuth();
 
   const [form, setForm] = useState({
@@ -57,7 +58,7 @@ export function RegisterForm() {
     e.preventDefault();
     setFormError(null);
 
-    const parsed = registerSchema.safeParse(form);
+    const parsed = registerSchema.safeParse({ ...form, ...consent });
     if (!parsed.success) {
       setErrors(fieldErrors(parsed.error));
       return;
@@ -179,7 +180,8 @@ export function RegisterForm() {
         error={errors.confirmPassword}
       />
 
-      <button type="submit" disabled={pending} className="btn btn-primary mt-6! w-full">
+      {errors.acceptTerms || errors.acceptPrivacy ? <p role="alert" className="text-sm text-[var(--danger)]">Please agree to both the Terms and Conditions and Privacy Policy before creating an account.</p> : null}
+      <button type="submit" disabled={pending || !consent.acceptTerms || !consent.acceptPrivacy} className="btn btn-primary mt-6! w-full">
         {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
         {pending ? "Creating your account…" : "Create account"}
       </button>

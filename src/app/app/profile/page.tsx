@@ -17,6 +17,7 @@ import { AppShell } from "@/components/shell/app-shell";
 import { ProfileEditor } from "@/components/profile/profile-editor";
 import { NotificationPreferences } from "@/components/profile/notification-preferences";
 import { AuthenticationMethods } from "@/components/profile/authentication-methods";
+import { PasswordSettings } from "@/components/profile/password-settings";
 import { PrivacySettings } from "@/components/profile/privacy-settings";
 import { LoginHistory } from "@/components/profile/login-history";
 import { AccountDataSection } from "@/components/profile/account-data";
@@ -114,7 +115,7 @@ export default async function ProfilePage({
             <EncryptionDevices openRecovery={query.recovery === "1"} recoveryEmail={accountSecurity?.emailVerifiedAt && !user.email.endsWith("@auth.maddychats.invalid") ? user.email : undefined} />
           </ProfileDisclosure>
           <ProfileDisclosure title="Sign-in & account security" description="Google, passwords, two-step verification, and signed-in sessions." anchors={["account-security", "devices", "authentication-methods"]} defaultOpen={Boolean(notice)}>
-            <div id="account-security" className="space-y-4"><AuthenticationMethods initialMethods={initialMethods} notice={notice} /><TwoFactorAuth /><Devices /><LoginHistory /></div>
+            <div id="account-security" className="space-y-4"><AuthenticationMethods initialMethods={initialMethods} notice={notice} /><PasswordSettings email={user.email} google={initialMethods.google} /><TwoFactorAuth /><Devices /><LoginHistory /></div>
           </ProfileDisclosure>
           <ProfileDisclosure title="Notifications" description="Enable push alerts and choose which messages notify you." anchors={["notifications"]}>
             <div id="notifications"><NotificationPreferences /></div>

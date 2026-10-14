@@ -15,7 +15,7 @@ async function mediaRegister(displayName: string) {
       username: `qa${mediaStamp}${displayName.toLowerCase().slice(0, 3)}`,
       email: `qa.med${mediaStamp.slice(-5)}.${displayName.toLowerCase().slice(0, 3)}@test.dev`,
       password: "TestPass!2026",
-      confirmPassword: "TestPass!2026",
+      confirmPassword: "TestPass!2026", acceptTerms: true, acceptPrivacy: true,
     }),
   });
   const body = await res.json().catch(() => ({}));

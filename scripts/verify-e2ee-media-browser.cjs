@@ -7,7 +7,7 @@ const base=process.env.QA_BASE||'https://ziptalks.vercel.app';
  const contexts=await Promise.all([browser.newContext(),browser.newContext()]);
  const users=[]; const stamp=Date.now().toString(36);
  for(let i=0;i<2;i++){
- const response=await contexts[i].request.post(base+'/api/auth/register',{headers:{Origin:base},data:{displayName:'Media QA '+i,username:'med'+stamp+i,email:'med'+stamp+i+'@test.dev',password:'TestPass!2026',confirmPassword:'TestPass!2026'}});
+ const response=await contexts[i].request.post(base+'/api/auth/register',{headers:{Origin:base},data:{displayName:'Media QA '+i,username:'med'+stamp+i,email:'med'+stamp+i+'@test.dev',password:'TestPass!2026',confirmPassword:'TestPass!2026', acceptTerms: true, acceptPrivacy: true}});
  assert.equal(response.status(),201,await response.text()); users.push((await response.json()).user);
  }
  const response=await contexts[0].request.post(base+'/api/conversations',{headers:{Origin:base},data:{userId:users[1].id}});

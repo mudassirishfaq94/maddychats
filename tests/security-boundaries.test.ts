@@ -34,7 +34,7 @@ test("new passwords enforce bcrypt's byte boundary and logs exclude sensitive er
   const password = "Aa1" + "é".repeat(35);
   assert.equal(password.length, 38);
   assert.equal(new TextEncoder().encode(password).length, 73);
-  assert(!registerSchema.safeParse({ displayName: "Security test", username: "security_test", email: "test@example.invalid", password, confirmPassword: password }).success);
+  assert(!registerSchema.safeParse({ displayName: "Security test", username: "security_test", email: "test@example.invalid", password, confirmPassword: password, acceptTerms: true, acceptPrivacy: true }).success);
   assert(!resetPasswordSchema.safeParse({ token: "x".repeat(43), password, confirmPassword: password }).success);
   const valid = "Aa1" + "é".repeat(34);
   assert(resetPasswordSchema.safeParse({ token: "x".repeat(43), password: valid, confirmPassword: valid }).success);

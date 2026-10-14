@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { clientUrl, googleCallbackUrl } from "@/server/config";
 import { requestIsSecure } from "@/server/http";
 import { getSessionUser } from "@/server/session";
+import { POLICY_VERSION } from "@/lib/policy-consent";
 
 const COOKIE_AGE = 10 * 60;
 
@@ -36,6 +37,7 @@ export async function GET(req: NextRequest) {
   response.cookies.set("google_oauth_verifier", verifier, options);
   response.cookies.set("google_oauth_next", safeNext, options);
   response.cookies.set("google_oauth_mode", linking ? "link" : "signin", options);
+  response.cookies.set("google_oauth_policy", req.nextUrl.searchParams.get("terms") === "1" && req.nextUrl.searchParams.get("privacy") === "1" ? POLICY_VERSION : "", options);
   if (mobile) {
     response.cookies.set("google_oauth_mobile", "1", options);
     response.cookies.set("google_oauth_code_challenge", codeChallenge!, options);

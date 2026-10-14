@@ -70,6 +70,9 @@ export const users = pgTable(
     deviceName: text("device_name"),
     /** IANA country the owner chose for this account. */
     country: text("country"),
+    termsAcceptedAt: timestamp("terms_accepted_at", { withTimezone: true, mode: "date" }),
+    privacyAcceptedAt: timestamp("privacy_accepted_at", { withTimezone: true, mode: "date" }),
+    policyVersion: text("policy_version"),
   },
   (table) => [
     uniqueIndex("users_username_lower_unique").on(sql`lower(${table.username})`),

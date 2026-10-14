@@ -4,6 +4,8 @@ import { findUserByEmail } from "@/server/users";
 import { AUTH_RATE_LIMIT, rateLimit } from "@/server/rate-limit";
 import { clientIp, guardSameOrigin, jsonError, readJson } from "@/server/http";
 import { emailDeliveryConfigured, issuePasswordReset } from "@/server/password-reset";
+import { createHmac } from "node:crypto";
+import { jwtSecret } from "@/server/config";
 
 export const dynamic = "force-dynamic";
 
@@ -33,9 +35,13 @@ export async function POST(req: NextRequest) {
   }
 
   const email = parsed.data.email.trim().toLowerCase();
+  const emailKey = createHmac("sha256", jwtSecret()).update(email).digest("hex");
+  if (!(await rateLimit(`forgot-email:${emailKey}`, 3, 15 * 60 * 1000)).allowed) return jsonError(429, "Too many reset requests for this address. Please wait before retrying.");
   if (!emailDeliveryConfigured()) return jsonError(503, "Password-reset email delivery is temporarily unavailable.");
   const user = await findUserByEmail(email);
   if (user) await issuePasswordReset(user);
   // Always return the same response so account existence is never disclosed.
-  return NextResponse.json({ ok: true, delivered: true });
+  // Acceptance is not proof of delivery; unknown accounts and transport
+  // failures use the same envelope without exposing account existence.
+  return NextResponse.json({ ok: true }, { headers: { "Cache-Control": "private, no-store" } });
 }

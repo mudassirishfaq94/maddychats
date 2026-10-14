@@ -9,13 +9,14 @@ import { and, eq, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { notificationPreferences, oauthAccounts, users } from "@/db/schema";
+import { POLICY_VERSION, policyAcceptance } from "@/lib/policy-consent";
 import { clientUrl, googleCallbackUrl } from "@/server/config";
 import { hashPassword } from "@/server/password";
 import { getSessionUser, newSessionBlockReason } from "@/server/session";
 import { createGoogleMobileHandoff } from "@/server/google-mobile-handoff";
 
 const googleKeys = createRemoteJWKSet(new URL("https://www.googleapis.com/oauth2/v3/certs"));
-const GOOGLE_OAUTH_COOKIES = ["google_oauth_state", "google_oauth_nonce", "google_oauth_verifier", "google_oauth_next", "google_oauth_mode", "google_oauth_mobile", "google_oauth_code_challenge"];
+const GOOGLE_OAUTH_COOKIES = ["google_oauth_state", "google_oauth_nonce", "google_oauth_verifier", "google_oauth_next", "google_oauth_mode", "google_oauth_mobile", "google_oauth_code_challenge", "google_oauth_policy"];
 
 function finishGoogleOAuth(response: NextResponse) {
   for (const name of GOOGLE_OAUTH_COOKIES) {
@@ -123,6 +124,7 @@ async function handleGoogleCallback(req: NextRequest) {
   }
   if (!user) {
     const base = claims.email.split("@")[0].replace(/[^a-zA-Z0-9_]/g, "").slice(0, 14) || "maddyuser";
+    if (req.cookies.get("google_oauth_policy")?.value !== POLICY_VERSION) return finishGoogleOAuth(NextResponse.redirect(new URL("/signup?error=consent_required", clientUrl())));
     let username = base;
     for (let i = 0; i < 20; i++) {
       const found = await db.select({ id: users.id }).from(users).where(sql`lower(${users.username}) = ${username.toLowerCase()}`).limit(1);
@@ -131,7 +133,7 @@ async function handleGoogleCallback(req: NextRequest) {
     }
     const passwordHash = await hashPassword(randomBytes(32).toString("base64url"));
     user = await db.transaction(async (tx) => {
-      const created = await tx.insert(users).values({ displayName: typeof claims.name === "string" ? claims.name.slice(0, 50) : username, username, email: claims.email!.toLowerCase(), emailVerifiedAt: new Date(), passwordHash, avatarUrl: typeof claims.picture === "string" ? claims.picture : null }).returning();
+      const created = await tx.insert(users).values({ displayName: typeof claims.name === "string" ? claims.name.slice(0, 50) : username, username, email: claims.email!.toLowerCase(), emailVerifiedAt: new Date(), passwordHash, avatarUrl: typeof claims.picture === "string" ? claims.picture : null, ...policyAcceptance({ acceptTerms: true, acceptPrivacy: true })! }).returning();
       await tx.insert(notificationPreferences).values({ userId: created[0].id });
       await tx.insert(oauthAccounts).values({ userId: created[0].id, provider: "google", providerAccountId: claims.sub! });
       return created[0];

@@ -33,7 +33,7 @@ async function register(label: string, index: number) {
       username: `fqa_${index}_${Date.now().toString(36)}`,
       email: `forward.qa.${suffix}@e2ee.local`,
       password: "QaPassword123!",
-      confirmPassword: "QaPassword123!",
+      confirmPassword: "QaPassword123!", acceptTerms: true, acceptPrivacy: true,
     }),
   });
   const body = await response.json() as { user?: { id: string }; error?: string };

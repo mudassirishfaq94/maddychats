@@ -14,9 +14,9 @@ export const dynamic = "force-dynamic";
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string; error?: string; mfa?: string; reauth?: string; emailProof?: string }>;
+  searchParams: Promise<{ next?: string; error?: string; mfa?: string; reauth?: string; emailProof?: string; passwordChanged?: string }>;
 }) {
-  const { next, error, mfa, reauth, emailProof } = await searchParams;
+  const { next, error, mfa, reauth, emailProof, passwordChanged } = await searchParams;
   const user = await getSessionUser();
   if (user && mfa !== "1" && reauth !== "1") redirect("/app");
   const googleError = error === "google_not_configured"
@@ -44,6 +44,7 @@ export default async function LoginPage({
       }
     >
       {googleError ? <p role="alert" className="mb-4 rounded-xl border border-[color-mix(in_srgb,var(--danger)_35%,transparent)] bg-[color-mix(in_srgb,var(--danger)_10%,transparent)] px-4 py-3 text-sm text-[var(--danger)]">{googleError}</p> : null}
+      {passwordChanged === "1" ? <p role="status" className="mb-4 text-sm">Password updated. Sign in again with your new password or Google.</p> : null}
       {mfa === "1" ? <MfaForm next={next} /> : <>
         {process.env.STARTER_MODE === "1" ? <p className="mb-4 text-sm text-[var(--muted)]">{emailProof === "google" ? "Google verified your email. Enter your existing password to continue." : "New here? Continue with Google. If password sign-in asks for verification, continue with Google first, then enter your existing password."}</p> : null}
         <LoginForm next={next} />

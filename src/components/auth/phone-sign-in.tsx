@@ -5,8 +5,12 @@ import { Loader2, Phone, ShieldCheck, UserRound } from "lucide-react";
 import type { RecaptchaVerifier, ConfirmationResult } from "firebase/auth";
 import { firebasePhoneAuth, firebasePhoneAuthConfigured } from "@/lib/firebase-client";
 import { Field } from "./field";
+import { PolicyAgreement } from "./policy-agreement";
+import { acceptsPolicies, type PolicyConsent } from "@/lib/policy-consent";
 
-export function PhoneSignIn({ next = "/app", signup = false }: { next?: string; signup?: boolean }) {
+export function PhoneSignIn({ next = "/app", signup = false, consent }: { next?: string; signup?: boolean; consent?: PolicyConsent }) {
+  const [localConsent, setLocalConsent] = useState({ acceptTerms: false, acceptPrivacy: false });
+  const acceptance = consent ?? localConsent;
   const verifier = useRef<RecaptchaVerifier | null>(null);
   const confirmation = useRef<ConfirmationResult | null>(null);
   const [phone, setPhone] = useState("");
@@ -21,6 +25,7 @@ export function PhoneSignIn({ next = "/app", signup = false }: { next?: string; 
   async function sendCode(e: FormEvent) {
     e.preventDefault();
     setError(null);
+    if (signup && !acceptsPolicies(acceptance)) { setError("Agree to both signup policies first."); return; }
     if (!/^\+[1-9]\d{7,14}$/.test(phone.trim())) {
       setError("Enter your phone number in international format, e.g. +971501234567.");
       return;
@@ -51,7 +56,7 @@ export function PhoneSignIn({ next = "/app", signup = false }: { next?: string; 
       const idToken = await credential.user.getIdToken();
       const complete = async (profile = false) => fetch("/api/auth/phone", {
         method: "POST", headers: { "Content-Type": "application/json", ...(location.protocol === "https:" ? { "x-secure-context": "1" } : {}) },
-        body: JSON.stringify({ idToken, ...(profile ? { displayName, username } : {}) }),
+        body: JSON.stringify({ idToken, ...acceptance, ...(profile ? { displayName, username } : {}) }),
       });
       let response = await complete(signup || stage === "profile");
       const data = await response.json().catch(() => null) as { error?: string; needsProfile?: boolean; mfaRequired?: boolean; fields?: Record<string, string> } | null;
@@ -76,6 +81,7 @@ export function PhoneSignIn({ next = "/app", signup = false }: { next?: string; 
         <Field label="Username" icon={<UserRound className="h-4 w-4" />} value={username} onChange={(e) => setUsername(e.target.value)} placeholder="letters, numbers, underscores" autoComplete="username" />
       </> : null}
       <div id="phone-recaptcha" />
+      {stage === "profile" && !consent ? <PolicyAgreement value={localConsent} onChange={setLocalConsent} /> : null}
       <button type="submit" disabled={pending} className="btn btn-secondary w-full">{pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Phone className="h-4 w-4" />}{stage === "phone" ? "Continue with phone" : "Verify and continue"}</button>
     </form>
   </>;

@@ -12,6 +12,7 @@ import { jsonError, readJson, guardSameOrigin, clientIp } from "@/server/http";
 import { verifyGoogleMobileHandoff } from "@/server/google-mobile-handoff";
 import { findUserById } from "@/server/users";
 import { createHash, timingSafeEqual } from "crypto";
+import { policyAcceptance } from "@/lib/policy-consent";
 
 export const dynamic = "force-dynamic";
 
@@ -75,6 +76,8 @@ async function handlePOST(req: NextRequest) {
     }
   }
   if (!user) {
+    const acceptance = policyAcceptance(body);
+    if (!acceptance) return jsonError(422, "Agree to the Terms and Conditions and Privacy Policy on signup first.");
     const base = claims.email.split("@")[0].replace(/[^a-zA-Z0-9_]/g, "").slice(0, 14) || "ziptalk";
     let username = base;
     for (let i = 0; i < 20; i++) {
@@ -89,6 +92,7 @@ async function handlePOST(req: NextRequest) {
         displayName: typeof claims.name === "string" ? claims.name.slice(0, 50) : username,
         username, email: claims.email!.toLowerCase(), emailVerifiedAt: new Date(),
         passwordHash,
+        ...acceptance,
         avatarUrl: typeof claims.picture === "string" ? claims.picture : null,
       }).returning();
       await tx.insert(notificationPreferences).values({ userId: created.id });

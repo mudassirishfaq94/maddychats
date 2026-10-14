@@ -10,6 +10,7 @@ import {
   findUserByUsername,
 } from "@/server/users";
 import { AUTH_RATE_LIMIT, rateLimit } from "@/server/rate-limit";
+import { policyAcceptance } from "@/lib/policy-consent";
 import {
   clientIp,
   guardSameOrigin,
@@ -61,7 +62,7 @@ async function handlePOST(req: NextRequest) {
 
   let user;
   try {
-    user = await createUser({ displayName, username, email, passwordHash });
+    user = await createUser({ displayName, username, email, passwordHash, ...policyAcceptance(parsed.data)! });
   } catch (err) {
     // Unique-constraint race safety net (concurrent registrations).
     const failure = err as { code?: string; constraint?: string; cause?: { code?: string; constraint?: string } };

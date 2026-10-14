@@ -15,7 +15,7 @@ async function doodleRegister(displayName: string, prefix: string) {
       username: `${prefix}${doodleStamp}`,
       email: `${prefix}${doodleStamp}@test.dev`,
       password: "Str0ng!Pass9",
-      confirmPassword: "Str0ng!Pass9",
+      confirmPassword: "Str0ng!Pass9", acceptTerms: true, acceptPrivacy: true,
     }),
   });
   const body = await res.json().catch(() => null);

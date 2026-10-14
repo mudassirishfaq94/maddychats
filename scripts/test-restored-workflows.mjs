@@ -101,11 +101,17 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     await registrationPage.getByLabel("Email", { exact: true }).fill(registerName + "@example.invalid");
     await registrationPage.getByLabel("Password", { exact: true }).fill(password);
     await registrationPage.getByLabel("Confirm password", { exact: true }).fill(password);
+    assert.equal(await registrationPage.getByRole("button", { name: "Create account", exact: true }).isEnabled(), false);
+    await registrationPage.getByRole("checkbox", { name: /Terms and Conditions/ }).check();
+    assert.equal(await registrationPage.getByRole("button", { name: "Create account", exact: true }).isEnabled(), false);
+    await registrationPage.getByRole("checkbox", { name: /Privacy Policy/ }).check();
     await registrationPage.getByRole("button", { name: "Create account", exact: true }).click();
     await registrationPage.waitForURL("**/verify-email?delivery=unavailable");
     registered = (await pool.query("select id,username,email,password_hash,email_verified_at from users where username=$1", [registerName])).rows[0];
     assert(registered); assert.equal(registered.email_verified_at, null); assert(await bcrypt.compare(password, registered.password_hash));
-    const registration = { displayName: "Workflow registration", username: registerName, email: registered.email, password, confirmPassword: password };
+    const registration = { displayName: "Workflow registration", username: registerName, email: registered.email, password, confirmPassword: password, acceptTerms: true, acceptPrivacy: true };
+    const acceptance = (await pool.query("select terms_accepted_at,privacy_accepted_at,policy_version from users where id=$1", [registered.id])).rows[0];
+    assert(acceptance.terms_accepted_at && acceptance.privacy_accepted_at && acceptance.policy_version);
     assert.equal((await api("/api/auth/register", "", registration)).status, 409);
     assert.equal((await api("/api/auth/register", "", { ...registration, email: "invalid" })).status, 422);
     assert.equal((await api("/api/auth/login", "", { identifier: registerName, password })).status, 403);

@@ -34,6 +34,8 @@ export const registerSchema = z
       .regex(/[A-Z]/, "Password is too weak — add an uppercase letter")
       .regex(/[0-9]/, "Password is too weak — add a number"),
     confirmPassword: z.string(),
+    acceptTerms: z.literal(true, { error: "Agree to the Terms and Conditions" }),
+    acceptPrivacy: z.literal(true, { error: "Agree to the Privacy Policy" }),
   })
   .refine((v) => v.password === v.confirmPassword, {
     message: "Passwords do not match",

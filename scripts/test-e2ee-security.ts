@@ -52,6 +52,7 @@ async function register(displayName: string) {
       username: `test_${displayName.toLowerCase().replace(/\s+/g, "_")}_${stamp}`,
       email: `test_${stamp}_${displayName.toLowerCase().replace(/\s+/g, "_")}@example.com`,
       password: "TestPassword123!",
+      confirmPassword: "TestPassword123!", acceptTerms: true, acceptPrivacy: true,
     }),
   });
   
