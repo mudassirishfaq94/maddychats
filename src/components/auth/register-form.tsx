@@ -32,7 +32,7 @@ function passwordScore(pw: string): number {
 
 const METER_LABELS = ["Too short", "Okay", "Good", "Strong", "Excellent"];
 
-export function RegisterForm({ consent }: { consent: PolicyConsent }) {
+export function RegisterForm({ consent, agreement }: { consent: PolicyConsent; agreement?: React.ReactNode }) {
   const { signUp } = useAuth();
 
   const [form, setForm] = useState({
@@ -180,6 +180,7 @@ export function RegisterForm({ consent }: { consent: PolicyConsent }) {
         error={errors.confirmPassword}
       />
 
+      {agreement}
       {errors.acceptTerms || errors.acceptPrivacy ? <p role="alert" className="text-sm text-[var(--danger)]">Please agree to both the Terms and Conditions and Privacy Policy before creating an account.</p> : null}
       <button type="submit" disabled={pending || !consent.acceptTerms || !consent.acceptPrivacy} className="btn btn-primary mt-6! w-full">
         {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}

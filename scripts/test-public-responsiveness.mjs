@@ -23,8 +23,38 @@ for(const width of [390,1440]) {
   assert.equal(response.status(),200,route);
   assert.equal(metrics.overflow,false,`${route} horizontal overflow at ${width}px`);
   assert.deepEqual(errors,[],`${route} browser errors`);
+  if(route==='/' && pass==='first' && width===390) {
+   await page.getByRole('heading',{name:'All the little ways to stay close.',exact:true}).waitFor();
+   await page.getByRole('heading',{name:'A circle with room to grow.',exact:true}).waitFor();
+   assert.equal(await page.locator('#roadmap article').count(),4);
+   for(const anchor of await page.locator('a[href^="#"]').all()) assert.equal(await page.locator(await anchor.getAttribute('href')).count(),1);
+   await mkdir('.freebuff/performance',{recursive:true});
+   for(const size of [320,360,390,412,768,1440]) {
+    await page.setViewportSize({width:size,height:900});
+    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false,`Landing overflow at ${size}px`);
+    for(const control of await page.getByRole('navigation',{name:'Main navigation'}).locator('a:visible, button:visible').all()) {
+     const box=await control.boundingBox();
+     assert(box && box.x>=0 && box.x+box.width<=size+1,`Clipped navigation control at ${size}px`);
+    }
+    await page.screenshot({path:`.freebuff/performance/landing-${size}.png`,fullPage:true});
+   }
+   await page.setViewportSize({width,height:900});
+   for(const summary of await page.locator('#questions summary').all()) {
+    await summary.click();assert(await summary.evaluate(node=>node.parentElement.open));
+    await summary.click();assert.equal(await summary.evaluate(node=>node.parentElement.open),false);
+   }
+   await page.evaluate(()=>scrollTo(0,0));
+  }
   if(route==='/login'||route==='/signup') {
    const action=page.getByRole('button',{name:route==='/login'?'Sign in':'Create account',exact:true});
+   assert.equal(await page.getByRole('checkbox').count(),2,'One shared agreement pair per page');
+   assert(await page.evaluate(() => {
+    const form=document.querySelector('form');
+    const fields=[...form.querySelectorAll('input:not([type="checkbox"])')];
+    const checkbox=form.querySelector('input[type="checkbox"]');
+    const submit=form.querySelector('button[type="submit"]');
+    return !!checkbox && !!submit && !!(fields.at(-1).compareDocumentPosition(checkbox)&Node.DOCUMENT_POSITION_FOLLOWING) && !!(checkbox.compareDocumentPosition(submit)&Node.DOCUMENT_POSITION_FOLLOWING);
+   }),'Agreement follows fields and precedes submit');
    assert.equal(await action.isEnabled(),false);
    await page.getByRole('checkbox',{name:/Terms and Conditions/}).check();
    assert.equal(await action.isEnabled(),false);

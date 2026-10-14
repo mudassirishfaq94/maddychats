@@ -2,7 +2,7 @@
 
 import { navigateWithReload } from "@/lib/navigation";
 
-import { useState, type FormEvent } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
 import Link from "next/link";
 import { AlertTriangle, AtSign, Eye, EyeOff, Loader2, Lock } from "lucide-react";
 import { loginSchema, fieldErrors } from "@/lib/schemas";
@@ -10,7 +10,7 @@ import { useAuth } from "@/components/providers/auth-provider";
 import { Field } from "./field";
 import { acceptsPolicies, type PolicyConsent } from "@/lib/policy-consent";
 
-export function LoginForm({ next, consent }: { next?: string; consent: PolicyConsent }) {
+export function LoginForm({ next, consent, agreement }: { next?: string; consent: PolicyConsent; agreement?: ReactNode }) {
   const { signIn } = useAuth();
 
   const [identifier, setIdentifier] = useState("");
@@ -106,6 +106,7 @@ export function LoginForm({ next, consent }: { next?: string; consent: PolicyCon
         </div>
       </div>
 
+      {agreement}
       <button type="submit" disabled={pending || !acceptsPolicies(consent)} className="btn btn-primary w-full">
         {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
         {pending ? "Signing in…" : "Sign in"}

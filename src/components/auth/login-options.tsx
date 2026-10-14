@@ -7,8 +7,7 @@ import { PolicyAgreement } from "./policy-agreement";
 export function LoginOptions({ next, phoneEnabled }: { next?: string; phoneEnabled: boolean }) {
   const [consent, setConsent] = useState({ acceptTerms: false, acceptPrivacy: false });
   return <>
-    <div className="mb-5"><PolicyAgreement value={consent} onChange={setConsent} /></div>
-    <LoginForm next={next} consent={consent} />
+    <LoginForm next={next} consent={consent} agreement={<PolicyAgreement value={consent} onChange={setConsent} />} />
     <GoogleSignIn next={next} consent={consent} />
     {phoneEnabled ? <PhoneSignIn next={next} consent={consent} /> : null}
   </>;
