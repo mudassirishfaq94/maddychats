@@ -75,6 +75,14 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     await profile(device.page);
     const sessions = await (await api("/api/privacy/devices", device.cookies, null, "GET")).json();
     assert(sessions.currentSessionId);
+    const deviceId = await device.page.evaluate(() => localStorage.getItem("e2ee_device_id"));
+    let bound;
+    for (let attempt = 0; attempt < 40; attempt++) {
+      bound = (await pool.query("select session_id from e2ee_keys where user_id=$1 and device_id=$2", [owner.id, deviceId])).rows[0];
+      if (bound?.session_id === sessions.currentSessionId) break;
+      await device.page.waitForTimeout(250);
+    }
+    assert.equal(bound?.session_id, sessions.currentSessionId, "Browser possession proof must finish rebinding before the persisted session assertion");
     return sessions.currentSessionId;
   };
   try {
