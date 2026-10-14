@@ -19,6 +19,21 @@ const rows = [
   { key: "notificationSound", label: "Notification sound", hint: "Play a sound when an alert arrives", icon: Volume2 },
 ] as const;
 
+function applicationServerKey(value: string): Uint8Array<ArrayBuffer> {
+  const padding = "=".repeat((4 - value.length % 4) % 4);
+  const raw = atob((value + padding).replace(/-/g, "+").replace(/_/g, "/"));
+  const bytes = new Uint8Array(raw.length);
+  for (let index = 0; index < raw.length; index += 1) bytes[index] = raw.charCodeAt(index);
+  return bytes;
+}
+
+function subscriptionMatchesKey(subscription: PushSubscription, expected: Uint8Array) {
+  const previous = subscription.options?.applicationServerKey;
+  if (!previous) return false;
+  const bytes = new Uint8Array(previous);
+  return bytes.length === expected.length && bytes.every((byte, index) => byte === expected[index]);
+}
+
 export function NotificationPreferences() {
   const [preferences, setPreferences] = useState<Preferences | null>(null);
   const [saving, setSaving] = useState<keyof Preferences | null>(null);
@@ -47,17 +62,15 @@ export function NotificationPreferences() {
     if (isNativeApp() || !("serviceWorker" in navigator) || !("PushManager" in window)) return;
     void navigator.serviceWorker.getRegistration("/")
       .then((registration) => registration?.pushManager.getSubscription())
-      .then((subscription) => setPushSubscribed(Boolean(subscription)))
-      .catch(() => setPushSubscribed(false));
+      .then(async subscription => {
+        if (!subscription) return;
+        const response = await fetch("/api/notifications/push", { cache: "no-store", signal: AbortSignal.timeout(10000) });
+        if (!response.ok) return;
+        const configuration = await response.json() as { publicKey: string | null };
+        if (configuration.publicKey && subscriptionMatchesKey(subscription, applicationServerKey(configuration.publicKey))) setPushSubscribed(true);
+      })
+      .catch(() => {});
   }, []);
-
-  function applicationServerKey(value: string): Uint8Array<ArrayBuffer> {
-    const padding = "=".repeat((4 - value.length % 4) % 4);
-    const raw = atob((value + padding).replace(/-/g, "+").replace(/_/g, "/"));
-    const bytes = new Uint8Array(raw.length);
-    for (let index = 0; index < raw.length; index += 1) bytes[index] = raw.charCodeAt(index);
-    return bytes;
-  }
 
   async function subscribeForPush(): Promise<boolean> {
     // The Capacitor FCM registration runs after sign-in. There is no browser
@@ -83,10 +96,17 @@ export function NotificationPreferences() {
       await navigator.serviceWorker.register("/sw.js", { scope: "/" });
       let deadline: ReturnType<typeof setTimeout> | undefined;
       const registration = await Promise.race([navigator.serviceWorker.ready, new Promise<never>((_, reject) => { deadline = setTimeout(() => reject(new Error("Notifications could not start. Reload this page and retry.")), 10000); })]).finally(() => { if (deadline) clearTimeout(deadline); });
-      const existing = await registration.pushManager.getSubscription();
+      const serverKey = applicationServerKey(publicKey);
+      let existing = await registration.pushManager.getSubscription();
+      if (existing && !subscriptionMatchesKey(existing, serverKey)) {
+        const endpoint = existing.endpoint;
+        await existing.unsubscribe();
+        existing = null;
+        await fetch("/api/notifications/push", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ endpoint }), signal: AbortSignal.timeout(10000) }).catch(() => null);
+      }
       const subscription = existing ?? await registration.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: applicationServerKey(publicKey),
+        applicationServerKey: serverKey,
       });
       const response = await fetch("/api/notifications/push", {
         method: "POST",
@@ -108,7 +128,7 @@ export function NotificationPreferences() {
   }
 
   async function toggle(key: keyof Preferences) {
-    if (!preferences || saving) return;
+    if (!preferences || saving || subscribing) return;
     const next = !preferences[key];
     if (key === "pushNotifications" && next && !(await subscribeForPush())) {
       return;
@@ -162,7 +182,7 @@ export function NotificationPreferences() {
             <div key={key} className="flex items-center gap-3 py-4">
               <Icon className="h-4 w-4 shrink-0 text-[var(--accent-fg)]" />
               <span className="min-w-0 flex-1"><b className="block text-sm">{label}</b><small className="text-[var(--muted)]">{hint}</small></span>
-              <Toggle checked={preferences[key]} onChange={() => void toggle(key)} disabled={saving !== null} label={label} />
+              <Toggle checked={preferences[key]} onChange={() => void toggle(key)} disabled={saving !== null || subscribing} label={label} />
             </div>
           ))}
         </div>

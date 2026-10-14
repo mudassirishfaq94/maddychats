@@ -34,7 +34,8 @@ export async function testDeviceRecoveryUI(base, pool) {
     assert.equal(await notificationSection.getAttribute("open"), null, "Secondary profile settings start collapsed");
     await source.page.evaluate(`(() => {
       const subscription = { toJSON: () => ({ endpoint: "https://fcm.googleapis.com/fcm/send/circlo-disposable-ui-fixture", keys: { p256dh: "fake-public-key-for-ui-test-only", auth: "fake-auth-for-ui-test" } }) };
-      const registration = { pushManager: { getSubscription: async () => null, subscribe: async options => { window.__pushHasKey = options.applicationServerKey.byteLength === 65; return subscription; } } };
+      const oldSubscription = { endpoint: "https://fcm.googleapis.com/fcm/send/old-disposable-ui-fixture", options: { applicationServerKey: new Uint8Array(65).buffer }, unsubscribe: async () => { window.__pushReplacedKey = true; return true; } };
+      const registration = { pushManager: { getSubscription: async () => oldSubscription, subscribe: async options => { window.__pushHasKey = options.applicationServerKey.byteLength === 65; return subscription; } } };
       Object.defineProperty(window, "Notification", { configurable: true, value: { permission: "default", requestPermission: async () => "granted" } });
       Object.defineProperty(navigator, "serviceWorker", { configurable: true, value: { ready: Promise.resolve(registration), register: async () => registration, getRegistration: async () => registration } });
       if (!("PushManager" in window)) Object.defineProperty(window, "PushManager", { configurable: true, value: function () {} });
@@ -48,6 +49,7 @@ export async function testDeviceRecoveryUI(base, pool) {
     await notificationSection.getByRole("button", { name: "Enable", exact: true }).click();
     await notificationSection.getByText("Push alerts enabled on this device.", { exact: true }).waitFor();
     assert.equal(await source.page.evaluate(() => window.__pushHasKey), true);
+    assert.equal(await source.page.evaluate(() => window.__pushReplacedKey), true, "Subscriptions made with a previous deployment key are replaced");
     assert.equal((await pool.query("select count(*)::int as n from push_subscriptions where user_id=$1", [user.id])).rows[0].n, 1);
     assert.equal((await source.context.request.delete(base + "/api/notifications/push", { data: { endpoint: "https://fcm.googleapis.com/fcm/send/circlo-disposable-ui-fixture" }, headers: { Origin: base } })).status(), 200);
     await notificationSection.locator("summary").click();
