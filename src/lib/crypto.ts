@@ -1,8 +1,8 @@
 /**
  * End-to-End Encryption (E2EE) using Web Crypto API.
  *
- * - Each device generates an X25519 key pair
- * - Private key is encrypted with a passphrase and stored on the server
+ * - Each device generates an RSA-OAEP-2048/SHA-256 key pair
+ * - Private key backups are encrypted with a browser-held recovery secret
  * - Public key is shared with other users
  * - Per-conversation AES-GCM symmetric keys are shared via key exchange
  * - Messages are encrypted client-side before sending

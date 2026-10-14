@@ -237,6 +237,7 @@ export interface RealtimeConversationEvent {
     | "conversation:encryption-ready"
     | "conversation:keys-shared"
     | "group:created"
+    | "group:updated"
     | "group:member-added"
     | "group:member-removed"
     | "group:member-updated";

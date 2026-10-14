@@ -230,8 +230,39 @@ async function main() {
     await sql.query("delete from blocks where blocker_id=$1", [bob.id]);
     assert.equal((await api(`/api/conversations/${group.id}/messages`, bobCookie, "POST", { text: "ciphertext", encrypted: true })).status, 403);
     assert.equal((await api(`/api/groups/${group.id}/members`, bobCookie, "POST", { userId: outsider.id })).status, 403);
+    const settingsPath = `/api/groups/${group.id}/settings`;
+    assert.equal((await api(settingsPath, bobCookie, "PATCH", { name: "Forbidden" })).status, 403);
+    assert.equal((await api(settingsPath, outsiderCookie, "PATCH", { name: "Forbidden" })).status, 404);
+    assert.equal((await api(`/api/groups/${conversation.id}/settings`, aliceCookie, "PATCH", { name: "Not a group" })).status, 404);
+    for (const invalid of [{ name: " " }, { name: null }, { description: {} }, { adminOnlyMessaging: "false" }, { slowModeSeconds: -1 }, { role: "owner" }]) {
+      assert.equal((await api(settingsPath, aliceCookie, "PATCH", invalid)).status, 422);
+    }
+    const renamed = await api(settingsPath, aliceCookie, "PATCH", { name: "  Renamed group  ", description: "Updated description" });
+    assert.equal(renamed.status, 200);
+    assert.equal((await sql.query("select name,description from conversations where id=$1", [group.id])).rows[0].name, "Renamed group");
+    const ownerPeers = await api(`/api/e2ee/peers?conversationId=${group.id}`, aliceCookie);
+    const firstRevision = (await ownerPeers.json()).groupRevision;
+    assert(firstRevision);
     assert.equal((await api(`/api/conversations/${group.id}`, bobCookie, "DELETE")).status, 403);
     assert.equal((await api(`/api/groups/${group.id}/members`, aliceCookie, "POST", { userId: outsider.id })).status, 200);
+    assert.notEqual((await (await api(`/api/e2ee/peers?conversationId=${group.id}`, aliceCookie)).json()).groupRevision, firstRevision);
+    const inviteGroup = (await sql.query("insert into conversations(type,name,created_by_id) values('group','Invite concurrency fixture',$1) returning id", [alice.id])).rows[0];
+    await sql.query("insert into conversation_members(conversation_id,user_id,role) values($1,$2,'owner')", [inviteGroup.id, alice.id]);
+    const invitePath = `/api/groups/${inviteGroup.id}/invites`;
+    assert.equal((await api(invitePath, aliceCookie, "POST", { maxUses: -1 })).status, 422);
+    const inviteResponse = await api(invitePath, aliceCookie, "POST", { maxUses: 1 });
+    assert.equal(inviteResponse.status, 201);
+    const invite = (await inviteResponse.json()).link;
+    assert.equal(invite.code.length, 32);
+    assert.equal((await api(`/invite/${invite.code}`, bobCookie)).status, 200);
+    assert.equal((await sql.query("select count(*)::int n from conversation_members where conversation_id=$1", [inviteGroup.id])).rows[0].n, 1, "Reading an invite cannot enroll the visitor");
+    const joinResults = await Promise.all([bobCookie, outsiderCookie].map(cookie => api("/api/groups/join", cookie, "POST", { code: invite.code })));
+    assert.deepEqual(joinResults.map(result => result.status).sort(), [200, 409], "A one-use invite admits exactly one concurrent visitor");
+    assert.equal((await sql.query("select use_count from group_invite_links where id=$1", [invite.id])).rows[0].use_count, 1);
+    assert.equal((await api("/api/groups/join", aliceCookie, "POST", { code: invite.code }, { "sec-fetch-site": "cross-site" })).status, 403);
+    await sql.query("update conversations set deleted_at=now() where id=$1", [inviteGroup.id]);
+    assert.equal((await api("/api/groups/join", aliceCookie, "POST", { code: invite.code })).status, 409, "Deleted groups cannot be rejoined using old links");
+    await sql.query("delete from conversations where id=$1", [inviteGroup.id]);
 
     assert.equal((await api(`/api/messages/${message.id}`, bobCookie, "DELETE", { mode: "for_everyone" })).status, 403);
     assert.equal((await api(`/api/messages/${message.id}`, outsiderCookie, "DELETE", { mode: "for_me" })).status, 404);

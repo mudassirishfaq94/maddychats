@@ -536,10 +536,8 @@ export function ChatView({
         ? "Secure messaging is taking longer than expected. Your draft is saved; please retry."
         : encryption.error ?? "Encryption is unavailable on this device.");
     }
-    // Never re-publish or replace a key on the sending path. A concurrent
-    // device bootstrap used to create competing conversation keys and left
-    // recipients with undecryptable messages. The upcoming per-device session
-    // transport handles device changes explicitly.
+    // Refresh approved recipients before encryption. Group roster/device changes
+    // establish a fresh sending key; the initial bootstrap remains serialized.
     const prepared = await encryption.prepareConversation(conversationId, { allowMessageRequest });
     setE2eeState((previous) => ({
       ...previous,
@@ -748,6 +746,10 @@ export function ChatView({
 
   useEffect(() => {
     return subscribe((event) => {
+      if ((event.type === "group:updated" || event.type === "group:member-added" || event.type === "group:member-removed" || event.type === "group:member-updated") && event.conversationId === conversationId) {
+        router.refresh();
+        return;
+      }
       if (event.type === "conversation:accepted" && event.conversationId === conversationId) {
         setAwaitingApproval(false);
         setRequestAccepted(true);
@@ -3092,11 +3094,11 @@ function EncryptionInfoDialog({
                 </li>
                 <li className="flex items-start gap-2 text-xs text-[var(--muted)]">
                   <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--accent-fg)]" />
-                  Each conversation uses a unique key. Old keys are never reused.
+                  Each conversation uses its own encryption keys. Older keys are retained on authorized devices so you can read history.
                 </li>
                 <li className="flex items-start gap-2 text-xs text-[var(--muted)]">
                   <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--accent-fg)]" />
-                  Keys rotate automatically every 7 days or 100 messages for forward secrecy.
+                  Group sending keys refresh when membership or approved devices change. This chat does not provide a per-message forward-secrecy guarantee.
                 </li>
               </ul>
               <div className="mt-4 border-t border-[var(--border)] pt-4">

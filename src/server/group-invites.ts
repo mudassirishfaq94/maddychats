@@ -1,11 +1,11 @@
 import { randomBytes } from "crypto";
 import { eq, and, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { groupInviteLinks, users, conversationMembers } from "@/db/schema";
+import { groupInviteLinks, users, conversationMembers, conversations } from "@/db/schema";
 
 /** Generate a unique invite link code for a group */
 export function generateInviteCode(): string {
-  return randomBytes(8).toString("hex").slice(0, 12);
+  return randomBytes(16).toString("hex");
 }
 
 /** Create an invite link for a group */
@@ -61,49 +61,31 @@ export async function acceptGroupInvite(
   code: string,
   userId: string,
 ): Promise<{ success: boolean; conversationId?: string; error?: string }> {
-  const link = await getGroupInviteLink(code);
-
-  if (!link) return { success: false, error: "Invalid invite link." };
-  if ("expired" in link && link.expired) return { success: false, error: "This invite link has expired." };
-  if ("exhausted" in link && link.exhausted) return { success: false, error: "This invite link has been used too many times." };
-
-  if ("expired" in link || "exhausted" in link) return { success: false, error: "This invite link is no longer valid." };
-
-  // Check if user is already a member
-  const [existing] = await db
-    .select()
-    .from(conversationMembers)
-    .where(
-      and(
-        eq(conversationMembers.conversationId, link.conversationId),
-        eq(conversationMembers.userId, userId),
-      ),
-    )
-    .limit(1);
-
-  if (existing) {
+  return db.transaction(async tx => {
+    // Serialize redemption, revocation and the final remaining use of a link.
+    const [link] = await tx.select().from(groupInviteLinks)
+      .where(eq(groupInviteLinks.code, code)).for("update").limit(1);
+    if (!link) return { success: false, error: "Invalid invite link." };
+    const [group] = await tx.select({ type: conversations.type, deletedAt: conversations.deletedAt })
+      .from(conversations).where(eq(conversations.id, link.conversationId)).limit(1);
+    if (!group || group.type !== "group" || group.deletedAt) return { success: false, error: "This group is no longer available." };
+    const [existing] = await tx.select({ id: conversationMembers.id }).from(conversationMembers)
+      .where(and(eq(conversationMembers.conversationId, link.conversationId), eq(conversationMembers.userId, userId))).limit(1);
+    if (existing) return { success: true, conversationId: link.conversationId };
+    if (link.expiresAt && link.expiresAt <= new Date()) return { success: false, error: "This invite link has expired." };
+    if (link.maxUses !== null && link.useCount >= link.maxUses) return { success: false, error: "This invite link has been used too many times." };
+    const added = await tx.insert(conversationMembers).values({ conversationId: link.conversationId, userId, role: "member" })
+      .onConflictDoNothing().returning({ id: conversationMembers.id });
+    if (added.length) await tx.update(groupInviteLinks).set({ useCount: sql`${groupInviteLinks.useCount} + 1` }).where(eq(groupInviteLinks.id, link.id));
     return { success: true, conversationId: link.conversationId };
-  }
-
-  // Add user to the group
-  await db.insert(conversationMembers).values({
-    conversationId: link.conversationId,
-    userId,
-    role: "member",
   });
-
-  // Increment use count
-  await db.execute(
-    sql`UPDATE group_invite_links SET use_count = use_count + 1 WHERE code = ${code}`
-  );
-
-  return { success: true, conversationId: link.conversationId };
 }
 
 /** Revoke an invite link */
 export async function revokeGroupInviteLink(
   linkId: string,
   userId: string,
+  conversationId: string,
 ): Promise<boolean> {
   const deleted = await db
     .delete(groupInviteLinks)
@@ -111,6 +93,7 @@ export async function revokeGroupInviteLink(
       and(
         eq(groupInviteLinks.id, linkId),
         eq(groupInviteLinks.createdByUserId, userId),
+        eq(groupInviteLinks.conversationId, conversationId),
       ),
     )
     .returning();

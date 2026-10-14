@@ -155,6 +155,18 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     await profile(source.page); await profile(recipient.page);
     await source.page.getByText("This device: Trusted", { exact: true }).waitFor();
     assert.equal(await source.page.getByText(/App (by|My) Mudassir/).count(), 0);
+    if (process.env.GROUP_ONLY === "1" && !ownedLive) {
+      const photos = await testProfilePhotos(base, pool, owner, peer, source, unrelatedCookie, recipient.cookies);
+      await pool.query("delete from conversations where id=$1 and created_by_id=$2", [photos.groupId, owner.id]);
+      for (const file of photos.paths) {
+        const target = resolve(".next/standalone/server/uploads", file);
+        assert(target.startsWith(resolve(".next/standalone/server/uploads") + "/") || target.startsWith(resolve(".next/standalone/server/uploads") + "\\"));
+        await unlink(target); await pool.query("delete from stored_uploads where path=$1", [file]);
+      }
+      assert.deepEqual(errors, []);
+      return { groupManagement: true, groupRemovalKeyExclusion: true, mobilePages: true, browserErrors: 0 };
+    }
+
     await source.page.setViewportSize({ width: 1440, height: 1000 });
     assert.equal(await source.page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
     const statusChecks = await testStatusPhoto(base, pool, owner, peer, source, recipient, unrelatedCookie);

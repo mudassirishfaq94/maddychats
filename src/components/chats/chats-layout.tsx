@@ -212,6 +212,10 @@ export function ChatsLayout({
         event.type !== "message:deleted" &&
         event.type !== "message:read" &&
         event.type !== "conversation:new" &&
+        event.type !== "group:updated" &&
+        event.type !== "group:member-added" &&
+        event.type !== "group:member-removed" &&
+        event.type !== "group:member-updated" &&
         event.type !== "conversation:delete"
       ) {
         return;

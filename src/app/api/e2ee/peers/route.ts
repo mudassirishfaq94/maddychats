@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { conversationMembers, e2eeKeys, users } from "@/db/schema";
+import { conversationMembers, conversations, e2eeKeys, users } from "@/db/schema";
 import { getSessionUser } from "@/server/session";
 import { getMembership } from "@/server/chat";
 import { guardSameOrigin, jsonError } from "@/server/http";
@@ -36,9 +36,10 @@ export async function GET(req: NextRequest) {
   if (!membership) return jsonError(404, "Conversation not found.");
 
   const memberRows = await db
-    .select({ userId: conversationMembers.userId, user: users })
+    .select({ userId: conversationMembers.userId, memberId: conversationMembers.id, type: conversations.type, user: users })
     .from(conversationMembers)
     .innerJoin(users, eq(conversationMembers.userId, users.id))
+    .innerJoin(conversations, eq(conversationMembers.conversationId, conversations.id))
     .where(eq(conversationMembers.conversationId, conversationId));
 
   const peers = memberRows;
@@ -81,5 +82,7 @@ export async function GET(req: NextRequest) {
       and exists(select 1 from conversation_members p where p.conversation_id=c.id and p.user_id<>${user.id} and p.accepted_at is null)
       and not exists(select 1 from messages m where m.conversation_id=c.id)) as allowed`)
     : null;
-  return NextResponse.json({ peers: [...byUser.values()], allowInitialRequest: permission?.rows[0]?.allowed === true });
+  // Membership row IDs change on leave/rejoin, even when the same accounts return.
+  const groupRevision = memberRows[0]?.type === "group" ? memberRows.map(member => member.memberId).sort().join(":") : null;
+  return NextResponse.json({ peers: [...byUser.values()], groupRevision, allowInitialRequest: permission?.rows[0]?.allowed === true });
 }

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import sharp from "sharp";
+import { decryptPrivateKeyFromStorage, importPrivateKey, decryptKeyFromSender, decryptMessage } from "../src/lib/crypto.ts";
 
 /** Only disposable accounts; the caller removes the returned owned uploads/group. */
 export async function testProfilePhotos(base, pool, owner, peer, source, unrelatedCookie, peerCookie) {
@@ -34,6 +35,94 @@ export async function testProfilePhotos(base, pool, owner, peer, source, unrelat
   const avatar = await fetch(base + `/api/groups/${group.id}/avatar`, { method: "POST", headers: { Origin: base, Cookie: source.cookies }, body: form() });
   assert.equal(avatar.status, 200); const avatarUrl = (await avatar.json()).avatarUrl; paths.push(avatarUrl.replace("/api/media/", ""));
   assert.equal((await fetch(base + `/api/groups/${group.id}/avatar`, { method: "POST", headers: { Origin: base, Cookie: unrelatedCookie }, body: form() })).status, 404);
+  // Actual mobile UI edits, persisted reload, and an actionable failed-save retry.
+  await source.page.goto(base + `/app/chats/${group.id}`);
+  await source.page.setViewportSize({ width: 320, height: 740 });
+  await source.page.getByRole("button", { name: "Chat options", exact: true }).click();
+  await source.page.getByRole("menuitem", { name: "Group info", exact: true }).click();
+  await source.page.getByRole("button", { name: "Group settings", exact: true }).click();
+  const settings = source.page.getByRole("region", { name: "Group settings", exact: true });
+  assert(await source.page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), "Group settings fit a 320px phone");
+  await settings.getByLabel("Group name", { exact: true }).fill("Edited group name");
+  await settings.getByLabel("Group description", { exact: true }).fill("Description saved after creation");
+  const saveSettings = source.page.waitForResponse(r => r.url().endsWith(`/api/groups/${group.id}/settings`) && r.request().method() === "PATCH");
+  await settings.getByRole("button", { name: "Save group settings", exact: true }).click();
+  assert.equal((await saveSettings).status(), 200);
+  await settings.getByText("Group settings saved.", { exact: true }).waitFor();
+  assert.deepEqual((await pool.query("select name,description from conversations where id=$1", [group.id])).rows[0], { name: "Edited group name", description: "Description saved after creation" });
+  await source.page.reload();
+  await source.page.getByRole("button", { name: "Chat options", exact: true }).click();
+  await source.page.getByRole("menuitem", { name: "Group info", exact: true }).click();
+  await source.page.getByRole("button", { name: "Group settings", exact: true }).click();
+  assert.equal(await settings.getByLabel("Group name", { exact: true }).inputValue(), "Edited group name");
+  assert.equal(await settings.getByLabel("Group description", { exact: true }).inputValue(), "Description saved after creation");
+  const uploadedGroup = source.page.waitForResponse(r => r.url().endsWith(`/api/groups/${group.id}/avatar`) && r.request().method() === "POST");
+  await settings.getByLabel("Group photo", { exact: true }).setInputFiles({ name: "group.png", mimeType: "image/png", buffer: png });
+  const photoResponse = await uploadedGroup; assert.equal(photoResponse.status(), 200);
+  paths.push((await photoResponse.json()).avatarUrl.replace("/api/media/", ""));
+  await settings.getByText("Group photo updated.", { exact: true }).waitFor();
+  const failSettings = route => route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "Owned save failure. Retry safely." }) });
+  await source.page.route(`**/api/groups/${group.id}/settings`, failSettings);
+  await settings.getByRole("button", { name: "Save group settings", exact: true }).click();
+  await settings.getByRole("alert").filter({ hasText: "Owned save failure" }).waitFor();
+  await source.page.unroute(`**/api/groups/${group.id}/settings`, failSettings);
+  await settings.getByRole("button", { name: "Save group settings", exact: true }).click();
+  await settings.getByText("Group settings saved.", { exact: true }).waitFor();
+  await source.page.getByRole("button", { name: "Close details", exact: true }).click();
+  const composer = source.page.getByRole("textbox", { name: "Message text", exact: true });
+  await composer.fill("Group encryption before removal"); await composer.press("Enter");
+  await source.page.locator("p").filter({ hasText: /^Group encryption before removal$/ }).waitFor();
+  let baseline;
+  for (let i = 0; i < 100; i++) {
+    baseline = (await pool.query("select id,text from messages where conversation_id=$1 order by created_at desc limit 1", [group.id])).rows[0];
+    if (baseline) break; await source.page.waitForTimeout(200);
+  }
+  assert(baseline); assert.notEqual(baseline.text, "Group encryption before removal");
+  const peerDevice = (await pool.query("select device_id from e2ee_keys where user_id=$1 and trusted_at is not null order by created_at desc limit 1", [peer.id])).rows[0];
+  // The original peer browser has the private key for this exact recipient wrap.
+  const peerState = await source.page.context().browser().contexts().reduce(async (previous, context) => {
+    const found = await previous; if (found) return found;
+    for (const page of context.pages()) {
+      const stored = await page.evaluate(userId => ({ pair: localStorage.getItem(`e2ee_keypair_${userId}`), device: localStorage.getItem("e2ee_device_id"), recovery: localStorage.getItem(`e2ee_recovery_${userId}_${localStorage.getItem("e2ee_device_id")}`) }), peer.id).catch(() => null);
+      if (stored?.pair && stored.device === peerDevice.device_id) return { ...stored, page };
+    }
+    return null;
+  }, Promise.resolve(null));
+  assert(peerState?.recovery);
+  await peerState.page.goto(base + `/app/chats/${group.id}`);
+  await peerState.page.getByRole("region", { name: "Conversation", exact: true }).getByText("Group encryption before removal", { exact: true }).waitFor();
+  const pair = JSON.parse(peerState.pair);
+  const jwk = await decryptPrivateKeyFromStorage(pair.encryptedPrivateKey.slice(3), peerState.recovery);
+  const privateKey = await importPrivateKey(jwk);
+  const wraps = (await pool.query("select encrypted_key from e2ee_conversation_keys where conversation_id=$1 and user_id=$2 and recipient_device_id=$3", [group.id, peer.id, peerDevice.device_id])).rows;
+  const oldKeys = await Promise.all(wraps.map(row => decryptKeyFromSender(row.encrypted_key, privateKey)));
+  assert((await Promise.all(oldKeys.map(key => decryptMessage(baseline.text, key).catch(() => null)))).includes("Group encryption before removal"));
+  const removed = await fetch(base + `/api/groups/${group.id}/members/${peer.id}`, { method: "DELETE", headers: { Origin: base, Cookie: source.cookies } }); assert.equal(removed.status, 200);
+  await composer.fill("Group encryption after removal"); await composer.press("Enter");
+  const approve = source.page.getByRole("button").filter({ hasText: "Encryption device keys changed" });
+  await approve.waitFor(); await approve.click();
+  await source.page.locator("p").filter({ hasText: /^Group encryption after removal$/ }).waitFor();
+  let after;
+  for (let i = 0; i < 100; i++) {
+    after = (await pool.query("select id,text from messages where conversation_id=$1 order by created_at desc limit 1", [group.id])).rows[0];
+    if (after && after.id !== baseline.id) break; await source.page.waitForTimeout(200);
+  }
+  assert.notEqual(after.id, baseline.id);
+  assert((await Promise.all(oldKeys.map(key => decryptMessage(after.text, key).catch(() => null)))).every(value => value === null), "Removed member's retained AES keys cannot decrypt the new group message");
+  assert.equal((await fetch(base + `/api/e2ee/conversation-keys?conversationId=${group.id}&deviceId=${peerDevice.device_id}`, { headers: { Cookie: peerCookie } })).status, 404);
+  const inviteResponse = await fetch(base + `/api/groups/${group.id}/invites`, { method: "POST", headers: { Origin: base, Cookie: source.cookies, "Content-Type": "application/json" }, body: JSON.stringify({ maxUses: 1 }) });
+  assert.equal(inviteResponse.status, 201);
+  const invite = (await inviteResponse.json()).link;
+  await peerState.page.goto(base + `/invite/${invite.code}`);
+  assert.equal((await pool.query("select count(*)::int n from conversation_members where conversation_id=$1 and user_id=$2", [group.id, peer.id])).rows[0].n, 0);
+  await peerState.page.getByRole("button", { name: "Join group", exact: true }).click();
+  await peerState.page.waitForURL(`**/app/chats/${group.id}`);
+  assert.equal((await pool.query("select count(*)::int n from conversation_members where conversation_id=$1 and user_id=$2", [group.id, peer.id])).rows[0].n, 1);
+  await composer.fill("Group encryption after rejoining"); await composer.press("Enter");
+  await approve.waitFor(); await approve.click();
+  await peerState.page.getByRole("region", { name: "Conversation", exact: true }).getByText("Group encryption after rejoining", { exact: true }).waitFor();
+  assert.equal((await pool.query("select count(*)::int n from messages where conversation_id=$1 and encrypted=false", [group.id])).rows[0].n, 0);
+  console.log("PASS mobile group name/description/photo UI, save retry, and retained-key exclusion after removal");
   const background = await fetch(base + `/api/conversations/${group.id}/background`, { method: "PATCH", headers: { Origin: base, Cookie: source.cookies }, body: form() });
   assert.equal(background.status, 200); const style = (await background.json()).backgroundStyle;
   assert(style.startsWith("data:image/webp;base64,"));

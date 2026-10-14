@@ -49,7 +49,7 @@ async function main() {
       } else if (process.env.PROFILE_ONLY === "1") {
         await testDeviceRecoveryUI(base, pool);
       } else {
-        await testDeviceRecoveryUI(base, pool);
+        if (process.env.GROUP_ONLY !== "1") await testDeviceRecoveryUI(base, pool);
         console.log(await testRestoredWorkflows(base, pool, accounts[0], accounts[1], password, conversation!, false, testSecret));
       }
     }

@@ -627,13 +627,15 @@ export function useE2EE(userId: string | undefined) {
         .then(({ key }) => key)
         .catch(() => null);
       let peers: Peer[] = [];
+      let groupRevision: string | null = null;
       let introductionAllowed = false;
       try {
         const res = await e2eeRequest(`/api/e2ee/peers?conversationId=${encodeURIComponent(conversationId)}&deviceId=${encodeURIComponent(state.deviceId)}${allowMessageRequest ? "&allowMessageRequest=1" : ""}`);
         if (!res.ok) return { ready: false, fingerprint: null };
         if (res.ok) {
-          const data = (await res.json()) as { peers?: Peer[]; allowInitialRequest?: boolean };
+          const data = (await res.json()) as { peers?: Peer[]; groupRevision?: string | null; allowInitialRequest?: boolean };
           peers = data.peers ?? [];
+          groupRevision = data.groupRevision ?? null;
           introductionAllowed = allowMessageRequest && data.allowInitialRequest === true;
         }
       } catch {
@@ -669,7 +671,7 @@ export function useE2EE(userId: string | undefined) {
         if (!bootstrapped) return { ready: false, fingerprint: null };
         key = bootstrapped;
       }
-      const peerSignature = targets
+      const peerSignature = (groupRevision ? `group-v2:${groupRevision}|` : "") + targets
         .map((target) => `${target.userId}:${target.deviceId}:${target.publicKey}`)
         .sort()
         .join("|");
@@ -695,14 +697,14 @@ export function useE2EE(userId: string | undefined) {
         .filter((entry) => !entry.startsWith(`${userId}:`))
         .sort()
         .join("|");
-      if (ready && trusted && legacyPeerSignature === trustSignature && trusted !== trustSignature && typeof localStorage !== "undefined") {
+      if (ready && trusted !== null && legacyPeerSignature === trustSignature && trusted !== trustSignature && typeof localStorage !== "undefined") {
         localStorage.setItem(trustKey, trustSignature);
       }
-      if (ready && trusted && trusted !== trustSignature && legacyPeerSignature !== trustSignature) {
+      if (ready && trusted !== null && trusted !== trustSignature && legacyPeerSignature !== trustSignature) {
         pendingTrustRef.current.set(conversationId, trustSignature);
         return { ready: false, fingerprint: null, trustChanged: true };
       }
-      if (ready && !trusted && trustSignature && typeof localStorage !== "undefined") {
+      if (ready && trusted === null && typeof localStorage !== "undefined") {
         localStorage.setItem(trustKey, trustSignature);
       }
       let fingerprint: string | null = null;
@@ -729,6 +731,24 @@ export function useE2EE(userId: string | undefined) {
           return null;
         }
       })();
+      // Never reuse a group sending key across roster/device changes. A removed
+      // member can retain the old AES key even after server access is revoked.
+      // No local baseline (including an upgraded/new browser) also requires a
+      // fresh sending key. Keep old keys solely for decrypting existing history.
+      if (ready && groupRevision && persisted?.peerSignature !== peerSignature) {
+        const candidate = await generateConversationKey();
+        const shared = await mapWithConcurrency(targets, 3, target =>
+          shareKey(conversationId, target.userId, target.deviceId, target.publicKey, candidate).catch(() => false));
+        if (shared.some(success => !success)) return { ready: false, fingerprint: null };
+        await rememberSendingKey(conversationId, candidate);
+        decryptionKeysRef.current.set(conversationId, [key, ...(decryptionKeysRef.current.get(conversationId) ?? [])]);
+        conversationKeysRef.current.set(conversationId, candidate);
+        key = candidate;
+        fingerprint = await conversationFingerprint(candidate);
+        preparedConversationsRef.current.set(conversationId, { fingerprint, peerSignature });
+        localStorage.setItem(persistedKey, JSON.stringify({ fingerprint, peerSignature }));
+        return { ready: true, fingerprint, missingPeers };
+      }
       if (ready && !forceReshare && fingerprint &&
         persisted?.fingerprint === fingerprint && persisted.peerSignature === peerSignature) {
         preparedConversationsRef.current.set(conversationId, { fingerprint, peerSignature });
@@ -760,13 +780,13 @@ export function useE2EE(userId: string | undefined) {
       }
       return { ready, fingerprint, missingPeers };
     },
-    [bootstrapConversationKey, getConversationKey, shareKey, state.deviceId, state.publicKey, userId],
+    [bootstrapConversationKey, getConversationKey, shareKey, rememberSendingKey, state.deviceId, state.publicKey, userId],
   );
 
   /** Accept a detected device-set change only after out-of-band verification. */
   const approvePeerKeyChange = useCallback((conversationId: string): boolean => {
     const pending = pendingTrustRef.current.get(conversationId);
-    if (!pending || typeof localStorage === "undefined") return false;
+    if (!pendingTrustRef.current.has(conversationId) || pending === undefined || typeof localStorage === "undefined") return false;
     localStorage.setItem(`e2ee_trust_${userId}_${conversationId}`, pending);
     pendingTrustRef.current.delete(conversationId);
     preparedConversationsRef.current.delete(conversationId);

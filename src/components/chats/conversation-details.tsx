@@ -4,7 +4,6 @@ import Image from "next/image";
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import Image from "next/image";
 import {
   Download,
   Ban,
@@ -95,15 +94,16 @@ export function ConversationDetails({
 
   async function groupAction(url: string, method: "POST" | "PATCH" | "DELETE", body?: object) {
     setGroupBusy(url);
-    const response = await fetch(url, { method, headers: body ? { "Content-Type": "application/json" } : undefined, body: body ? JSON.stringify(body) : undefined });
-    if (response.ok) {
+    setError(null);
+    try {
+      const response = await fetch(url, { method, headers: body ? { "Content-Type": "application/json" } : undefined, body: body ? JSON.stringify(body) : undefined, signal: AbortSignal.timeout(30000) });
+      if (!response.ok) { const data = await response.json().catch(() => null); throw new Error(data?.error ?? "That group action failed. Please retry."); }
       if (url.endsWith("/leave")) { router.push("/app/chats"); router.refresh(); return; }
-      const refreshed = await fetch(`/api/conversations/${conversationId}`, { cache: "no-store" });
-      if (refreshed.ok) setGroup((await refreshed.json()).conversation);
-    } else {
-      const data = await response.json().catch(() => null); setError(data?.error ?? "That group action failed.");
-    }
-    setGroupBusy(null);
+      const refreshed = await fetch(`/api/conversations/${conversationId}`, { cache: "no-store", signal: AbortSignal.timeout(15000) });
+      if (!refreshed.ok) throw new Error("Group changed, but its details could not refresh. Close and reopen this panel.");
+      setGroup((await refreshed.json()).conversation); router.refresh();
+    } catch (cause) { setError(cause instanceof Error && cause.name !== "TimeoutError" ? cause.message : "Connection timed out. Please retry."); }
+    finally { setGroupBusy(null); }
   }
 
   async function toggleNotifications() {
@@ -168,6 +168,12 @@ export function ConversationDetails({
 
   useEffect(() => {
     return subscribe((event) => {
+      if ((event.type === "group:updated" || event.type === "group:member-added" || event.type === "group:member-removed" || event.type === "group:member-updated") && event.conversationId === conversationId) {
+        void fetch(`/api/conversations/${conversationId}`, { cache: "no-store" })
+          .then(response => response.ok ? response.json() : null)
+          .then(data => { if (data?.conversation) setGroup(data.conversation); })
+          .catch(() => setError("Group details could not refresh. Close and reopen this panel to retry."));
+      }
       if (
         "conversationId" in event &&
         event.conversationId === conversationId &&
@@ -349,7 +355,7 @@ export function ConversationDetails({
                 conversationId={conversationId}
                 group={group}
                 busy={groupBusy !== null}
-                onUpdate={(patch) => setGroup((prev) => ({ ...prev, ...patch }))}
+                onUpdate={(patch) => { setGroup((prev) => ({ ...prev, ...patch })); router.refresh(); }}
               />
             ) : null}
             <button type="button" disabled={groupBusy !== null} onClick={() => void groupAction(`/api/groups/${conversationId}/leave`, "POST")} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold text-[var(--danger)] hover:bg-[color-mix(in_srgb,var(--danger)_8%,transparent)]"><LogOut className="h-4 w-4" />Leave group</button>
@@ -1369,248 +1375,58 @@ function clampPct(v: number): number {
 
 /* =================== Group Settings Panel =================== */
 
-function GroupSettingsPanel({
-  conversationId,
-  group,
-  busy,
-  onUpdate,
-}: {
-  conversationId: string;
-  group: { adminOnlyMessaging: boolean; rules: string | null; announcements: string | null; slowModeSeconds: number; name?: string | null; description?: string | null; avatarUrl?: string | null };
-  busy: boolean;
+function GroupSettingsPanel({ conversationId, group, busy, onUpdate }: {
+  conversationId: string; group: ConversationDetail; busy: boolean;
   onUpdate: (patch: Record<string, unknown>) => void;
 }) {
-  const [showSettings, setShowSettings] = useState(false);
-  const [rules, setRules] = useState(group.rules ?? "");
-  const [announcements, setAnnouncements] = useState(group.announcements ?? "");
-  const [slowMode, setSlowMode] = useState(group.slowModeSeconds);
-  const [adminOnly, setAdminOnly] = useState(group.adminOnlyMessaging);
-  const [name, setName] = useState(group.name ?? "");
-  const [description, setDescription] = useState(group.description ?? "");
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState({ name: group.name ?? "", description: group.description ?? "", rules: group.rules ?? "", announcements: group.announcements ?? "", adminOnlyMessaging: group.adminOnlyMessaging, slowModeSeconds: group.slowModeSeconds });
   const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
-  // Avatar editing state
-  const [avatarUrl, setAvatarUrl] = useState(group.avatarUrl ?? "");
-  const [isUploading, setIsUploading] = useState(false);
-  const avatarFileRef = useRef<HTMLInputElement>(null);
-
-  async function saveSetting(patch: Record<string, unknown>) {
-    setSaving(true);
-    setSaved(false);
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const locked = busy || saving;
+  function edit() {
+    setDraft({ name: group.name ?? "", description: group.description ?? "", rules: group.rules ?? "", announcements: group.announcements ?? "", adminOnlyMessaging: group.adminOnlyMessaging, slowModeSeconds: group.slowModeSeconds });
+    setError(null); setNotice(null); setOpen(true);
+  }
+  async function submit(file?: File) {
+    if (locked) return;
+    if (!file && !draft.name.trim()) { setError("Enter a group name before saving."); return; }
+    setSaving(true); setError(null); setNotice(null);
     try {
-      const res = await fetch(`/api/groups/${conversationId}/settings`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(patch),
+      const form = file ? new FormData() : null;
+      if (form && file) form.append("file", file);
+      const response = await fetch(`/api/groups/${conversationId}/${file ? "avatar" : "settings"}`, {
+        method: file ? "POST" : "PATCH", headers: file ? undefined : { "Content-Type": "application/json" },
+        body: form ?? JSON.stringify({ ...draft, name: draft.name.trim() }), signal: AbortSignal.timeout(30000),
       });
-      if (res.ok) {
-        onUpdate(patch);
-        setSaved(true);
-        setTimeout(() => setSaved(false), 2000);
-      }
-    } catch {}
-    setSaving(false);
+      const result = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(result?.error ?? "Changes could not be saved. Please retry.");
+      onUpdate(file ? { avatarUrl: result.avatarUrl } : result.settings);
+      setNotice(file ? "Group photo updated." : "Group settings saved.");
+    } catch (cause) { setError(cause instanceof Error && cause.name !== "TimeoutError" ? cause.message : "Connection timed out. Please retry."); }
+    finally { setSaving(false); }
   }
-
-  // Sync local inputs when group name/description change elsewhere (e.g. another tab)
-  const [syncedGroupFields, setSyncedGroupFields] = useState({
-    name: group.name,
-    description: group.description,
-  });
-  if (
-    syncedGroupFields.name !== group.name ||
-    syncedGroupFields.description !== group.description
-  ) {
-    setSyncedGroupFields({ name: group.name, description: group.description });
-    setName(group.name ?? "");
-    setDescription(group.description ?? "");
-  }
-
-  // Avatar upload handler (POST /api/groups/[id]/avatar with multipart form data)
-  async function handleAvatarUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file || isUploading) return;
-    setIsUploading(true);
-    try {
-      const form = new FormData();
-      form.append("file", file);
-      const res = await fetch(`/api/groups/${conversationId}/avatar`, { method: "POST", body: form });
-      const data = await res.json().catch(() => null);
-      if (res.ok && data?.avatarUrl) {
-        setAvatarUrl(data.avatarUrl);
-        onUpdate({ avatarUrl: data.avatarUrl });
-      }
-    } catch {}
-    setIsUploading(false);
-  }
-
-  // Avatar preview
-  const avatarPreview = avatarUrl ? (
-    <>
-      <Image
-        unoptimized
-        width={128}
-        height={128}
-        src={avatarUrl}
-        alt="Group avatar"
-        className="h-32 w-32 rounded-full object-cover"
-      />
-      <button
-        type="button"
-        disabled={isUploading}
-        onClick={() => avatarFileRef.current?.click()}
-        className="px-2 py-0.5 text-[0.6rem] text-[var(--muted)] rounded border border-[var(--border)] hover:border-[var(--accent)]"
-      >
-        {isUploading ? "Uploading…" : "Change avatar"}
-      </button>
-    </>
-  ) : (
-    <>
-      <div className="mt-1.5 h-32 w-32 rounded-full bg-[var(--surface)] border border-[var(--border)] flex items-center justify-center"><span className="text-[var(--muted)]">No avatar</span></div>
-      <button
-        type="button"
-        disabled={isUploading}
-        onClick={() => avatarFileRef.current?.click()}
-        className="mt-1.5 px-2 py-0.5 text-[0.6rem] text-[var(--muted)] rounded border border-[var(--border)] hover:border-[var(--accent)]"
-      >
-        {isUploading ? "Uploading…" : "Upload avatar"}
-      </button>
-    </>
-  );
-
-  return (
-    <div className="mt-3">
-      <button
-        type="button"
-        onClick={() => setShowSettings(!showSettings)}
-        className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium text-[var(--accent-fg)] hover:bg-[var(--accent-soft)]"
-      >
-        <span className="text-lg">⚙️</span>
-        {showSettings ? "Hide settings" : "Group settings"}
-        {saving && <Loader2 className="ml-auto h-3 w-3 animate-spin" />}
-        {saved && !saving && <span className="ml-auto text-[var(--success)]">✓</span>}
-      </button>
-
-      {showSettings ? (
-        <div className="mt-2 space-y-4 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-3">
-          {/* Admin-only messaging */}
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium">Admin-only messaging</span>
-            <Toggle
-              checked={adminOnly}
-              onChange={(next) => {
-                setAdminOnly(next);
-                void saveSetting({ adminOnlyMessaging: next });
-              }}
-              disabled={busy}
-              label="Admin-only messaging"
-              size="small"
-            />
-          </div>
-
-          {/* Name */}
-          <div>
-            <span className="text-xs font-medium">Group name</span>
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              onBlur={() => void saveSetting({ name: name.trim() || null })}
-              placeholder="e.g. Study group, Book club, Gaming squad..."
-              className="mt-1.5 w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-2 text-xs text-[var(--text)] placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:outline-none"
-            />
-          </div>
-
-          {/* Description */}
-          <div>
-            <span className="text-xs font-medium">Description</span>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              onBlur={() => {
-                if (description !== (group.description ?? "")) {
-                  void saveSetting({ description: description.trim() || null });
-                }
-              }}
-              placeholder="Tell members what this group is about..."
-              rows={3}
-              className="mt-1.5 w-full resize-none rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-2 text-xs text-[var(--text)] placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:outline-none"
-            />
-          </div>
-
-          {/* Slow mode */}
-          <div>
-            <span className="text-xs font-medium">Slow mode</span>
-            <div className="mt-1.5 flex gap-1.5">
-              {[0, 10, 30, 60, 300].map((sec) => (
-                <button
-                  key={sec}
-                  type="button"
-                  disabled={busy}
-                  onClick={() => {
-                    setSlowMode(sec);
-                    void saveSetting({ slowModeSeconds: sec });
-                  }}
-                  className={`rounded-lg px-2 py-1 text-[0.6rem] font-medium transition-colors ${
-                    slowMode === sec
-                      ? "bg-[var(--accent)] text-white"
-                      : "bg-[var(--surface)] text-[var(--muted)] hover:bg-[color-mix(in_srgb,var(--muted)_10%,transparent)]"
-                  }`}
-                >
-                  {sec === 0 ? "Off" : sec < 60 ? `${sec}s` : `${sec / 60}m`}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Rules */}
-          <div>
-            <span className="text-xs font-medium">Group rules</span>
-            <textarea
-              value={rules}
-              onChange={(e) => setRules(e.target.value)}
-              onBlur={() => {
-                if (rules !== (group.rules ?? "")) {
-                  void saveSetting({ rules: rules.trim() || null });
-                }
-              }}
-              placeholder="e.g. Be respectful, no spam, English only..."
-              rows={3}
-              className="mt-1.5 w-full resize-none rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-2 text-xs text-[var(--text)] placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:outline-none"
-            />
-          </div>
-
-          {/* Announcements */}
-          <div>
-            <span className="text-xs font-medium">Announcements</span>
-            <textarea
-              value={announcements}
-              onChange={(e) => setAnnouncements(e.target.value)}
-              onBlur={() => {
-                if (announcements !== (group.announcements ?? "")) {
-                  void saveSetting({ announcements: announcements.trim() || null });
-                }
-              }}
-              placeholder="Pin important messages for all members..."
-              rows={2}
-              className="mt-1.5 w-full resize-none rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-2 text-xs text-[var(--text)] placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:outline-none"
-            />
-          </div>
-
-          {/* Avatar */}
-          <div>
-            <span className="text-xs font-medium">Avatar</span>
-            {avatarPreview}
-            <input
-              ref={avatarFileRef}
-              type="file"
-              accept="image/jpeg,image/png,image/webp,image/gif,image/avif"
-              className="hidden"
-              onChange={handleAvatarUpload}
-            />
-          </div>
-        </div>
-      ) : null}
-    </div>
-  );
+  return <section className="mt-3" aria-label="Group settings">
+    <button type="button" aria-expanded={open} onClick={() => open ? setOpen(false) : edit()} className="btn min-h-11 w-full text-xs">{open ? "Hide settings" : "Group settings"}</button>
+    {open ? <div className="mt-2 space-y-4 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-3">
+      <p className="text-xs text-[var(--muted)]">Admins can edit these details. Group names, descriptions and photos are visible to the service; chat messages stay encrypted.</p>
+      <div className="flex flex-wrap items-center gap-3">
+        {group.avatarUrl ? <Image unoptimized src={group.avatarUrl} alt="Group photo" width={64} height={64} className="h-16 w-16 rounded-full object-cover" /> : null}
+        <button type="button" disabled={locked} onClick={() => fileRef.current?.click()} className="btn min-h-11 text-xs">Change group photo</button>
+        <input ref={fileRef} type="file" aria-label="Group photo" accept="image/jpeg,image/png,image/webp,image/gif,image/avif" hidden onChange={event => { const file = event.target.files?.[0]; event.target.value = ""; if (file) void submit(file); }} />
+      </div>
+      {([['name', 'Group name', 200], ['description', 'Group description', 5000], ['rules', 'Group rules', 2000], ['announcements', 'Announcements', 2000]] as const).map(([key, label, max]) => <div key={key} className="text-xs font-medium"><label htmlFor={`group-${conversationId}-${key}`}>{label}</label>
+        {key === 'name' ? <input id={`group-${conversationId}-${key}`} className="field-input mt-1" value={draft[key]} maxLength={max} disabled={locked} onChange={event => setDraft(previous => ({ ...previous, [key]: event.target.value }))} /> : <textarea id={`group-${conversationId}-${key}`} className="field-input mt-1 resize-y" rows={3} value={draft[key]} maxLength={max} disabled={locked} onChange={event => setDraft(previous => ({ ...previous, [key]: event.target.value }))} />}
+      </div>)}
+      <div className="flex min-h-11 items-center justify-between gap-2"><span className="text-xs">Admin-only messaging</span><Toggle checked={draft.adminOnlyMessaging} onChange={value => setDraft(previous => ({ ...previous, adminOnlyMessaging: value }))} disabled={locked} label="Admin-only messaging" size="small" /></div>
+      <label className="block text-xs font-medium">Slow mode<select className="field-input mt-1 min-h-11" value={draft.slowModeSeconds} disabled={locked} onChange={event => setDraft(previous => ({ ...previous, slowModeSeconds: Number(event.target.value) }))}>
+        {[...new Set([0, 10, 30, 60, 300, group.slowModeSeconds])].sort((a,b) => a-b).map(seconds => <option key={seconds} value={seconds}>{seconds === 0 ? "Off" : `${seconds} seconds`}</option>)}
+      </select></label>
+      {error ? <p role="alert" className="text-sm text-[var(--danger)]">{error}</p> : null}
+      {notice ? <p role="status" className="text-sm text-[var(--success)]">{notice}</p> : null}
+      <button type="button" disabled={locked} onClick={() => void submit()} className="btn btn-primary min-h-11 w-full text-xs">{saving ? "Saving…" : "Save group settings"}</button>
+    </div> : null}
+  </section>;
 }
