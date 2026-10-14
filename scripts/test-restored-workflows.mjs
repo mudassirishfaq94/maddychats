@@ -72,6 +72,10 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
       const actual = await device.page.request.get(base + "/api/privacy/devices");
       assert.equal((await actual.json()).currentSessionId, desired, "A delayed identity response preserves the newer browser session");
     }
+    // Cookies were replaced outside the UI. A same-profile URL with a hash
+    // can be a same-document navigation, retaining the old E2EE provider.
+    // Reload as a completed sign-in redirect does before asserting rebinding.
+    await device.page.reload();
     await profile(device.page);
     const sessions = await (await api("/api/privacy/devices", device.cookies, null, "GET")).json();
     assert(sessions.currentSessionId);
