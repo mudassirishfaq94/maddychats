@@ -71,8 +71,10 @@ export async function testChatRecovery(base, cookieHeader, conversationId) {
     assert.equal(await composer.inputValue(), nextDraft, "A failed send must preserve the draft");
     await source.unroute(messageUrl, failSend);
     const typingSamples = await source.evaluate(() => window.__typingSamples);
+    // Throttling measures typing only; recovery waits should use normal CPU.
+    await cdp.send("Emulation.setCPUThrottlingRate", { rate: 1 });
     await source.reload();
-    await source.waitForFunction(text => document.querySelector('textarea[aria-label="Message text"]')?.value === text, nextDraft, { timeout: 15000 });
+    await source.waitForFunction(text => document.querySelector('textarea[aria-label="Message text"]')?.value === text, nextDraft, { timeout: 30000 });
     await source.getByRole("button", { name: activeName, exact: true }).click();
     await source.getByRole("button", { name: "Restore my other devices", exact: true }).click();
     await source.getByRole("status").filter({ hasText: "No other trusted devices found" }).waitFor({ timeout: 10000 }).catch(async cause => {
@@ -112,6 +114,9 @@ export async function testChatRecovery(base, cookieHeader, conversationId) {
     await source.getByRole("status").filter({ hasText: "Shared" }).waitFor();
     // Keep the new device on the same page: approval and key restoration
     // must release its queued message without reloading or replacing keys.
+    // Retries intentionally pause in background tabs. Return to the new
+    // browser as a user would after approving it on the trusted browser.
+    await target.bringToFront();
     await target.getByRole("region", { name: "Conversation", exact: true }).getByText(submitted, { exact: true }).waitFor({ timeout: 30000 });
     await source.getByRole("region", { name: "Conversation", exact: true }).getByText(pendingText, { exact: true }).waitFor({ timeout: 60000 });
     assert.equal(await target.getByLabel("Queued", { exact: true }).count(), 0);
