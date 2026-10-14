@@ -20,6 +20,7 @@ export function NotificationBell() {
   const [unread, setUnread] = useState(0);
   const [loading, setLoading] = useState(true);
   const ref = useRef<HTMLDivElement>(null);
+  const received = useRef(new Set<string>());
 
   useEffect(() => {
     const controller = new AbortController();
@@ -36,6 +37,7 @@ export function NotificationBell() {
       })
       .then((data) => {
         if (!data) return;
+        data.notifications.forEach(item => received.current.add(item.id));
         setItems(data.notifications);
         setUnread(data.unreadCount);
       })
@@ -48,7 +50,10 @@ export function NotificationBell() {
   useEffect(() => {
     return subscribe((event) => {
       if (event.type === "notification:new") {
-        setItems((prev) => [event.notification, ...prev].slice(0, 25));
+        if (received.current.has(event.notification.id)) return;
+        received.current.add(event.notification.id);
+        if (received.current.size > 5000) received.current.delete(received.current.values().next().value!);
+        setItems((prev) => [event.notification, ...prev.filter(item => item.id !== event.notification.id)].slice(0, 25));
         setUnread((n) => n + 1);
       }
     });

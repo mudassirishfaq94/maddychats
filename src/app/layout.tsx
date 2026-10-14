@@ -9,6 +9,7 @@ import { CapacitorDeepLinks } from "@/components/capacitor-deep-links";
 import { PwaUpdatePrompt } from "@/components/pwa-update-prompt";
 import { NativeAppBridge } from "@/components/native-app-bridge";
 import { PerformanceMonitor } from "@/components/performance-monitor";
+import { InstalledLaunch } from "@/components/installed-launch";
 import { getSessionUser } from "@/server/session";
 import "./globals.css";
 
@@ -61,6 +62,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
       suppressHydrationWarning
     >
       <body>
+        <InstalledLaunch />
         <Script src="/theme-init.js" strategy="beforeInteractive" nonce={nonce} />
         <AuthProvider initialUser={initialUser}>
           <PerformanceMonitor>{children}</PerformanceMonitor>

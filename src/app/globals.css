@@ -1,5 +1,13 @@
 @import "tailwindcss";
 
+.installed-launch { display: none; position: fixed; inset: 0; z-index: 250; background: #151719; color: #ECEAE6; align-items: center; justify-content: center; flex-direction: column; padding: max(24px, env(safe-area-inset-top)) 24px max(24px, env(safe-area-inset-bottom)); text-align: center; --brand-mark: #fff; }
+@media (display-mode: standalone) { .installed-launch { display: flex; } }
+html[data-installed-app="true"] .installed-launch { display: flex; }
+.installed-launch-brand { display: flex; flex-direction: column; align-items: center; gap: 22px; }
+.installed-launch-brand > span { font-size: 42px; font-weight: 700; letter-spacing: -2px; }
+.installed-launch > p { margin-top: 20px; font-size: 16px; line-height: 1.6; color: #C9A77B; }
+.installed-launch-caption { position: absolute; bottom: max(36px, env(safe-area-inset-bottom)); left: 24px; right: 24px; font-size: 12px; line-height: 1.5; color: #A9A8B3; }
+
 /* ==========================================================================
    Circlo â€” a private circle in ink and mint.
    ========================================================================== */

@@ -92,7 +92,7 @@ async function create(
   type: string,
   data: Record<string, unknown>,
   actorId: string | null,
-): Promise<void> {
+): Promise<NotificationDTO> {
   const rows = await db
     .insert(notifications)
     .values({ userId, actorId, type, data })
@@ -102,6 +102,7 @@ async function create(
     type: "notification:new",
     notification: dto,
   });
+  return dto;
 }
 
 export async function notifyUser(
@@ -145,6 +146,7 @@ export async function notifyNewMessage(input: {
           ? preferences.groupNotifications
           : preferences.messageNotifications;
         if (!enabled) return;
+        let notificationId: string;
         if (input.persistedRequest) {
           const rows = await db.select().from(notifications).where(and(
             eq(notifications.userId, m.userId),
@@ -152,8 +154,9 @@ export async function notifyNewMessage(input: {
             sql`${notifications.data}->>'messageId' = ${input.messageId}`,
           )).limit(1);
           if (!rows[0]) return;
+          notificationId = rows[0].id;
           await publishToUsers([m.userId], { type: "notification:new", notification: toNotificationDTO(rows[0]) });
-        } else await create(
+        } else notificationId = (await create(
           m.userId,
           "message",
           {
@@ -163,9 +166,10 @@ export async function notifyNewMessage(input: {
             preview: input.preview.slice(0, 140),
           },
           input.actorId,
-        );
+        )).id;
         if (preferences.pushNotifications) {
           await sendMessagePush(m.userId, {
+            notificationId,
             actorName: input.actorName,
             preview: input.preview.slice(0, 140),
             conversationId: input.conversationId,

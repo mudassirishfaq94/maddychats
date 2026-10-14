@@ -67,7 +67,10 @@ export function NotificationPreferences() {
         const response = await fetch("/api/notifications/push", { cache: "no-store", signal: AbortSignal.timeout(10000) });
         if (!response.ok) return;
         const configuration = await response.json() as { publicKey: string | null };
-        if (configuration.publicKey && subscriptionMatchesKey(subscription, applicationServerKey(configuration.publicKey))) setPushSubscribed(true);
+        if (configuration.publicKey && subscriptionMatchesKey(subscription, applicationServerKey(configuration.publicKey))) {
+          const rebound = await fetch("/api/notifications/push", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(subscription.toJSON()), signal: AbortSignal.timeout(10000) });
+          if (rebound.ok) setPushSubscribed(true);
+        }
       })
       .catch(() => {});
   }, []);
@@ -159,7 +162,8 @@ export function NotificationPreferences() {
     <section className="card-glass rounded-3xl p-6 sm:p-8">
       <div>
         <h2 className="font-display text-xl font-bold">Notifications</h2>
-        <p className="mt-1 text-sm text-[var(--muted)]">Choose how Circlo alerts you.</p>
+        <p className="mt-1 text-sm text-[var(--muted)]">Quiet while you use Circlo. Branded chat alerts when it is in the background or closed.</p>
+        <p className="mt-2 text-xs text-[var(--muted)]">Install Circlo from your browser menu, then enable alerts here. On iPhone, use Add to Home Screen first. Your phone controls notification sounds, appearance and battery restrictions.</p>
       </div>
       {!preferences ? (
         <div className="flex justify-center py-10">{message ? <p className="text-sm text-[var(--danger)]">{message}</p> : <Loader2 className="h-5 w-5 animate-spin text-[var(--muted)]" />}</div>

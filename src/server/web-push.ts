@@ -120,6 +120,7 @@ async function sendFCM(
 export async function sendMessagePush(
   userId: string,
   payload: {
+    notificationId: string;
     actorName: string;
     preview: string;
     conversationId: string;
@@ -130,7 +131,7 @@ export async function sendMessagePush(
     title: payload.actorName,
     body: payload.preview,
     url: `/app/chats/${payload.conversationId}?latest=1`,
-    tag: `message-${payload.messageId}`,
+    tag: `circlo-chat-${payload.conversationId}`,
   };
 
   // 1. Send through FCM for Android devices
@@ -168,8 +169,10 @@ export async function sendMessagePush(
             endpoint: subscription.endpoint,
             keys: { p256dh: subscription.p256dh, auth: subscription.auth },
           },
-          JSON.stringify(notificationPayload),
-          { timeout: 10000 },
+          // Resolve presentation through the current authenticated session in
+          // the worker. Queued pushes cannot reveal a previous account's name.
+          JSON.stringify({ notificationId: payload.notificationId, recipientId: userId }),
+          { timeout: 10000, TTL: 3600, urgency: "high" },
         );
       } catch (error) {
         const statusCode =

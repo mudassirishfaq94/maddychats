@@ -12,6 +12,7 @@ import { migrate } from "drizzle-orm/node-postgres/migrator";
 import bcrypt from "bcryptjs";
 import webPush from "web-push";
 import { testRestoredWorkflows } from "./test-restored-workflows.mjs";
+import { testPwaNotifications } from "./test-pwa-notifications.mjs";
 
 async function main() {
   const url = process.env.ITEM456_TEST_DATABASE_URL;
@@ -44,11 +45,14 @@ async function main() {
     let output = ""; server.stdout?.on("data", d => output += d); server.stderr?.on("data", d => output += d);
     for (let i = 0; i < 100; i++) { try { if ((await fetch(base + "/api/health")).status === 204) break; } catch {} await new Promise(r => setTimeout(r, 200)); }
     try {
-      if (process.env.DEVICE_RECOVERY_ONLY === "1") {
+      if (process.env.PWA_ONLY === "1") {
+        console.log(await testPwaNotifications(base, pool));
+      } else if (process.env.DEVICE_RECOVERY_ONLY === "1") {
         console.log(await testEncryptionDevices(base, pool, accounts[0], accounts[1], password, conversation!, testSecret));
       } else if (process.env.PROFILE_ONLY === "1") {
         await testDeviceRecoveryUI(base, pool);
       } else {
+        if (process.env.GROUP_ONLY !== "1") await testPwaNotifications(base, pool);
         if (process.env.GROUP_ONLY !== "1") await testDeviceRecoveryUI(base, pool);
         console.log(await testRestoredWorkflows(base, pool, accounts[0], accounts[1], password, conversation!, false, testSecret));
       }

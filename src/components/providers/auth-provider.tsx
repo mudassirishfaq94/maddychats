@@ -200,6 +200,9 @@ export function AuthProvider({ children, initialUser }: { children: ReactNode; i
 
   const signOut = useCallback(async () => {
     const signedOutUserId = user?.id;
+    if ("serviceWorker" in navigator) {
+      void navigator.serviceWorker.getRegistration("/").then(registration => registration?.active?.postMessage({ type: "CIRCLO_SIGNED_OUT" })).catch(() => {});
+    }
     try {
       await fetch("/api/auth/logout", { method: "POST" });
     } catch {

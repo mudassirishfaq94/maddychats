@@ -93,6 +93,28 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // Rebind an existing, already-permitted subscription on every account change.
+  // Never request permission automatically. The worker independently checks the
+  // signed-in account before presenting queued push metadata.
+  useEffect(() => {
+    if (status !== "authenticated" || !user?.id || isNativeApp() || !("serviceWorker" in navigator)) return;
+    let stopped = false;
+    const visible = () => {
+      if (document.visibilityState !== "visible") return;
+      void navigator.serviceWorker.getRegistration("/").then(registration => registration?.active?.postMessage({ type: "CIRCLO_APP_VISIBLE" })).catch(() => {});
+    };
+    visible(); document.addEventListener("visibilitychange", visible);
+    void navigator.serviceWorker.ready.then(async registration => {
+      visible();
+      const subscription = await registration.pushManager?.getSubscription();
+      if (stopped) return;
+      if (!subscription || !("Notification" in window) || Notification.permission !== "granted") { localStorage.removeItem("maddy:web-push-subscribed"); return; }
+      const response = await fetch("/api/notifications/push", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(subscription.toJSON()), signal: AbortSignal.timeout(10000) });
+      if (response.ok && !stopped) localStorage.setItem("maddy:web-push-subscribed", "1");
+    }).catch(() => {});
+    return () => { stopped = true; document.removeEventListener("visibilitychange", visible); };
+  }, [status, user?.id]);
+
   // Capacitor (Android): register for FCM push notifications
   useEffect(() => {
     if (status !== "authenticated") return;
@@ -223,7 +245,12 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
           return;
         }
 
-        if (preferences?.notificationSound) playNotificationSound();
+        if (document.visibilityState === "visible") {
+          // Keep the inbox badge current without foreground OS alerts or sound.
+          listeners.current.forEach(fn => { try { fn(event); } catch {} });
+          return;
+        }
+        if (preferences?.notificationSound && localStorage.getItem("maddy:web-push-subscribed") !== "1") playNotificationSound();
         if (
           preferences?.pushNotifications &&
           localStorage.getItem("maddy:web-push-subscribed") !== "1" &&
@@ -235,9 +262,9 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
           const url = `/app/chats/${conversationId}?latest=1`;
           const options: NotificationOptions = {
             body: preview,
-            tag: `maddy-message-${event.notification.id}`,
+            tag: `circlo-${user?.id}-${conversationId}`,
             icon: "/icons/circlo-192.png",
-            badge: "/icons/circlo-192.png",
+            badge: "/icons/circlo-badge-96.png",
             data: { url },
           };
           if ("serviceWorker" in navigator) {
