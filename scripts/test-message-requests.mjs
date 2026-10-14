@@ -22,7 +22,7 @@ export async function testMessageRequests(base, senderCookie, recipientCookie, c
   const introduction = "Hello from my circle — please approve this introduction";
   try {
     const sender = await makePage(senderCookie);
-    await sender.goto(`${base}/app/profile`);
+    await sender.goto(`${base}/app/profile#encryption-devices`);
     await sender.getByText("This device: Trusted", { exact: true }).waitFor({ timeout: 60000 });
     await sender.goto(url);
     await sender.getByText("Start with a message request", { exact: true }).waitFor();
@@ -54,7 +54,7 @@ export async function testMessageRequests(base, senderCookie, recipientCookie, c
     assert(notificationData.notifications.some(entry => entry.data?.conversationId === conversationId && entry.data?.preview?.includes("Message request")));
     // Reconnect the same trusted sender on another app route: key delivery
     // must work even when the sender does not reopen this specific chat.
-    await sender.goto(`${base}/app/profile`);
+    await sender.goto(`${base}/app/profile#encryption-devices`);
     await recipient.getByRole("region", { name: "Conversation", exact: true }).getByText(introduction, { exact: true }).waitFor({ timeout: 60000 });
     await recipient.getByRole("button", { name: "Accept", exact: true }).click();
     await recipient.getByRole("textbox", { name: "Message text" }).waitFor();

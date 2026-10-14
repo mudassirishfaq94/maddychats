@@ -17,11 +17,41 @@ export async function testDeviceRecoveryUI(base, pool) {
   const open = async () => {
     const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, serviceWorkers: "block" });
     await login(context); const page = await context.newPage(); page.on("pageerror", error => errors.push(error.message));
-    await page.goto(base + "/app/profile"); await page.getByLabel("This device fingerprint").waitFor();
+    await page.goto(base + "/app/profile#encryption-devices"); await page.getByLabel("This device fingerprint").waitFor();
     return { context, page };
   };
   try {
     const source = await open(); await source.page.getByText("This device: Trusted", { exact: true }).waitFor();
+    const overview = await source.context.newPage();
+    await overview.goto(base + "/app/profile");
+    await overview.getByRole("heading", { name: username, exact: true }).waitFor();
+    assert.equal(await overview.locator("details[open]").count(), 0, "Profile starts with compact settings sections");
+    assert.equal(await overview.getByRole("heading", { name: "Notifications", exact: true }).count(), 0, "Collapsed settings do not mount their API-backed component");
+    assert.equal(await overview.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+    if (process.env.PROFILE_QA_SCREENSHOT) await overview.screenshot({ path: process.env.PROFILE_QA_SCREENSHOT, fullPage: true });
+    await overview.close();
+    const notificationSection = source.page.locator("details").filter({ has: source.page.locator("summary").filter({ hasText: /^Notifications/ }) }).first();
+    assert.equal(await notificationSection.getAttribute("open"), null, "Secondary profile settings start collapsed");
+    await source.page.evaluate(`(() => {
+      const subscription = { toJSON: () => ({ endpoint: "https://fcm.googleapis.com/fcm/send/circlo-disposable-ui-fixture", keys: { p256dh: "fake-public-key-for-ui-test-only", auth: "fake-auth-for-ui-test" } }) };
+      const registration = { pushManager: { getSubscription: async () => null, subscribe: async options => { window.__pushHasKey = options.applicationServerKey.byteLength === 65; return subscription; } } };
+      Object.defineProperty(window, "Notification", { configurable: true, value: { permission: "default", requestPermission: async () => "granted" } });
+      Object.defineProperty(navigator, "serviceWorker", { configurable: true, value: { ready: Promise.resolve(registration), register: async () => registration, getRegistration: async () => registration } });
+      if (!("PushManager" in window)) Object.defineProperty(window, "PushManager", { configurable: true, value: function () {} });
+    })()`);
+    await notificationSection.locator("summary").click();
+    const pushSettings = await source.context.request.get(base + "/api/notifications/push");
+    assert.equal(pushSettings.status(), 200);
+    const pushConfig = await pushSettings.json();
+    assert.equal(Buffer.from(pushConfig.publicKey, "base64url").length, 65);
+    assert.deepEqual(Object.keys(pushConfig), ["publicKey"], "Only the public push key is exposed");
+    await notificationSection.getByRole("button", { name: "Enable", exact: true }).click();
+    await notificationSection.getByText("Push alerts enabled on this device.", { exact: true }).waitFor();
+    assert.equal(await source.page.evaluate(() => window.__pushHasKey), true);
+    assert.equal((await pool.query("select count(*)::int as n from push_subscriptions where user_id=$1", [user.id])).rows[0].n, 1);
+    assert.equal((await source.context.request.delete(base + "/api/notifications/push", { data: { endpoint: "https://fcm.googleapis.com/fcm/send/circlo-disposable-ui-fixture" }, headers: { Origin: base } })).status(), 200);
+    await notificationSection.locator("summary").click();
+    console.log("PASS mobile profile disclosures and push permission, runtime public key, UI subscription, persisted account binding, and cleanup (browser push mocked)");
     await source.page.getByText("Name this browser and set its country", { exact: true }).click();
     await source.page.getByLabel("Device name", { exact: true }).fill("My trusted laptop");
     await source.page.getByLabel("Country (provided by you)").selectOption("AE");

@@ -3,16 +3,17 @@ import webPush from "web-push";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { pushSubscriptions, fcmTokens } from "@/db/schema";
+import { pushConfiguration } from "./push-configuration";
+import { isSupportedPushEndpoint } from "@/lib/push-endpoint";
 
 let configured = false;
 let firebaseAdmin: any = null;
 
 function configureWebPush(): boolean {
   if (configured) return true;
-  const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
-  const privateKey = process.env.VAPID_PRIVATE_KEY;
-  const subject = process.env.VAPID_SUBJECT;
-  if (!publicKey || !privateKey || !subject) return false;
+  const configuration = pushConfiguration();
+  if (!configuration) return false;
+  const { publicKey, privateKey, subject } = configuration;
   webPush.setVapidDetails(subject, publicKey, privateKey);
   configured = true;
   return true;
@@ -160,6 +161,7 @@ export async function sendMessagePush(
 
   await Promise.all(
     subscriptions.map(async (subscription) => {
+      if (!isSupportedPushEndpoint(subscription.endpoint)) return;
       try {
         await webPush.sendNotification(
           {
@@ -167,6 +169,7 @@ export async function sendMessagePush(
             keys: { p256dh: subscription.p256dh, auth: subscription.auth },
           },
           JSON.stringify(notificationPayload),
+          { timeout: 10000 },
         );
       } catch (error) {
         const statusCode =

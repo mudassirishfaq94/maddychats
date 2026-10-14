@@ -23,6 +23,7 @@ import { AccountDataSection } from "@/components/profile/account-data";
 import { TwoFactorAuth } from "@/components/profile/two-factor-auth";
 import { EncryptionDevices } from "@/components/profile/encryption-devices";
 import { Devices } from "@/components/profile/devices";
+import { ProfileDisclosure } from "@/components/profile/profile-disclosure";
 import { db } from "@/db";
 import { oauthAccounts, users } from "@/db/schema";
 import { Avatar } from "@/components/avatar";
@@ -34,7 +35,7 @@ export const dynamic = "force-dynamic";
 export default async function ProfilePage({
   searchParams,
 }: {
-  searchParams: Promise<{ onboarding?: string; auth_linked?: string; auth_error?: string }>;
+  searchParams: Promise<{ onboarding?: string; auth_linked?: string; auth_error?: string; recovery?: string }>;
 }) {
   const user = await getSessionUser();
   if (!user) redirect("/login?next=/app/profile");
@@ -86,13 +87,13 @@ export default async function ProfilePage({
 
       {/* ---------- profile header ---------- */}
       <section
-        className="card-glass mt-5 flex min-w-0 flex-col items-center gap-5 rounded-3xl p-5 text-center sm:mt-6 sm:flex-row sm:gap-6 sm:p-8 sm:text-left animate-fade-up"
+        className="card-glass mt-5 flex min-w-0 items-center gap-4 rounded-3xl p-4 text-left sm:mt-6 sm:gap-6 sm:p-6 animate-fade-up"
         style={{ "--d": "80ms" } as React.CSSProperties}
       >
-        <Avatar user={user} size={92} ring />
+        <Avatar user={user} size={64} ring />
         <div className="w-full min-w-0 flex-1">
-          <div className="flex min-w-0 flex-col items-center gap-3 sm:flex-row sm:flex-wrap sm:items-center">
-            <h1 className="max-w-full break-words font-display text-2xl font-bold sm:text-3xl">{user.displayName}</h1>
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <h1 className="max-w-full break-words font-display text-xl font-bold sm:text-2xl">{user.displayName}</h1>
             <span className="badge badge-accent">
               <span className="pulse-dot h-1.5 w-1.5 rounded-full bg-[var(--success)]" />
               Online
@@ -109,32 +110,24 @@ export default async function ProfilePage({
       <div className="mt-5 grid min-w-0 grid-cols-[minmax(0,1fr)] items-start gap-5 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
         <div className="min-w-0 space-y-5">
           <ProfileEditor user={user} />
-          <AuthenticationMethods initialMethods={initialMethods} notice={notice} />
-          <TwoFactorAuth />
-          <Devices />
-              <EncryptionDevices recoveryEmail={accountSecurity?.emailVerifiedAt && !user.email.endsWith("@auth.maddychats.invalid") ? user.email : undefined} />
-          <NotificationPreferences />
-          <PrivacySettings />
-          <LoginHistory />
-          <AccountDataSection />
+          <ProfileDisclosure title="Encryption & trusted devices" description="Link a browser, recover access, and save your encryption keys." anchors={["encryption-devices"]} defaultOpen={query.recovery === "1"}>
+            <EncryptionDevices openRecovery={query.recovery === "1"} recoveryEmail={accountSecurity?.emailVerifiedAt && !user.email.endsWith("@auth.maddychats.invalid") ? user.email : undefined} />
+          </ProfileDisclosure>
+          <ProfileDisclosure title="Sign-in & account security" description="Google, passwords, two-step verification, and signed-in sessions." anchors={["account-security", "devices", "authentication-methods"]} defaultOpen={Boolean(notice)}>
+            <div id="account-security" className="space-y-4"><AuthenticationMethods initialMethods={initialMethods} notice={notice} /><TwoFactorAuth /><Devices /><LoginHistory /></div>
+          </ProfileDisclosure>
+          <ProfileDisclosure title="Notifications" description="Enable push alerts and choose which messages notify you." anchors={["notifications"]}>
+            <div id="notifications"><NotificationPreferences /></div>
+          </ProfileDisclosure>
+          <ProfileDisclosure title="Privacy & your data" description="Visibility settings, account export, and account deletion." anchors={["privacy-settings"]}>
+            <div id="privacy-settings" className="space-y-4"><PrivacySettings /><AccountDataSection /></div>
+          </ProfileDisclosure>
         </div>
 
         <div className="min-w-0 space-y-4">
-          {meta.map(({ icon: Icon, label, value }, i) => (
-            <div
-              key={label}
-              className="card-flat rounded-2xl p-5 animate-fade-up"
-              style={{ "--d": `${220 + i * 60}ms` } as React.CSSProperties}
-            >
-              <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-[var(--muted)]">
-                <Icon className="h-3.5 w-3.5 text-[var(--accent)]" />
-                {label}
-              </p>
-              <p className="mt-2.5 break-words text-[0.95rem] font-medium leading-relaxed">
-                {value}
-              </p>
-            </div>
-          ))}
+          <div className="card-flat rounded-2xl p-5"><h2 className="font-semibold">Account overview</h2><dl className="mt-3 divide-y divide-[var(--border)]">
+            {meta.map(({ icon: Icon, label, value }) => <div key={label} className="py-3"><dt className="flex items-center gap-2 text-xs text-[var(--muted)]"><Icon className="h-3.5 w-3.5" />{label}</dt><dd className="mt-1 break-words text-sm">{value}</dd></div>)}
+          </dl></div>
           <div
             className="card-flat rounded-2xl p-5 animate-fade-up"
             style={{ "--d": "460ms" } as React.CSSProperties}

@@ -2,21 +2,29 @@ import { NextRequest, NextResponse } from "next/server";
 import { and, eq, gt, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import { deviceSessions, e2eeKeys, users } from "@/db/schema";
-import { getSessionDeviceId, getSessionUser } from "@/server/session";
+import { getSessionAuthTime, getSessionDeviceId, getSessionUser } from "@/server/session";
 import { guardSameOrigin, jsonError, readJson, clientIp } from "@/server/http";
 import { rateLimit } from "@/server/rate-limit";
-import { verifyFreshAuthentication } from "@/server/authentication";
+import { recentlyAuthenticated, verifyFreshAuthentication } from "@/server/authentication";
 import { issueDeviceRecoveryEmailCode, deviceRecoveryEmailConfigured } from "@/server/device-recovery-email";
 import { createHash } from "node:crypto";
 
 export const dynamic = "force-dynamic";
+
+export async function GET() {
+  const user = await getSessionUser();
+  if (!user) return jsonError(401, "Sign in before requesting device recovery.");
+  return NextResponse.json({ configured: deviceRecoveryEmailConfigured(), recentSignIn: recentlyAuthenticated(await getSessionAuthTime()) }, { headers: { "Cache-Control": "private, no-store" } });
+}
 
 export async function POST(req: NextRequest) {
   const blocked = guardSameOrigin(req);
   if (blocked) return blocked;
   const user = await getSessionUser();
   if (!user) return jsonError(401, "Sign in before requesting device recovery.");
-  if (!await verifyFreshAuthentication(user.id, null)) return jsonError(403, "Sign in again with Google or your account provider before requesting a recovery code.");
+  const body = await readJson(req);
+  if (!recentlyAuthenticated(await getSessionAuthTime()) && !(await rateLimit(`e2ee-recovery-email-auth:${user.id}`, 5, 10 * 60 * 1000)).allowed) return jsonError(429, "Too many identity-confirmation attempts. Please wait or sign in again with your account provider.");
+  if (!await verifyFreshAuthentication(user.id, body)) return NextResponse.json({ code: "REAUTH_REQUIRED", error: "Confirm your identity first: sign in again with Google, or enter your current password and authenticator code below. Then request your email code." }, { status: 403, headers: { "Cache-Control": "private, no-store" } });
   const [account] = await db.select({ emailVerifiedAt: users.emailVerifiedAt }).from(users).where(eq(users.id, user.id)).limit(1);
   if (!account?.emailVerifiedAt || user.email.endsWith("@auth.maddychats.invalid")) return jsonError(409, "This account has no verified email address for recovery. Sign in again or use a saved recovery file.");
   if (!deviceRecoveryEmailConfigured()) return jsonError(503, "Email recovery is temporarily unavailable. Use a trusted device or saved recovery file.");
@@ -26,7 +34,6 @@ export async function POST(req: NextRequest) {
   if (!ipLimit.allowed || !userLimit.allowed) return jsonError(429, "Too many recovery-code requests. Please wait before trying again.");
 
   const sessionId = await getSessionDeviceId();
-  const body = await readJson(req);
   const deviceId = typeof body?.deviceId === "string" ? body.deviceId : "";
   const fingerprint = typeof body?.fingerprint === "string" ? body.fingerprint : "";
   if (!sessionId || !deviceId || deviceId.length > 128 || !/^[a-f0-9]{64}$/.test(fingerprint)) return jsonError(422, "Refresh this browser's pending encryption device, then request a new code.");

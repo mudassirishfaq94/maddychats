@@ -35,7 +35,7 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     return { page, cookies };
   };
   const api = async (route, cookies, body, method = "POST") => fetch(base + route, { method, headers: { Origin: base, Cookie: cookies, "Content-Type": "application/json" }, ...(body ? { body: JSON.stringify(body) } : {}) });
-  const profile = async page => { await page.goto(base + "/app/profile"); await page.getByLabel("This device fingerprint").waitFor({ timeout: 30000 }); };
+  const profile = async page => { await page.goto(base + "/app/profile#encryption-devices"); await page.getByLabel("This device fingerprint").waitFor({ timeout: 30000 }); };
   const chat = async page => { await page.goto(base + "/app/chats/" + conversationId); await page.getByRole("textbox", { name: "Message text" }).waitFor(); };
   const refresh = async page => { const response = page.waitForResponse(r => r.url().endsWith("/api/e2ee/keys") && r.request().method() === "GET"); await page.getByRole("button", { name: "Refresh encryption devices", exact: true }).click(); assert.equal((await response).status(), 200); await page.getByLabel("This device fingerprint").waitFor(); };
   let sessionRaceChecked = false;

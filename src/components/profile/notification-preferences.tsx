@@ -45,9 +45,10 @@ export function NotificationPreferences() {
 
   useEffect(() => {
     if (isNativeApp() || !("serviceWorker" in navigator) || !("PushManager" in window)) return;
-    void navigator.serviceWorker.ready
-      .then((registration) => registration.pushManager.getSubscription())
-      .then((subscription) => setPushSubscribed(Boolean(subscription)));
+    void navigator.serviceWorker.getRegistration("/")
+      .then((registration) => registration?.pushManager.getSubscription())
+      .then((subscription) => setPushSubscribed(Boolean(subscription)))
+      .catch(() => setPushSubscribed(false));
   }, []);
 
   function applicationServerKey(value: string): Uint8Array<ArrayBuffer> {
@@ -66,20 +67,22 @@ export function NotificationPreferences() {
       setMessage("Push notifications are not supported on this device or browser.");
       return false;
     }
-    const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
-    if (!publicKey) {
-      setMessage("Push notifications are not configured on this deployment yet.");
-      return false;
-    }
     setSubscribing(true);
     try {
+      // Ask permission within the click gesture (required by mobile Safari).
       const permission = await Notification.requestPermission();
       setBrowserPermission(permission);
       if (permission !== "granted") {
         setMessage("Notifications are blocked. Allow them in this app's site settings.");
         return false;
       }
-      const registration = await navigator.serviceWorker.ready;
+      const configurationResponse = await fetch("/api/notifications/push", { cache: "no-store", signal: AbortSignal.timeout(10000) });
+      if (!configurationResponse.ok) throw new Error("Could not load push settings. Sign in again and retry.");
+      const { publicKey } = await configurationResponse.json() as { publicKey: string | null };
+      if (!publicKey) throw new Error("Push alerts are temporarily unavailable. Please try again later.");
+      await navigator.serviceWorker.register("/sw.js", { scope: "/" });
+      let deadline: ReturnType<typeof setTimeout> | undefined;
+      const registration = await Promise.race([navigator.serviceWorker.ready, new Promise<never>((_, reject) => { deadline = setTimeout(() => reject(new Error("Notifications could not start. Reload this page and retry.")), 10000); })]).finally(() => { if (deadline) clearTimeout(deadline); });
       const existing = await registration.pushManager.getSubscription();
       const subscription = existing ?? await registration.pushManager.subscribe({
         userVisibleOnly: true,
@@ -89,10 +92,11 @@ export function NotificationPreferences() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(subscription.toJSON()),
+        signal: AbortSignal.timeout(10000),
       });
       if (!response.ok) throw new Error("The device could not be registered.");
       setPushSubscribed(true);
-      localStorage.setItem("maddy:web-push-subscribed", "1");
+      try { localStorage.setItem("maddy:web-push-subscribed", "1"); } catch { /* Subscription does not depend on optional browser storage. */ }
       setMessage("Push alerts enabled on this device.");
       return true;
     } catch (error) {

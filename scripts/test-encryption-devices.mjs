@@ -35,7 +35,7 @@ export async function testEncryptionDevices(base, pool, owner, peer, password, c
     }
     else {
       const original = await login(owner); contact = await login(peer);
-      for (const client of [original, contact]) { await client.page.goto(base + "/app/profile"); await client.page.getByText("This device: Trusted", { exact: true }).waitFor(); }
+      for (const client of [original, contact]) { await client.page.goto(base + "/app/profile#encryption-devices"); await client.page.getByText("This device: Trusted", { exact: true }).waitFor(); }
       for (const client of [original, contact]) { await client.page.goto(base + "/app/chats/" + conversationId); await client.page.getByRole("textbox", { name: "Message text" }).waitFor(); }
       await original.page.getByRole("textbox", { name: "Message text" }).fill("Recovery baseline ciphertext");
       await original.page.getByRole("textbox", { name: "Message text" }).press("Enter");
@@ -74,6 +74,12 @@ export async function testEncryptionDevices(base, pool, owner, peer, password, c
     const legacyToken = await new SignJWT({ usr: owner.username, iatMs: Date.now(), authTime: Date.now() - 10 * 60000, mfaTime: enabledAt + 1 }).setProtectedHeader({ alg: "HS256", typ: "JWT" }).setSubject(owner.id).setIssuer("maddy-chats").setAudience("maddy-chats-web").setIssuedAt().setExpirationTime("15m").sign(new TextEncoder().encode(jwtSecret));
     device.cookies = "maddy_session=" + staleToken;
     await device.page.context().addCookies([{ name: "maddy_session", value: staleToken, url: base, httpOnly: true, sameSite: "Lax" }]);
+    const readiness = await fetch(base + "/api/e2ee/devices/recovery-email", { headers: { Cookie: device.cookies } });
+    assert.equal(readiness.status, 200);
+    assert.equal((await readiness.json()).recentSignIn, false, "Recovery UI can identify an expired confirmation before claiming mail was sent");
+    const blockedMail = await fetch(base + "/api/e2ee/devices/recovery-email", { method: "POST", headers: { Origin: base, Cookie: device.cookies, "Content-Type": "application/json" }, body: JSON.stringify({ deviceId: target.device_id, fingerprint }) });
+    assert.equal(blockedMail.status, 403);
+    assert.equal((await blockedMail.json()).code, "REAUTH_REQUIRED", "Expired confirmations provide an actionable mail error");
     assert.equal((await api(device.cookies, recovery)).status, 403, "Old cookies cannot recover trust");
     assert.equal((await api(device.cookies, { ...recovery, password, mfaCode: "invalid" })).status, 403, "MFA cannot be bypassed");
     device.cookies = "maddy_session=" + currentToken;
@@ -129,6 +135,6 @@ export async function testEncryptionDevices(base, pool, owner, peer, password, c
     assert(sent.encrypted); assert(!sent.text.includes("Recovered browser encrypted reply"));
     assert.equal(await device.page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
     assert.deepEqual(errors, []);
-    return { olderSessionsAndLegacyCookiesRevoked: true, lostTrustedBrowserRecovery: true, noTrustedDeviceRecovery: true, privateKeyProof: true, staleSessionRejected: true, wrongPasswordRejected: true, mfaRequired: true, crossAccountRejected: true, replayRejected: true, historyPreserved: true, encryptedDelivery: true, mobileOverflow: false, browserErrors: 0 };
+    return { olderSessionsAndLegacyCookiesRevoked: true, lostTrustedBrowserRecovery: true, noTrustedDeviceRecovery: true, privateKeyProof: true, staleSessionRejected: true, mfaRequired: true, crossAccountRejected: true, replayRejected: true, historyPreserved: true, encryptedDelivery: true, mobileOverflow: false, browserErrors: 0 };
   } finally { await browser.close(); }
 }

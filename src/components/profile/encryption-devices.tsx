@@ -6,6 +6,7 @@ import { DeviceIdentityEditor } from "./device-identity-editor";
 import { DeviceRecovery } from "./device-recovery";
 import { browserLabel, countryName } from "@/server/device-meta";
 import { FreshAuthentication } from "./fresh-authentication";
+import Link from "next/link";
 
 type Device = { deviceId: string; trustedAt: string | null; publicKey: string; fingerprint: string; browser: string | null; sessionExpiresAt: string | null; sessionRevokedAt: string | null; lastUsedAt: string | null; sessionState: string; deviceName?: string | null; country?: string | null; platform?: string | null; };
 type LinkRequest = { id: string; deviceId: string; fingerprint: string; status: string; expiresAt: string };
@@ -16,7 +17,7 @@ function maskEmail(email: string) {
   return `${local.slice(0, 1)}${local.length > 1 ? "•••" : "••"}@${domain}`;
 }
 
-export function EncryptionDevices({ recoveryEmail }: { recoveryEmail?: string }) {
+export function EncryptionDevices({ recoveryEmail, openRecovery = false }: { recoveryEmail?: string; openRecovery?: boolean }) {
   const encryption = useSharedE2EE();
   const [devices, setDevices] = useState<Device[]>([]);
   const [verified, setVerified] = useState<string[]>([]);
@@ -27,12 +28,13 @@ export function EncryptionDevices({ recoveryEmail }: { recoveryEmail?: string })
   const [deviceName, setDeviceName] = useState("");
   const [codes, setCodes] = useState<Record<string, string>>({});
   const [status, setStatus] = useState("");
-  const [recoveryOpen, setRecoveryOpen] = useState(false);
+  const [recoveryOpen, setRecoveryOpen] = useState(openRecovery);
   const [confirmation, setConfirmation] = useState("");
   const [password, setPassword] = useState("");
   const [mfaCode, setMfaCode] = useState("");
   const [emailRecoveryCode, setEmailRecoveryCode] = useState("");
   const [emailRecoveryCodeSent, setEmailRecoveryCodeSent] = useState(false);
+  const [recoveryReadiness, setRecoveryReadiness] = useState<{ configured: boolean; recentSignIn: boolean } | null>(null);
   const { waitForDeviceRegistration, syncKnownConversations } = encryption;
   const knownTrusted = useRef<Set<string> | null>(null);
 
@@ -72,6 +74,15 @@ export function EncryptionDevices({ recoveryEmail }: { recoveryEmail?: string })
 
   const current = devices.find(device => device.deviceId === encryption.deviceId);
 
+  useEffect(() => {
+    if (!recoveryOpen || !recoveryEmail) return;
+    const controller = new AbortController();
+    void e2eeRequest("/api/e2ee/devices/recovery-email", { cache: "no-store", signal: controller.signal })
+      .then(async response => { if (response.ok) setRecoveryReadiness(await response.json()); })
+      .catch(() => {});
+    return () => controller.abort();
+  }, [recoveryOpen, recoveryEmail]);
+
   async function sendRecoveryEmailCode() {
     if (!current || !current.fingerprint) return;
     setBusy(true);
@@ -80,12 +91,13 @@ export function EncryptionDevices({ recoveryEmail }: { recoveryEmail?: string })
       const response = await e2eeRequest("/api/e2ee/devices/recovery-email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ deviceId: current.deviceId, fingerprint: current.fingerprint }),
+        body: JSON.stringify({ deviceId: current.deviceId, fingerprint: current.fingerprint, password, mfaCode }),
       });
-      const data = await response.json() as { error?: string; expiresInSeconds?: number };
+      const data = await response.json() as { error?: string; code?: string; expiresInSeconds?: number };
+      if (data.code === "REAUTH_REQUIRED") setRecoveryReadiness(previous => ({ configured: previous?.configured ?? true, recentSignIn: false }));
       if (!response.ok) throw new Error(data.error ?? "Unable to send a recovery code.");
       setEmailRecoveryCodeSent(true);
-      setStatus("Recovery code sent. It expires in 10 minutes and works once.");
+      setStatus("Recovery email submitted. Check your inbox and spam folder. The code expires in 10 minutes and works once.");
     } catch (cause) {
       setStatus(cause instanceof Error ? cause.message : "Unable to send a recovery code.");
     } finally {
@@ -142,7 +154,7 @@ export function EncryptionDevices({ recoveryEmail }: { recoveryEmail?: string })
     <p className="mt-1 text-sm text-[var(--muted)]">Use a one-time linking code from a trusted browser. Keep that browser open while existing chat keys synchronize. Save a recovery file so you can recover without resetting everyone else.</p>
     {current && <div className="mt-3 text-sm"><p>This device: {current.trustedAt ? "Trusted" : "Waiting for approval"}</p><p className="mt-1 text-xs">Device ID: {current.deviceId}</p>{current.deviceName ? <p className="mt-1 text-xs text-[var(--muted)]">Device name: {current.deviceName}</p> : null}<p className="mt-1 text-xs text-[var(--muted)]">Country: {current.country ? countryName(current.country) : "Not provided — set Country in your profile"}</p><code className="mt-1 block break-all select-all text-xs" aria-label="This device fingerprint">{current.fingerprint}</code></div>}
     {current && !current.trustedAt && <p className="mt-3 text-sm text-[var(--muted)]">This browser cannot approve devices. Open Profile on a device marked Trusted and compare the fingerprint shown here.</p>}
-    <p className="mt-3 text-sm text-[var(--muted)]">Trust belongs to this account and this browser&apos;s saved encryption key, not the laptop or phone itself. Signing in again in the same browser keeps its approval; a different browser, a different website address, or clearing browser storage creates a new device that needs linking once. Approval permits key sharing; it does not mean every chat key has synchronized.</p>
+    <details className="mt-3 text-sm text-[var(--muted)]"><summary className="cursor-pointer">How browser trust and chat recovery work</summary><p className="mt-2">Trust belongs to this account and this browser&apos;s saved encryption key, not the laptop or phone itself. Signing in again in the same browser keeps its approval; a different browser, a different website address, or clearing browser storage creates a new device that needs linking once. Approval permits key sharing; it does not mean every chat key has synchronized.</p></details>
     <h3 className="mt-4 text-sm font-semibold">Trusted devices for this account</h3>
     {devices.some(device => device.trustedAt) ? <ul className="mt-2 space-y-3">{devices.filter(device => device.trustedAt).map(device => <li key={device.deviceId} className="rounded-xl border border-[var(--border)] p-3 text-xs">
       <p className="font-semibold">{device.deviceId === encryption.deviceId ? "This browser — Trusted" : "Trusted encryption key"}</p>
@@ -162,7 +174,10 @@ export function EncryptionDevices({ recoveryEmail }: { recoveryEmail?: string })
         {recoveryEmail ? <div className="my-3 rounded-xl border border-[var(--border)] p-3">
           <p className="text-xs">Confirm your verified email: <strong>{maskEmail(recoveryEmail)}</strong></p>
           <p className="mt-1 text-xs text-[var(--muted)]">You must also have signed in again within the last five minutes. If needed, use the sign-in link below and choose Google.</p>
-          <button type="button" className="btn btn-secondary mt-2" disabled={busy} onClick={() => void sendRecoveryEmailCode()}>{emailRecoveryCodeSent ? "Send another recovery code" : "Send recovery code"}</button>
+          {recoveryReadiness?.recentSignIn === false ? <div className="mt-2 rounded-lg bg-[var(--card-2)] p-3 text-xs"><p>Confirm your identity before sending the code. For Google accounts, use the button below; password accounts can fill in the password and authenticator fields.</p><Link className="btn btn-secondary mt-2" href={`/login?reauth=1&next=${encodeURIComponent("/app/profile?recovery=1#encryption-devices")}`}>Confirm with Google or sign in again</Link></div> : null}
+          {recoveryReadiness?.configured === false ? <p className="mt-2 text-xs">Email recovery is temporarily unavailable. Use a saved recovery file or another trusted browser.</p> : null}
+          <button type="button" className="btn btn-secondary mt-2" disabled={busy || recoveryReadiness?.configured === false || (recoveryReadiness?.recentSignIn === false && !password)} onClick={() => void sendRecoveryEmailCode()}>{busy ? "Please wait…" : emailRecoveryCodeSent ? "Send another recovery code" : "Send recovery code"}</button>
+          {status ? <p role="status" className="mt-2 text-sm">{status}</p> : null}
           <label className="mt-3 block text-xs">Six-digit email recovery code<input className="field-input mt-1 w-full tracking-[0.3em]" aria-label="Email recovery code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={emailRecoveryCode} onChange={event => setEmailRecoveryCode(event.target.value.replace(/\D/g, "").slice(0, 6))} /></label>
         </div> : <p className="my-3 text-xs text-[var(--muted)]">This account has no verified email available for recovery. Use the password and recent sign-in options below, or verify an email in account settings first.</p>}
         <FreshAuthentication password={password} code={mfaCode} onPassword={setPassword} onCode={setMfaCode} returnTo="/app/profile#encryption-devices" />
@@ -186,7 +201,7 @@ export function EncryptionDevices({ recoveryEmail }: { recoveryEmail?: string })
       {links.filter(link => link.deviceId === encryption.deviceId).map(link => <p key={link.id} className="mt-2 text-xs text-[var(--muted)]" role="status">Linking request: {link.status}</p>)}
     </div>}
     {encryption.error && !current?.trustedAt && <p role="status" className="mt-2 text-sm">{encryption.error}</p>}
-    {status && <p role="status" className="mt-2 text-sm">{status}</p>}
+    {status && !(recoveryOpen && recoveryEmail) && <p role="status" className="mt-2 text-sm">{status}</p>}
     <ul className="mt-3 space-y-3">{devices.filter(device => !device.trustedAt && device.deviceId !== encryption.deviceId).map(device => <li key={device.deviceId} className="border-t border-[var(--border)] pt-3">
       <p className="text-sm break-all">New device: {device.deviceId}</p>
       <code className="mt-1 block break-all select-all text-xs">{device.fingerprint}</code>

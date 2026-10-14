@@ -5,11 +5,19 @@ import { db } from "@/db";
 import { pushSubscriptions } from "@/db/schema";
 import { guardSameOrigin, jsonError, readJson } from "@/server/http";
 import { getSessionUser } from "@/server/session";
+import { pushConfiguration } from "@/server/push-configuration";
+import { isSupportedPushEndpoint } from "@/lib/push-endpoint";
 
 export const dynamic = "force-dynamic";
 
+export async function GET() {
+  if (!await getSessionUser()) return jsonError(401, "Not authenticated.");
+  const configuration = pushConfiguration();
+  return NextResponse.json({ publicKey: configuration?.publicKey ?? null }, { headers: { "Cache-Control": "private, no-store" } });
+}
+
 const subscriptionSchema = z.object({
-  endpoint: z.string().url().max(2048).refine((value) => value.startsWith("https://"), "A secure push endpoint is required."),
+  endpoint: z.string().url().max(2048).refine(isSupportedPushEndpoint, "A supported browser push service is required."),
   keys: z.object({
     p256dh: z.string().min(20).max(512),
     auth: z.string().min(8).max(256),
@@ -23,6 +31,7 @@ export async function POST(req: NextRequest) {
   if (blocked) return blocked;
   const me = await getSessionUser();
   if (!me) return jsonError(401, "Not authenticated.");
+  if (!pushConfiguration()) return jsonError(503, "Push alerts are temporarily unavailable. Please try again later.");
   const body = await readJson(req);
   const parsed = subscriptionSchema.safeParse(body);
   if (!parsed.success) return jsonError(400, "Invalid push subscription.");

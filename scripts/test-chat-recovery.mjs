@@ -81,7 +81,7 @@ export async function testChatRecovery(base, cookieHeader, conversationId) {
     await source.getByRole("button", { name: "Close", exact: true }).click();
 
     const target = await context();
-    await target.goto(`${base}/app/profile`);
+    await target.goto(`${base}/app/profile#encryption-devices`);
     await target.getByText("This device: Waiting for approval", { exact: true }).waitFor({ timeout: 30000 });
     const targetId = await target.evaluate(() => localStorage.getItem("e2ee_device_id"));
     const targetFingerprint = await target.getByLabel("This device fingerprint").innerText();
@@ -92,7 +92,7 @@ export async function testChatRecovery(base, cookieHeader, conversationId) {
     await target.getByLabel("Queued", { exact: true }).waitFor();
     assert.equal(await target.getByLabel("Failed to send", { exact: true }).count(), 0);
     await target.getByRole("status").filter({ hasText: "This device needs approval" }).waitFor();
-    await source.goto(`${base}/app/profile`);
+    await source.goto(`${base}/app/profile#encryption-devices`);
     const pending = source.locator("li").filter({ hasText: `New device: ${targetId}` });
     await pending.waitFor();
     assert.equal(await pending.locator("code").innerText(), targetFingerprint, "Verify the fingerprint on both real devices");
