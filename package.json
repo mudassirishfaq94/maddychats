@@ -5,6 +5,7 @@
     "node": "22.x"
   },
   "scripts": {
+    "postinstall": "node scripts/harden-braces.mjs",
     "dev": "next dev",
     "build": "next build",
     "start": "node scripts/start-production.mjs",

@@ -37,6 +37,10 @@ async function handlePOST(req: NextRequest) {
     }
     const user = await findUserById(handoff.userId);
     if (!user || user.username !== handoff.username) return jsonError(401, "Google mobile sign-in expired.");
+    // PKCE proves possession, but does not make a captured ticket/verifier
+    // pair single-use. Consume it atomically in the shared store before auth.
+    const ticketId = createHash("sha256").update(ticket).digest("hex");
+    if (!(await rateLimit(`google-mobile-handoff:${ticketId}`, 1, 5 * 60 * 1000)).allowed) return jsonError(409, "Google mobile sign-in was already used or could not be verified. Start sign-in again.");
     return beginSignIn(req, user);
   }
   const idToken = typeof body?.idToken === "string" ? body.idToken : null;

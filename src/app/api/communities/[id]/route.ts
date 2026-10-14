@@ -3,6 +3,7 @@ import { getSessionUser } from "@/server/session";
 import { isUuid } from "@/server/users";
 import { getCommunity, getCommunityMembership, joinCommunity, leaveCommunity, getCommunityMembers, createChannel, listChannels } from "@/server/communities";
 import { guardSameOrigin, jsonError, readJson } from "@/server/http";
+import { rateLimit } from "@/server/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -48,6 +49,12 @@ export async function POST(
   const body = await readJson(req);
   const data = (body ?? {}) as Record<string, unknown>;
   const action = data.action ? String(data.action) : "join";
+  const limit = await rateLimit(`community-mutation:${user.id}`, 60, 60 * 1000);
+  if (!limit.allowed) {
+    const response = jsonError(429, "Too many community changes. Please wait before retrying.");
+    response.headers.set("Retry-After", String(limit.retryAfterSeconds));
+    return response;
+  }
 
   if (action === "join") {
     const result = await joinCommunity(id, user.id);

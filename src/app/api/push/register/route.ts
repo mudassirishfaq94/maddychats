@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
-import { eq, and } from "drizzle-orm";
+import { eq, and, ne } from "drizzle-orm";
 import { db } from "@/db";
-import { fcmTokens } from "@/db/schema";
+import { fcmTokens, users } from "@/db/schema";
 import { getSessionUser } from "@/server/session";
 import { jsonError, readJson, guardSameOrigin } from "@/server/http";
 import { rateLimit } from "@/server/rate-limit";
@@ -27,50 +27,32 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await readJson(req);
-  if (!body || typeof body.token !== "string" || body.token.length < 10) {
+  if (!body || typeof body.token !== "string" || body.token.length < 10 || body.token.length > 4096) {
     return jsonError(400, "Valid FCM token required.");
   }
 
   const platform = typeof body.platform === "string" ? body.platform.slice(0, 20) : "android";
 
-  // Upsert: if this exact token exists, update the timestamp;
-  // if the user already has a token for this platform, replace it.
-  const existing = await db
-    .select({ id: fcmTokens.id })
-    .from(fcmTokens)
-    .where(eq(fcmTokens.token, body.token))
-    .limit(1);
-
-  if (existing[0]) {
-    // Token already stored — just touch the timestamp
-    await db
-      .update(fcmTokens)
-      .set({ updatedAt: new Date() })
-      .where(eq(fcmTokens.id, existing[0].id));
-  } else {
-    // Remove any old token for this user + platform
-    await db
-      .delete(fcmTokens)
-      .where(and(eq(fcmTokens.userId, user.id), eq(fcmTokens.platform, platform)));
-
-    // Insert the new token
-    await db.insert(fcmTokens).values({
-      userId: user.id,
-      token: body.token,
-      platform,
-    });
-  }
-
-  return Response.json({ ok: true });
+  // The same physical device can switch accounts without rotating its FCM
+  // token. Route future alerts to the signed-in account, never the old owner.
+  await db.transaction(async tx => {
+    await tx.select({ id: users.id }).from(users).where(eq(users.id, user.id)).for("update");
+    await tx.delete(fcmTokens).where(and(eq(fcmTokens.userId, user.id), eq(fcmTokens.platform, platform), ne(fcmTokens.token, body.token as string)));
+    await tx.insert(fcmTokens).values({ userId: user.id, token: body.token as string, platform })
+      .onConflictDoUpdate({ target: fcmTokens.token, set: { userId: user.id, platform, updatedAt: new Date() } });
+  });
+  return Response.json({ ok: true }, { headers: { "Cache-Control": "private, no-store" } });
 }
 
 /**
  * DELETE /api/push/register — Remove the caller's FCM tokens.
  */
 export async function DELETE(req: NextRequest) {
+  const blocked = guardSameOrigin(req);
+  if (blocked) return blocked;
   const user = await getSessionUser();
   if (!user) return jsonError(401, "Not authenticated.");
 
   await db.delete(fcmTokens).where(eq(fcmTokens.userId, user.id));
-  return Response.json({ ok: true });
+  return Response.json({ ok: true }, { headers: { "Cache-Control": "private, no-store" } });
 }

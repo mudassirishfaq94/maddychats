@@ -20,6 +20,7 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci --ignore-scripts
+      - run: node scripts/harden-braces.mjs
       - run: npx playwright install --with-deps chromium
       - run: node scripts/check-landing.mjs
       - uses: actions/upload-artifact@v4

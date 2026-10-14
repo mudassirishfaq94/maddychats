@@ -1,6 +1,7 @@
 /** Production HTTP authorization checks, restricted to one disposable loopback DB. */
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { randomUUID, createHash } from "node:crypto";
+import { SignJWT } from "jose";
 import { spawn, type ChildProcess } from "node:child_process";
 import { once } from "node:events";
 import { mkdir, writeFile, unlink, readFile } from "node:fs/promises";
@@ -30,6 +31,7 @@ async function main() {
     await admin.query("CREATE DATABASE item3_authorization_test");
     await migrate(drizzle(sql), { migrationsFolder: "drizzle" });
     await sql.query(await readFile("docs/database/runtime-role.sql", "utf8"));
+    assert.equal((await sql.query("select has_table_privilege('circlo_runtime','admin_audit_log','UPDATE') or has_table_privilege('circlo_runtime','admin_audit_log','DELETE') or has_table_privilege('circlo_runtime','admin_audit_log','TRUNCATE') as mutable")).rows[0].mutable, false, "Runtime cannot rewrite audit history");
     runtimeRoleCreated = true;
     await sql.query("ALTER ROLE circlo_runtime LOGIN PASSWORD 'disposable-item3-runtime-only'");
     const runtimeUrl = new URL(url); runtimeUrl.username = "circlo_runtime"; runtimeUrl.password = "disposable-item3-runtime-only";
@@ -38,6 +40,9 @@ async function main() {
     assert.deepEqual(capabilities, { rolsuper: false, rolcreatedb: false, rolcreaterole: false, rolbypassrls: false });
     await assert.rejects(runtimePool.query("CREATE TABLE public.permission_probe(id int)"), /permission denied/);
     await assert.rejects(runtimePool.query("TRUNCATE users"), /permission denied/);
+    await assert.rejects(runtimePool.query("UPDATE admin_audit_log SET action='tamper' WHERE false"), /permission denied/);
+    await assert.rejects(runtimePool.query("DELETE FROM admin_audit_log WHERE false"), /permission denied/);
+    await assert.rejects(runtimePool.query("TRUNCATE admin_audit_log"), /permission denied/);
     await assert.rejects(runtimePool.query(`SET ROLE "${parsed.username.replace(/"/g, '""')}"`), /permission denied/, "Runtime cannot become the database owner");
     const password = "IsolatedItem3Password9";
     const passwordHash = await hashPassword(password);
@@ -85,6 +90,34 @@ async function main() {
       assert(cookie); return cookie;
     };
     const aliceCookie = await login(alice.username), bobCookie = await login(bob.username), outsiderCookie = await login(outsider.username);
+    const verifier = "a".repeat(43);
+    const ticket = await new SignJWT({ usr: alice.username, codeChallenge: createHash("sha256").update(verifier).digest("base64url") })
+      .setProtectedHeader({ alg: "HS256", typ: "JWT" }).setSubject(alice.id).setIssuer("circlo").setAudience("circlo-google-mobile-handoff").setIssuedAt().setExpirationTime("120s")
+      .sign(new TextEncoder().encode(env.JWT_SECRET));
+    assert.equal((await api("/api/auth/google/native", "", "POST", { ticket, verifier: "b".repeat(43) })).status, 401);
+    assert.equal((await api("/api/auth/google/native", "", "POST", { ticket, verifier })).status, 200);
+    assert.equal((await api("/api/auth/google/native", "", "POST", { ticket, verifier })).status, 409, "Google mobile handoff can establish authentication only once");
+    const pushToken = "disposable-native-push-device-token-no-real-delivery";
+    assert.equal((await api("/api/push/register", aliceCookie, "POST", { token: pushToken })).status, 200);
+    assert.equal((await api("/api/push/register", bobCookie, "POST", { token: pushToken })).status, 200);
+    assert.equal((await sql.query("select user_id from fcm_tokens where token=$1", [pushToken])).rows[0].user_id, bob.id, "A shared device switching accounts must not retain the previous user's notification routing");
+    assert.equal((await api("/api/push/register", bobCookie, "DELETE", undefined, { origin: "https://attacker.example.invalid" })).status, 403);
+    assert.equal((await api("/api/push/register", aliceCookie, "DELETE")).status, 200);
+    assert.equal((await sql.query("select count(*)::int n from fcm_tokens where token=$1", [pushToken])).rows[0].n, 1, "Previous account cannot unregister the new account's token");
+    assert.equal((await api("/api/push/register", bobCookie, "DELETE")).status, 200);
+    const privateCommunityResponse = await api("/api/communities", aliceCookie, "POST", { name: "Private audit fixture", isPublic: false });
+    assert.equal(privateCommunityResponse.status, 201);
+    const privateCommunity = (await privateCommunityResponse.json()).community;
+    assert.equal((await api(`/api/communities/${privateCommunity.id}`, outsiderCookie)).status, 404);
+    assert.equal((await api(`/api/communities/${privateCommunity.id}`, outsiderCookie, "POST", { action: "join" })).status, 400);
+    assert.equal((await api(`/api/communities/${privateCommunity.id}`, outsiderCookie, "POST", { action: "create_channel", name: "Forbidden" })).status, 404, "Private communities conceal their existence from outsiders");
+    const creationKey = `community-create:${alice.id}`, mutationKey = `community-mutation:${alice.id}`;
+    await sql.query("insert into rate_limit_buckets(key,window_started_at,count) values($1,now(),20),($2,now(),60) on conflict(key) do update set count=excluded.count,window_started_at=excluded.window_started_at", [creationKey, mutationKey]);
+    const limitedCommunity = await api("/api/communities", aliceCookie, "POST", { name: "Must not create" });
+    assert.equal(limitedCommunity.status, 429); assert(Number(limitedCommunity.headers.get("retry-after")) > 0);
+    assert.equal((await api(`/api/communities/${privateCommunity.id}`, aliceCookie, "POST", { action: "create_channel", name: "Must not create" })).status, 429);
+    assert.equal((await sql.query("select count(*)::int n from communities where name='Must not create'")).rows[0].n, 0);
+    await sql.query("delete from rate_limit_buckets where key in ($1,$2)", [creationKey, mutationKey]);
     const historyPath = `/api/conversations/${conversation.id}/messages`;
     assert.equal((await api(historyPath)).status, 401);
     assert.equal((await api(historyPath, outsiderCookie)).status, 404);

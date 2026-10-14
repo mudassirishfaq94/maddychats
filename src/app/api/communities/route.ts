@@ -3,6 +3,7 @@ import { revalidateTag } from "next/cache";
 import { getSessionUser } from "@/server/session";
 import { createCommunity, listUserCommunities, listPublicCommunities, PUBLIC_COMMUNITIES_CACHE_TAG } from "@/server/communities";
 import { guardSameOrigin, jsonError, readJson } from "@/server/http";
+import { rateLimit } from "@/server/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -29,6 +30,13 @@ export async function POST(req: NextRequest) {
 
   const user = await getSessionUser();
   if (!user) return jsonError(401, "Not authenticated.");
+
+  const limit = await rateLimit(`community-create:${user.id}`, 20, 60 * 60 * 1000);
+  if (!limit.allowed) {
+    const response = jsonError(429, "Too many community creations. Please try again later.");
+    response.headers.set("Retry-After", String(limit.retryAfterSeconds));
+    return response;
+  }
 
   const body = await readJson(req);
   const data = (body ?? {}) as Record<string, unknown>;

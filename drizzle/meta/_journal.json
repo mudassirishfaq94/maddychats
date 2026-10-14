@@ -316,6 +316,13 @@
       "when": 1792281600001,
       "tag": "0043_device_recovery_email_codes",
       "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1792281600002,
+      "tag": "0044_runtime_audit_privileges",
+      "breakpoints": true
     }
   ]
 }

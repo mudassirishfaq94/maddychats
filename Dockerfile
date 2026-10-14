@@ -4,6 +4,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 
 FROM base AS dependencies
 COPY package.json package-lock.json ./
+COPY scripts/harden-braces.mjs ./scripts/harden-braces.mjs
 RUN npm ci
 
 FROM base AS builder
