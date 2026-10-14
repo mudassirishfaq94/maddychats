@@ -71,10 +71,9 @@ function MobileMessageMenuContent({
         else if (!event.shiftKey && document.activeElement === buttons.at(-1)) { event.preventDefault(); buttons[0]?.focus(); }
       }
     };
-    const resize = () => { if (innerWidth >= 640) onClose(); };
-    document.addEventListener("keydown", key); window.addEventListener("resize", resize);
+    document.addEventListener("keydown", key);
     return () => {
-      document.removeEventListener("keydown", key); window.removeEventListener("resize", resize);
+      document.removeEventListener("keydown", key);
       document.body.style.overflow = overflow;
       if (previousFocus?.isConnected) previousFocus.focus();
     };
@@ -106,7 +105,7 @@ function MobileMessageMenuContent({
   }
 
   return createPortal(
-    <div role="dialog" aria-modal="true" aria-label="Message options" className="fixed inset-0 z-[200] flex items-end justify-center sm:hidden">
+    <div role="dialog" aria-modal="true" aria-label="Message options" className="fixed inset-0 z-[200] flex items-end justify-center">
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/50 backdrop-blur-sm"

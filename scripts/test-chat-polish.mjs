@@ -46,13 +46,19 @@ export async function testChatPolish(page, recipient) {
     await page.getByRole("menu", { name: "Chat options", exact: true }).getByRole("alert").waitFor();
     assert.equal(page.url(), beforeFailure, "A failed archive must not silently navigate away");
     await page.keyboard.press("Escape"); await page.unroute("**/api/conversations/*/controls");
-    const bubble = page.locator(".message-history-row .inline-block.rounded-2xl").last(); await bubble.scrollIntoViewIfNeeded();
-    const box = await bubble.boundingBox();
     const cdp = await page.context().newCDPSession(page);
-    await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: box.x + box.width / 2, y: box.y + box.height / 2 }] });
-    await page.getByRole("dialog", { name: "Message options", exact: true }).waitFor();
-    await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
-    await page.keyboard.press("Escape"); await page.getByRole("dialog", { name: "Message options", exact: true }).waitFor({ state: "detached" });
+    for (const viewport of [{ width: 390, height: 844 }, { width: 844, height: 390 }]) {
+      await page.setViewportSize(viewport);
+      const bubble = page.locator(".message-history-row .inline-block.rounded-2xl").last(); await bubble.scrollIntoViewIfNeeded();
+      const box = await bubble.boundingBox();
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: box.x + box.width / 2, y: box.y + box.height / 2 }] });
+      const menu = page.getByRole("dialog", { name: "Message options", exact: true }); await menu.waitFor();
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+      await menu.getByRole("button", { name: "Cancel", exact: true }).scrollIntoViewIfNeeded();
+      assert(await menu.getByRole("button", { name: "Cancel", exact: true }).isVisible());
+      await page.keyboard.press("Escape"); await menu.waitFor({ state: "detached" });
+    }
+    await page.setViewportSize({ width: 390, height: 844 });
     const files = page.locator('input[type="file"]').first();
     const photo = await readFile(new URL("../public/icons/circlo-192.png", import.meta.url));
     await files.setInputFiles([{ name: "polish-preview.png", mimeType: "image/png", buffer: photo }, { name: "polish-note.txt", mimeType: "text/plain", buffer: Buffer.from("Owned review fixture") }]);
