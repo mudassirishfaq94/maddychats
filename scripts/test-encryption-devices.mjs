@@ -132,7 +132,17 @@ export async function testEncryptionDevices(base, pool, owner, peer, password, c
     await contact.page.getByRole("textbox", { name: "Message text" }).fill("Encrypted recovery verification");
     await contact.page.getByRole("textbox", { name: "Message text" }).press("Enter");
     await device.page.goto(base + "/app/chats/" + conversationId);
-    await device.page.getByRole("region", { name: "Conversation", exact: true }).getByText("Encrypted recovery verification", { exact: true }).waitFor({ timeout: 45000 });
+    try {
+      await device.page.getByRole("region", { name: "Conversation", exact: true }).getByText("Encrypted recovery verification", { exact: true }).waitFor({ timeout: 45000 });
+    } catch (cause) {
+      console.error("Owned recovery delivery state", {
+        sender: (await contact.page.getByRole("region", { name: "Conversation", exact: true }).innerText().catch(() => "Chat unavailable")).slice(-2500),
+        recipient: (await device.page.getByRole("region", { name: "Conversation", exact: true }).innerText().catch(() => "Chat unavailable")).slice(-2500),
+        senderPath: new URL(contact.page.url()).pathname,
+        recipientPath: new URL(device.page.url()).pathname,
+      });
+      throw cause;
+    }
     assert((await pool.query("select encrypted,text from messages where conversation_id=$1 and sender_id=$2 order by created_at desc limit 1", [conversationId, peer.id])).rows[0].encrypted);
     await device.page.getByRole("textbox", { name: "Message text" }).fill("Recovered browser encrypted reply");
     await device.page.getByRole("textbox", { name: "Message text" }).press("Enter");

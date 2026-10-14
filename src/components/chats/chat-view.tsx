@@ -198,7 +198,7 @@ export function ChatView({
   const hydrated = useHydrated();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { subscribe, presence } = useRealtime();
+  const { subscribe, presence, connected } = useRealtime();
   const e2ee = useSharedE2EE();
   const encryptionRef = useRef<typeof e2ee | null>(null);
   useEffect(() => { encryptionRef.current = e2ee; }, [e2ee]);
@@ -710,6 +710,33 @@ export function ChatView({
     return () => window.clearTimeout(timer);
   }, [markRead]);
 
+  // A message can commit after the SSR history query but before SSE starts.
+  // Its initial replay window is only one second. Reconcile once per stream
+  // connection, without polling, replacing drafts, or dropping older pages.
+  useEffect(() => {
+    if (!connected) return;
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 10000);
+    void (async () => {
+      try {
+        const response = await fetch(`/api/conversations/${conversationId}/messages`, { cache: "no-store", signal: controller.signal });
+        if (!response.ok) return;
+        const page = await response.json() as MessagePage;
+        if (controller.signal.aborted || !Array.isArray(page.messages)) return;
+        setItems(current => {
+          const ids = new Set(current.map(message => message.id));
+          const pending = new Set(current.filter(message => message.sendStatus).map(message => message.clientMessageId).filter(Boolean));
+          const missing = page.messages.filter(message => message.conversationId === conversationId && !ids.has(message.id) && !(message.clientMessageId && pending.has(message.clientMessageId)));
+          if (!missing.length) return current;
+          return [...current, ...missing].sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
+        });
+        if (page.messages.length && document.visibilityState === "visible") void markRead();
+      } catch { /* A reconnect retries; cached private history is never used. */ }
+      finally { window.clearTimeout(timeout); }
+    })();
+    return () => { controller.abort(); window.clearTimeout(timeout); };
+  }, [connected, conversationId, me.id, markRead]);
+
   /* ---------------------------- typing state ----------------------------- */
 
   const signalTyping = useCallback(
@@ -877,7 +904,7 @@ export function ChatView({
   useLayoutEffect(() => {
     if (!initialScrollDone.current) {
       initialScrollDone.current = true;
-      followLatestRef.current = !searchParams.get("message");
+      followLatestRef.current = !searchParams.get("message") || !nodeRefs.current.has(searchParams.get("message")!);
       if (followLatestRef.current) scrollToBottom(false);
     }
   }, [scrollToBottom, searchParams]);
@@ -2029,7 +2056,7 @@ export function ChatView({
               type="button"
               onClick={loadOlder}
               disabled={loadingOlder}
-              className="btn btn-ghost py-1.5! text-xs!"
+              className="btn btn-secondary py-1.5! text-xs!"
             >
               {loadingOlder ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -2040,13 +2067,13 @@ export function ChatView({
             </button>
           </div>
         ) : items.length > 0 ? (
-          <p className="mx-auto w-fit rounded-full bg-black/50 px-3.5 py-1.5 text-[0.64rem] font-medium uppercase tracking-widest text-white/90 shadow-sm backdrop-blur-[2px]">
+          <p className="mx-auto w-fit rounded-full bg-[var(--surface)] px-3.5 py-1.5 text-[0.64rem] font-medium uppercase tracking-widest text-[var(--muted)] shadow-sm">
             Beginning of conversation
           </p>
         ) : null}
 
         {items.length === 0 ? (
-          <div className="flex h-full flex-col items-center justify-center py-16 text-center">
+          <div className="mx-auto flex h-full w-fit flex-col items-center justify-center rounded-3xl bg-[var(--surface)] px-6 py-16 text-center">
             <Avatar user={other ?? me} size={64} />
             <p className="mt-5 font-semibold">No messages yet</p>
             <p className="mt-1.5 max-w-[15rem] text-sm leading-relaxed text-[var(--muted)]">
@@ -2076,7 +2103,7 @@ export function ChatView({
                   {msg.id === firstVisibleUnreadId ? (
                     <div className="my-4 flex items-center gap-3" role="separator" aria-label={`${initialUnread?.count ?? 0} unread messages`}>
                       <span className="h-px flex-1 bg-[color-mix(in_srgb,var(--accent)_45%,transparent)]" />
-                      <span className="rounded-full bg-[var(--accent-soft)] px-3 py-1 text-[0.68rem] font-semibold text-[var(--accent-fg)] shadow-sm">
+                      <span className="rounded-full bg-[var(--surface)] px-3 py-1 text-[0.68rem] font-semibold text-[var(--accent-fg)] shadow-sm">
                         {initialUnread?.count ?? 0} unread {initialUnread?.count === 1 ? "message" : "messages"}
                       </span>
                       <span className="h-px flex-1 bg-[color-mix(in_srgb,var(--accent)_45%,transparent)]" />
@@ -2084,7 +2111,7 @@ export function ChatView({
                   ) : null}
                   {showDate ? (
                     <div className="my-4 flex justify-center">
-                      <span className="rounded-full bg-black/50 px-3.5 py-1.5 text-[0.66rem] font-medium text-white/90 shadow-sm backdrop-blur-[2px]">
+                      <span className="rounded-full bg-[var(--surface)] px-3.5 py-1.5 text-[0.66rem] font-medium text-[var(--muted)] shadow-sm">
                         {dayLabel(msg.createdAt, hydrated)}
                       </span>
                     </div>
@@ -2111,7 +2138,7 @@ export function ChatView({
                         own ? "text-right" : "text-left",
                       )}
                     >
-                      {isGroup && !own && !sameSenderPrev ? <span className="mb-0.5 block px-2 text-[0.68rem] font-semibold text-[var(--accent-fg)]">{msg.sender.displayName}</span> : null}
+                      {isGroup && !own && !sameSenderPrev ? <span className="mb-1 block w-fit rounded-full bg-[var(--surface)] px-2 py-1 text-[0.68rem] font-semibold text-[var(--accent-fg)]">{msg.sender.displayName}</span> : null}
                       {editingId === msg.id ? (
                         <div className="card-glass rounded-2xl p-2">
                           <textarea
@@ -2162,7 +2189,7 @@ export function ChatView({
                           >
                           <div
                             className={cn(
-                              "inline-block max-w-full rounded-2xl px-3 py-2 text-left align-middle",
+                              "chat-bubble inline-block max-w-full rounded-2xl px-3 py-2 text-left align-middle",
                               own
                                 ? "rounded-br-md text-[var(--bubble-own-fg)]"
                                 : "rounded-bl-md border border-[var(--border)] bg-[var(--bubble-other-bg)]",
@@ -2170,7 +2197,7 @@ export function ChatView({
                             )}
                             style={
                               own
-                                ? { background: "var(--bubble-own-bg)", "--muted": "var(--bubble-own-sub)", "--accent-fg": bubbleTheme ? "#ffffff" : "var(--bubble-own-fg)" } as React.CSSProperties
+                                ? { background: "var(--bubble-own-bg)", "--muted": "var(--bubble-own-sub)", "--accent-fg": "var(--bubble-own-fg)" } as React.CSSProperties
                                 : undefined
                             }
                           >

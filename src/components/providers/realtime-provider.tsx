@@ -115,21 +115,25 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     return () => { stopped = true; document.removeEventListener("visibilitychange", visible); };
   }, [status, user?.id]);
 
-  // Capacitor (Android): register for FCM push notifications
+  // Install the tap handler before token registration (including cold starts).
   useEffect(() => {
-    if (status !== "authenticated") return;
+    let stopped = false;
+    let removeTap: (() => void) | undefined;
     void (async () => {
       try {
-        const { isCapacitor, registerCapacitorPush, sendTokenToServer, setupNotificationTapListener } = await import("@/lib/capacitor-push");
-        if (!isCapacitor()) return;
-        const token = await registerCapacitorPush();
-        if (token) await sendTokenToServer(token);
-        setupNotificationTapListener();
-      } catch {
-        // Capacitor plugins not available in browser — expected
-      }
+        const native = await import("@/lib/capacitor-push");
+        if (!native.isCapacitor() || stopped) return;
+        removeTap = await native.setupNotificationTapListener();
+        if (stopped) { removeTap(); return; }
+        if (status === "authenticated") {
+          const token = await native.registerCapacitorPush();
+          if (token && !stopped) await native.sendTokenToServer(token);
+        }
+      } catch { /* Plugins are absent in browser builds. */ }
     })();
-  }, [status]);
+    return () => { stopped = true; removeTap?.(); };
+  }, [status, user?.id]);
+
 
   useEffect(() => {
     const unlock = () => {
@@ -259,7 +263,8 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
           (document.visibilityState === "hidden" || !document.hasFocus())
         ) {
           const title = actor;
-          const url = `/app/chats/${conversationId}?latest=1`;
+          const message = String(data?.messageId ?? "");
+          const url = `/app/chats/${conversationId}?message=${encodeURIComponent(message)}`;
           const options: NotificationOptions = {
             body: preview,
             tag: `circlo-${user?.id}-${conversationId}`,

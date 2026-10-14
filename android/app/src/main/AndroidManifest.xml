@@ -71,6 +71,7 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="https" android:host="maddychats.onrender.com" />
+                <data android:scheme="https" android:host="circlo.chat" />
             </intent-filter>
 
         </activity>
@@ -85,6 +86,9 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
+
+        <meta-data android:name="com.google.firebase.messaging.default_notification_channel_id" android:value="maddychats-messages" />
+        <meta-data android:name="com.google.firebase.messaging.default_notification_icon" android:resource="@drawable/ic_stat_ic_notification" />
 
         <!-- Push notification service -->
         <service

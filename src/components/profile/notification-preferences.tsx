@@ -164,6 +164,10 @@ export function NotificationPreferences() {
         <h2 className="font-display text-xl font-bold">Notifications</h2>
         <p className="mt-1 text-sm text-[var(--muted)]">Quiet while you use Circlo. Branded chat alerts when it is in the background or closed.</p>
         <p className="mt-2 text-xs text-[var(--muted)]">Install Circlo from your browser menu, then enable alerts here. On iPhone, use Add to Home Screen first. Your phone controls notification sounds, appearance and battery restrictions.</p>
+        <details className="mt-3 rounded-xl border border-[var(--border)] p-3 text-xs text-[var(--muted)]">
+          <summary className="cursor-pointer font-semibold text-[var(--text)]">Notifications arrive, but no pop-up?</summary>
+          <p className="mt-2 leading-relaxed">On Android, press and hold a Circlo notification, open its settings, then enable Alerting and Pop on screen (or Floating notifications). Check that Do Not Disturb is off and Notification sound is enabled below. Menu names vary by phone. Android controls banners; a website cannot override these settings.</p>
+        </details>
       </div>
       {!preferences ? (
         <div className="flex justify-center py-10">{message ? <p className="text-sm text-[var(--danger)]">{message}</p> : <Loader2 className="h-5 w-5 animate-spin text-[var(--muted)]" />}</div>

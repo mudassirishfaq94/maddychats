@@ -25,16 +25,16 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
 
         val intent = Intent(this, MainActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-            url?.let { putExtra("notification_url", it) }
+            url?.let { putExtra("notification_url", it); data = android.net.Uri.parse(it).buildUpon().clearQuery().build() }
         }
 
-        var pendingIntentFlags = PendingIntent.FLAG_ONE_SHOT
+        var pendingIntentFlags = PendingIntent.FLAG_UPDATE_CURRENT
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             pendingIntentFlags = pendingIntentFlags or PendingIntent.FLAG_IMMUTABLE
         }
 
         val pendingIntent = PendingIntent.getActivity(
-            this, 0, intent, pendingIntentFlags
+            this, tag?.hashCode() ?: 0, intent, pendingIntentFlags
         )
 
         val builder = NotificationCompat.Builder(this, CHANNEL_ID)
@@ -49,7 +49,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         val notificationManager =
             getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
         notificationManager?.notify(
-            tag?.hashCode() ?: 0,
+            tag ?: "circlo-messages", 0,
             builder.build()
         )
     }

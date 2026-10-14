@@ -1,3 +1,4 @@
+import { testChatOpeningRace } from "./test-chat-opening.mjs";
 import {testChatScroll} from "./test-chat-scroll.mjs";
 import assert from "node:assert/strict";
 import { chromium } from "playwright";
@@ -20,6 +21,7 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
   if (!["localhost", "127.0.0.1"].includes(hostname) && !(ownedLive && hostname === "maddychats.onrender.com")) throw new Error("Owned staging fixtures required");
   const browser = await chromium.launch({ args: ["--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream"] });
   const pages = []; const errors = []; let registered; let unrelatedCookie;
+  const cookieContexts = new Map();
   const registerName = "restreg_" + randomBytes(6).toString("hex");
   const login = async account => {
     const response = await fetch(base + "/api/auth/login", { method: "POST", headers: { Origin: base, "Content-Type": "application/json" }, body: JSON.stringify({ acceptTerms: true, acceptPrivacy: true, identifier: account.username, password }) });
@@ -32,9 +34,18 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     page.setDefaultTimeout(60000);
     page.setDefaultNavigationTimeout(60000);
     page.on("pageerror", error => errors.push(error.message)); pages.push(page);
+    cookieContexts.set(cookies, context);
     return { page, cookies };
   };
-  const api = async (route, cookies, body, method = "POST") => fetch(base + route, { method, headers: { Origin: base, Cookie: cookies, "Content-Type": "application/json" }, ...(body ? { body: JSON.stringify(body) } : {}) });
+  const api = async (route, cookies, body, method = "POST") => {
+    const context = cookieContexts.get(cookies);
+    if (!context) return fetch(base + route, { method, headers: { Origin: base, Cookie: cookies, "Content-Type": "application/json" }, ...(body ? { body: JSON.stringify(body) } : {}) });
+    // Long runs can outlive the 15-minute access token. Use this browser's
+    // live cookie jar, including refresh rotation, rather than replaying a
+    // captured refresh token and correctly revoking the fixture's session.
+    const response = await context.request.fetch(base + route, { method, headers: { Origin: base, "Content-Type": "application/json" }, ...(body ? { data: body } : {}) });
+    return new Response([204, 205, 304].includes(response.status()) ? null : await response.body(), { status: response.status(), headers: response.headers() });
+  };
   const profile = async page => { await page.goto(base + "/app/profile#encryption-devices"); await page.getByLabel("This device fingerprint").waitFor({ timeout: 30000 }); };
   const chat = async page => { await page.goto(base + "/app/chats/" + conversationId); await page.getByRole("textbox", { name: "Message text" }).waitFor(); };
   const refresh = async page => { const response = page.waitForResponse(r => r.url().endsWith("/api/e2ee/keys") && r.request().method() === "GET"); await page.getByRole("button", { name: "Refresh encryption devices", exact: true }).click(); assert.equal((await response).status(), 200); await page.getByLabel("This device fingerprint").waitFor(); };
@@ -61,6 +72,7 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     }
     const response = await api("/api/auth/login", "", { acceptTerms: true, acceptPrivacy: true, identifier: owner.username, password }); assert.equal(response.status, 200);
     device.cookies = response.headers.getSetCookie().filter(cookie => /^(maddy_session|maddy_refresh)=/.test(cookie)).map(cookie => cookie.split(";")[0]).join("; ");
+    cookieContexts.set(device.cookies, device.page.context());
     await device.page.context().addCookies(device.cookies.split("; ").map(cookie => { const i = cookie.indexOf("="); return { name: cookie.slice(0, i), value: cookie.slice(i + 1), url: base, httpOnly: true, sameSite: "Lax" }; }));
     if (releaseIdentity) {
       releaseIdentity(); await identityDone; await oldIdentity;
@@ -289,6 +301,7 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     await recipient.page.getByRole("region", { name: "Conversation", exact: true }).getByText("Queued new device delivery", { exact: true }).waitFor({ timeout: 45000 });
     await chat(source.page);
     console.log("PASS trusted-device key restoration and queued-message delivery");
+    await testChatOpeningRace(source.page, recipient.page);
     // A real file is encrypted by the composer and decrypted by the recipient.
     const fileContent = "Authorized encrypted attachment verification\n";
     await source.page.locator('input[type="file"]').first().setInputFiles({ name: "workflow-check.txt", mimeType: "text/plain", buffer: Buffer.from(fileContent) });

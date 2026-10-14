@@ -114,6 +114,58 @@ export async function testChatPolish(page, recipient) {
     await player.evaluate(async element => { await element.play(); });
     await recipient.waitForFunction(() => document.querySelector('div[role="dialog"][aria-label="polish-video.webm"] video')?.currentTime > 0);
     await recipient.keyboard.press("Escape");
+    await testChatWallpapers(page);
     console.log("PASS unclipped message/reaction/header menus with hit testing, responsive media review, caption retention, failed upload recovery and pre-upload cancellation");
   } finally { await page.unroute("**/api/upload/message"); await page.setViewportSize(previous); }
+}
+
+
+/** Real settings API + rendered CSS, owned fixture chats only. */
+async function testChatWallpapers(page) {
+  const chat = new URL(page.url()).pathname.match(/\/app\/chats\/([^/]+)/)?.[1];
+  assert(chat);
+  const endpoint = new URL(`/api/conversations/${chat}/background`, page.url()).href;
+  const origin = new URL(page.url()).origin;
+  const wasLight = await page.evaluate(() => document.documentElement.classList.contains("light"));
+  const samples = ["default", "ocean", "#000000", "#ffffff", "doodle:classic,nature:#a78bfa:#101828:1", "photo"];
+  try {
+    for (const style of samples) {
+      const response = await page.request.patch(endpoint, { headers: { Origin: origin }, ...(style === "photo" ? { multipart: { file: { name: "wallpaper.png", mimeType: "image/png", buffer: await readFile("public/icons/circlo-192.png") } } } : { data: { backgroundStyle: style, backgroundOpacity: 100 } }) });
+      assert.equal(response.status(), 200);
+      await page.reload(); await page.locator(".chat-bubble").first().waitFor();
+      for (const light of [false, true]) {
+        await page.evaluate(light => document.documentElement.classList.toggle("light", light), light);
+        for (const viewport of [{ width: 320, height: 740 }, { width: 844, height: 390 }]) {
+          await page.setViewportSize(viewport);
+          const result = await page.evaluate(String.raw`(() => {
+            const luminance = value => {
+              const channels = value.match(/[\d.]+/g).slice(0, 3).map(Number).map(v => { const c = v / 255; return c <= .04045 ? c / 12.92 : ((c + .055) / 1.055) ** 2.4; });
+              return channels[0] * .2126 + channels[1] * .7152 + channels[2] * .0722;
+            };
+            const ratio = (a, b) => { const x = luminance(a), y = luminance(b); return (Math.max(x, y) + .05) / (Math.min(x, y) + .05); };
+            return {
+              overflow: document.documentElement.scrollWidth > innerWidth + 1,
+              ratios: Array.from(document.querySelectorAll(".chat-bubble")).map(bubble => {
+                const css = getComputedStyle(bubble);
+                const probe = document.createElement("span"); probe.style.color = "var(--muted)"; bubble.append(probe);
+                const muted = getComputedStyle(probe).color; probe.remove();
+                return { text: ratio(css.color, css.backgroundColor), metadata: ratio(muted, css.backgroundColor), alpha: css.backgroundColor };
+              }),
+              pattern: getComputedStyle(document.querySelector(".chat-message-area")).backgroundImage,
+            };
+          })()`);
+          assert.equal(result.overflow, false, `${style}: no horizontal overflow`);
+          assert(result.ratios.every(value => value.text >= 4.5 && value.metadata >= 4.5), `${style}/${light}: readable bubble text and metadata: ${JSON.stringify(result.ratios)}`);
+          if (style === "default") assert.notEqual(result.pattern, "none", "Default has a signature wallpaper");
+        }
+      }
+    }
+    console.log("PASS real wallpaper settings: dark/light palettes, black/white/gradient/doodle backgrounds, text and timestamp contrast >=4.5:1, 320px portrait and touch landscape");
+  } finally {
+    await page.request.patch(endpoint, { headers: { Origin: origin }, data: { backgroundStyle: null, backgroundOpacity: 100 } });
+    await page.reload(); await page.locator(".chat-bubble").first().waitFor();
+    await page.evaluate(light => document.documentElement.classList.toggle("light", light), wasLight);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.screenshot({ path: ".freebuff/performance/circlo-signature-wallpaper.png" });
+  }
 }

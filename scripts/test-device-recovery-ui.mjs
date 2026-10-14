@@ -40,7 +40,7 @@ export async function testDeviceRecoveryUI(base, pool) {
       Object.defineProperty(navigator, "serviceWorker", { configurable: true, value: { ready: Promise.resolve(registration), register: async () => registration, getRegistration: async () => registration } });
       if (!("PushManager" in window)) Object.defineProperty(window, "PushManager", { configurable: true, value: function () {} });
     })()`);
-    await notificationSection.locator("summary").click();
+    await notificationSection.locator(":scope > summary").click();
     const pushSettings = await source.context.request.get(base + "/api/notifications/push");
     assert.equal(pushSettings.status(), 200);
     const pushConfig = await pushSettings.json();
@@ -52,7 +52,7 @@ export async function testDeviceRecoveryUI(base, pool) {
     assert.equal(await source.page.evaluate(() => window.__pushReplacedKey), true, "Subscriptions made with a previous deployment key are replaced");
     assert.equal((await pool.query("select count(*)::int as n from push_subscriptions where user_id=$1", [user.id])).rows[0].n, 1);
     assert.equal((await source.context.request.delete(base + "/api/notifications/push", { data: { endpoint: "https://fcm.googleapis.com/fcm/send/circlo-disposable-ui-fixture" }, headers: { Origin: base } })).status(), 200);
-    await notificationSection.locator("summary").click();
+    await notificationSection.locator(":scope > summary").click();
     console.log("PASS mobile profile disclosures and push permission, runtime public key, UI subscription, persisted account binding, and cleanup (browser push mocked)");
     await source.page.getByText("Name this browser and set its country", { exact: true }).click();
     await source.page.getByLabel("Device name", { exact: true }).fill("My trusted laptop");

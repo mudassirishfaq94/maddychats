@@ -30,7 +30,7 @@ function harness() {
     fetch: async () => { if (offline) throw new Error("offline"); return { status, ok: status === 200, json: async () => detail }; },
   });
   const dispatch = async (name: string, extra: any) => { let done: Promise<unknown> = Promise.resolve(); handlers[name]({ ...extra, waitUntil(p: Promise<unknown>) { done = p; } }); await done; };
-  return { cards, opened, setWindows: (value: any[]) => { windows = value; }, setDetail: (value: any) => { detail = { ...detail, ...value }; }, setStatus: (value: number) => { status = value; }, setOffline: () => { offline = true; },
+  return { cards, opened, setWindows: (value: any[]) => { windows = value; }, setDetail: (value: any) => { detail = { ...detail, ...value }; }, setStatus: (value: number) => { status = value; }, setOffline: (value = true) => { offline = value; },
     push: () => dispatch("push", { data: { json: () => ({ notificationId: notice, recipientId: user }) } }),
     click: (notification: any, action = "open") => dispatch("notificationclick", { notification, action }),
     visible: () => dispatch("message", { source: { url: "https://circlo.chat/app/profile" }, data: { type: "CIRCLO_APP_VISIBLE" } }),
@@ -50,7 +50,7 @@ test("per-chat cards coalesce, deduplicate delivery, respect silent mode and saf
   const h = harness(); await h.push(); await h.push(); assert.equal(h.cards[0].data.count, 1);
   h.setDetail({ messageId: notice, silent: true }); await h.push();
   assert.equal(h.cards.length, 1); assert.equal(h.cards[0].data.count, 2); assert.equal(h.cards[0].silent, true); assert.equal(h.cards[0].vibrate, undefined);
-  await h.click(h.cards[0]); assert.equal(h.opened[0], `https://circlo.chat/app/chats/${chat}?latest=1`);
+  await h.click(h.cards[0]); assert.equal(h.opened[0], `https://circlo.chat/app/chats/${chat}?message=${notice}`);
   await h.click({ data: { url: "https://evil.invalid/app/chats" }, close() {} });
   assert.equal(h.opened[1], "https://circlo.chat/app/chats");
 });
@@ -61,4 +61,35 @@ test("stale account, logged-out, read, muted and unavailable deliveries never ex
   const offline = harness(); offline.setOffline(); await offline.push(); assert.equal(offline.cards[0].title, "Circlo");
   assert(!offline.cards[0].body.includes("Alex"));
   await offline.click(offline.cards[0], "dismiss"); assert.equal(offline.opened.length, 0);
+});
+
+
+test("tap focuses before navigating and falls back for a destroyed or null client", async () => {
+  for (const failure of ["focus", "navigate", "null", "none"]) {
+    const h = harness(); const calls: string[] = [];
+    const destination = `https://circlo.chat/app/chats/${chat}?message=${message}`;
+    const navigated = { focus: async () => { calls.push("new-focus"); } };
+    h.setWindows([{ url: "https://circlo.chat/app/profile", visibilityState: "hidden",
+      focus: async () => { calls.push("focus"); if (failure === "focus") throw new Error("focus denied"); },
+      navigate: async (url: string) => { calls.push(url); if (failure === "navigate") throw new Error("destroyed"); return failure === "null" ? null : navigated; },
+    }]);
+    await h.push(); await h.click(h.cards[0]);
+    assert.equal(calls[0], "focus"); assert.equal(calls[1], destination);
+    if (["navigate", "null"].includes(failure)) assert.equal(h.opened[0], destination);
+    else { assert.equal(h.opened.length, 0); assert(calls.includes("new-focus")); }
+  }
+});
+
+test("offline card resolves its own private message destination again on tap", async () => {
+  const h = harness(); h.setOffline(); await h.push();
+  const card = h.cards[0]; assert.equal(card.data.notificationId, notice);
+  // Still offline: safely open the inbox instead of rejecting the click.
+  await h.click(card); assert.equal(h.opened[0], "https://circlo.chat/app/chats");
+});
+
+
+test("an offline push recovers its exact message link once the connection returns", async () => {
+  const h = harness(); h.setOffline(); await h.push(); h.setOffline(false);
+  await h.click(h.cards[0]);
+  assert.equal(h.opened[0], `https://circlo.chat/app/chats/${chat}?message=${message}`);
 });

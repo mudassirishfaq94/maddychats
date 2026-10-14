@@ -1,4 +1,4 @@
-const CACHE_NAME = "circlo-offline-notifications-v3";
+const CACHE_NAME = "circlo-offline-notifications-v4";
 const OFFLINE_URL = "/offline.html";
 
 self.addEventListener("install", (event) => {
@@ -36,7 +36,9 @@ const appPath = value => {
     if (url.origin !== self.location.origin || url.username || url.password) return null;
     if (url.pathname === "/app/chats") return "/app/chats";
     const id = url.pathname.match(/^\/app\/chats\/([^/]+)$/)?.[1];
-    return id && uuid.test(id) ? `/app/chats/${id}?latest=1` : null;
+    if (!id || !uuid.test(id)) return null;
+    const message = url.searchParams.get("message");
+    return `/app/chats/${id}?${message && uuid.test(message) ? `message=${message}` : "latest=1"}`;
   } catch { return null; }
 };
 const appWindows = async () => (await self.clients.matchAll({ type: "window", includeUncontrolled: true }))
@@ -72,7 +74,7 @@ self.addEventListener("push", event => {
     }
     // The user can foreground the app while the authenticated lookup runs.
     if ((await appWindows()).some(client => client.visibilityState === "visible")) { await clearAlerts(); return; }
-    const url = detail.conversationId ? `/app/chats/${detail.conversationId}?latest=1` : "/app/chats";
+    const url = detail.conversationId ? `/app/chats/${detail.conversationId}?message=${detail.messageId}` : "/app/chats";
     const tag = detail.conversationId ? `circlo-${data.recipientId}-${detail.conversationId}` : "circlo-activity";
     const previous = (await self.registration.getNotifications({ tag }))[0];
     const ids = previous?.data?.messageIds ?? [];
@@ -86,7 +88,7 @@ self.addEventListener("push", event => {
       tag, renotify: Boolean(previous && alertAgain), silent: Boolean(detail.silent),
       ...(!detail.silent ? { vibrate: [100, 50, 100] } : {}),
       actions: [{ action: "open", title: "Open chat" }, { action: "dismiss", title: "Dismiss" }],
-      data: { url, count, recipientId: data.recipientId, messageIds: [...ids, detail.messageId].filter(Boolean).slice(-20), lastAlertAt: alertAgain ? now : previous.data.lastAlertAt },
+      data: { url, notificationId: data.notificationId, count, recipientId: data.recipientId, messageIds: [...ids, detail.messageId].filter(Boolean).slice(-20), lastAlertAt: alertAgain ? now : previous.data.lastAlertAt },
     });
 
   };
@@ -94,17 +96,37 @@ self.addEventListener("push", event => {
   event.waitUntil(pushWork);
 });
 
-self.addEventListener("notificationclick", event => {
-  event.notification.close();
-  if (event.action === "dismiss") return;
-  const path = appPath(event.notification.data?.url) || "/app/chats";
-  const full = new URL(path, self.location.origin).href;
-  event.waitUntil((async () => {
+async function openChatFromNotification(data) {
+    let path = appPath(data?.url) || "/app/chats";
+    // A push received offline has no private routing details. Retry the
+    // authenticated lookup on tap, without trusting a URL from the payload.
+    if (path === "/app/chats" && uuid.test(data?.notificationId)) {
+      try {
+        const response = await fetch(`/api/notifications/push/delivery?id=${encodeURIComponent(data.notificationId)}`, { credentials: "same-origin", cache: "no-store", signal: AbortSignal.timeout(3000) });
+        if (response.ok) {
+          const detail = await response.json();
+          if (detail.recipientId === data.recipientId && uuid.test(detail.conversationId) && uuid.test(detail.messageId)) path = `/app/chats/${detail.conversationId}?message=${detail.messageId}`;
+        }
+      } catch { /* Opening the inbox still works offline. */ }
+    }
+    const full = new URL(path, self.location.origin).href;
     const windows = await appWindows();
     const existing = windows.find(client => new URL(client.url).pathname === new URL(full).pathname) || windows[0];
     if (existing) {
-      try { await existing.navigate(full); await existing.focus(); return; } catch { /* Fall back to opening a fresh app window. */ }
+      // Focus before navigation: navigation can destroy the original client.
+      // Focus failure must not discard a successful navigation, or vice versa.
+      try { await existing.focus(); } catch { /* Still attempt navigation. */ }
+      try {
+        const navigated = await existing.navigate(full);
+        if (navigated) { try { await navigated.focus(); } catch {} return; }
+      } catch { /* Fall back to opening a fresh app window. */ }
     }
-    await self.clients.openWindow(full);
-  })());
+    const opened = await self.clients.openWindow(full);
+    if (opened) { try { await opened.focus(); } catch {} }
+}
+
+self.addEventListener("notificationclick", event => {
+  event.notification.close();
+  if (event.action === "dismiss") return;
+  event.waitUntil(openChatFromNotification(event.notification.data));
 });

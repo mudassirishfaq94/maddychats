@@ -27,29 +27,12 @@ export function isBackgroundImage(value: string): boolean {
   return /^(https?:\/\/|data:image\/|\/api\/)/i.test(value);
 }
 
-/** Opaque, coordinated bubbles preserve contrast even on busy photographs. */
+/** Wallpaper never changes app text colors. Opaque theme surfaces keep text,
+ * voice controls and nested cards readable on any photo or pattern. */
 export function chatBubbleTheme(background: string | null): CSSProperties | undefined {
   if (!background || background === "default") return undefined;
-  const resolved = CHAT_BACKGROUNDS.find((p) => p.key === background)?.color ?? background;
-  const hex = !isBackgroundImage(resolved) ? resolved.match(/#([a-f0-9]{6}|[a-f0-9]{3})(?![a-f0-9])/i)?.[1] : undefined;
-  let hue = 215;
-  if (hex) {
-    const full = hex.length === 3 ? hex.split("").map((c) => c + c).join("") : hex;
-    const [r, g, b] = [0, 2, 4].map((i) => parseInt(full.slice(i, i + 2), 16) / 255);
-    const max = Math.max(r, g, b), min = Math.min(r, g, b), delta = max - min;
-    if (delta) hue = ((max === r ? (g - b) / delta : max === g ? (b - r) / delta + 2 : (r - g) / delta + 4) * 60 + 360) % 360;
-  }
   return {
-    "--bubble-other-bg": `hsl(${hue} 30% 97%)`,
-    "--bubble-own-bg": `hsl(${hue} 48% 23%)`,
-    "--bubble-own-fg": "#ffffff",
-    "--bubble-own-sub": `hsl(${hue} 25% 85%)`,
-    "--text": `hsl(${hue} 35% 12%)`,
-    "--muted": `hsl(${hue} 18% 33%)`,
-    "--surface": `hsl(${hue} 30% 97%)`,
-    "--surface-2": `hsl(${hue} 25% 91%)`,
-    "--border": `hsl(${hue} 15% 75%)`,
-    "--accent-fg": `hsl(${hue} 55% 27%)`,
-    color: `hsl(${hue} 35% 12%)`,
+    "--bubble-other-bg": "var(--surface-2)",
+    "--chat-bubble-shadow": "0 2px 8px rgb(0 0 0 / 18%)",
   } as CSSProperties;
 }

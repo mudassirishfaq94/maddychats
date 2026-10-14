@@ -90,6 +90,20 @@ export async function testPwaNotifications(base, pool) {
     await pool.query("update messages set expires_at=now()-interval '1 second' where id=$1", [messageId]);
     assert.equal((await delivery()).status(), 404, "Expired messages cannot be presented");
     await pool.query("update messages set expires_at=null where id=$1", [messageId]);
+    // Exercise the actual WindowClient navigation, not a mocked browser URL.
+    const tapped = shown[0].data;
+    const tappedPage = await context.newPage();
+    await tappedPage.route("**/api/conversations/*/read", route => route.fulfill({ status: 200, contentType: "application/json", body: '{"readCount":0,"messageIds":[]}' }));
+    await tappedPage.goto(base + "/app/profile");
+    await worker.evaluate(data => openChatFromNotification(data), tapped);
+    await tappedPage.waitForURL(base + tapped.url);
+    assert.equal(new URL(tappedPage.url()).searchParams.get("message"), tapped.messageIds.at(-1));
+    await tappedPage.close();
+    const loggedOut = await browser.newContext();
+    const loginPage = await loggedOut.newPage(); await loginPage.goto(base + tapped.url);
+    assert.equal(new URL(loginPage.url()).pathname, "/login");
+    assert.equal(new URL(loginPage.url()).searchParams.get("next"), tapped.url, "Sign-in preserves the exact message link");
+    await loggedOut.close();
     await worker.evaluate("self.registration.getNotifications().then(cards => cards.forEach(card => card.close()))");
     await login(peer); assert.equal((await delivery()).status(), 404); await push(4); assert.equal((await cards()).length, 0, "Account switching cannot reveal the previous account's sender");
     await context.request.post(base + "/api/auth/logout", { headers: { Origin: base } });

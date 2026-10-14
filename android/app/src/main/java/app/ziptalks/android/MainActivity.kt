@@ -245,6 +245,31 @@ class MainActivity : ComponentActivity() {
         setContentView(content)
     }
 
+    // Firebase background notifications deliver data extras to the launcher;
+    // foreground notifications use notification_url; app links use intent.data.
+    private fun notificationDestination(source: Intent?): String? {
+        val raw = source?.getStringExtra("notification_url")
+            ?: source?.getStringExtra("url") ?: source?.dataString ?: return null
+        val uri = runCatching { Uri.parse(raw) }.getOrNull() ?: return null
+        val base = Uri.parse(BuildConfig.API_BASE_URL)
+        val id = when {
+            uri.scheme == "ziptalks" && uri.host == "chat" -> uri.pathSegments.firstOrNull()
+            uri.scheme == "https" && (uri.host == base.host || uri.host == "circlo.chat") && uri.port == base.port && uri.userInfo == null &&
+                uri.pathSegments.size == 3 && uri.pathSegments.take(2) == listOf("app", "chats") -> uri.lastPathSegment
+            else -> null
+        } ?: return null
+        val uuid = Regex("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
+        if (!uuid.matches(id)) return null
+        val message = uri.getQueryParameter("message")?.takeIf { uuid.matches(it) }
+        return "${BuildConfig.API_BASE_URL}/app/chats/$id?" + (message?.let { "message=$it" } ?: "latest=1")
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        notificationDestination(intent)?.let { webView?.loadUrl(it) }
+    }
+
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
@@ -344,7 +369,7 @@ class MainActivity : ComponentActivity() {
                             .onSuccess {
                                 api.cookiesForWeb().forEach { cookieManager.setCookie(BuildConfig.API_BASE_URL, it) }
                                 cookieManager.flush()
-                                view.loadUrl("${BuildConfig.API_BASE_URL}/app")
+                                view.loadUrl(notificationDestination(intent) ?: "${BuildConfig.API_BASE_URL}/app")
                             }
                             .onFailure { view.loadUrl("${BuildConfig.API_BASE_URL}/login?error=google_native_failed") }
                     }
@@ -353,7 +378,7 @@ class MainActivity : ComponentActivity() {
                 return false
             }
         }
-        loadUrl("${BuildConfig.API_BASE_URL}/app")
+        loadUrl(notificationDestination(intent) ?: "${BuildConfig.API_BASE_URL}/app")
     }
 }
 

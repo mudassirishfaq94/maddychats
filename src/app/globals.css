@@ -98,8 +98,8 @@ body {
 
 /* Conversation pattern stays scoped to the message canvas. */
 .chat-message-area {
-  background-color: var(--bg);
-  background-image: none;
+  background-color: var(--chat-canvas);
+  background-image: var(--chat-signature);
   background-repeat: repeat;
   background-position: center top;
   background-size: clamp(290px, 34vw, 360px) auto;
@@ -107,14 +107,17 @@ body {
   background-attachment: scroll;
 }
 
-html.light .chat-message-area {
-  background-image: none;
+/* Quiet linked orbits echo the Circlo mark. One tiny static SVG tile: no
+   animation, extra dependency, network request or per-message rendering. */
+:root {
+  --chat-canvas: #F0EDE8;
+  --chat-signature: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='320' viewBox='0 0 320 320'%3E%3Cg fill='none' stroke='%2374543A' stroke-opacity='.09' stroke-width='1.2' stroke-linecap='round'%3E%3Cpath d='M90 65a26 26 0 1 0-16 46m4-35a26 26 0 1 1-16 46M250 225a26 26 0 1 0-16 46m4-35a26 26 0 1 1-16 46'/%3E%3Ccircle cx='180' cy='56' r='3'/%3E%3Ccircle cx='30' cy='230' r='3'/%3E%3Cpath d='M155 166h10m-5-5v10M284 116h6'/%3E%3C/g%3E%3C/svg%3E");
 }
-
-html:not(.light) .chat-message-area {
-  background-color: var(--bg);
-  background-image: none;
+html:not(.light) {
+  --chat-canvas: #1B1E24;
+  --chat-signature: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='320' viewBox='0 0 320 320'%3E%3Cg fill='none' stroke='%23B9A7C7' stroke-opacity='.11' stroke-width='1.2' stroke-linecap='round'%3E%3Cpath d='M90 65a26 26 0 1 0-16 46m4-35a26 26 0 1 1-16 46M250 225a26 26 0 1 0-16 46m4-35a26 26 0 1 1-16 46'/%3E%3Ccircle cx='180' cy='56' r='3'/%3E%3Ccircle cx='30' cy='230' r='3'/%3E%3Cpath d='M155 166h10m-5-5v10M284 116h6'/%3E%3C/g%3E%3C/svg%3E");
 }
+.chat-bubble { box-shadow: var(--chat-bubble-shadow, 0 1px 2px rgb(0 0 0 / 8%)); }
 
 ::selection {
   background: var(--accent-soft);

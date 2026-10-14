@@ -78,7 +78,7 @@ export function MessageActions({
   }
 
   const iconBtn =
-    "flex h-7 w-7 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--card)] text-[var(--muted)] transition-colors hover:text-[var(--text)]";
+    "flex h-7 w-7 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] transition-colors hover:text-[var(--text)]";
 
   return (
     <div

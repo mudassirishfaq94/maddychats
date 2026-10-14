@@ -87,7 +87,8 @@ async function sendFCM(
             notification: {
               channelId: "maddychats-messages",
               tag: payload.tag,
-              clickAction: "OPEN_ACTIVITY_1",
+              defaultSound: true,
+              defaultVibrateTimings: true,
             },
           },
           webpush: {
@@ -130,7 +131,7 @@ export async function sendMessagePush(
   const notificationPayload = {
     title: payload.actorName,
     body: payload.preview,
-    url: `/app/chats/${payload.conversationId}?latest=1`,
+    url: `/app/chats/${payload.conversationId}?message=${payload.messageId}`,
     tag: `circlo-chat-${payload.conversationId}`,
   };
 
@@ -146,7 +147,7 @@ export async function sendMessagePush(
     // Chrome and show a browser address bar.
     sendFCM(fcmDevices, {
       ...notificationPayload,
-      url: `ziptalks://chat/${payload.conversationId}?latest=1`,
+      url: `ziptalks://chat/${payload.conversationId}?message=${payload.messageId}`,
     }).catch((err) =>
       console.error("[push] FCM batch error:", safeError(err)),
     );

@@ -1,17 +1,7 @@
 import { isNativeApp } from "@/lib/native-platform";
 import { notificationPath } from "@/lib/notification-navigation";
 
-/**
- * Capacitor Push Notifications — Android native push via FCM.
- *
- * On Android, web-push (VAPID) doesn't fire system notifications when the app
- * is in the background.  Capacitor's PushNotifications plugin uses FCM which
- * delivers notifications through the OS notification tray, exactly like a
- * native Android app.
- *
- * This module registers for push on Capacitor, sends the device token to the
- * server, and falls back to VAPID web push if not on Capacitor.
- */
+/** Native Capacitor builds use FCM; installed browser PWAs use Web Push. */
 
 /** Detect Capacitor runtime. */
 export function isCapacitor(): boolean {
@@ -35,28 +25,29 @@ export async function registerCapacitorPush(): Promise<string | null> {
       return null;
     }
 
-    // Register for push
-    await PushNotifications.register();
-
-    // Wait for registration token
-    return new Promise<string | null>((resolve) => {
-      const timeout = setTimeout(() => {
-        PushNotifications.removeAllListeners();
-        resolve(null);
-      }, 10_000);
-
-      PushNotifications.addListener("registration", (token) => {
+    await PushNotifications.createChannel({ id: "maddychats-messages", name: "Messages", description: "New encrypted messages", importance: 4, vibration: true });
+    // Attach before register(): cached tokens can be emitted immediately.
+    // Remove only these two handles, never the independent tap listener.
+    return await new Promise<string | null>((resolve) => {
+      const handles: Array<{ remove: () => Promise<void> }> = [];
+      let finished = false;
+      const finish = (token: string | null) => {
+        if (finished) return;
+        finished = true;
         clearTimeout(timeout);
-        PushNotifications.removeAllListeners();
-        resolve(token.value);
-      });
-
-      PushNotifications.addListener("registrationError", (error) => {
-        clearTimeout(timeout);
-        PushNotifications.removeAllListeners();
-        console.error("[capacitor-push] Registration failed:", error);
-        resolve(null);
-      });
+        for (const handle of handles) void handle.remove();
+        resolve(token);
+      };
+      const timeout = setTimeout(() => finish(null), 10_000);
+      void (async () => {
+        const add = async (handle: Promise<{ remove: () => Promise<void> }>) => {
+          const listener = await handle;
+          if (finished) await listener.remove(); else handles.push(listener);
+        };
+        await add(PushNotifications.addListener("registration", token => finish(token.value)));
+        await add(PushNotifications.addListener("registrationError", () => finish(null)));
+        if (!finished) await PushNotifications.register();
+      })().catch(() => finish(null));
     });
   } catch (error) {
     console.error("[capacitor-push] Failed to register:", error);
@@ -69,11 +60,13 @@ export async function registerCapacitorPush(): Promise<string | null> {
  */
 export async function sendTokenToServer(token: string): Promise<void> {
   try {
-    await fetch("/api/push/register", {
+    const response = await fetch("/api/push/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ token, platform: "android" }),
+      signal: AbortSignal.timeout(10000),
     });
+    if (!response.ok) throw new Error("Push device registration was rejected.");
   } catch (error) {
     console.error("[capacitor-push] Failed to send token to server:", error);
   }
@@ -82,16 +75,12 @@ export async function sendTokenToServer(token: string): Promise<void> {
 /**
  * Listen for notification taps — navigate to the relevant chat.
  */
-export function setupNotificationTapListener(): void {
-  if (!isCapacitor()) return;
-
-  import("@capacitor/push-notifications").then(({ PushNotifications }) => {
-    PushNotifications.addListener("pushNotificationActionPerformed", (action) => {
-      const url = (action as any).notification?.data?.url;
-      if (url && typeof window !== "undefined") {
-        const target = notificationPath(url, window.location.origin);
-        if (target) window.location.href = target;
-      }
-    });
+export async function setupNotificationTapListener(): Promise<() => void> {
+  if (!isCapacitor()) return () => {};
+  const { PushNotifications } = await import("@capacitor/push-notifications");
+  const listener = await PushNotifications.addListener("pushNotificationActionPerformed", action => {
+    const target = notificationPath(action.notification.data?.url, window.location.origin);
+    if (target) window.location.assign(target);
   });
+  return () => { void listener.remove(); };
 }

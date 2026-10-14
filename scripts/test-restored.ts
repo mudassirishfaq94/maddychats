@@ -1,3 +1,4 @@
+import { testChatOpeningFixture } from "./test-chat-opening.mjs";
 import { testDeviceRecoveryUI } from "./test-device-recovery-ui.mjs";
 import { testEncryptionDevices } from "./test-encryption-devices.mjs";
 import assert from "node:assert/strict";
@@ -45,7 +46,9 @@ async function main() {
     let output = ""; server.stdout?.on("data", d => output += d); server.stderr?.on("data", d => output += d);
     for (let i = 0; i < 100; i++) { try { if ((await fetch(base + "/api/health")).status === 204) break; } catch {} await new Promise(r => setTimeout(r, 200)); }
     try {
-      if (process.env.PWA_ONLY === "1") {
+      if (process.env.CHAT_RACE_ONLY === "1") {
+        await testChatOpeningFixture(base, accounts[0], accounts[1], password, conversation!);
+      } else if (process.env.PWA_ONLY === "1") {
         console.log(await testPwaNotifications(base, pool));
       } else if (process.env.DEVICE_RECOVERY_ONLY === "1") {
         console.log(await testEncryptionDevices(base, pool, accounts[0], accounts[1], password, conversation!, testSecret));
