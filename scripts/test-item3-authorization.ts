@@ -291,6 +291,7 @@ async function main() {
       await context.addCookies([{ name: cookieName, value: cookieValue, url: base, httpOnly: true, sameSite: "Lax" }]);
       const page = await context.newPage();
       await page.goto(base + "/app/profile#account-security");
+      await page.getByText("Password", { exact: true }).click();
       await page.getByRole("button", { name: "Email me a password setup link", exact: true }).waitFor();
       let resetRequested = false;
       await page.route("**/api/auth/forgot-password", async route => {
