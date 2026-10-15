@@ -3,11 +3,11 @@ import { createContext, useContext, useEffect, type ReactNode } from "react";
 import { useE2EE } from "@/hooks/use-e2ee";
 import { useAuth } from "./auth-provider";
 const Context = createContext<ReturnType<typeof useE2EE> | null>(null);
-function UserEncryption({ userId, children }: { userId?: string; children: ReactNode }) {
+function UserEncryption({ userId, children, setupOnly }: { userId?: string; children: ReactNode; setupOnly: boolean }) {
   const encryption = useE2EE(userId);
   const { initialized, getConversationKey, prepareConversation } = encryption;
   useEffect(() => {
-    if (!initialized || !userId) return;
+    if (!initialized || !userId || setupOnly) return;
     let stopped = false;
     let running = false;
     let queued = false;
@@ -37,12 +37,12 @@ function UserEncryption({ userId, children }: { userId?: string; children: React
     refresh();
     window.addEventListener("maddy:message-request-keys", refresh);
     return () => { stopped = true; window.removeEventListener("maddy:message-request-keys", refresh); };
-  }, [initialized, userId, getConversationKey, prepareConversation]);
+  }, [initialized, userId, getConversationKey, prepareConversation, setupOnly]);
   return <Context.Provider value={encryption}>{children}</Context.Provider>;
 }
-export function E2EEProvider({ children }: { children: ReactNode }) {
+export function E2EEProvider({ children, setupOnly = false }: { children: ReactNode; setupOnly?: boolean }) {
   const { user } = useAuth();
-  return <UserEncryption key={user?.id ?? "signed-out"} userId={user?.id}>{children}</UserEncryption>;
+  return <UserEncryption key={user?.id ?? "signed-out"} userId={user?.id} setupOnly={setupOnly}>{children}</UserEncryption>;
 }
 export function useSharedE2EE() {
   const context = useContext(Context);

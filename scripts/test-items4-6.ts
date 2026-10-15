@@ -1,3 +1,4 @@
+import { fixtureAppSession } from "./fixture-app-session.mjs";
 /** Destructive tests restricted to a named disposable loopback database. */
 import assert from "node:assert/strict";
 import { createServer } from "node:net";
@@ -71,7 +72,7 @@ async function main() {
     const api = (path: string, cookie = "", method = "GET", body?: unknown, extra: Record<string, string> = {}) => fetch(`${base}${path}`, { method, headers: { cookie, origin: base, "content-type": "application/json", ...extra }, body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(20000) });
     const cookies = (response: Response) => response.headers.getSetCookie().filter((cookie) => /^(maddy_session|maddy_refresh)=/.test(cookie)).map((cookie) => cookie.split(";")[0]).join("; ");
     const part = (cookie: string, name: string) => cookie.split("; ").find((value) => value.startsWith(`${name}=`))!;
-    const login = async (username: string) => { const res = await api("/api/auth/login", "", "POST", { acceptTerms: true, acceptPrivacy: true, identifier: username, password }); assert.equal(res.status, 200); return cookies(res); };
+    const login = async (username: string) => { const res = await api("/api/auth/login", "", "POST", { acceptTerms: true, acceptPrivacy: true, identifier: username, password }); assert.equal(res.status, 200); await fixtureAppSession(sql,res); return cookies(res); };
     await start();
     let aliceCookie = await login(alice.username); const bobCookie = await login(bob.username);
     // A first contact gets exactly one encrypted introduction and a durable

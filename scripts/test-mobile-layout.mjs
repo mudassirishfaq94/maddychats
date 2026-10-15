@@ -1,3 +1,4 @@
+import { fixtureAppSession } from "./fixture-app-session.mjs";
 import assert from "node:assert/strict";
 import { chromium } from "playwright";
 import bcrypt from "bcryptjs";
@@ -87,6 +88,7 @@ export async function testMobileLayout(base, pool, { recordOnly = false } = {}) 
         assert.equal(response.status, 200);
       }
       const context = await browser.newContext({ viewport: { width: 320, height: 740 }, isMobile: true, hasTouch: true, serviceWorkers: "block", extraHTTPHeaders: fixtureHeaders });
+      await fixtureAppSession(pool, response);
       await context.addCookies(response.headers.getSetCookie().filter(c => /^(maddy_session|maddy_refresh)=/.test(c)).map(c => { const i = c.indexOf("="); return { name: c.slice(0,i), value: c.slice(i+1).split(";")[0], url: base, httpOnly: true, sameSite: "Lax" }; }));
       const page = await context.newPage(); page.setDefaultTimeout(30000); page.on("pageerror", e => errors.push(e.message));
       return page;

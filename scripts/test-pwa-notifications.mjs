@@ -1,3 +1,4 @@
+import { fixtureAppSession } from "./fixture-app-session.mjs";
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 import { mkdir } from "node:fs/promises";
@@ -29,7 +30,7 @@ export async function testPwaNotifications(base, pool) {
     }
     const context = await browser.newContext({ viewport: { width: 320, height: 740 }, permissions: ["notifications"], serviceWorkers: "allow" });
     await context.grantPermissions(["notifications"], { origin: base });
-    const login = async account => { const r = await context.request.post(base + "/api/auth/login", { data: { identifier: account.username, password, acceptTerms: true, acceptPrivacy: true }, headers: { Origin: base } }); assert.equal(r.status(), 200); };
+    const login = async account => { const r = await context.request.post(base + "/api/auth/login", { data: { identifier: account.username, password, acceptTerms: true, acceptPrivacy: true }, headers: { Origin: base } }); assert.equal(r.status(), 200); await fixtureAppSession(pool,r); };
     await login(owner);
     const page = await context.newPage(); page.setDefaultTimeout(30000); page.on("pageerror", error => errors.push(error.message));
     let release; const gate = new Promise(resolve => { release = resolve; });

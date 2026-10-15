@@ -1,3 +1,4 @@
+import { fixtureAppSession } from "./fixture-app-session.mjs";
 import { openDeviceTools } from "./device-ui-tools.mjs";
 import assert from "node:assert/strict";
 import { chromium } from "playwright";
@@ -16,6 +17,7 @@ export async function testEncryptionDevices(base, pool, owner, peer, password, c
   const login = async account => {
     const r = await fetch(base + "/api/auth/login", { method: "POST", headers: { Origin: base, "Content-Type": "application/json" }, body: JSON.stringify({ acceptTerms: true, acceptPrivacy: true, identifier: account.username, password }) });
     assert.equal(r.status, 200);
+    await fixtureAppSession(pool, r);
     const cookies = r.headers.getSetCookie().filter(c => /^(maddy_session|maddy_refresh)=/.test(c)).map(c => c.split(";")[0]).join("; ");
     const context = await browser.newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: "block" });
     await context.addCookies(cookies.split("; ").map(c => { const i = c.indexOf("="); return { name: c.slice(0, i), value: c.slice(i + 1), url: base, httpOnly: true, sameSite: "Lax" }; }));

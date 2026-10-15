@@ -108,6 +108,7 @@ export const deviceSessions = pgTable("device_sessions", {
   previousHash: text("previous_hash"),
   previousValidUntil: timestamp("previous_valid_until", { withTimezone: true, mode: "date" }),
   generation: integer("generation").default(0).notNull(),
+  approvalRequired: boolean("approval_required").default(true).notNull(),
   userAgent: text("user_agent").notNull(),
   authTime: bigint("auth_time", { mode: "number" }).notNull(),
   mfaTime: bigint("mfa_time", { mode: "number" }).notNull(),

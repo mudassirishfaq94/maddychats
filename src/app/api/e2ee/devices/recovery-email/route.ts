@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { and, eq, gt, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import { deviceSessions, e2eeKeys, users } from "@/db/schema";
-import { getSessionAuthTime, getSessionDeviceId, getSessionUser } from "@/server/session";
+import { getSessionAuthTime, getSessionDeviceId, getDeviceSetupUser } from "@/server/session";
 import { guardSameOrigin, jsonError, readJson, clientIp } from "@/server/http";
 import { rateLimit } from "@/server/rate-limit";
 import { recentlyAuthenticated, verifyFreshAuthentication } from "@/server/authentication";
@@ -12,7 +12,7 @@ import { createHash } from "node:crypto";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const user = await getSessionUser();
+  const user = await getDeviceSetupUser();
   if (!user) return jsonError(401, "Sign in before requesting device recovery.");
   return NextResponse.json({ configured: deviceRecoveryEmailConfigured(), recentSignIn: recentlyAuthenticated(await getSessionAuthTime()) }, { headers: { "Cache-Control": "private, no-store" } });
 }
@@ -20,7 +20,7 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   const blocked = guardSameOrigin(req);
   if (blocked) return blocked;
-  const user = await getSessionUser();
+  const user = await getDeviceSetupUser();
   if (!user) return jsonError(401, "Sign in before requesting device recovery.");
   const body = await readJson(req);
   if (!recentlyAuthenticated(await getSessionAuthTime()) && !(await rateLimit(`e2ee-recovery-email-auth:${user.id}`, 5, 10 * 60 * 1000)).allowed) return jsonError(429, "Too many identity-confirmation attempts. Please wait or sign in again with your account provider.");

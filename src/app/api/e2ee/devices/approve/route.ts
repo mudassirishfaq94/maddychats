@@ -5,7 +5,7 @@ import { and, eq, isNotNull, gt, isNull, ne } from "drizzle-orm";
 import { db } from "@/db";
 import { e2eeKeys, deviceLinkRequests, deviceSessions, users } from "@/db/schema";
 import { jwtSecret, SESSION_COOKIE } from "@/server/config";
-import { getSessionUser, getSessionDeviceId, getSessionAuthTime, getSessionMfaTime, createSessionToken, sessionCookieOptions } from "@/server/session";
+import { getDeviceSetupUser, getSessionDeviceId, getSessionAuthTime, getSessionMfaTime, createSessionToken, sessionCookieOptions } from "@/server/session";
 import { guardSameOrigin, jsonError, readJson, requestIsSecure } from "@/server/http";
 import { rateLimit } from "@/server/rate-limit";
 import { isUuid } from "@/server/users";
@@ -20,7 +20,7 @@ const audience = "ziptalks:e2ee-device-approval";
 export async function POST(req: NextRequest) {
   const blocked = guardSameOrigin(req);
   if (blocked) return blocked;
-  const user = await getSessionUser();
+  const user = await getDeviceSetupUser();
   if (!user) return jsonError(401, "Not authenticated.");
   if (!(await rateLimit(`e2ee-approval:${user.id}`, 20, 60000)).allowed) return jsonError(429, "Too many approval attempts. Please wait.");
   const body = await readJson(req) as Record<string, unknown> | null;
@@ -36,7 +36,8 @@ export async function POST(req: NextRequest) {
       if (!(await rateLimit(`e2ee-recovery:${user.id}`, 5, 600000)).allowed) return jsonError(429, "Too many recovery attempts. Please wait.");
       if (!(await verifyFreshAuthentication(user.id, body))) return jsonError(403, "Confirm your identity: sign in again, or provide your password and authenticator/recovery code when enabled.");
       const [account] = await db.select({ emailVerifiedAt: users.emailVerifiedAt }).from(users).where(eq(users.id, user.id)).limit(1);
-      emailRecoveryRequired = Boolean(account?.emailVerifiedAt && !user.email.endsWith("@auth.maddychats.invalid"));
+      if (!account?.emailVerifiedAt || user.email.endsWith("@auth.maddychats.invalid")) return jsonError(409, "Email recovery requires your account's verified email. Use a trusted device or saved recovery file instead.");
+      emailRecoveryRequired = true;
     }
     if (typeof body.sourceDeviceId !== "string" || typeof body.targetDeviceId !== "string" || typeof body.targetFingerprint !== "string") return jsonError(422, "Device IDs and verified fingerprint are required.");
     const [source] = await db.select().from(e2eeKeys).where(and(eq(e2eeKeys.userId, user.id), eq(e2eeKeys.deviceId, body.sourceDeviceId), ...(selfProof ? [] : [isNotNull(e2eeKeys.trustedAt)]))).limit(1);
@@ -122,15 +123,22 @@ export async function POST(req: NextRequest) {
         // Explicit account recovery replaces trust, never private keys or chat history.
         await tx.update(deviceSessions).set({ revokedAt: new Date() }).where(and(eq(deviceSessions.userId, user.id), ne(deviceSessions.id, payload.sessionId as string), isNull(deviceSessions.revokedAt)));
         // Legacy cookies have no session ID, so revoke their older issuance too.
-        await tx.update(users).set({ tokenInvalidBeforeAt: new Date() }).where(eq(users.id, user.id));
+        const cutoff = new Date();
+        await tx.update(users).set({ tokenInvalidBeforeAt: cutoff }).where(eq(users.id, user.id));
         await tx.update(e2eeKeys).set({ trustedAt: null }).where(eq(e2eeKeys.userId, user.id));
         await tx.update(e2eeKeys).set({ trustedAt: new Date() }).where(eq(e2eeKeys.id, target.id));
+        // This ceremony just reverified primary auth, mailbox and private key.
+        // Keep its current refresh session newer than the legacy-cookie cutoff.
+        await tx.update(deviceSessions).set({ approvalRequired: false, authTime: cutoff.getTime() + 1 }).where(eq(deviceSessions.id, payload.sessionId as string));
         await tx.update(deviceLinkRequests).set({ status: "revoked" }).where(and(eq(deviceLinkRequests.userId, user.id), eq(deviceLinkRequests.status, "pending")));
         return true;
       }
       if (binding) {
         // Possession rebinds the same key after sign-in; it never grants or restores trust.
         await tx.update(e2eeKeys).set({ sessionId: payload.sessionId as string }).where(eq(e2eeKeys.id, target.id));
+        // Possession of a pending key does not grant access. A trusted key is
+        // required, either from first enrollment, linking, or verified recovery.
+        if (target.trustedAt) await tx.update(deviceSessions).set({ approvalRequired: false }).where(eq(deviceSessions.id, payload.sessionId as string));
         return true;
       }
       if (typeof payload.linkId === "string") {
@@ -144,9 +152,10 @@ export async function POST(req: NextRequest) {
     });
     if (!approved) return jsonError(403, "Device trust changed. Verify the devices again.");
     const response = NextResponse.json({ success: true }, { headers: { "Cache-Control": "no-store" } });
-    if (recovery) {
+    if (recovery || binding) {
+      const [session] = await db.select({ approvalRequired: deviceSessions.approvalRequired, authTime: deviceSessions.authTime }).from(deviceSessions).where(eq(deviceSessions.id, payload.sessionId as string));
       // Preserve the proven current session and its authentication/MFA times.
-      response.cookies.set(SESSION_COOKIE, await createSessionToken(user.id, user.username, await getSessionAuthTime(), await getSessionMfaTime(), payload.sessionId as string), sessionCookieOptions(requestIsSecure(req)));
+      response.cookies.set(SESSION_COOKIE, await createSessionToken(user.id, user.username, session?.authTime ?? await getSessionAuthTime(), await getSessionMfaTime(), payload.sessionId as string, session?.approvalRequired ?? true), sessionCookieOptions(requestIsSecure(req)));
     }
     return response;
   } catch { return jsonError(403, "Approval expired or could not be verified. Start again."); }

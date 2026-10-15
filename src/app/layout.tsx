@@ -10,7 +10,7 @@ import { PwaUpdatePrompt } from "@/components/pwa-update-prompt";
 import { NativeAppBridge } from "@/components/native-app-bridge";
 import { PerformanceMonitor } from "@/components/performance-monitor";
 import { InstalledLaunch } from "@/components/installed-launch";
-import { getSessionUser } from "@/server/session";
+import { getDeviceSetupUser } from "@/server/session";
 import "./globals.css";
 
 const inter = Inter({
@@ -53,7 +53,7 @@ export const viewport: Viewport = {
 };
 
 export default async function RootLayout({ children }: { children: ReactNode }) {
-  const [requestHeaders, initialUser] = await Promise.all([headers(), getSessionUser()]);
+  const [requestHeaders, initialUser] = await Promise.all([headers(), getDeviceSetupUser()]);
   const nonce = requestHeaders.get("x-nonce") ?? undefined;
   return (
     <html

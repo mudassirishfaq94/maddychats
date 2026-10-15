@@ -1,3 +1,4 @@
+import { fixtureAppSession } from "./fixture-app-session.mjs";
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import { chromium } from "playwright";
@@ -34,6 +35,7 @@ export async function testAudioContacts(base, pool, owner, peer, password, conve
       });
       const login = await context.request.post(base + "/api/auth/login", { headers: { Origin: base }, data: { identifier: account.username, password, acceptTerms: true, acceptPrivacy: true } });
       assert.equal(login.status(), 200); contexts.push(context);
+      await fixtureAppSession(pool, login);
       const page = await context.newPage(); page.setDefaultTimeout(30000); page.on("pageerror", err => errors.push(err.message)); pages.push(page);
       await page.goto(base + "/app/chats/" + conversationId);
       await page.getByRole("button", { name: "Start audio call", exact: true }).waitFor();
@@ -80,6 +82,7 @@ export async function testAudioContacts(base, pool, owner, peer, password, conve
     outsiderId = (await pool.query("INSERT INTO users(username,display_name,email,password_hash,email_verified_at) SELECT $1,$1,$2,password_hash,now() FROM users WHERE id=$3 RETURNING id", [outsiderName, outsiderName + "@example.invalid", owner.id])).rows[0].id;
     const outsider = await browser.newContext({ extraHTTPHeaders: { "X-Forwarded-For": "198.51.100.146" } });
     assert.equal((await post(outsider, "/api/auth/login", { identifier: outsiderName, password, acceptTerms: true, acceptPrivacy: true })).status(), 200);
+    await fixtureAppSession(pool, "maddy_session=" + (await outsider.cookies()).find(c=>c.name==="maddy_session").value);
     assert.equal((await (await outsider.request.get(base + "/api/calls")).json()).call, null);
     assert.equal((await post(outsider, "/api/calls", { action: "answer", id: ringing.id, clientId: crypto.randomUUID(), sdp: ringing.offer })).status(), 404);
     assert.equal((await post(outsider, "/api/calls", { action: "end", id: ringing.id, clientId: crypto.randomUUID() })).status(), 404);

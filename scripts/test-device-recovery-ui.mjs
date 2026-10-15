@@ -1,3 +1,4 @@
+import { fixtureAppSession } from "./fixture-app-session.mjs";
 import { openDeviceTools } from "./device-ui-tools.mjs";
 import assert from "node:assert/strict";
 import { chromium } from "playwright";
@@ -14,6 +15,7 @@ export async function testDeviceRecoveryUI(base, pool) {
   const login = async context => {
     const response = await context.request.post(base + "/api/auth/login", { data: { acceptTerms: true, acceptPrivacy: true, identifier: username, password }, headers: { Origin: base } });
     assert.equal(response.status(), 200);
+    await fixtureAppSession(pool, response);
   };
   const open = async () => {
     const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, serviceWorkers: "block" });

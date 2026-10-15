@@ -1,3 +1,4 @@
+import { fixtureAppSession } from "./fixture-app-session.mjs";
 /** Real HTTP/SQL checks restricted to a disposable loopback database. */
 import assert from "node:assert/strict";
 import { spawn, type ChildProcess } from "node:child_process";
@@ -44,9 +45,9 @@ async function main() {
     const sessionCookie = (response: Response) => { const cookie = response.headers.getSetCookie().find((value) => value.startsWith("maddy_session="))?.split(";")[0]; assert(cookie); return cookie; };
     const login = async (name: string, mfa?: string) => {
       const response = await api("/api/auth/login", "", "POST", { acceptTerms: true, acceptPrivacy: true, identifier: name, password }); assert.equal(response.status, 200);
-      if (!mfa) return sessionCookie(response);
+      if (!mfa) { await fixtureAppSession(sql,response); return sessionCookie(response); }
       const challenge = response.headers.getSetCookie().find((value) => value.startsWith("maddy_mfa_challenge="))?.split(";")[0]; assert(challenge);
-      const verified = await api("/api/auth/mfa", challenge, "POST", { code: new TOTP({ secret: mfa, algorithm: "SHA1", digits: 6, period: 30 }).generate() }); assert.equal(verified.status, 200, await verified.clone().text()); return sessionCookie(verified);
+      const verified = await api("/api/auth/mfa", challenge, "POST", { code: new TOTP({ secret: mfa, algorithm: "SHA1", digits: 6, period: 30 }).generate() }); assert.equal(verified.status, 200, await verified.clone().text()); await fixtureAppSession(sql,verified); return sessionCookie(verified);
     };
     let aliceCookie = await login(alice.username);
     const bobCookie = await login(bob.username), noMfaCookie = await login(owner.username);

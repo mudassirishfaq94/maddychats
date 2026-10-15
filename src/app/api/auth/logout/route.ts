@@ -4,7 +4,7 @@ import { db } from "@/db";
 import { users, deviceSessions } from "@/db/schema";
 import { guardSameOrigin, requestIsSecure } from "@/server/http";
 import { SESSION_COOKIE, REFRESH_COOKIE } from "@/server/config";
-import { getSessionDeviceId, getSessionUser, sessionCookieOptions } from "@/server/session";
+import { getSessionDeviceId, getDeviceSetupUser, sessionCookieOptions } from "@/server/session";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
   const blocked = guardSameOrigin(req);
   if (blocked) return blocked;
 
-  const me = await getSessionUser();
+  const me = await getDeviceSetupUser();
   if (me) {
     const sessionId = await getSessionDeviceId();
     if (sessionId) {

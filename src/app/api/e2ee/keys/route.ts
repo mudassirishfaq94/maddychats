@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { eq, and, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { e2eeKeys, deviceSessions, users } from "@/db/schema";
-import { getSessionUser, getSessionDeviceId } from "@/server/session";
+import { getSessionUser, getDeviceSetupUser, getSessionAccess, getSessionDeviceId } from "@/server/session";
 import { guardSameOrigin, jsonError, readJson } from "@/server/http";
 import { isUuid } from "@/server/users";
 import { publishToConversation } from "@/server/realtime";
@@ -23,10 +23,11 @@ export async function GET(req: NextRequest) {
   const blocked = guardSameOrigin(req);
   if (blocked) return blocked;
 
-  const user = await getSessionUser();
+  const user = await getDeviceSetupUser();
   if (!user) return jsonError(401, "Not authenticated.");
 
   const targetId = req.nextUrl.searchParams.get("userId");
+  if (targetId && !(await getSessionUser())) return jsonError(403, "Finish device verification before accessing other users.");
   if (targetId && !isUuid(targetId)) {
     return jsonError(422, "Invalid userId.");
   }
@@ -54,13 +55,14 @@ export async function GET(req: NextRequest) {
 
   // Private-key backups are only returned to their authenticated owner. A
   // peer can receive the public key only, which is all key exchange needs.
+  const restricted = (await getSessionAccess())?.approvalRequired;
   const keys = rows.filter((key) => !targetId || key.trustedAt).map((key) => targetId ? {
     id: key.id,
     deviceId: key.deviceId,
     publicKey: key.publicKey,
     createdAt: key.createdAt,
     lastUsedAt: key.lastUsedAt,
-  } : { ...key, deviceName: key.deviceName ?? browserLabel(key.browser) ?? key.platform, country: key.country ?? user.country, sessionState: key.sessionRevokedAt ? "revoked" : key.sessionExpiresAt ? (key.sessionExpiresAt.getTime() <= Date.now() ? "expired" : "active") : "unknown" });
+  } : { ...key, encryptedPrivateKey: restricted && !key.encryptedPrivateKey.startsWith("v2:") ? undefined : key.encryptedPrivateKey, deviceName: key.deviceName ?? browserLabel(key.browser) ?? key.platform, country: key.country ?? user.country, sessionState: key.sessionRevokedAt ? "revoked" : key.sessionExpiresAt ? (key.sessionExpiresAt.getTime() <= Date.now() ? "expired" : "active") : "unknown" });
 
   return NextResponse.json({ keys }, { headers: { "Cache-Control": "no-store" } });
 }
@@ -70,7 +72,7 @@ export async function POST(req: NextRequest) {
   const blocked = guardSameOrigin(req);
   if (blocked) return blocked;
 
-  const user = await getSessionUser();
+  const user = await getDeviceSetupUser();
   if (!user) return jsonError(401, "Not authenticated.");
   if (!(await rateLimit(`device-registration:${user.id}`, 20, 60000)).allowed) return jsonError(429, "Too many device registrations. Please wait.");
 
@@ -119,7 +121,7 @@ export async function POST(req: NextRequest) {
       // The public key is immutable, but a legacy private-key backup can be
       // rewrapped with a device-only recovery secret during client upgrade.
       .set({
-        encryptedPrivateKey,
+        encryptedPrivateKey: (await getSessionAccess())?.approvalRequired ? undefined : encryptedPrivateKey,
         lastUsedAt: new Date(),
         platform,
         ...(requestedName ? { deviceName: requestedName } : {}),
@@ -164,7 +166,7 @@ export async function POST(req: NextRequest) {
       type: "conversation:encryption-ready", conversationId: row.id, userId: user.id,
     })));
   }
-  return NextResponse.json({ success: true, pendingApproval: !registered?.trustedAt, needsSessionBinding: Boolean(sessionId && registered?.sessionId !== sessionId) });
+  return NextResponse.json({ success: true, pendingApproval: !registered?.trustedAt, needsSessionBinding: Boolean(sessionId && (registered?.sessionId !== sessionId || (registered.trustedAt && (await getSessionAccess())?.approvalRequired))) });
 }
 
 /** Labels describe this browser; they never grant encryption trust. */

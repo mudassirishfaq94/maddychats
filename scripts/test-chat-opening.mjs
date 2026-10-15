@@ -1,3 +1,4 @@
+import { fixtureAppSession } from "./fixture-app-session.mjs";
 import assert from "node:assert/strict";
 import { chromium } from "playwright";
 
@@ -29,7 +30,7 @@ export async function testChatOpeningRace(sender, recipient) {
   } finally { release(); await recipient.unroute("**/api/realtime/stream"); await recipient.getByRole("textbox", { name: "Message text", exact: true }).fill(""); }
 }
 
-export async function testChatOpeningFixture(base, owner, peer, password, conversationId) {
+export async function testChatOpeningFixture(base, pool, owner, peer, password, conversationId) {
   assert(["localhost", "127.0.0.1"].includes(new URL(base).hostname));
   const browser = await chromium.launch(); const pages = [];
   try {
@@ -37,6 +38,7 @@ export async function testChatOpeningFixture(base, owner, peer, password, conver
       const context = await browser.newContext({ serviceWorkers: "block", viewport: { width: 390, height: 844 } });
       const response = await context.request.post(base + "/api/auth/login", { headers: { Origin: base }, data: { identifier: account.username, password, acceptTerms: true, acceptPrivacy: true } });
       assert.equal(response.status(), 200);
+      await fixtureAppSession(pool,response);
       const page = await context.newPage(); page.setDefaultTimeout(30000);
       await page.goto(base + "/app/profile#encryption-devices"); await page.getByText("This device: Trusted", { exact: true }).waitFor(); pages.push(page);
     }

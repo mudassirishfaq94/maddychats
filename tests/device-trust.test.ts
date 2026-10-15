@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { browserLabel, countryFlag, countryName, platformLabel } from "../src/server/device-meta";
 import { LINK_CODE_LENGTH, generateLinkCode, linkCodeHash, normalizeLinkCode } from "../src/server/device-link-code";
+process.env.JWT_SECRET ??= "disposable-device-link-unit-test-secret-at-least-thirty-two";
 
 const CHROME_WINDOWS =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36";
@@ -40,13 +41,12 @@ test("countries render as a name and, when possible, a flag", () => {
   assert.equal(countryFlag("P1"), "");
 });
 
-test("linking codes avoid characters that are misread across devices", () => {
+test("linking codes contain exactly six decimal digits", () => {
   for (let attempt = 0; attempt < 200; attempt += 1) {
     const code = generateLinkCode();
     assert.equal(code.length, LINK_CODE_LENGTH);
     assert.equal(normalizeLinkCode(code), code);
-    // I, L, O and U are never emitted, so 0/O and 1/I/L cannot be confused.
-    assert(!/[ILOU]/.test(code));
+    assert(/^\d{6}$/.test(code));
   }
 });
 
@@ -60,6 +60,8 @@ test("a pasted code is accepted once and never widened", () => {
   assert.equal(normalizeLinkCode("!!!!!!!!"), null);
   assert.equal(normalizeLinkCode(null), null);
   assert.equal(normalizeLinkCode(""), null);
+  assert.equal(normalizeLinkCode("000123"), "000123");
+  assert.equal(normalizeLinkCode("O00123"), null);
 });
 
 test("only the code hash is comparable, and it is stable", () => {
@@ -67,5 +69,5 @@ test("only the code hash is comparable, and it is stable", () => {
   assert.equal(linkCodeHash(code), linkCodeHash(code));
   assert.notEqual(linkCodeHash(code), code);
   assert.equal(linkCodeHash(code).length, 64);
-  assert.notEqual(linkCodeHash(code), linkCodeHash(generateLinkCode()));
+  assert.notEqual(linkCodeHash(code), linkCodeHash(code === "000000" ? "000001" : "000000"));
 });

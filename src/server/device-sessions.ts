@@ -33,20 +33,19 @@ export async function issueDeviceSession(req: NextRequest, user: { id: string; u
     ), presence AS (
       UPDATE users SET last_seen_at=${new Date(authTime)} WHERE id=${user.id}
     )
-    INSERT INTO device_sessions (user_id, refresh_hash, user_agent, auth_time, mfa_time, expires_at)
-    VALUES (${user.id}, ${digest(secret)}, ${(ua || "Unknown browser").slice(0, 300)}, ${authTime}, ${mfaTime}, ${expiresAt})
+    INSERT INTO device_sessions (user_id, refresh_hash, user_agent, auth_time, mfa_time, expires_at, approval_required)
+    VALUES (${user.id}, ${digest(secret)}, ${(ua || "Unknown browser").slice(0, 300)}, ${authTime}, ${mfaTime}, ${expiresAt}, true)
     RETURNING id
   `));
   const session = result.rows[0];
   if (!session) throw new Error("device_session_not_created");
-  return { access: await measureLoginStage("jwt", () => signSessionToken(user.id, user.username, authTime, mfaTime, session.id)), refresh: `${session.id}.${secret}`, expiresAt };
+  return { access: await measureLoginStage("jwt", () => signSessionToken(user.id, user.username, authTime, mfaTime, session.id, true)), refresh: `${session.id}.${secret}`, expiresAt };
 }
 
 /** Validate device revocation for every access-token request, across instances. */
 export async function activeDevice(claims: SessionClaims) {
   if (!claims.sid) {
-    // Existing cookies get a finite migration window; renewal never extends it.
-    return Date.now() < Date.parse("2026-11-08T00:00:00Z");
+    return false;
   }
   const [session] = await db.select({ id: deviceSessions.id }).from(deviceSessions).where(and(
     eq(deviceSessions.id, claims.sid), eq(deviceSessions.userId, claims.sub), isNull(deviceSessions.revokedAt), gt(deviceSessions.expiresAt, new Date()),
@@ -63,6 +62,7 @@ export async function rotateDeviceSession(token: string): Promise<DeviceCredenti
     const now = new Date();
     const [session] = await tx.select().from(deviceSessions).where(eq(deviceSessions.id, id)).for("update");
     if (!session || session.revokedAt || session.expiresAt <= now) return null;
+    if (session.approvalRequired && now.getTime() - session.authTime >= 15 * 60_000) return null;
     const [user] = await tx.select().from(users).where(eq(users.id, session.userId));
     const [mfa] = await tx.select().from(user2fa).where(eq(user2fa.userId, session.userId));
     if (!user || (user.suspendedAt && (!user.suspendedUntil || user.suspendedUntil >= now)) ||
@@ -81,6 +81,6 @@ export async function rotateDeviceSession(token: string): Promise<DeviceCredenti
       if (sameHash(presented, session.previousHash)) await tx.update(deviceSessions).set({ revokedAt: now }).where(eq(deviceSessions.id, id));
       return null;
     }
-    return { access: await signSessionToken(user.id, user.username, session.authTime, session.mfaTime, id), refresh: `${id}.${nextSecret}`, expiresAt: session.expiresAt };
+    return { access: await signSessionToken(user.id, user.username, session.authTime, session.mfaTime, id, session.approvalRequired), refresh: `${id}.${nextSecret}`, expiresAt: session.expiresAt };
   });
 }

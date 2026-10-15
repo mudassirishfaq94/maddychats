@@ -4,7 +4,8 @@ import { redirect } from "next/navigation";
 import type { Metadata } from "next";
 import { AuthLayout } from "@/components/auth/auth-layout";
 import { LoginOptions } from "@/components/auth/login-options";
-import { getSessionUser } from "@/server/session";
+import { getSessionUser, getSessionAccess } from "@/server/session";
+import { deviceAccessPath } from "@/lib/device-access-navigation";
 
 export const metadata: Metadata = { title: "Sign in" };
 export const dynamic = "force-dynamic";
@@ -16,6 +17,7 @@ export default async function LoginPage({
 }) {
   const { next, error, mfa, reauth, emailProof, passwordChanged } = await searchParams;
   const user = await getSessionUser();
+  if ((await getSessionAccess())?.approvalRequired && mfa !== "1" && reauth !== "1") redirect(deviceAccessPath(next));
   if (user && mfa !== "1" && reauth !== "1") redirect("/app");
   const googleError = error === "consent_required"
     ? "Agree to both the Terms and Conditions and Privacy Policy before signing in."

@@ -3,7 +3,7 @@ import { and, eq, gt, isNull } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { deviceLinkRequests, deviceSessions, e2eeKeys } from "@/db/schema";
-import { getSessionDeviceId, getSessionUser } from "@/server/session";
+import { getSessionDeviceId, getDeviceSetupUser } from "@/server/session";
 import { guardSameOrigin, jsonError, readJson } from "@/server/http";
 import { rateLimit } from "@/server/rate-limit";
 import { detectCountry } from "@/server/country";
@@ -24,20 +24,20 @@ export async function POST(req: NextRequest) {
   const blocked = guardSameOrigin(req);
   if (blocked) return blocked;
 
-  const user = await getSessionUser();
+  const user = await getDeviceSetupUser();
   if (!user) return jsonError(401, "Not authenticated.");
 
   const sessionId = await getSessionDeviceId();
   if (!sessionId) return jsonError(409, "Sign in again to link this browser.");
 
-  if (!(await rateLimit(`device-link-verify:${user.id}`, 10, 60000)).allowed) {
+  if (!(await rateLimit(`device-link-verify:${user.id}`, 5, 10 * 60000)).allowed) {
     return jsonError(429, "Too many attempts. Please wait.");
   }
 
   const body = await readJson(req);
   const code = normalizeLinkCode(typeof body?.code === "string" ? body.code : null);
   const deviceId = typeof body?.deviceId === "string" ? body.deviceId.trim() : "";
-  if (!code) return jsonError(422, "Enter the 8-character code from your trusted device.");
+  if (!code) return jsonError(422, "Enter the six-digit code from your trusted device.");
   if (!deviceId || deviceId.length > 100) return jsonError(422, "Device ID is required.");
 
   const requestedName = typeof body?.deviceName === "string" ? body.deviceName.trim().slice(0, MAX_DEVICE_NAME) : "";

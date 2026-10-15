@@ -224,6 +224,12 @@ export function useE2EE(userId: string | undefined) {
           const nonce = await crypto.subtle.decrypt({ name: "RSA-OAEP" }, keyPair.privateKey, Uint8Array.from(atob(challenge.encryptedChallenge), char => char.charCodeAt(0)));
           const proofResponse = await e2eeRequest("/api/e2ee/devices/approve", { method: "POST", signal: registrationSignal, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "approve", token: challenge.token, proof: new TextDecoder().decode(nonce) }) });
           if (!proofResponse.ok) throw new Error("Unable to register this encryption session.");
+          // Only after private-key proof may an existing trusted identity
+          // replace its server backup with the device-secret protected format.
+          if (!registration.pendingApproval) {
+            const saved = await e2eeRequest("/api/e2ee/keys", { method: "POST", signal: registrationSignal, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ deviceId, publicKey: publicKeyStr, encryptedPrivateKey }) });
+            if (!saved.ok) throw new Error("Unable to save this device's protected key backup.");
+          }
         }
         if (registration.pendingApproval) {
           setState(previous => ({ ...previous, error: "This device needs approval. On a trusted device, open Profile > Devices and approve this device before restoring chat keys." }));

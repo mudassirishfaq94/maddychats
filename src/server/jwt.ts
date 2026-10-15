@@ -16,6 +16,7 @@ export interface SessionClaims {
   authTime: number;
   mfaTime: number;
   sid?: string;
+  devicePending?: boolean;
 }
 
 export async function signSessionToken(
@@ -24,10 +25,11 @@ export async function signSessionToken(
   authTime = 0,
   mfaTime = 0,
   sid?: string,
+  devicePending = false,
 ): Promise<string> {
   const nowMs = Date.now();
   const now = Math.floor(nowMs / 1000);
-  return new SignJWT({ usr: username, iatMs: nowMs, authTime, mfaTime, ...(sid ? { sid } : {}) })
+  return new SignJWT({ usr: username, iatMs: nowMs, authTime, mfaTime, ...(sid ? { sid } : {}), ...(devicePending ? { devicePending: true } : {}) })
     .setProtectedHeader({ alg: "HS256", typ: "JWT" })
     .setSubject(userId)
     .setIssuer(ISSUER)
@@ -63,6 +65,7 @@ export async function verifySessionToken(
       mfaTime: typeof payload.mfaTime === "number" && Number.isFinite(payload.mfaTime) ? payload.mfaTime : 0,
       authTime: typeof payload.authTime === "number" && Number.isFinite(payload.authTime) ? payload.authTime : 0,
       sid: typeof payload.sid === "string" ? payload.sid : undefined,
+      devicePending: payload.devicePending === true,
     };
   } catch {
     return null;

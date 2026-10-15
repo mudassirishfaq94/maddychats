@@ -3,21 +3,21 @@ import { and, eq, gt, isNull } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { deviceLinkRequests, deviceSessions, e2eeKeys } from "@/db/schema";
-import { getSessionDeviceId, getSessionUser } from "@/server/session";
+import { getSessionDeviceId, getDeviceSetupUser } from "@/server/session";
 import { guardSameOrigin, jsonError, readJson } from "@/server/http";
 import { rateLimit } from "@/server/rate-limit";
 
 export const dynamic = "force-dynamic";
 export async function GET(req: NextRequest) {
   const blocked = guardSameOrigin(req); if (blocked) return blocked;
-  const user = await getSessionUser(); if (!user) return jsonError(401, "Not authenticated.");
+  const user = await getDeviceSetupUser(); if (!user) return jsonError(401, "Not authenticated.");
   const requests = await db.select({ id: deviceLinkRequests.id, deviceId: deviceLinkRequests.deviceId, fingerprint: deviceLinkRequests.fingerprint, status: deviceLinkRequests.status, expiresAt: deviceLinkRequests.expiresAt })
     .from(deviceLinkRequests).where(and(eq(deviceLinkRequests.userId, user.id), gt(deviceLinkRequests.expiresAt, new Date()))).limit(100);
   return NextResponse.json({ requests }, { headers: { "Cache-Control": "no-store" } });
 }
 export async function POST(req: NextRequest) {
   const blocked = guardSameOrigin(req); if (blocked) return blocked;
-  const user = await getSessionUser(); if (!user) return jsonError(401, "Not authenticated.");
+  const user = await getDeviceSetupUser(); if (!user) return jsonError(401, "Not authenticated.");
   const sessionId = await getSessionDeviceId(); if (!sessionId) return jsonError(409, "Sign in again to link this browser.");
   if (!(await rateLimit(`device-link-create:${user.id}`, 5, 60000)).allowed) return jsonError(429, "Please wait before requesting another code.");
   const body = await readJson(req);

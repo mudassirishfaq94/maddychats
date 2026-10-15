@@ -194,9 +194,9 @@ export function EncryptionDevices({ recoveryEmail, openRecovery = false, setup =
     {current && !current.trustedAt && linkOpen && <div className="mt-3 rounded-xl border border-[var(--border)] p-3 text-sm">
       <p className="font-semibold">Enter the linking code from your trusted device</p>
       <p className="mt-1 text-xs text-[var(--muted)]">Keep this screen open. On your old device, open Settings → Manage secure devices. Find this new device and choose Generate linking code. Enter that code here within 10 minutes. It works once.</p>
-      <label className="mt-3 block text-xs">Linking code<input className="field-input mt-1 w-full tracking-[0.3em]" aria-label="Device linking code" autoComplete="off" maxLength={12} value={code} onChange={event => setCode(event.target.value)} /></label>
+      <label className="mt-3 block text-xs">Six-digit linking code<input className="field-input mt-1 w-full tracking-[0.3em]" aria-label="Device linking code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={event => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))} /></label>
       <label className="mt-2 block text-xs">Name this device (optional)<input className="field-input mt-1 w-full" aria-label="This device name" maxLength={60} value={deviceName} onChange={event => setDeviceName(event.target.value)} placeholder="e.g. Work laptop — Chrome" /></label>
-      <button type="button" className="btn btn-secondary mt-3" disabled={busy || code.trim().length < 8} onClick={redeemCode}>Link this device</button>
+      <button type="button" className="btn btn-secondary mt-3" disabled={busy || code.length !== 6} onClick={redeemCode}>Link this device</button>
       {links.filter(link => link.deviceId === encryption.deviceId).map(link => <p key={link.id} className="mt-2 text-xs text-[var(--muted)]" role="status">Linking request: {link.status}</p>)}
     </div>}
     {encryption.error && !current?.trustedAt && (!setup || !current) && <p role="status" className="mt-2 text-sm">{encryption.error}</p>}

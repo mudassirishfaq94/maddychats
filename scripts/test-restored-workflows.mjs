@@ -1,3 +1,4 @@
+import { fixtureAppSession } from "./fixture-app-session.mjs";
 import { testChatPresence } from "./test-chat-presence.mjs";
 import { openDeviceTools } from "./device-ui-tools.mjs";
 import { testChatOpeningRace } from "./test-chat-opening.mjs";
@@ -28,6 +29,7 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
   const login = async account => {
     const response = await fetch(base + "/api/auth/login", { method: "POST", headers: { Origin: base, "Content-Type": "application/json" }, body: JSON.stringify({ acceptTerms: true, acceptPrivacy: true, identifier: account.username, password }) });
     assert.equal(response.status, 200);
+    await fixtureAppSession(pool, response);
     const cookies = response.headers.getSetCookie().filter(cookie => /^(maddy_session|maddy_refresh)=/.test(cookie)).map(cookie => cookie.split(";")[0]).join("; ");
     const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, serviceWorkers: "block", permissions: ["microphone"] });
     await context.addInitScript(() => { window.__workflowCsp = []; document.addEventListener("securitypolicyviolation", event => window.__workflowCsp.push(event.violatedDirective)); });
@@ -73,6 +75,7 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
       await prepared;
     }
     const response = await api("/api/auth/login", "", { acceptTerms: true, acceptPrivacy: true, identifier: owner.username, password }); assert.equal(response.status, 200);
+    await fixtureAppSession(pool, response);
     device.cookies = response.headers.getSetCookie().filter(cookie => /^(maddy_session|maddy_refresh)=/.test(cookie)).map(cookie => cookie.split(";")[0]).join("; ");
     cookieContexts.set(device.cookies, device.page.context());
     await device.page.context().addCookies(device.cookies.split("; ").map(cookie => { const i = cookie.indexOf("="); return { name: cookie.slice(0, i), value: cookie.slice(i + 1), url: base, httpOnly: true, sameSite: "Lax" }; }));
@@ -163,6 +166,7 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     await registrationPage.getByRole("heading", { name: "Email Verified!", exact: true }).waitFor();
     assert.equal((await api("/api/auth/verify-email", "", { token: verificationToken })).status, 400);
     const verifiedLogin = await api("/api/auth/login", "", { acceptTerms: true, acceptPrivacy: true, identifier: registerName, password }); assert.equal(verifiedLogin.status, 200);
+    await fixtureAppSession(pool, verifiedLogin);
     unrelatedCookie = verifiedLogin.headers.getSetCookie().filter(cookie => /^(maddy_session|maddy_refresh)=/.test(cookie)).map(cookie => cookie.split(";")[0]).join("; ");
     assert.equal((await api("/api/auth/login", "", { acceptTerms: true, acceptPrivacy: true, identifier: registerName, password: "IncorrectPassword1" })).status, 401);
     const source = await login(owner), recipient = await login(peer);

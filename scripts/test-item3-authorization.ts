@@ -1,3 +1,4 @@
+import { fixtureAppSession } from "./fixture-app-session.mjs";
 /** Production HTTP authorization checks, restricted to one disposable loopback DB. */
 import assert from "node:assert/strict";
 import { randomUUID, createHash, generateKeyPairSync } from "node:crypto";
@@ -96,7 +97,7 @@ async function main() {
       const response = await api("/api/auth/login", "", "POST", { acceptTerms: true, acceptPrivacy: true, identifier: username, password });
       assert.equal(response.status, 200);
       const cookie = response.headers.getSetCookie().find((c) => c.startsWith("maddy_session="))?.split(";")[0];
-      assert(cookie); return cookie;
+      assert(cookie); await fixtureAppSession(sql,response); return cookie;
     };
     const aliceCookie = await login(alice.username), bobCookie = await login(bob.username), outsiderCookie = await login(outsider.username);
     const googleStart = "/api/auth/google?mode=link&next=/app/profile";
@@ -329,6 +330,7 @@ async function main() {
     const { generateTOTP } = await import("../src/server/two-factor");
     const mfaLogin = await api("/api/auth/mfa", challengeCookie, "POST", { code: generateTOTP("JBSWY3DPEHPK3PXP", Math.floor(Date.now() / 30000)) });
     assert.equal(mfaLogin.status, 200);
+    await fixtureAppSession(sql,mfaLogin);
     const mfaCookie = mfaLogin.headers.getSetCookie().find(c => c.startsWith("maddy_session="))!.split(";")[0];
     assert.equal((await api("/api/auth/change-password", mfaCookie, "POST", mfaChange)).status, 403, "Correct current password does not bypass enabled MFA");
     assert.equal((await api("/api/auth/change-password", mfaCookie, "POST", { ...mfaChange, mfaCode: recoveryCode })).status, 200);

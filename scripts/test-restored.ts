@@ -57,10 +57,12 @@ async function main() {
     assert.equal((xml.match(/<loc>/g) ?? []).length, 3);
     assert(!xml.includes("/app") && !xml.includes("/login"));
     try {
-      if (process.env.AUDIO_ONLY === "1") {
+      if (process.env.DEVICE_ACCESS_ONLY === "1") {
+        await testDeviceAccess(base, pool, testSecret);
+      } else if (process.env.AUDIO_ONLY === "1") {
         await testAudioContacts(base, pool, accounts[0], accounts[1], password, conversation!);
       } else if (process.env.CHAT_RACE_ONLY === "1") {
-        await testChatOpeningFixture(base, accounts[0], accounts[1], password, conversation!);
+        await testChatOpeningFixture(base, pool, accounts[0], accounts[1], password, conversation!);
       } else if (process.env.PWA_ONLY === "1") {
         console.log(await testPwaNotifications(base, pool));
       } else if (process.env.DEVICE_RECOVERY_ONLY === "1") {

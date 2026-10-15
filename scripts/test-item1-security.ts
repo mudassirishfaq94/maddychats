@@ -135,7 +135,7 @@ async function main() {
     assert(ready, `Test server did not become ready: ${serverOutput}`);
     const cookie = async (user: { id: string; username: string }, fresh = true, mfaTime = 0) => {
       const authTime = fresh ? Date.now() : Date.now() - 360_000;
-      const session = (await sql.query("insert into device_sessions(user_id,refresh_hash,user_agent,auth_time,mfa_time,expires_at) values($1,$2,'item1-fixture',$3,$4,now()+interval '30 days') returning id", [user.id, randomBytes(32).toString("hex"), authTime, mfaTime])).rows[0];
+      const session = (await sql.query("insert into device_sessions(user_id,refresh_hash,user_agent,auth_time,mfa_time,expires_at,approval_required) values($1,$2,'item1-fixture',$3,$4,now()+interval '30 days',false) returning id", [user.id, randomBytes(32).toString("hex"), authTime, mfaTime])).rows[0];
       return `maddy_session=${await signSessionToken(user.id, user.username, authTime, mfaTime, session.id)}`;
     };
     const api = async (path: string, body?: unknown, session?: string, method = "POST") => {

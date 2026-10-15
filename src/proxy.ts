@@ -8,6 +8,8 @@ import { randomBytes } from "node:crypto";
 import { rateLimit } from "@/server/rate-limit";
 import { clientUrl } from "@/server/config";
 import { canonicalDestination } from "@/server/canonical-domain";
+import { resolveSessionAccess } from "@/server/session";
+import { deviceAccessPath } from "@/lib/device-access-navigation";
 
 /**
  * Request-time interception (Next.js 16 "Proxy" convention — the successor
@@ -67,6 +69,13 @@ export async function proxy(req: NextRequest) {
     url.search = "";
     url.searchParams.set("next", pathname + req.nextUrl.search);
     return NextResponse.redirect(url);
+  }
+
+  // Routing is only a convenience; getSessionUser also checks the persisted
+  // flag, so APIs and long-lived connections enforce the same restriction.
+  if (claims?.devicePending && needsAuth && pathname !== "/app/device-access") {
+    const access = token ? await resolveSessionAccess(token) : null;
+    if (access?.approvalRequired) return NextResponse.redirect(new URL(deviceAccessPath(pathname + req.nextUrl.search), clientUrl()));
   }
 
   const headers = new Headers(req.headers);

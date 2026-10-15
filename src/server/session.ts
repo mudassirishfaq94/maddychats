@@ -18,6 +18,9 @@ import { retryDatabaseRead } from "./database-read-retry";
 // Compile the query once, but execute against fresh state for every request.
 // An empty name avoids named prepared-statement requirements on DB poolers.
 const sessionQuery = db.select({ user: users, mfa: user2fa,
+  approvalRequired: sql<boolean>`coalesce((select approval_required from ${deviceSessions}
+    where ${deviceSessions.id}=${sql.placeholder("sid")}::uuid
+      and ${deviceSessions.userId}=${sql.placeholder("userId")}::uuid), false)`,
   deviceActive: sql<boolean>`case when ${sql.placeholder("sid")}::uuid is null
     then ${sql.placeholder("legacy")}::boolean else exists(select 1 from ${deviceSessions}
     where ${deviceSessions.id}=${sql.placeholder("sid")}::uuid
@@ -61,8 +64,9 @@ export async function createSessionToken(
   authTime = 0,
   mfaTime = 0,
   sid?: string,
+  devicePending = false,
 ): Promise<string> {
-  return signSessionToken(userId, username, authTime, mfaTime, sid);
+  return signSessionToken(userId, username, authTime, mfaTime, sid, devicePending);
 }
 
 /**
@@ -89,24 +93,51 @@ export async function newSessionBlockReason(
  */
 // Request-scoped only: layouts and pages share one lookup, with no session
 // or revocation state cached across requests or users.
-export const getSessionUser = cache(async (): Promise<SafeUser | null> => {
+export const getSessionAccess = cache(async (): Promise<{user: SafeUser; approvalRequired: boolean} | null> => {
   const store = await cookies();
   const token = store.get(SESSION_COOKIE)?.value;
   if (!token) return null;
-  return resolveSessionToken(token);
+  return resolveSessionAccess(token);
 });
+
+/** Normal application authorization never accepts a restricted sign-in. */
+export const getSessionUser = cache(async (): Promise<SafeUser | null> => {
+  const access = await getSessionAccess();
+  return access && !access.approvalRequired ? access.user : null;
+});
+
+/** Only the explicit device-setup allowlist may use this primary-auth identity. */
+export const getDeviceSetupUser = cache(async (): Promise<SafeUser | null> => {
+  const access = await getSessionAccess();
+  if (!access) return null;
+  return deviceSetupIdentity(access);
+});
+
+export function deviceSetupIdentity(access: { user: SafeUser; approvalRequired: boolean }): SafeUser {
+  if (!access.approvalRequired) return access.user;
+  // Setup needs the verified owner identity, not their editable profile or role.
+  return { ...access.user, avatarUrl: null, bio: null, role: "user", lastSeenAt: null, deviceName: null, country: null };
+}
 
 /** Uncached eligibility check for long-lived connections. */
 export async function resolveSessionToken(token: string): Promise<SafeUser | null> {
+  const access = await resolveSessionAccess(token);
+  return access && !access.approvalRequired ? access.user : null;
+}
+
+export async function resolveSessionAccess(token: string): Promise<{user: SafeUser; approvalRequired: boolean} | null> {
   const claims = await verifySessionToken(token);
-  if (!claims) return null;
+  // Old sessionless cookies cannot carry server-enforced device approval.
+  // Sign in again; browser encryption keys and their trust are retained.
+  if (!claims?.sid) return null;
   return retryDatabaseRead(async () => {
   // One fresh database snapshot checks all three conditions. No cross-request
   // cache: logout, suspension, device revocation and MFA remain immediate.
   const [record] = await sessionQuery.execute({ userId: claims.sub, sid: claims.sid ?? null,
-    legacy: Date.now() < Date.parse("2026-11-08T00:00:00Z"), now: new Date(),
+    legacy: false, now: new Date(),
   });
   const user = record?.user;
+  if (record?.approvalRequired && Date.now() - claims.authTime >= 15 * 60_000) return null;
   const deviceActive = record?.deviceActive;
   const enabledSince = record?.mfa?.enabled ? record.mfa.enabledAt ?? record.mfa.createdAt : null;
   if (!deviceActive) return null;
@@ -127,7 +158,7 @@ export async function resolveSessionToken(token: string): Promise<SafeUser | nul
     return null;
   }
   if (enabledSince && claims.mfaTime < enabledSince.getTime()) return null;
-  return toSafeUser(user);
+  return { user: toSafeUser(user), approvalRequired: record.approvalRequired };
   });
 }
 
@@ -138,6 +169,10 @@ export async function resolveSessionToken(token: string): Promise<SafeUser | nul
 export async function getSessionUserWithPresence(): Promise<SafeUser | null> {
   const user = await getSessionUser();
   if (!user) return null;
+  return touchSessionPresence(user);
+}
+
+export async function touchSessionPresence(user: SafeUser): Promise<SafeUser> {
   const lastSeen = user.lastSeenAt ? new Date(user.lastSeenAt).getTime() : 0;
   if (Date.now() - lastSeen > 60_000) {
     await touchLastSeen(user.id);

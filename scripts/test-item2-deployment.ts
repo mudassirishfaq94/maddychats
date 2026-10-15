@@ -2,6 +2,7 @@ import { SignJWT } from "jose";
 import { createHash, randomUUID } from "node:crypto";
 import { hashPassword } from "../src/server/password";
 /** Destructive only to three explicitly named, loopback-only disposable databases. */
+import { fixtureAppSession } from "./fixture-app-session.mjs";
 import assert from "node:assert/strict";
 import { spawn, type ChildProcess } from "node:child_process";
 import { once } from "node:events";
@@ -202,6 +203,7 @@ async function main() {
     assert.equal((await login(password, "forged")).status, 403);
     const verifiedLogin = await login(password);
     assert.equal(verifiedLogin.status, 200);
+    await fixtureAppSession(fresh, verifiedLogin);
     assert((await fresh.query("select email_verified_at from users where id=$1", [proofUser.id])).rows[0].email_verified_at);
     assert.equal((await fresh.query("select count(*)::int as count from oauth_accounts where user_id=$1", [proofUser.id])).rows[0].count, 0, "Email proof must not silently link a Google account");
     const proofCookie = verifiedLogin.headers.getSetCookie().find(value => value.startsWith("maddy_session="))!.split(";")[0];

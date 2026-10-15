@@ -30,6 +30,24 @@ export async function testDeviceAccess(base, pool, secret) {
     const target = await open();
     await target.page.getByRole("button",{name:/^Link this device Have/}).waitFor();
     assert(target.page.url().includes("/app/device-access?"));
+    assert.equal((await target.context.request.get(base+"/api/auth/me")).status(),202,"Credentials create only a restricted verification session");
+    for (const route of ["/api/users/me","/api/conversations","/api/contacts","/api/status","/api/communities","/api/notifications","/api/privacy/settings","/api/admin/stats","/api/calls"]) {
+      assert.equal((await target.context.request.get(base+route)).status(),401,route+" cannot be read before device approval");
+    }
+    for (const route of ["/api/conversations","/api/calls","/api/status"]) assert.equal((await target.context.request.post(base+route,{headers:{Origin:base},data:{}})).status(),401,route+" cannot be mutated before device approval");
+    const profile = await target.context.request.get(base+"/app/profile",{maxRedirects:0});
+    assert.equal(profile.status(),307); assert(new URL(profile.headers().location,base).pathname === "/app/device-access");
+    const backup = (await pool.query("select device_id,public_key,encrypted_private_key from e2ee_keys where user_id=$1 and trusted_at is not null",[user.id])).rows[0];
+    await pool.query("update e2ee_keys set encrypted_private_key='legacy-device-id-only-backup' where user_id=$1 and device_id=$2",[user.id,backup.device_id]);
+    const restrictedKeys = await (await target.context.request.get(base+"/api/e2ee/keys")).json();
+    assert.equal(restrictedKeys.keys.find(k=>k.deviceId===backup.device_id).encryptedPrivateKey,undefined,"Restricted sign-ins cannot download legacy weakly wrapped private keys");
+    const overwrite = await target.context.request.post(base+"/api/e2ee/keys",{headers:{Origin:base},data:{deviceId:backup.device_id,publicKey:backup.public_key,encryptedPrivateKey:"attacker-replacement"}});
+    assert.equal(overwrite.status(),200);
+    assert.equal((await pool.query("select encrypted_private_key from e2ee_keys where user_id=$1 and device_id=$2",[user.id,backup.device_id])).rows[0].encrypted_private_key,"legacy-device-id-only-backup","A primary credential cannot overwrite an existing key backup without private-key proof");
+    await pool.query("update e2ee_keys set encrypted_private_key=$3 where user_id=$1 and device_id=$2",[user.id,backup.device_id,backup.encrypted_private_key]);
+    const oldCookies = await target.context.cookies();
+    await target.context.addCookies(oldCookies.filter(c=>c.name==="maddy_session").map(c=>({...c,value:"invalid-access-force-refresh"})));
+    assert.equal((await target.context.request.get(base+"/api/auth/me",{headers:{Origin:base}})).status(),202,"Refresh rotation cannot upgrade a restricted session");
     assert.equal(await target.page.getByLabel("Device linking code",{exact:true}).count(),0);
     assert.equal(await target.page.getByRole("button",{name:/Delete|Approve encryption|Emergency recovery/}).count(),0);
     for(const [width,height] of [[320,740],[390,844],[844,390],[390,360]]) {
@@ -41,6 +59,7 @@ export async function testDeviceAccess(base, pool, secret) {
     await source.page.getByRole("button",{name:"Refresh encryption devices",exact:true}).click();
     await source.page.getByRole("button",{name:"Generate linking code",exact:true}).click();
     const linkCode = await source.page.getByLabel("Device linking code",{exact:true}).innerText();
+    assert(/^\d{6}$/.test(linkCode),"Trusted devices issue six digits");
     await target.page.getByLabel("Device linking code",{exact:true}).fill(linkCode);
     await target.page.getByRole("button",{name:"Link this device",exact:true}).click();
     await target.page.waitForURL(base+"/app/chats");
@@ -58,6 +77,10 @@ export async function testDeviceAccess(base, pool, secret) {
     // A mailbox-code fixture avoids calling a paid or third-party email service.
     const pending = (await pool.query("select device_id,session_id,public_key from e2ee_keys where user_id=$1 order by created_at desc limit 1",[user.id])).rows[0];
     const fingerprint=createHash("sha256").update(pending.public_key).digest("hex"), code="483162";
+    await pool.query("update users set email_verified_at=null where id=$1",[user.id]);
+    const missingEmail = await recovery.context.request.post(base+"/api/e2ee/devices/approve",{headers:{Origin:base},data:{action:"challenge",decision:"recover",sourceDeviceId:pending.device_id,targetDeviceId:pending.device_id,targetFingerprint:fingerprint,confirmation:"RESET ENCRYPTION TRUST"}});
+    assert.equal(missingEmail.status(),409,"A primary credential and pending key cannot replace verified-email recovery");
+    await pool.query("update users set email_verified_at=now() where id=$1",[user.id]);
     const hash=createHmac("sha256",secret).update(`device-recovery-email:v1:${user.id}:${pending.device_id}:${pending.session_id}:${fingerprint}:${code}`).digest("hex");
     await pool.query("insert into device_recovery_email_codes(user_id,device_id,session_id,fingerprint,code_hash,expires_at) values($1,$2,$3,$4,$5,now()+interval '10 minutes')",[user.id,pending.device_id,pending.session_id,fingerprint,hash]);
     await recovery.page.getByLabel("Email recovery code",{exact:true}).fill(code);
@@ -73,6 +96,9 @@ export async function testDeviceAccess(base, pool, secret) {
     assert.equal((await target.context.request.get(base+"/api/auth/me")).status(),401);
     const me=await recovery.context.request.get(base+"/api/auth/me"); assert.equal(me.status(),200);
     assert.equal((await me.json()).user.id,user.id,"Recovery retains the same account");
+    const recoveredCookies = await recovery.context.cookies();
+    await recovery.context.addCookies(recoveredCookies.filter(c=>c.name==="maddy_session").map(c=>({...c,value:"invalid-access-force-refresh"})));
+    assert.equal((await recovery.context.request.get(base+"/api/auth/me",{headers:{Origin:base}})).status(),200,"The recovered browser can refresh without being revoked or restricted again");
     const after=(await pool.query("select device_id,public_key,trusted_at from e2ee_keys where user_id=$1",[user.id])).rows;
     assert.deepEqual(after.filter(row=>row.trusted_at).map(row=>row.device_id),[pending.device_id]);
     for(const old of before) assert.equal(after.find(row=>row.device_id===old.device_id).public_key,old.public_key,"Old keys are retained without being reconstructed");
