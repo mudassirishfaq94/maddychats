@@ -88,6 +88,11 @@ export async function testAudioContacts(base, pool, owner, peer, password, conve
         if (page === a && size.width === 320) { await mkdir(".freebuff/performance", { recursive: true }); await page.screenshot({ path: ".freebuff/performance/audio-mobile-320.png" }); }
         const box = await page.getByRole("region", { name: "Audio call", exact: true }).boundingBox();
         assert(box && box.x >= 0 && box.x + box.width <= size.width && box.y >= 0 && box.y + box.height <= size.height);
+        const theme = page.getByRole("button", { name: "Change theme", exact: true });
+        if (await theme.isVisible()) {
+          const themeBox = await theme.boundingBox();
+          assert(themeBox && (box.x + box.width <= themeBox.x || box.y >= themeBox.y + themeBox.height), "Call strip leaves global theme and account controls clear");
+        }
       }
     }
     const active = (await (await ca.request.get(base + "/api/calls")).json()).call;

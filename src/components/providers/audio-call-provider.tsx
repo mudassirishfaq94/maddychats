@@ -183,7 +183,7 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
   return <Context.Provider value={contextValue}>
     {children}
     <audio ref={audio} autoPlay className="hidden" />
-    {minimized && phase === "connected" && !error && !needsPlay ? <section role="region" aria-label="Audio call" className="fixed left-3 top-[max(0.375rem,env(safe-area-inset-top))] z-[200] flex w-[calc(100%_-_6rem)] max-w-sm items-center gap-1 rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-2 shadow-xl">
+    {minimized && phase === "connected" && !error && !needsPlay ? <section role="region" aria-label="Audio call" className="fixed left-3 top-[max(0.375rem,env(safe-area-inset-top))] z-[200] flex w-[calc(100%_-_8rem)] max-w-sm sm:left-auto sm:right-4 sm:top-16 sm:w-72 items-center gap-1 rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-2 shadow-xl">
       <button type="button" aria-label="Open call controls" className="min-h-11 min-w-0 flex-1 text-left" onClick={() => setMinimized(false)}><span className="block truncate text-xs font-semibold">{name}</span><span className="block text-[10px] text-[var(--muted)]">Audio connected</span></button>
       <button type="button" aria-label={muted ? "Unmute" : "Mute"} aria-pressed={muted} className="flex h-11 w-11 shrink-0 items-center justify-center" onClick={toggleMute}>{muted ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}</button>
       <button type="button" aria-label="End call" className="flex h-11 w-11 shrink-0 items-center justify-center text-[var(--danger)]" onClick={() => end()}><PhoneOff className="h-4 w-4" /></button>
