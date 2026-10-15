@@ -243,8 +243,10 @@ export function useE2EE(userId: string | undefined) {
       // compatibility key. A temporary Signal-directory outage must not make
       // already-established conversations unreadable; v2 sending is enabled
       // only after its session ratchet is available.
-      if (process.env.NEXT_PUBLIC_STARTER_MODE !== "1") void loadSignalBridge()
-        .then(async (bridge) => {
+      if (process.env.NEXT_PUBLIC_STARTER_MODE !== "1") void registration
+        .then(async (ready) => {
+          if (!ready) return;
+          const bridge = await loadSignalBridge();
           await ensureSignalDeviceRegistered(activeUserId, deviceId, bridge);
           await maintainSignalPrekeyReserve(activeUserId, deviceId, bridge);
         })
