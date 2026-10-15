@@ -136,6 +136,7 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
       const token = generation.current;
       try {
         const current = await request(undefined, client.current); if (disposed || token !== generation.current) return;
+        if (!current && !callRef.current && phaseRef.current === "idle" && new URLSearchParams(window.location.search).has("call")) { setName("Audio call"); setError("This call has ended or was answered on another device."); }
         if (!current) { if (callRef.current) { cleanup(); setError("Call ended or was not answered."); } return; }
         if (current.callee_id === userId && current.state === "ringing" && phaseRef.current === "idle") {
           storeCall(current); setName(current.peer_name ?? "Circlo contact"); setStatus("incoming");

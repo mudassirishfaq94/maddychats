@@ -25,7 +25,7 @@ export default async function PeoplePage() {
           Your <span className="text-accent">people</span>
         </h1>
         <p className="mt-2.5 max-w-md text-[0.95rem] leading-relaxed text-[var(--muted)]">
-          Only people you add appear here. Search by full name, username or an exact verified phone number to find someone new.
+          Only people you add appear here. Search by full name, username or an exact opted-in phone number to find someone new.
         </p>
       </section>
 

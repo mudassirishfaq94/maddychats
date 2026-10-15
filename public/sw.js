@@ -1,4 +1,4 @@
-const CACHE_NAME = "circlo-offline-notifications-v4";
+const CACHE_NAME = "circlo-offline-notifications-v5";
 const OFFLINE_URL = "/offline.html";
 
 self.addEventListener("install", (event) => {
@@ -37,6 +37,8 @@ const appPath = value => {
     if (url.pathname === "/app/chats") return "/app/chats";
     const id = url.pathname.match(/^\/app\/chats\/([^/]+)$/)?.[1];
     if (!id || !uuid.test(id)) return null;
+    const call = url.searchParams.get("call");
+    if (call && uuid.test(call)) return `/app/chats/${id}?call=${call}`;
     const message = url.searchParams.get("message");
     return `/app/chats/${id}?${message && uuid.test(message) ? `message=${message}` : "latest=1"}`;
   } catch { return null; }
@@ -64,11 +66,27 @@ self.addEventListener("push", event => {
     let detail;
     try {
       const response = await fetch(`/api/notifications/push/delivery?id=${encodeURIComponent(data.notificationId)}`, { credentials: "same-origin", cache: "no-store", signal: AbortSignal.timeout(10000) });
-      if (response.status === 401 || response.status === 403 || response.status === 404 || response.status === 422) return;
+      if (response.status === 401 || response.status === 403 || response.status === 404 || response.status === 422) {
+        if (uuid.test(data.callId)) for (const alert of await self.registration.getNotifications({ tag: `circlo-call-${data.recipientId}-${data.callId}` })) alert.close();
+        return;
+      }
       if (!response.ok) throw new Error("delivery_unavailable");
       detail = await response.json();
+      if (uuid.test(data.callId)) {
+        if (detail.recipientId !== data.recipientId || detail.callId !== data.callId || !uuid.test(detail.conversationId) || !Number.isFinite(Date.parse(detail.expiresAt)) || Date.parse(detail.expiresAt) <= Date.now()) return;
+        if ((await appWindows()).some(client => client.visibilityState === "visible")) return;
+        await self.registration.showNotification(detail.title || "Circlo", {
+          body: detail.body, icon: "/icons/circlo-192.png?v=linked-c-2", badge: "/icons/circlo-badge-96.png",
+          tag: `circlo-call-${data.recipientId}-${data.callId}`, silent: Boolean(detail.silent),
+          ...(!detail.silent ? { vibrate: [200,100,200] } : {}),
+          actions: [{ action: "open", title: "Open call" }, { action: "decline", title: "Decline" }],
+          data: { url: `/app/chats/${detail.conversationId}?call=${data.callId}`, callId: data.callId, notificationId: data.notificationId, recipientId: data.recipientId },
+        });
+        return;
+      }
       if (detail.recipientId !== data.recipientId || !uuid.test(detail.conversationId) || !uuid.test(detail.messageId)) return;
     } catch {
+      if (uuid.test(data.callId)) return; // Never invent a ringing call without a live, authorized lookup.
       // Offline: preserve a generic alert without disclosing account or sender.
       detail = { title: "Circlo", body: "New activity. Open Circlo to check your messages.", silent: false };
     }
@@ -128,5 +146,18 @@ async function openChatFromNotification(data) {
 self.addEventListener("notificationclick", event => {
   event.notification.close();
   if (event.action === "dismiss") return;
+  if (event.action === "decline" && uuid.test(event.notification.data?.callId)) {
+    const data = event.notification.data;
+    event.waitUntil((async () => {
+      try {
+        const response = await fetch(`/api/notifications/push/delivery?id=${encodeURIComponent(data.notificationId)}`, { credentials: "same-origin", cache: "no-store", signal: AbortSignal.timeout(5000) });
+        if (!response.ok) return;
+        const detail = await response.json();
+        if (detail.recipientId !== data.recipientId || detail.callId !== data.callId) return;
+        await fetch("/api/calls", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "end", id: data.callId, clientId: crypto.randomUUID() }), signal: AbortSignal.timeout(5000) });
+      } catch { /* A stale or offline call cannot be declined remotely. */ }
+    })());
+    return;
+  }
   event.waitUntil(openChatFromNotification(event.notification.data));
 });

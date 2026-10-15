@@ -21,6 +21,14 @@ export function NewChatDialog({ start = "choose", openExternally, onExternalClos
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [image, setImage] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState("");
+  const [createdGroupId, setCreatedGroupId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!image) return;
+    const url = URL.createObjectURL(image);
+    const timer = setTimeout(() => setImagePreview(url), 0);
+    return () => { clearTimeout(timer); URL.revokeObjectURL(url); };
+  }, [image]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
@@ -28,7 +36,7 @@ export function NewChatDialog({ start = "choose", openExternally, onExternalClos
 
   function reset() {
     setMode(start); setQuery(""); setResults([]); setSelected([]); setName("");
-    setDescription(""); setImage(null); setError(null); setStarting(false);
+    setDescription(""); setCreatedGroupId(null); setImage(null); setImagePreview(""); setError(null); setStarting(false);
   }
   function close() { setInternalOpen(false); reset(); onExternalClose?.(); }
 
@@ -57,36 +65,43 @@ export function NewChatDialog({ start = "choose", openExternally, onExternalClos
 
   async function startDirect(person: PublicUser) {
     setStarting(true); setError(null);
+    try {
     const res = await fetch("/api/conversations", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: person.id }) });
     const data = await res.json().catch(() => null) as { conversation?: ConversationDetail; error?: string } | null;
     if (!res.ok || !data?.conversation) { setError(data?.error ?? "Could not start the conversation."); setStarting(false); return; }
     close(); router.push(`/app/chats/${data.conversation.id}`); router.refresh();
+    } catch { setError("Could not start the chat. Check your connection and try again."); setStarting(false); }
   }
 
   async function createGroup() {
     if (!name.trim() || selected.length < 1) { setError("Enter a group name and select at least one person."); return; }
     setStarting(true); setError(null);
     try {
+      let groupId = createdGroupId;
+      if (!groupId) {
       const res = await fetch("/api/groups", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, description, memberIds: selected.map((u) => u.id) }) });
       const data = await res.json().catch(() => null) as { conversation?: ConversationDetail; error?: string } | null;
       if (!res.ok || !data?.conversation) throw new Error(data?.error ?? "Could not create the group.");
+      groupId = data.conversation.id; setCreatedGroupId(groupId);
+      }
       if (image) {
         const form = new FormData(); form.append("file", image);
-        const upload = await fetch(`/api/groups/${data.conversation.id}/avatar`, { method: "POST", body: form });
-        if (!upload.ok) throw new Error("The group was created, but its image could not be uploaded.");
+        const upload = await fetch(`/api/groups/${groupId}/avatar`, { method: "POST", body: form });
+        const uploaded = await upload.json().catch(() => null) as { avatarUrl?: string } | null;
+        if (!upload.ok || !uploaded?.avatarUrl) throw new Error("The group was created, but its image could not be uploaded.");
       }
-      close(); router.push(`/app/chats/${data.conversation.id}`); router.refresh();
+      close(); router.push(`/app/chats/${groupId}`); router.refresh();
     } catch (cause) { setError((cause as Error).message); setStarting(false); }
   }
 
   const title = mode === "choose" ? "New chat" : mode === "direct" ? "New message" : mode === "group-people" ? "Select people" : "Group info";
   return <>
-    <button type="button" onClick={() => setInternalOpen(true)} aria-label={start === "group-people" ? "New group" : "New chat"} title={start === "group-people" ? "New group" : "New chat"} className={start === "group-people" ? "btn min-h-[44px] min-w-[44px] gap-1.5 rounded-xl! px-2.5! text-xs!" : "btn btn-primary min-h-[44px] min-w-[44px] gap-1.5 rounded-xl! px-2.5! text-xs!"}>{start === "group-people" ? <Users className="h-4 w-4" /> : <SquarePen className="h-4 w-4" />}<span className="hidden sm:inline">{start === "group-people" ? "New group" : "New chat"}</span></button>
+    <button type="button" onClick={() => setInternalOpen(true)} aria-label={start === "group-people" ? "New group" : "New chat"} title={start === "group-people" ? "New group" : "New chat"} className={start === "group-people" ? "btn min-h-[44px] min-w-[44px] gap-1.5 rounded-xl! px-2.5! text-xs!" : "btn btn-primary min-h-[44px] min-w-[44px] gap-1.5 rounded-xl! px-2.5! text-xs!"}>{start === "group-people" ? <Users className="h-4 w-4" /> : <SquarePen className="h-4 w-4" />}<span>{start === "group-people" ? "New group" : "New chat"}</span></button>
     {open ? <div role="dialog" aria-modal="true" aria-label={title} className="dialog-backdrop pt-[6vh] animate-fade-up" onMouseDown={(e) => { if (e.target === e.currentTarget) close(); }}>
       <div className="card-glass dialog-card max-w-md rounded-3xl p-5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            {mode !== "choose" ? <button type="button" aria-label="Back" className="flex h-8 w-8 items-center justify-center rounded-full" onClick={() => { setError(null); setMode(mode === "group-info" ? "group-people" : "choose"); }}><ArrowLeft className="h-4 w-4" /></button> : null}
+            {mode !== "choose" ? <button type="button" aria-label="Back" disabled={starting || Boolean(createdGroupId)} className="flex h-8 w-8 items-center justify-center rounded-full" onClick={() => { setError(null); setMode(mode === "group-info" ? "group-people" : "choose"); }}><ArrowLeft className="h-4 w-4" /></button> : null}
             <h3 className="font-display text-lg font-bold">{title}</h3>
           </div>
           <button type="button" onClick={close} aria-label="Close" className="flex h-8 w-8 items-center justify-center rounded-full text-[var(--muted)]"><X className="h-4 w-4" /></button>
@@ -145,11 +160,12 @@ export function NewChatDialog({ start = "choose", openExternally, onExternalClos
         </> : null}
 
         {mode === "group-info" ? <div className="mt-5 space-y-4">
-          <label className="mx-auto flex h-20 w-20 cursor-pointer items-center justify-center overflow-hidden rounded-full bg-[var(--surface-2)] text-[var(--muted)]">{image ? <Image unoptimized width={1200} height={1200} src={URL.createObjectURL(image)} alt="Group preview" className="h-full w-full object-cover" /> : <Camera className="h-7 w-7" />}<input type="file" accept="image/*" className="sr-only" onChange={(e) => setImage(e.target.files?.[0] ?? null)} /></label>
-          <div><label className="mb-1 block text-xs font-semibold">Group name</label><input ref={inputRef} value={name} maxLength={100} onChange={(e) => setName(e.target.value)} className="field-input" placeholder="Group name" /></div>
-          <div><label className="mb-1 block text-xs font-semibold">Description <span className="font-normal text-[var(--muted)]">(optional)</span></label><textarea value={description} maxLength={500} onChange={(e) => setDescription(e.target.value)} className="field-input min-h-20 resize-none" placeholder="What is this group about?" /></div>
-          <button type="button" disabled={starting || !name.trim()} onClick={() => void createGroup()} className="btn btn-primary w-full disabled:opacity-50">{starting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Users className="h-4 w-4" />} Create group</button>
+          <label className="mx-auto flex h-20 w-20 cursor-pointer items-center justify-center overflow-hidden rounded-full bg-[var(--surface-2)] text-[var(--muted)]">{image && imagePreview ? <Image unoptimized width={1200} height={1200} src={imagePreview} alt="Group preview" className="h-full w-full object-cover" /> : <Camera className="h-7 w-7" />}<input type="file" accept="image/*" className="sr-only" onChange={(e) => setImage(e.target.files?.[0] ?? null)} /></label>
+          <div><label className="mb-1 block text-xs font-semibold">Group name</label><input ref={inputRef} value={name} maxLength={100} onChange={(e) => setName(e.target.value)} className="field-input" disabled={Boolean(createdGroupId)} placeholder="Group name" /></div>
+          <div><label className="mb-1 block text-xs font-semibold">Description <span className="font-normal text-[var(--muted)]">(optional)</span></label><textarea value={description} maxLength={500} onChange={(e) => setDescription(e.target.value)} className="field-input min-h-20 resize-none" disabled={Boolean(createdGroupId)} placeholder="What is this group about?" /></div>
+          <button type="button" disabled={starting || !name.trim()} onClick={() => void createGroup()} className="btn btn-primary w-full disabled:opacity-50">{starting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Users className="h-4 w-4" />} {createdGroupId ? "Retry group photo" : "Create group"}</button>
         </div> : null}
+        {createdGroupId && error ? <button type="button" className="btn btn-secondary mt-3 w-full" onClick={() => { const id = createdGroupId; close(); router.push(`/app/chats/${id}`); router.refresh(); }}>Open created group</button> : null}
         {error ? <p className="mt-3 flex items-center gap-2 text-sm text-[var(--danger)]"><AlertTriangle className="h-4 w-4" />{error}</p> : null}
       </div>
     </div> : null}

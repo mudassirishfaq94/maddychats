@@ -254,6 +254,14 @@ export function ConversationDetails({
               <span className="text-base font-semibold">{group.name}</span>
               <span className="text-xs text-[var(--muted)]">{group.members.length} members · {group.members.filter((m) => m.role === "owner" || m.role === "admin").length} admins</span>
               {group.description ? <p className="text-center text-xs text-[var(--muted)]">{group.description}</p> : null}
+            {(group.myRole === "owner" || group.myRole === "admin") ? (
+              <GroupSettingsPanel
+                conversationId={conversationId}
+                group={group}
+                busy={groupBusy !== null}
+                onUpdate={(patch) => { setGroup((prev) => ({ ...prev, ...patch })); router.refresh(); }}
+              />
+            ) : null}
             </div>
             <div className="mt-4 max-h-52 space-y-1 overflow-y-auto">
               {group.members.map((member) => <div key={member.id} className="flex items-center gap-2 rounded-xl px-2 py-1.5 hover:bg-[var(--surface-2)]">
@@ -349,14 +357,6 @@ export function ConversationDetails({
                   </div>
                 ) : null}
               </div>
-            ) : null}
-            {(group.myRole === "owner" || group.myRole === "admin") ? (
-              <GroupSettingsPanel
-                conversationId={conversationId}
-                group={group}
-                busy={groupBusy !== null}
-                onUpdate={(patch) => { setGroup((prev) => ({ ...prev, ...patch })); router.refresh(); }}
-              />
             ) : null}
             <button type="button" disabled={groupBusy !== null} onClick={() => void groupAction(`/api/groups/${conversationId}/leave`, "POST")} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold text-[var(--danger)] hover:bg-[color-mix(in_srgb,var(--danger)_8%,transparent)]"><LogOut className="h-4 w-4" />Leave group</button>
           </div>
@@ -1408,7 +1408,7 @@ function GroupSettingsPanel({ conversationId, group, busy, onUpdate }: {
     } catch (cause) { setError(cause instanceof Error && cause.name !== "TimeoutError" ? cause.message : "Connection timed out. Please retry."); }
     finally { setSaving(false); }
   }
-  return <section className="mt-3" aria-label="Group settings">
+  return <section className="mt-3 w-full min-w-0" aria-label="Group settings">
     <button type="button" aria-expanded={open} onClick={() => open ? setOpen(false) : edit()} className="btn min-h-11 w-full text-xs">{open ? "Hide settings" : "Group settings"}</button>
     {open ? <div className="mt-2 space-y-4 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-3">
       <p className="text-xs text-[var(--muted)]">Admins can edit these details. Group names, descriptions and photos are visible to the service; chat messages stay encrypted.</p>

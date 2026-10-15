@@ -62,7 +62,7 @@ async function getFirebaseAdmin() {
  */
 async function sendFCM(
   tokens: { token: string; platform: string }[],
-  payload: { title: string; body: string; url: string; tag: string },
+  payload: { title: string; body: string; url: string; tag: string; silent?: boolean; ttl?: number },
 ): Promise<void> {
   const admin = await getFirebaseAdmin();
   if (!admin) return;
@@ -84,15 +84,16 @@ async function sendFCM(
           },
           android: {
             priority: "high",
+            ...(payload.ttl !== undefined ? { ttl: payload.ttl * 1000 } : {}),
             notification: {
               channelId: "maddychats-messages",
               tag: payload.tag,
-              defaultSound: true,
-              defaultVibrateTimings: true,
+              defaultSound: !payload.silent,
+              defaultVibrateTimings: !payload.silent,
             },
           },
           webpush: {
-            headers: { TTL: "86400" },
+            headers: { TTL: String(payload.ttl ?? 86400) },
           },
         });
       } catch (error: any) {
@@ -121,6 +122,10 @@ async function sendFCM(
 export async function sendMessagePush(
   userId: string,
   payload: {
+    silent?: boolean;
+    callId?: string;
+    callTtl?: number;
+    webOnly?: boolean;
     notificationId: string;
     actorName: string;
     preview: string;
@@ -129,10 +134,12 @@ export async function sendMessagePush(
   },
 ): Promise<void> {
   const notificationPayload = {
+    silent: payload.silent,
+    ttl: payload.callId ? (payload.callTtl ?? 45) : undefined,
     title: payload.actorName,
     body: payload.preview,
-    url: `/app/chats/${payload.conversationId}?message=${payload.messageId}`,
-    tag: `circlo-chat-${payload.conversationId}`,
+    url: `/app/chats/${payload.conversationId}?${payload.callId ? `call=${payload.callId}` : `message=${payload.messageId}`}`,
+    tag: payload.callId ? `circlo-call-${payload.callId}` : `circlo-chat-${payload.conversationId}`,
   };
 
   // 1. Send through FCM for Android devices
@@ -141,13 +148,13 @@ export async function sendMessagePush(
     .from(fcmTokens)
     .where(eq(fcmTokens.userId, userId));
 
-  if (fcmDevices.length > 0) {
+  if (fcmDevices.length > 0 && !payload.webOnly) {
     // Use the registered native scheme for FCM. This never needs Android's
     // HTTPS domain verification, so a notification tap cannot fall back to
     // Chrome and show a browser address bar.
     sendFCM(fcmDevices, {
       ...notificationPayload,
-      url: `ziptalks://chat/${payload.conversationId}?message=${payload.messageId}`,
+      url: `ziptalks://chat/${payload.conversationId}?${payload.callId ? `call=${payload.callId}` : `message=${payload.messageId}`}`,
     }).catch((err) =>
       console.error("[push] FCM batch error:", safeError(err)),
     );
@@ -172,8 +179,8 @@ export async function sendMessagePush(
           },
           // Resolve presentation through the current authenticated session in
           // the worker. Queued pushes cannot reveal a previous account's name.
-          JSON.stringify({ notificationId: payload.notificationId, recipientId: userId }),
-          { timeout: 10000, TTL: 3600, urgency: "high" },
+          JSON.stringify({ notificationId: payload.notificationId, recipientId: userId, ...(payload.callId ? { callId: payload.callId } : {}) }),
+          { timeout: 10000, TTL: payload.callTtl ?? 3600, urgency: "high" },
         );
       } catch (error) {
         const statusCode =

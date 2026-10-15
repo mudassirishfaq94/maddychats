@@ -337,6 +337,13 @@
       "when": 1792281600004,
       "tag": "0046_contacts_audio_calls",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1792281600005,
+      "tag": "0047_contact_phone",
+      "breakpoints": true
     }
   ]
 }

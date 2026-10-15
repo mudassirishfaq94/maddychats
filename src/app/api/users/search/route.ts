@@ -29,5 +29,5 @@ export async function GET(req: NextRequest) {
   const raw = req.nextUrl.searchParams.get("q") ?? "";
   const q = raw.trim().slice(0, MAX_QUERY_LENGTH);
   const found = await searchUsers(q, me.id, 20);
-  return NextResponse.json({ users: found.map(toPublicUser) }, { headers: { "Cache-Control": "private, no-store" } });
+  return NextResponse.json({ users: found.map(user => ({ ...toPublicUser(user), ...(/^\+/.test(q) ? { phoneUnverified: Boolean(user.contactPhone) } : {}) })) }, { headers: { "Cache-Control": "private, no-store" } });
 }

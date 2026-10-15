@@ -24,6 +24,7 @@ export interface SafeUser {
  * Note: no email — that is private to the account owner.
  */
 export interface PublicUser {
+  phoneUnverified?: boolean;
   id: string;
   username: string;
   displayName: string;

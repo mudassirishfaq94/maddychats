@@ -23,6 +23,7 @@ import dynamic from "next/dynamic";
 import { useRouter, useSearchParams } from "next/navigation";
 import type * as React from "react";
 import {
+  Settings,
   Phone,
   AlertTriangle,
   ArrowDown,
@@ -1820,6 +1821,7 @@ export function ChatView({
           </div>
         )}
 
+        {isGroup ? <button type="button" aria-label="Open group settings" title="Group settings" onClick={() => setShowDetails(true)} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full hover:bg-[var(--surface-2)]"><Settings className="h-5 w-5" /></button> : null}
         {!isGroup && other ? <button type="button" aria-label="Start audio call" title="Direct audio call · keep Circlo open" disabled={audioCall.busy || conversation.blocked || conversation.requestPending || conversation.awaitingApproval} onClick={() => audioCall.start(conversationId, otherName)} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full hover:bg-[var(--surface-2)] disabled:opacity-40"><Phone className="h-5 w-5" /></button> : null}
         <MessageSearch open={showHeaderSearch} onOpenChange={setShowHeaderSearch} />
 

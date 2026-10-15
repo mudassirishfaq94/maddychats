@@ -147,7 +147,7 @@ export async function updateUserProfile(
   return rows[0];
 }
 
-/** Literal name/username discovery, or exact opted-in verified phone.
+/** Literal name/username discovery, or exact opted-in phone.
  * Empty input never enumerates registered accounts. */
 export async function searchUsers(
   query: string,
@@ -168,7 +168,7 @@ export async function searchUsers(
         or(
           sql`${users.displayName} ILIKE ${`%${literal}%`}`,
           sql`${users.username} ILIKE ${`%${literal}%`}`,
-          sql`(${users.phoneDiscoverable} AND ${users.verifiedPhone} = ${/^\+[1-9]\d{7,14}$/.test(phone) ? phone : ""})`,
+          sql`(${users.phoneDiscoverable} AND coalesce(${users.contactPhone}, ${users.verifiedPhone}) = ${/^\+[1-9]\d{7,14}$/.test(phone) ? phone : ""})`,
         ),
       ),
     )

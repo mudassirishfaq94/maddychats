@@ -9,7 +9,7 @@ const notice = "33333333-3333-4333-8333-333333333333";
 const message = "44444444-4444-4444-8444-444444444444";
 function harness() {
   const handlers: Record<string, (event: any) => void> = {};
-  const cards: any[] = [], opened: string[] = [];
+  const cards: any[] = [], opened: string[] = [], fetches: Array<{ url: string; body?: string }> = [];
   let windows: any[] = [];
   let detail: any = { recipientId: user, conversationId: chat, messageId: message, title: "Alex · Circlo", body: "New encrypted message", silent: false };
   let status = 200, offline = false;
@@ -27,11 +27,12 @@ function harness() {
     },
   };
   vm.runInNewContext(readFileSync("public/sw.js", "utf8"), { self, clients: self.clients, URL, AbortSignal, Date,
-    fetch: async () => { if (offline) throw new Error("offline"); return { status, ok: status === 200, json: async () => detail }; },
+    crypto: { randomUUID: () => message },
+    fetch: async (url: string, options?: { body?: string }) => { fetches.push({ url, body: options?.body }); if (offline) throw new Error("offline"); return { status, ok: status === 200, json: async () => detail }; },
   });
   const dispatch = async (name: string, extra: any) => { let done: Promise<unknown> = Promise.resolve(); handlers[name]({ ...extra, waitUntil(p: Promise<unknown>) { done = p; } }); await done; };
-  return { cards, opened, setWindows: (value: any[]) => { windows = value; }, setDetail: (value: any) => { detail = { ...detail, ...value }; }, setStatus: (value: number) => { status = value; }, setOffline: (value = true) => { offline = value; },
-    push: () => dispatch("push", { data: { json: () => ({ notificationId: notice, recipientId: user }) } }),
+  return { cards, opened, fetches, setWindows: (value: any[]) => { windows = value; }, setDetail: (value: any) => { detail = { ...detail, ...value }; }, setStatus: (value: number) => { status = value; }, setOffline: (value = true) => { offline = value; },
+    push: (extra: Record<string, unknown> = {}) => dispatch("push", { data: { json: () => ({ notificationId: notice, recipientId: user, ...extra }) } }),
     click: (notification: any, action = "open") => dispatch("notificationclick", { notification, action }),
     visible: () => dispatch("message", { source: { url: "https://circlo.chat/app/profile" }, data: { type: "CIRCLO_APP_VISIBLE" } }),
   };
@@ -92,4 +93,26 @@ test("an offline push recovers its exact message link once the connection return
   const h = harness(); h.setOffline(); await h.push(); h.setOffline(false);
   await h.click(h.cards[0]);
   assert.equal(h.opened[0], `https://circlo.chat/app/chats/${chat}?message=${message}`);
+});
+
+
+test("closed-app call alerts require a live authorized call, preserve the call link and close on cancellation", async () => {
+  const h = harness();
+  h.setDetail({ callId: message, messageId: undefined, expiresAt: new Date(Date.now()+30000).toISOString(), body: "Incoming audio call" });
+  await h.push({ callId: message }); assert.equal(h.cards.length,1);
+  assert.equal(h.cards[0].actions[0].title,"Open call");
+  await h.click(h.cards[0]); assert.equal(h.opened[0],`https://circlo.chat/app/chats/${chat}?call=${message}`);
+  await h.push({ callId: message }); h.setStatus(404); await h.push({ callId: message }); assert.equal(h.cards.length,0);
+  h.setStatus(200); h.setDetail({ expiresAt: new Date(Date.now()-1000).toISOString() }); await h.push({ callId: message }); assert.equal(h.cards.length,0);
+  h.setDetail({ expiresAt: "not-a-date" }); await h.push({ callId: message }); assert.equal(h.cards.length,0);
+  h.setOffline(); await h.push({ callId: message }); assert.equal(h.cards.length,0);
+});
+
+test("a call can be declined from its notification only after recipient authorization is checked", async () => {
+  const h = harness(); h.setDetail({ callId: message, expiresAt: new Date(Date.now()+30000).toISOString() });
+  await h.push({ callId: message }); await h.click(h.cards[0],"decline");
+  assert(h.fetches.some(item => item.url === "/api/calls" && JSON.parse(item.body!).action === "end"));
+  const other = harness(); other.setDetail({ callId: message, recipientId: chat });
+  await other.click({ data: { callId: message, notificationId: notice, recipientId: user }, close() {} },"decline");
+  assert(!other.fetches.some(item => item.url === "/api/calls"));
 });

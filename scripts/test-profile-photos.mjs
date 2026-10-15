@@ -29,8 +29,37 @@ export async function testProfilePhotos(base, pool, owner, peer, source, unrelat
   await source.page.getByRole("button", { name: "Save changes", exact: true }).click(); assert.equal((await save).status(), 200);
   assert.equal((await pool.query("select display_name from users where id=$1", [owner.id])).rows[0].display_name, displayName);
   await pool.query("update users set display_name=$2,bio=$3 where id=$1", [owner.id, original.display_name, original.bio]);
-  const create = await fetch(base + "/api/groups", { method: "POST", headers: { Origin: base, Cookie: source.cookies, "Content-Type": "application/json" }, body: JSON.stringify({ name: "Owned photo check", memberIds: [peer.id] }) });
-  assert.equal(create.status, 201); const group = (await create.json()).conversation;
+  await source.page.goto(base + "/app/chats");
+  await source.page.setViewportSize({ width: 320, height: 740 });
+  const newGroup = source.page.getByRole("button", { name: "New group", exact: true });
+  assert(await newGroup.getByText("New group", { exact: true }).isVisible(), "Mobile group creation has a visible text label");
+  await newGroup.click();
+  const createDialog = source.page.getByRole("dialog", { name: "Select people", exact: true });
+  await createDialog.getByPlaceholder("Type exact full name or username…").fill(peer.username);
+  await createDialog.getByRole("button").filter({ hasText: "@" + peer.username }).click();
+  await createDialog.getByRole("button", { name: "Next (1)", exact: true }).click();
+  const groupDialog = source.page.getByRole("dialog", { name: "Group info", exact: true });
+  await groupDialog.getByPlaceholder("Group name", { exact: true }).fill("Photo test group");
+  await groupDialog.getByPlaceholder("What is this group about?").fill("Mobile creation verified");
+  await groupDialog.locator('input[type="file"]').setInputFiles({ name: "initial-group.png", mimeType: "image/png", buffer: png });
+  let rejectInitialPhoto = true;
+  const initialPhotoRoute = async route => {
+    if (rejectInitialPhoto && route.request().method() === "POST") { rejectInitialPhoto = false; return route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "Owned photo retry fixture" }) }); }
+    return route.continue();
+  };
+  await source.page.route("**/api/groups/*/avatar", initialPhotoRoute);
+  const created = source.page.waitForResponse(response => response.url() === base + "/api/groups" && response.request().method() === "POST");
+  await groupDialog.getByRole("button", { name: "Create group", exact: true }).click();
+  const create = await created; assert.equal(create.status(), 201); const group = (await create.json()).conversation;
+  await groupDialog.getByText("The group was created, but its image could not be uploaded.", { exact: true }).waitFor();
+  const initialPhoto = source.page.waitForResponse(response => response.url().endsWith(`/api/groups/${group.id}/avatar`) && response.status() === 200);
+  await groupDialog.getByRole("button", { name: "Retry group photo", exact: true }).click();
+  assert.equal((await initialPhoto).status(),200);
+  const initialAvatar = (await pool.query("SELECT avatar_url FROM conversations WHERE id=$1",[group.id])).rows[0].avatar_url;
+  paths.push(initialAvatar.replace("/api/media/", ""));
+  await source.page.unroute("**/api/groups/*/avatar", initialPhotoRoute);
+  assert.equal((await pool.query("SELECT count(*)::int AS n FROM conversations WHERE created_by_id=$1 AND type='group' AND name='Photo test group'",[owner.id])).rows[0].n,1,"Photo retry does not create a duplicate group");
+  await source.page.waitForURL(base + `/app/chats/${group.id}`);
   const form = () => { const body = new FormData(); body.append("file", new File([png], "photo.png", { type: "image/png" })); return body; };
   const avatar = await fetch(base + `/api/groups/${group.id}/avatar`, { method: "POST", headers: { Origin: base, Cookie: source.cookies }, body: form() });
   assert.equal(avatar.status, 200); const avatarUrl = (await avatar.json()).avatarUrl; paths.push(avatarUrl.replace("/api/media/", ""));
@@ -38,8 +67,7 @@ export async function testProfilePhotos(base, pool, owner, peer, source, unrelat
   // Actual mobile UI edits, persisted reload, and an actionable failed-save retry.
   await source.page.goto(base + `/app/chats/${group.id}`);
   await source.page.setViewportSize({ width: 320, height: 740 });
-  await source.page.getByRole("button", { name: "Chat options", exact: true }).click();
-  await source.page.getByRole("menuitem", { name: "Group info", exact: true }).click();
+  await source.page.getByRole("button", { name: "Open group settings", exact: true }).click();
   await source.page.getByRole("button", { name: "Group settings", exact: true }).click();
   const settings = source.page.getByRole("region", { name: "Group settings", exact: true });
   assert(await source.page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), "Group settings fit a 320px phone");
@@ -52,7 +80,7 @@ export async function testProfilePhotos(base, pool, owner, peer, source, unrelat
   assert.deepEqual((await pool.query("select name,description from conversations where id=$1", [group.id])).rows[0], { name: "Edited group name", description: "Description saved after creation" });
   await source.page.reload();
   await source.page.getByRole("button", { name: "Chat options", exact: true }).click();
-  await source.page.getByRole("menuitem", { name: "Group info", exact: true }).click();
+  await source.page.getByRole("menuitem", { name: "Group info & settings", exact: true }).click();
   await source.page.getByRole("button", { name: "Group settings", exact: true }).click();
   assert.equal(await settings.getByLabel("Group name", { exact: true }).inputValue(), "Edited group name");
   assert.equal(await settings.getByLabel("Group description", { exact: true }).inputValue(), "Description saved after creation");
@@ -131,7 +159,7 @@ export async function testProfilePhotos(base, pool, owner, peer, source, unrelat
   await rejoinVerification.getByRole("button", { name: "Approve verified changes", exact: true }).click();
   await peerState.page.getByRole("region", { name: "Conversation", exact: true }).getByText("Group encryption after rejoining", { exact: true }).waitFor();
   assert.equal((await pool.query("select count(*)::int n from messages where conversation_id=$1 and encrypted=false", [group.id])).rows[0].n, 0);
-  console.log("PASS mobile group name/description/photo UI, save retry, and retained-key exclusion after removal");
+  console.log("PASS mobile group creation/photo retry without duplicates, name/description/photo UI, save retry, and retained-key exclusion after removal");
   const background = await fetch(base + `/api/conversations/${group.id}/background`, { method: "PATCH", headers: { Origin: base, Cookie: source.cookies }, body: form() });
   assert.equal(background.status, 200); const style = (await background.json()).backgroundStyle;
   assert(style.startsWith("data:image/webp;base64,"));

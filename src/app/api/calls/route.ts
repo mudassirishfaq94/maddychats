@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from "next/server";
+import { sendCallAlert } from "@/server/call-push";
+import { after, NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { pool } from "@/db";
 import { getSessionUser } from "@/server/session";
@@ -77,10 +78,17 @@ export async function POST(req: NextRequest) {
         ((caller_id=$2 AND caller_client=$3) OR (callee_id=$2 AND (callee_client=$3 ${ending ? "OR state='ringing'" : ""}))) RETURNING *`, [body.id, me.id, body.clientId])).rows[0];
     }
     if (!call) { await connection.query("ROLLBACK"); return jsonError(409, "This call expired or was answered on another browser."); }
+    let noticeId: string | undefined;
+    if (body.action === "invite") {
+      noticeId = (await connection.query("INSERT INTO notifications(user_id,actor_id,type,data) VALUES($1,$2,'call',$3::jsonb) RETURNING id", [call.callee_id, call.caller_id, JSON.stringify({ conversationId, callId: call.id, preview: "Audio call", actorName: me.displayName })])).rows[0].id;
+    } else if (body.action !== "heartbeat") {
+      noticeId = (await connection.query("UPDATE notifications SET read_at=now() WHERE user_id=$1 AND type='call' AND data->>'callId'=$2 RETURNING id", [call.callee_id, call.id])).rows[0]?.id;
+    }
     // Keep signaling ephemeral. No SDP/IP history is retained after calls finish.
     await connection.query("DELETE FROM audio_calls WHERE expires_at < now() OR state='ended'");
     if (body.action !== "heartbeat") await connection.query("INSERT INTO realtime_events(user_id,payload) SELECT unnest($1::uuid[]),$2::jsonb", [[me.id, peer.id], JSON.stringify({ type: "call:changed", conversationId })]);
     await connection.query("COMMIT");
+    if (noticeId) { const pushId = noticeId; const callee = call.callee_id; const callId = call.id; after(async () => { try { await sendCallAlert(pushId, callee, callId, conversationId, body.action !== "invite"); } catch { console.error("[calls] Push delivery unavailable."); } }); }
     return NextResponse.json({ call: publicCall(call, me.id, body.clientId) }, { headers: { "Cache-Control": "private, no-store" } });
   } catch {
     await connection.query("ROLLBACK");

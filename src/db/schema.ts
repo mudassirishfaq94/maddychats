@@ -45,6 +45,7 @@ export const users = pgTable(
     passwordHash: text("password_hash").notNull(),
     avatarUrl: text("avatar_url"),
     bio: text("bio"),
+    contactPhone: text("contact_phone"),
     verifiedPhone: text("verified_phone"),
     phoneDiscoverable: boolean("phone_discoverable").default(false).notNull(),
     /** Database-backed role: user | moderator | admin */
@@ -78,7 +79,7 @@ export const users = pgTable(
     policyVersion: text("policy_version"),
   },
   (table) => [
-    index("users_discoverable_phone_idx").on(table.verifiedPhone).where(sql`${table.phoneDiscoverable}`),
+    index("users_discoverable_phone_idx").on(sql`coalesce(${table.contactPhone}, ${table.verifiedPhone})`).where(sql`${table.phoneDiscoverable}`),
     uniqueIndex("users_username_lower_unique").on(sql`lower(${table.username})`),
     uniqueIndex("users_email_lower_unique").on(sql`lower(${table.email})`),
   ],

@@ -75,8 +75,23 @@ export async function testPwaNotifications(base, pool) {
     await page.close();
     await worker.evaluate("self.clients.matchAll = self.originalMatchAll; delete self.originalMatchAll");
     await push(3); assert.equal((await cards())[0].data.count, 4, "Worker handles a push with no app window");
+    // Real Chromium worker presents a live incoming call with every app window closed.
+    await pool.query("insert into notification_preferences(user_id,push_notifications) values($1,true) on conflict(user_id) do update set push_notifications=true", [owner.id]);
+    const incoming = (await pool.query("INSERT INTO audio_calls(conversation_id,caller_id,callee_id,caller_client,offer) VALUES($1,$2,$3,$4,'local-call-push-fixture') RETURNING id", [conversation,peer.id,owner.id,crypto.randomUUID()])).rows[0];
+    const incomingNotice = (await pool.query("INSERT INTO notifications(user_id,actor_id,type,data) VALUES($1,$2,'call',$3) RETURNING id",[owner.id,peer.id,JSON.stringify({callId:incoming.id,conversationId:conversation})])).rows[0];
+    const pushCall = async () => {
+      await cdp.send("ServiceWorker.deliverPushMessage", { origin:base,registrationId,data:JSON.stringify({notificationId:incomingNotice.id,recipientId:owner.id,callId:incoming.id}) });
+      await worker.evaluate("pushWork.then(() => true)");
+    };
+    await pushCall();
+    assert((await cards()).some(card => card.data.callId === incoming.id),"Closed-window incoming call card appears");
+    const callUrl = (await cards()).find(card => card.data.callId === incoming.id).data.url;
+    assert.equal(callUrl,`/app/chats/${conversation}?call=${incoming.id}`);
+    await pool.query("UPDATE audio_calls SET state='active' WHERE id=$1",[incoming.id]);
+    await pushCall(); assert(!(await cards()).some(card => card.data.callId===incoming.id),"Answered call removes its ringing card");
+    await pool.query("DELETE FROM audio_calls WHERE id=$1",[incoming.id]);
     await pool.query("update conversation_members set muted_at=now() where conversation_id=$1 and user_id=$2", [conversation, owner.id]);
-    await push(4); assert.equal((await cards())[0].data.count, 4, "Mute is rechecked on delivery");
+    await push(4); assert.equal((await cards()).find(card => card.data.messageIds)?.data.count, 4, "Mute is rechecked on delivery");
     await pool.query("update conversation_members set muted_at=null where conversation_id=$1 and user_id=$2", [conversation, owner.id]);
     const delivery = () => context.request.get(base + "/api/notifications/push/delivery?id=" + notices[4].id, { headers: { Origin: base } });
     const response = await delivery(); assert.equal(response.status(), 200); assert.equal(response.headers()["cache-control"], "private, no-store");

@@ -24,6 +24,7 @@ export async function testAudioContacts(base, pool, owner, peer, password, conve
     const contexts = [], pages = [];
     for (const account of [owner, peer]) {
       const context = await browser.newContext({ viewport: { width: 390, height: 844 }, permissions: ["microphone"], serviceWorkers: "block", extraHTTPHeaders: { "X-Forwarded-For": "198.51.100.146" } });
+      await context.addInitScript({content: 'Object.defineProperty(navigator,"contacts",{configurable:true,value:{select:async()=>[{tel:["+15555550124"]}]}});'});
       await context.addInitScript(() => {
         window.__callPeers = []; window.__callTracks = [];
         const Peer = window.RTCPeerConnection;
@@ -52,6 +53,19 @@ export async function testAudioContacts(base, pool, owner, peer, password, conve
     assert.equal((await findPhone())[0].id, peer.id);
     assert(!JSON.stringify(await findPhone()).includes("15555550123"), "Phone is not exposed in results");
     await post(cb, "/api/contacts/phone", { enabled: false }); assert.equal((await findPhone()).length, 0);
+    // User-provided discovery numbers never become authentication credentials.
+    await b.goto(base + "/app/profile");
+    await b.getByLabel("Phone number", { exact: true }).fill("+15555550124");
+    await b.getByLabel("Let people find me using my exact phone number", { exact: true }).check();
+    await b.getByRole("button", { name: "Save phone number", exact: true }).click();
+    await b.getByText("Phone settings saved.", { exact: true }).waitFor();
+    assert.equal((await pool.query("SELECT verified_phone FROM users WHERE id=$1",[peer.id])).rows[0].verified_phone,"+15555550123");
+    await a.goto(base + "/app/people");
+    await a.waitForFunction(() => Boolean(navigator.contacts?.select));
+    await a.getByRole("button",{name:"Find phone contacts",exact:true}).click();
+    await a.getByText("User-provided number · not verified",{exact:true}).waitFor();
+    assert(await a.getByText(peer.username,{exact:true}).isVisible());
+    for (const page of pages) { await page.goto(base + "/app/chats/" + conversationId); await page.getByRole("button",{name:"Start audio call",exact:true}).waitFor(); }
     const noAuth = await browser.newContext(); assert.equal((await noAuth.request.get(base + "/api/calls")).status(), 401); await noAuth.close();
     assert.equal((await ca.request.post(base + "/api/calls", { headers: { Origin: "https://attacker.invalid" }, data: { action: "invite" } })).status(), 403);
     // Real browser offer/answer, DTLS audio, remote media and lifecycle, no mocked WebRTC.
@@ -118,6 +132,21 @@ export async function testAudioContacts(base, pool, owner, peer, password, conve
     await pool.query("UPDATE conversation_members SET accepted_at=NULL WHERE conversation_id=$1 AND user_id=$2", [conversationId, peer.id]);
     assert.equal((await post(ca, "/api/calls", { action: "invite", conversationId, clientId: crypto.randomUUID(), sdp: ringing.offer })).status(), 403);
     await pool.query("UPDATE conversation_members SET accepted_at=now() WHERE conversation_id=$1 AND user_id=$2", [conversationId, peer.id]);
+    // A visible app shows a tappable banner for another screen, but stays quiet in the open chat.
+    const baseline = "Banner baseline " + Date.now();
+    await a.getByRole("textbox",{name:"Message text",exact:true}).fill(baseline);
+    await a.getByRole("textbox",{name:"Message text",exact:true}).press("Enter");
+    await b.getByRole("region",{name:"Conversation",exact:true}).getByText(baseline,{exact:true}).waitFor();
+    assert.equal(await b.getByRole("status",{name:"New message notification",exact:true}).count(),0);
+    await b.goto(base + "/app/profile");
+    const alertText = "Foreground banner " + Date.now();
+    await a.getByRole("textbox",{name:"Message text",exact:true}).fill(alertText);
+    await a.getByRole("textbox",{name:"Message text",exact:true}).press("Enter");
+    const banner = b.getByRole("status",{name:"New message notification",exact:true});
+    await banner.waitFor();
+    await banner.getByRole("link").click();
+    await b.getByRole("region",{name:"Conversation",exact:true}).getByText(alertText,{exact:true}).waitFor();
+    assert.equal(await banner.count(),0);
     // Microphone denial must be useful and must not create a phantom call.
     await a.evaluate(() => { navigator.mediaDevices.getUserMedia = async () => { throw new DOMException("Denied", "NotAllowedError"); }; });
     await a.getByRole("button", { name: "Start audio call", exact: true }).click();

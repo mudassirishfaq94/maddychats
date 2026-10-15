@@ -141,7 +141,7 @@ export function ChatActionsMenu({
           <fieldset disabled={busy || exporting} className="contents">
           <button type="button" role="menuitem" className={item} onClick={openInfo}>
             <Info className="h-4 w-4" />
-            {conversation.type === "group" ? "Group info" : "Contact info"}
+            {conversation.type === "group" ? "Group info & settings" : "Contact info"}
           </button>
           <button type="button" role="menuitem" className={item} onClick={openSearch}>
             <Search className="h-4 w-4" /> Search messages

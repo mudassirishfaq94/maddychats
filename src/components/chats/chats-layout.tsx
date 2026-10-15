@@ -311,12 +311,12 @@ export function ChatsLayout({
         )}
         aria-label="Conversations"
       >
-        <div className="flex items-center justify-between gap-2 px-5 pb-3 pt-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 px-4 pb-3 pt-4">
           <div>
             <p className="text-[0.66rem] font-bold uppercase tracking-[0.16em] text-[var(--accent-fg)]">Circlo</p>
             <h1 className="font-display mt-0.5 text-[1.3rem] font-bold tracking-tight">Your circle</h1>
           </div>
-          <div className="flex items-center gap-1.5">
+          <div className="flex w-full items-center gap-2 sm:w-auto">
             <NewChatDialog start="group-people" />
             <NewChatDialog start="direct" />
           </div>

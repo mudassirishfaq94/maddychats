@@ -249,6 +249,7 @@ export async function exportUserData(userId: string) {
       username: users.username,
       displayName: users.displayName,
       email: users.email,
+      contactPhone: users.contactPhone,
       verifiedPhone: users.verifiedPhone,
       phoneDiscoverable: users.phoneDiscoverable,
       avatarUrl: users.avatarUrl,

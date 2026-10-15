@@ -1,3 +1,4 @@
+import { callPushDetail } from "@/server/call-push";
 import { NextRequest, NextResponse } from "next/server";
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
@@ -15,7 +16,12 @@ export async function GET(req: NextRequest) {
   const user = await getSessionUser(); if (!user) return jsonError(401, "Not authenticated.");
   const id = req.nextUrl.searchParams.get("id");
   if (!id || !isUuid(id)) return jsonError(422, "Invalid notification.");
-  const [notice] = await db.select().from(notifications).where(and(eq(notifications.id, id), eq(notifications.userId, user.id), eq(notifications.type, "message"))).limit(1);
+  const [notice] = await db.select().from(notifications).where(and(eq(notifications.id, id), eq(notifications.userId, user.id))).limit(1);
+  if (notice?.type === "call") {
+    const callDetail = await callPushDetail(id, user.id);
+    return callDetail ? NextResponse.json(callDetail, { headers: { "Cache-Control": "private, no-store" } }) : jsonError(404, "Call unavailable.");
+  }
+  if (notice?.type !== "message") return jsonError(404, "Notification unavailable.");
   const conversationId = notice?.data?.conversationId;
   const messageId = notice?.data?.messageId;
   if (!notice || notice.readAt || typeof conversationId !== "string" || !isUuid(conversationId) || typeof messageId !== "string" || !isUuid(messageId)) return jsonError(404, "Notification unavailable.");

@@ -6,8 +6,9 @@ One-to-one, audio-only WebRTC calls use the existing authenticated application,
 Postgres and SSE signaling. Audio does not pass through Render or the database.
 No paid service, SMS, relay or new hosting resource is provisioned. Google's
 public STUN endpoint assists direct connection discovery; it sees network
-addresses. Both people must keep Circlo open. A suspended/closed mobile browser
-cannot reliably receive a call with this implementation.
+addresses. An authorized push subscription can now alert a backgrounded or closed app.
+Opening the notification brings the recipient to Circlo to answer; the browser
+never opens the microphone or answers without an explicit user gesture.
 
 Direct connections do not work on every carrier, firewall or NAT. This release
 has no TURN relay and does not promise universal connectivity. Failed calls have
@@ -38,7 +39,9 @@ playback permission remain under the user's control.
   This release does **not** bind call fingerprints to chat safety numbers and
   must not be described as independently safety-number-verified calling.
 - Direct peers can learn each other's network address. The incoming-call card
-  explains this before acceptance. There is no recording or retained call log.
+  explains this before acceptance. Audio is not recorded. Incoming-call notification
+  metadata (participants, conversation/call IDs and timestamps) is retained under
+  the existing notification lifecycle; SDP and audio are not stored in notices.
 - Idle browsers do not poll: initial/reconnected SSE, focus and online events
   synchronize incoming calls. Open calls check state every two seconds and
   heartbeat every 15 seconds. Stable context values avoid repeated chat renders.
@@ -50,13 +53,15 @@ shows only explicitly saved, one-way contacts. Searches require two characters;
 names and usernames use literal, case-insensitive matching. Wildcards are escaped
 and blocked accounts are excluded. Add/remove actions affect only the owner.
 
-Phone lookup requires an exact international number, verified by the existing
-Firebase phone sign-in, and the owner's explicit Profile opt-in (off by default).
-Numbers are never returned in public results. Existing Google/email accounts
-have no verified phone number and cannot be found by an unprovided number.
-Existing starter-mode SMS restrictions are retained: this change does not enable
-paid SMS or treat an unverified number as a verified identity. Previous phone
-accounts populate their number on a subsequent supported verified phone login.
+Profile now accepts a user-provided international phone number without SMS.
+It is stored separately in `contact_phone`, labelled unverified and never used
+for authentication, account recovery or proof of identity. Discovery remains
+explicitly opt-in and exact-match only; numbers are not returned in public
+results. Verified legacy phone identities remain separate. A supported browser
+can let the user select particular device contacts; only their selected phone
+numbers are matched, up to ten unique numbers per selection, with two concurrent
+requests. Local numbers require an explicitly chosen country calling code.
+Unsupported browsers retain manual name, username and phone search.
 
 Contacts and owner phone preferences are included in account export and cascade
 away on account deletion. These new private tables use deny-by-default RLS for
@@ -92,5 +97,48 @@ requests, microphone denial, private contact isolation, phone opt-in/out and the
 People add/remove/search UI. Profile layout checks include expanded settings and
 maximum-length names/bios at 320, 390, 844-landscape and 1280px widths.
 
-Physical Android/iPhone, distinct carrier networks and closed-app ringing are
-not verified by browser emulation. No production load test is performed.
+Physical Android/iPhone heads-up presentation and distinct carrier networks
+are not verified by browser emulation. No production load test is performed.
+
+## Notification and mobile group follow-up
+
+A visible app shows a temporary in-app banner for another conversation, and stays
+quiet for the conversation already being read. Background/closed windows use the
+existing push infrastructure. Incoming-call notifications contain opaque IDs;
+the worker resolves caller information through the authenticated delivery API.
+That API checks recipient, current ringing state, expiry, accepted membership,
+blocks, mute/archive state and notification preferences. Answered/ended calls
+withdraw the web notification; offline delivery never invents a ringing call.
+Tapping opens the exact conversation; Decline is independently authorized.
+Android controls permission, battery restrictions and heads-up presentation, so
+an application switch cannot guarantee a system pop-up. Native APK publication
+is separate from deploying this PWA.
+
+Mobile chat lists now expose labelled New chat and New group buttons. Group
+headers include an explicit settings button, and the existing owner/admin editor
+appears before the member list. Existing server permission checks and encrypted
+roster/key handling are retained. Initial photo-upload retry reuses the created
+group rather than creating duplicate groups; previews release their object URLs.
+
+There is no application daily/monthly minute quota or maximum connected-call
+duration. Calls are currently one-to-one, one concurrent call per account, with
+eight invitation attempts per minute and a 45-second unanswered timeout.
+Connectivity, hosting resources, browser restrictions and STUN availability still
+limit practical use; no free TURN relay or unlimited capacity is promised.
+
+Migration `0047_contact_phone.sql` adds only the optional contact phone and changes
+the existing opted-in phone index to the queried coalesce expression. To undo,
+first deploy the prior code, then drop users_discoverable_phone_idx, recreate its
+0046 definition on verified_phone WHERE phone_discoverable, and drop contact_phone.
+Export user-provided numbers before rollback; reconcile the migration ledger in
+a reviewed maintenance operation. No message or encryption keys are rewritten.
+
+
+Follow-up verification: production build, zero-warning lint and 61 unit tests
+passed locally. Two-browser real audio, phone save/opt-in/contact selection,
+foreground message navigation and private account isolation passed. The actual
+Chromium worker presented a live incoming-call notification with all app windows
+closed and withdrew it after answering. Mobile group creation, photo failure and
+retry without duplicate groups, direct settings entry, persisted group edits and
+removed-member key exclusion passed. No physical-phone OS presentation or carrier
+connectivity claim follows from these browser checks.
