@@ -314,8 +314,10 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     const fileMessage = (await fileResponse.json()).message;
     const download = recipient.page.getByRole("link", { name: "Download workflow-check.txt", exact: true });
     await download.waitFor(); await recipient.page.waitForFunction(() => document.querySelector('a[aria-label="Download workflow-check.txt"]')?.href.startsWith("blob:"), undefined, { timeout: 60000 });
-    const downloaded = recipient.page.waitForEvent("download"); await download.click();
-    assert.equal(await readFile(await (await downloaded).path(), "utf8"), fileContent);
+    await download.scrollIntoViewIfNeeded();
+    assert(await download.evaluate(element => {const box=element.getBoundingClientRect();return element.contains(document.elementFromPoint(box.x+box.width/2,box.y+box.height/2));}), "Encrypted download target cannot be covered by message actions");
+    const [downloaded] = await Promise.all([recipient.page.waitForEvent("download"), download.click()]);
+    assert.equal(await readFile(await downloaded.path(), "utf8"), fileContent);
     const stored = (await pool.query("select id from message_attachments where message_id=$1", [fileMessage.id])).rows[0].id;
     assert.equal((await fetch(base + "/api/media/" + stored)).status, 401);
     const authorizedMedia = await fetch(base + "/api/media/" + stored, { headers: { Cookie: recipient.cookies } }); assert.equal(authorizedMedia.status, 200);

@@ -21,6 +21,10 @@ export async function testComposerMedia(base, source, recipient, pool, conversat
       await page.getByRole("button", { name: "Emoji", exact: true }).click();
       const tray = page.getByRole("dialog", { name: "Emoji, stickers and GIFs", exact: true }); await tray.waitFor(); await page.waitForTimeout(60);
       const bounds = await tray.boundingBox(); assert(bounds.x >= 0 && bounds.y >= 0 && bounds.x + bounds.width <= width + 1);
+      assert(await tray.locator(".emoji-button").evaluateAll(buttons => buttons.every(button => {
+        const box = button.getBoundingClientRect();
+        return box.left >= 0 && box.right <= innerWidth + 1 && box.width >= 43.5 && box.height >= 43.5;
+      })), "Emoji cells must fit without overlapping after enlarging touch targets");
       await tray.getByRole("tab", { name: "GIFs", exact: true }).click();
       assert.equal(await tray.getByRole("button", { name: /Add .* GIF$/ }).count(), 6);
       await page.keyboard.press("Escape"); await tray.waitFor({ state: "detached" });

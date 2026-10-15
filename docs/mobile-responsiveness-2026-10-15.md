@@ -41,5 +41,12 @@ Android touch/viewport conditions; a physical handset and its native keyboard
 still require manual acceptance testing. These checks do not prove every
 possible screen size, browser or interaction is bug-free.
 
-The completed focused audit covered 175 screen/layout states with zero layout
+The initial focused audit covered 175 screen/layout states with zero layout
 observations and zero browser errors. Build, lint and all 61 unit tests passed.
+
+Emoji cells use an adaptive 44px grid and swipeable category tabs. Compact
+touch chats keep their existing long-press action sheet instead of overflowing
+hover controls; wider touch layouts reserve space for the larger control row.
+
+Encrypted file downloads have a dedicated 44px link target and an explicit
+real-browser check that message actions cannot intercept the download tap.

@@ -146,6 +146,16 @@ export async function testMobileLayout(base, pool, { recordOnly = false } = {}) 
           await user.getByRole("button", { name: "Open group settings", exact: true }).click();
           await user.getByRole("button", { name: "Group settings", exact: true }).click();
           await expandDetails(user); await check(user, "group-details-" + size);
+          await user.getByRole("button", {name:"Close details",exact:true}).click();
+          await user.getByRole("button", {name:"Emoji",exact:true}).click();
+          const picker = user.getByRole("dialog",{name:"Emoji, stickers and GIFs",exact:true});
+          await picker.waitFor();
+          await check(user, "emoji-picker-" + size);
+          for (const tab of ["Stickers", "GIFs"]) {
+            await picker.getByRole("tab",{name:tab,exact:true}).click();
+            await check(user, tab.toLowerCase() + "-picker-" + size);
+          }
+          await picker.getByRole("button",{name:"Close media picker",exact:true}).click();
         }
         if (path === "/app/chats") {
           await user.getByRole("button", { name: "New chat", exact: true }).click(); await check(user, "new-chat-" + size);

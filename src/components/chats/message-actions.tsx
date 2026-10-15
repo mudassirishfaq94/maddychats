@@ -81,9 +81,9 @@ export function MessageActions({
     "flex h-7 w-7 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] transition-colors hover:text-[var(--text)]";
 
   return (
-    <div
+    <div data-align={align}
       className={cn(
-        "absolute top-1/2 z-20 flex -translate-y-1/2 items-center gap-1",
+        "message-action-cluster absolute top-1/2 z-20 flex -translate-y-1/2 items-center gap-1",
         "opacity-0 transition-opacity duration-150 focus-within:opacity-100 group-hover:opacity-100",
         pickerOpen || menuOpen ? "opacity-100" : "",
         align === "right" ? "-left-[5.5rem]" : "-right-[5.5rem]",

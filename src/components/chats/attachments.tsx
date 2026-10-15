@@ -303,7 +303,7 @@ function FileChip({ file, own }: { file: AttachmentDTO; own: boolean }) {
   return (
     <span
       className={cn(
-        "flex items-center gap-3 rounded-xl border px-3 py-2.5",
+        "flex min-w-0 max-w-full items-center gap-3 rounded-xl border px-3 py-2.5",
         own
           ? "border-[color-mix(in_srgb,var(--bubble-own-fg)_20%,transparent)] bg-[color-mix(in_srgb,var(--bubble-own-fg)_8%,transparent)]"
           : "border-[var(--border)] bg-[var(--card-2)]",
@@ -352,6 +352,7 @@ function FileChip({ file, own }: { file: AttachmentDTO; own: boolean }) {
           download={file.originalName}
           aria-disabled={!url}
           aria-label={`Download ${file.originalName}`}
+          className="flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-full focus-visible:outline-2 focus-visible:outline-[var(--accent)]"
           onClick={(e) => e.stopPropagation()}
         >
           <Download

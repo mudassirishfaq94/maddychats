@@ -153,7 +153,7 @@ export function EmojiPicker({ onSelect, onClose, embedded = false }: EmojiPicker
       </div>
 
       {/* Category tabs */}
-      <div className="flex border-b border-[var(--border)] px-1 py-1">
+      <div className="flex overflow-x-auto border-b border-[var(--border)] px-1 py-1">
         {EMOJI_CATEGORIES.map((cat) => (
           <button
             key={cat.id}
@@ -163,7 +163,7 @@ export function EmojiPicker({ onSelect, onClose, embedded = false }: EmojiPicker
               setSearch("");
             }}
             className={cn(
-              "flex h-8 w-8 items-center justify-center rounded-lg text-base transition-colors",
+              "flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-base transition-colors",
               activeCategory === cat.id && !search
                 ? "bg-[var(--surface-2)]"
                 : "hover:bg-[var(--surface-2)]",
@@ -177,7 +177,7 @@ export function EmojiPicker({ onSelect, onClose, embedded = false }: EmojiPicker
       {/* Emoji grid */}
       <div className="max-h-[240px] overflow-y-auto p-2">
         {search ? (
-          <div className="grid grid-cols-8 gap-0.5">
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(44px,1fr))] gap-0.5">
             {EMOJI_CATEGORIES.flatMap((c) => c.emojis)
               .slice(0, 64)
               .map((emoji) => (
@@ -185,7 +185,7 @@ export function EmojiPicker({ onSelect, onClose, embedded = false }: EmojiPicker
                   key={emoji}
                   type="button"
                   onClick={() => handleSelect(emoji)}
-                  className="emoji-button flex h-9 w-9 items-center justify-center rounded-lg text-xl transition-colors hover:bg-[var(--surface-2)]"
+                  className="emoji-button flex h-11 w-full items-center justify-center rounded-lg text-xl transition-colors hover:bg-[var(--surface-2)]"
                 >
                   {emoji}
                 </button>
@@ -197,13 +197,13 @@ export function EmojiPicker({ onSelect, onClose, embedded = false }: EmojiPicker
               <p className="mb-1 px-1 text-[0.65rem] font-semibold uppercase tracking-wider text-[var(--muted)]">
                 {cat.label} {cat.id}
               </p>
-              <div className="grid grid-cols-8 gap-0.5">
+              <div className="grid grid-cols-[repeat(auto-fit,minmax(44px,1fr))] gap-0.5">
                 {cat.emojis.map((emoji) => (
                   <button
                     key={emoji}
                     type="button"
                     onClick={() => handleSelect(emoji)}
-                    className="emoji-button flex h-9 w-9 items-center justify-center rounded-lg text-xl transition-colors hover:bg-[var(--surface-2)]"
+                    className="emoji-button flex h-11 w-full items-center justify-center rounded-lg text-xl transition-colors hover:bg-[var(--surface-2)]"
                   >
                     {emoji}
                   </button>

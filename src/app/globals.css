@@ -507,3 +507,13 @@ svg.lucide { stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
   .chat-composer, .field-input, input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), textarea, select { font-size: 16px; }
   .dialog-backdrop { padding: .5rem; }
 }
+
+/* Touch users use the existing long-press action sheet on compact chats.
+   Wider touch screens reserve the full width of the enlarged hover controls. */
+@media (pointer: coarse) and (max-width: 639px) {
+  .message-action-cluster { display: none; }
+}
+@media (pointer: coarse) and (min-width: 640px) {
+  .message-action-cluster[data-align="right"] { left: -8.75rem; }
+  .message-action-cluster[data-align="left"] { right: -8.75rem; }
+}
