@@ -227,7 +227,7 @@ export function ConversationDetails({
       />
 
       {/* Panel */}
-      <div
+      <div role="complementary" aria-label="Conversation details"
         className={cn(
           "fixed inset-y-0 right-0 z-[90] flex w-full max-w-sm flex-col bg-[var(--surface)] border-l border-[var(--border)] shadow-xl",
           "animate-slide-in-right",
@@ -254,7 +254,7 @@ export function ConversationDetails({
           <div className="border-b border-[var(--border)] px-4 py-5">
             <div className="flex flex-col items-center gap-2">
               {group.avatarUrl ? <Image unoptimized width={64} height={64} src={group.avatarUrl} alt="" className="h-16 w-16 rounded-full object-cover" /> : <span className="flex h-16 w-16 items-center justify-center rounded-full bg-[var(--accent-soft)]"><Users className="h-7 w-7 text-[var(--accent-fg)]" /></span>}
-              <span className="text-base font-semibold">{group.name}</span>
+              <span className="max-w-full break-words text-center text-base font-semibold [overflow-wrap:anywhere]">{group.name}</span>
               <span className="text-xs text-[var(--muted)]">{group.members.length} members · {group.members.filter((m) => m.role === "owner" || m.role === "admin").length} admins</span>
               {group.description ? <p className="text-center text-xs text-[var(--muted)]">{group.description}</p> : null}
             {(group.myRole === "owner" || group.myRole === "admin") ? (

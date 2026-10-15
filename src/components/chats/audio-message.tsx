@@ -98,7 +98,7 @@ export function AudioMessage({
   return (
     <div
       className={cn(
-        "flex items-end gap-2",
+        "flex min-w-0 max-w-full items-end gap-2",
         own ? "flex-row-reverse" : "flex-row",
       )}
     >
@@ -112,7 +112,7 @@ export function AudioMessage({
       {/* Voice bubble */}
       <div
         className={cn(
-          "flex max-w-[300px] min-w-[220px] items-center gap-3 rounded-2xl px-3 py-2.5",
+          "flex w-[min(300px,60vw)] min-w-0 max-w-full items-center gap-3 rounded-2xl px-3 py-2.5",
           own
             ? "rounded-br-md"
             : "rounded-bl-md border border-[var(--border)] bg-[var(--bubble-other-bg)]",
@@ -153,7 +153,7 @@ export function AudioMessage({
             loading={loading}
           />
 
-          <div className="mt-1 flex items-center justify-between">
+          <div className="mt-1 flex flex-wrap items-center justify-between gap-1">
             <button
               type="button"
               onClick={cyclePlaybackRate}

@@ -188,14 +188,14 @@ export function TwoFactorAuth() {
             <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-[var(--muted)]">
               Step 2: Enter verification code
             </p>
-            <div className="flex gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row">
               <input
                 type="text"
                 value={verifyCode}
                 onChange={(e) => setVerifyCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
                 placeholder="000000"
                 maxLength={6}
-                className="flex-1 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-center font-mono text-lg tracking-[0.3em] text-[var(--text)] placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:outline-none"
+                className="min-h-11 min-w-0 flex-1 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-center font-mono text-lg tracking-[0.3em] text-[var(--text)] placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:outline-none"
               />
               <button
                 type="button"

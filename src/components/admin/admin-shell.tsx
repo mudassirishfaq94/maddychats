@@ -41,10 +41,10 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
       ) : null}
 
       {/* Sidebar */}
-      <aside
+      <aside role="complementary" aria-label="Admin navigation"
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex w-60 flex-col border-r border-[var(--border)] bg-[var(--surface)] transition-transform lg:relative lg:z-auto lg:translate-x-0",
-          sidebarOpen ? "translate-x-0" : "-translate-x-full",
+          "fixed inset-y-0 left-0 z-50 flex w-60 flex-col border-r border-[var(--border)] bg-[var(--surface)] transition-transform lg:relative lg:z-auto lg:visible lg:translate-x-0",
+          sidebarOpen ? "visible translate-x-0" : "invisible -translate-x-full",
         )}
       >
         <div className="flex h-14 items-center gap-2 border-b border-[var(--border)] px-4">
@@ -59,13 +59,14 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
           <button
             type="button"
             onClick={() => setSidebarOpen(false)}
-            className="ml-auto lg:hidden"
+            aria-label="Close admin navigation"
+            className="ml-auto flex h-11 w-11 shrink-0 items-center justify-center lg:hidden"
           >
             <X className="h-4 w-4 text-[var(--muted)]" />
           </button>
         </div>
 
-        <nav className="flex-1 space-y-1 p-2">
+        <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto p-2">
           {NAV_ITEMS.map((item) => {
             const active =
               item.href === "/app/admin"
@@ -100,10 +101,11 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
       {/* Main content */}
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Mobile header */}
-        <header className="flex h-14 items-center gap-3 border-b border-[var(--border)] bg-[var(--surface)] px-4 lg:hidden">
+        <header className="flex h-14 shrink-0 items-center gap-3 border-b border-[var(--border)] bg-[var(--surface)] px-4 lg:hidden">
           <button
             type="button"
             onClick={() => setSidebarOpen(true)}
+            aria-label="Open admin navigation"
             className="flex h-8 w-8 items-center justify-center rounded-full text-[var(--muted)] hover:bg-[var(--surface-2)]"
           >
             <Menu className="h-4 w-4" />

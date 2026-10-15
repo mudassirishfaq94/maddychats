@@ -2339,7 +2339,7 @@ export function ChatView({
                             ) : (
                               <>
                                 {msg.type === "audio" && msg.attachments.length > 0 ? (
-                                  <div className="mb-1.5 min-w-[220px]">
+                                  <div className="mb-1.5 min-w-0 max-w-full">
                                     <AudioMessage
                                       src={msg.attachments[0].url}
                                       attachment={msg.attachments[0]}
@@ -2904,8 +2904,8 @@ export function ChatView({
 
       {/* Schedule message dialog */}
       {showSchedule ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="card-glass w-full max-w-md rounded-3xl p-6 animate-fade-up">
+        <div role="dialog" aria-modal="true" aria-label="Schedule message" className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-black/50 p-3 sm:p-4">
+          <div className="card-glass max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-3xl p-4 sm:p-6 animate-fade-up">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Clock className="h-4.5 w-4.5 text-[var(--accent)]" />
@@ -2931,7 +2931,7 @@ export function ChatView({
                 <p className="mt-1 line-clamp-3 text-sm">{draft.trim()}</p>
               </div>
             ) : null}
-            <div className="mt-5 flex justify-end gap-2">
+            <div className="mt-5 flex flex-wrap justify-end gap-2">
               <button type="button" onClick={() => { setShowSchedule(false); setScheduledTime(""); }} className="rounded-xl px-4 py-2 text-sm font-medium text-[var(--muted)] hover:bg-[var(--surface-2)]">Cancel</button>
               <button
                 type="button"
@@ -2989,12 +2989,12 @@ function EncryptionInfoDialog({
   const [restoreResult, setRestoreResult] = useState<string | null>(null);
   return (
     <div
-      className="fixed inset-0 z-[90] flex items-center justify-center bg-black/50 p-4"
+      role="dialog" aria-modal="true" aria-label="Encryption details" className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-black/50 p-3 sm:p-4"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="card-glass w-full max-w-md overflow-hidden rounded-3xl animate-fade-up">
+      <div className="card-glass max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-3xl animate-fade-up">
         <div className="flex items-center gap-3 border-b border-[var(--border)] px-5 py-4">
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--accent)_15%,transparent)]">
             {ready ? (

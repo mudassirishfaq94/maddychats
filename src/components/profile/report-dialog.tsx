@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import { Ban, X, Flag, Loader2, CheckCircle, AlertTriangle } from "lucide-react";
 import { Toggle } from "@/components/ui/toggle";
 
@@ -80,9 +81,10 @@ export function ReportDialog({
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="card-glass w-full max-w-md rounded-3xl p-6 animate-fade-up">
+  if (typeof document === "undefined") return null;
+  return createPortal(
+    <div role="dialog" aria-modal="true" aria-label="Report" className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-black/50 p-3 sm:p-4">
+      <div className="card-glass max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-3xl p-4 sm:p-6 animate-fade-up">
         {submitted ? (
           <div className="flex flex-col items-center py-6 text-center">
             <CheckCircle className="h-12 w-12 text-[var(--success)]" />
@@ -194,6 +196,6 @@ export function ReportDialog({
           </>
         )}
       </div>
-    </div>
+    </div>, document.body
   );
 }

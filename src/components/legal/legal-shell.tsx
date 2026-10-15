@@ -17,17 +17,17 @@ export function LegalHeader() {
     <header className="border-b border-[var(--border)] bg-[color-mix(in_srgb,var(--bg)_90%,transparent)] backdrop-blur-md">
       <nav
         aria-label="Main navigation"
-        className="mx-auto flex h-20 max-w-6xl items-center justify-between px-5 sm:px-8"
+        className="mx-auto flex min-h-20 max-w-6xl flex-wrap items-center justify-between gap-3 px-3 py-3 sm:px-8"
       >
-        <Link href="/" aria-label="Circlo home">
+        <Link href="/" aria-label="Circlo home" className="shrink-0">
           <LogoWordmark size={38} />
         </Link>
-        <div className="flex items-center gap-3 sm:gap-5">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2 sm:flex-none sm:gap-5">
           <ThemeToggle />
           <Link href="/login" className="hidden text-sm font-semibold sm:block">
             Log in
           </Link>
-          <Link href="/signup" className="btn btn-primary">
+          <Link href="/signup" className="btn btn-primary px-3! text-xs! sm:text-sm!">
             Join your circle <ArrowUpRight className="h-4 w-4" />
           </Link>
         </div>

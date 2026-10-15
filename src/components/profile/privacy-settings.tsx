@@ -44,16 +44,16 @@ function SelectField({
   options: { value: string; label: string }[];
 }) {
   return (
-    <div className="flex items-center justify-between gap-3 py-3">
+    <div className="flex flex-col items-stretch justify-between gap-2 py-3 sm:flex-row sm:items-center sm:gap-3">
       <div className="flex items-center gap-2.5 min-w-0">
         <Icon className="h-4 w-4 shrink-0 text-[var(--muted)]" />
         <span className="text-sm">{label}</span>
       </div>
-      <div className="relative shrink-0">
+      <div className="relative min-w-0 sm:shrink-0">
         <select
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className="appearance-none rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-1.5 pr-7 text-xs font-medium text-[var(--text)] transition-colors hover:border-[var(--border-strong)] focus:border-[var(--accent)] focus:outline-none"
+          className="min-h-11 w-full appearance-none rounded-xl sm:w-auto border border-[var(--border)] bg-[var(--surface-2)] px-3 py-1.5 pr-7 text-xs font-medium text-[var(--text)] transition-colors hover:border-[var(--border-strong)] focus:border-[var(--accent)] focus:outline-none"
         >
           {options.map((opt) => (
             <option key={opt.value} value={opt.value}>

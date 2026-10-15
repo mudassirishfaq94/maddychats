@@ -80,7 +80,7 @@ export default function AdminReportsPage() {
       </div>
 
       {form}
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         {["pending", "reviewed", "resolved", "dismissed", "all"].map((s) => (
           <button
             key={s}

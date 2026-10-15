@@ -368,6 +368,17 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     await recipient.page.getByRole("button", { name: "Play voice message", exact: true }).click();
     await recipient.page.getByRole("button", { name: "Pause voice message", exact: true }).waitFor();
     await recipient.page.waitForFunction(() => Array.from(document.querySelectorAll('[aria-valuenow]')).some(waveform => Number(waveform.getAttribute("aria-valuenow")) > 0), undefined, { timeout: 60000 });
+    for (const device of [source, recipient]) {
+      for (const width of [320, 360, 390, 412]) {
+        await device.page.setViewportSize({width,height:844});
+        const controls = device.page.getByRole("button",{name:/^(Play voice message|Pause voice message|Playback speed)/});
+        for (const control of await controls.all()) {
+          const box = await control.boundingBox();
+          assert(box && box.x >= -1 && box.x + box.width <= width + 1 && box.width >= 43.5 && box.height >= 43.5, "Voice playback and speed controls stay readable, touch-sized and inside the phone viewport");
+        }
+      }
+      await device.page.setViewportSize({width:390,height:844});
+    }
     console.log("PASS voice recording, upload, playback, and contrast");
     // No cron HTTP request is injected: the existing processor must deliver the persisted job.
     await composer.fill("Actual scheduled encrypted delivery");

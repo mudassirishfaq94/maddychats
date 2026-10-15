@@ -4,6 +4,7 @@ import { navigateWithReload } from "@/lib/navigation";
 
 import { FreshAuthentication } from "./fresh-authentication";
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import {
   Download,
   Trash2,
@@ -109,9 +110,9 @@ export function AccountDataSection() {
       </div>
 
       {/* Delete Confirmation Modal */}
-      {showDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="card-glass w-full max-w-md rounded-3xl p-6 animate-fade-up">
+      {showDelete && createPortal(
+        <div role="dialog" aria-modal="true" aria-label="Delete account" className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-black/50 p-3 sm:p-4">
+          <div className="card-glass max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-3xl p-4 sm:p-6 animate-fade-up">
             {deleted ? (
               <div className="flex flex-col items-center py-6 text-center">
                 <CheckCircle className="h-12 w-12 text-[var(--success)]" />
@@ -171,7 +172,7 @@ export function AccountDataSection() {
                   <p className="mt-2 text-xs text-[var(--danger)]">{deleteError}</p>
                 )}
 
-                <div className="mt-5 flex justify-end gap-2">
+                <div className="mt-5 flex flex-wrap justify-end gap-2">
                   <button
                     type="button"
                     onClick={() => {
@@ -199,7 +200,7 @@ export function AccountDataSection() {
               </>
             )}
           </div>
-        </div>
+        </div>, document.body
       )}
     </div>
   );

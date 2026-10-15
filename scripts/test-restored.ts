@@ -1,3 +1,4 @@
+import { testMobileLayout } from "./test-mobile-layout.mjs";
 import { testAudioContacts } from "./test-audio-contacts.mjs";
 import { testChatOpeningFixture } from "./test-chat-opening.mjs";
 import { testDeviceRecoveryUI } from "./test-device-recovery-ui.mjs";
@@ -70,6 +71,7 @@ async function main() {
         if (process.env.GROUP_ONLY !== "1") await testPwaNotifications(base, pool);
         if (process.env.GROUP_ONLY !== "1") await testDeviceRecoveryUI(base, pool);
         console.log(await testRestoredWorkflows(base, pool, accounts[0], accounts[1], password, conversation!, false, testSecret));
+        if (process.env.GROUP_ONLY !== "1") console.log(await testMobileLayout(base, pool));
       }
     }
     catch (error) { console.error(output.slice(-5000)); throw error; }

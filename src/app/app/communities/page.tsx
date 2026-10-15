@@ -219,8 +219,8 @@ export default function CommunitiesPage() {
 
       {/* Create community modal */}
       {showCreate && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="card-glass w-full max-w-md rounded-3xl p-6 animate-fade-up">
+        <div role="dialog" aria-modal="true" aria-label="Create community" className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-black/50 p-3 sm:p-4">
+          <div className="card-glass max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-3xl p-4 sm:p-6 animate-fade-up">
             <div className="flex items-center justify-between">
               <h3 className="text-base font-bold">Create Community</h3>
               <button type="button" onClick={() => setShowCreate(false)} className="flex h-8 w-8 items-center justify-center rounded-full text-[var(--muted)] hover:bg-[var(--surface-2)]">
@@ -244,7 +244,7 @@ export default function CommunitiesPage() {
                 className="w-full resize-none rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2.5 text-sm text-[var(--text)] placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:outline-none"
               />
             </div>
-            <div className="mt-5 flex justify-end gap-2">
+            <div className="mt-5 flex flex-wrap justify-end gap-2">
               <button type="button" onClick={() => setShowCreate(false)} className="rounded-xl px-4 py-2 text-sm font-medium text-[var(--muted)] hover:bg-[var(--surface-2)]">
                 Cancel
               </button>

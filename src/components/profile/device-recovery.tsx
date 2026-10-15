@@ -44,7 +44,7 @@ export function DeviceRecovery() {
     setCode("");
     window.location.reload();
   }
-  return <section className="mt-4 rounded-xl border border-[var(--border)] p-4">
+  return <section className="mt-4 min-w-0 rounded-xl border border-[var(--border)] p-3 sm:p-4">
     <h3 className="font-semibold">Keep a recovery file</h3>
     <p className="mt-2 text-sm text-[var(--muted)]">Save this browser&apos;s encryption identity and locally stored chat keys before changing browsers or clearing data. The file is encrypted on your device; its recovery code is never sent to our server. This is not a full message, media, draft, or Signal session backup.</p>
     <button className="btn btn-secondary mt-3" disabled={busy || !encryption.initialized} onClick={() => void run(backup)}>Download encrypted recovery file</button>

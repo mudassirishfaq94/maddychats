@@ -40,23 +40,23 @@ export function Toggle({
       disabled={disabled}
       onClick={() => onChange(!checked)}
       className={cn(
-        "relative inline-flex shrink-0 cursor-pointer items-center rounded-full transition-colors duration-200 ease-in-out",
+        "inline-flex min-h-11 min-w-11 shrink-0 cursor-pointer items-center justify-center rounded-full",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]",
         "disabled:cursor-not-allowed disabled:opacity-50",
-        s.track,
-        checked
-          ? (activeColor || "bg-[var(--accent)]")
-          : "bg-[var(--border-strong)]",
         className,
       )}
     >
-      <span
-        className={cn(
+      <span aria-hidden="true" className={cn(
+        "relative inline-flex shrink-0 items-center rounded-full transition-colors duration-200 ease-in-out",
+        s.track,
+        checked ? (activeColor || "bg-[var(--accent)]") : "bg-[var(--border-strong)]",
+      )}>
+        <span className={cn(
           "pointer-events-none inline-block rounded-full bg-white shadow-md ring-0 transition-transform duration-200 ease-in-out",
           s.thumb,
           checked ? s.translate : s.translateOff,
-        )}
-      />
+        )} />
+      </span>
     </button>
   );
 }

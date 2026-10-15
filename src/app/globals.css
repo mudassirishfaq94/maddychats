@@ -153,12 +153,17 @@ html:not(.light) {
   gap: 0.45rem;
   font-weight: 600;
   font-size: 0.9rem;
-  line-height: 1;
+  line-height: 1.35;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 44px;
+  text-align: center;
+  overflow-wrap: anywhere;
   border-radius: 0.7rem;
   padding: 0.7rem 1.15rem;
   cursor: pointer;
   user-select: none;
-  white-space: nowrap;
+  white-space: normal;
   transition:
     transform 0.14s ease,
     background-color 0.18s ease,
@@ -166,6 +171,8 @@ html:not(.light) {
     border-color 0.18s ease,
     opacity 0.18s ease;
 }
+
+.btn > svg { flex-shrink: 0; }
 
 .btn:disabled {
   opacity: 0.5;
@@ -204,6 +211,10 @@ html:not(.light) {
   background: color-mix(in srgb, var(--muted) 10%, transparent);
 }
 
+/* Intrinsic input widths and unbroken names must not widen nested mobile cards. */
+input, textarea, select { min-width: 0; max-width: 100%; }
+.card-flat, .card-glass { min-width: 0; overflow-wrap: anywhere; }
+
 /* ---------- form fields ---------- */
 
 .field-label {
@@ -216,6 +227,8 @@ html:not(.light) {
 }
 
 .field-input {
+  min-width: 0;
+  max-width: 100%;
   width: 100%;
   background: var(--input-bg);
   border: 1px solid transparent;
@@ -318,14 +331,17 @@ html:not(.light) {
   justify-content: center;
   padding: 1rem;
   background: rgba(0, 0, 0, 0.5);
+  overflow-y: auto;
 }
 
 .dialog-card {
   width: 100%;
+  min-width: 0;
   max-height: min(85dvh, 44rem);
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 /* ---------- motion ---------- */
@@ -486,6 +502,8 @@ svg.lucide { stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
 /* Retain searchable history while skipping offscreen layout and paint. */
 .message-history-row { content-visibility: auto; }
 @media (pointer: coarse) {
+  /* The hit area grows without shrinking icons or requiring precision taps. */
+  button { min-height: 44px; min-width: 44px; }
   .chat-composer, .field-input, input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), textarea, select { font-size: 16px; }
   .dialog-backdrop { padding: .5rem; }
 }

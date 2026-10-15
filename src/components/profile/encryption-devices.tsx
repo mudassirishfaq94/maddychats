@@ -149,7 +149,7 @@ export function EncryptionDevices({ recoveryEmail, openRecovery = false }: { rec
     }).catch(cause => setStatus(cause instanceof Error ? cause.message : "Unable to link this device.")).finally(() => setBusy(false));
   }
 
-  return <section id="encryption-devices" className="card-flat rounded-2xl p-5">
+  return <section id="encryption-devices" className="card-flat rounded-2xl p-3 sm:p-5">
     <h2 className="font-semibold">Encryption devices</h2>
     <p className="mt-1 text-sm text-[var(--muted)]">Manage access to your private chats. Link a new device or save a recovery file when you need one.</p>
     {current && <div className="mt-4 rounded-2xl bg-[var(--surface-2)] p-4 text-sm"><p className="font-semibold">This device: {current.trustedAt ? "Trusted" : "Waiting for approval"}</p><p className="mt-1 text-[var(--muted)]">{current.trustedAt ? "Ready for private chats. You don’t need to do anything else." : "Link this device to access your private chats."}</p><p className="mt-2 text-xs text-[var(--muted)]">{current.deviceName || browserLabel(current.browser) || "This device"}{current.country ? ` · ${countryName(current.country)}` : ""}</p><details className="mt-3 text-xs"><summary className="cursor-pointer min-h-11 py-3">Security details</summary><p className="mt-2 break-all">Device ID: {current.deviceId}</p><p className="mt-2">Security fingerprint — compare only when approving a device.</p><code className="mt-1 block break-all select-all" aria-label="This device fingerprint">{current.fingerprint}</code><DeviceIdentityEditor key={current.deviceId} deviceId={current.deviceId} name={current.deviceName} country={current.country} onSaved={refresh} /></details></div>}
