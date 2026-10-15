@@ -1,4 +1,5 @@
 import { testMobileLayout } from "./test-mobile-layout.mjs";
+import { testDeviceAccess } from "./test-device-access.mjs";
 import { testAudioContacts } from "./test-audio-contacts.mjs";
 import { testChatOpeningFixture } from "./test-chat-opening.mjs";
 import { testDeviceRecoveryUI } from "./test-device-recovery-ui.mjs";
@@ -65,11 +66,13 @@ async function main() {
       } else if (process.env.DEVICE_RECOVERY_ONLY === "1") {
         console.log(await testEncryptionDevices(base, pool, accounts[0], accounts[1], password, conversation!, testSecret));
       } else if (process.env.PROFILE_ONLY === "1") {
+        await testDeviceAccess(base, pool, testSecret);
         await testDeviceRecoveryUI(base, pool);
       } else {
         if (process.env.GROUP_ONLY !== "1") await testAudioContacts(base, pool, accounts[0], accounts[1], password, conversation!);
         if (process.env.GROUP_ONLY !== "1") await testPwaNotifications(base, pool);
         if (process.env.GROUP_ONLY !== "1") await testDeviceRecoveryUI(base, pool);
+        if (process.env.GROUP_ONLY !== "1") await testDeviceAccess(base, pool, testSecret);
         console.log(await testRestoredWorkflows(base, pool, accounts[0], accounts[1], password, conversation!, false, testSecret));
         if (process.env.GROUP_ONLY !== "1") console.log(await testMobileLayout(base, pool));
       }

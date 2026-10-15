@@ -1,6 +1,7 @@
 "use client";
 
 import { navigateWithReload } from "@/lib/navigation";
+import { deviceAccessPath } from "@/lib/device-access-navigation";
 
 import { useState, type FormEvent, type ReactNode } from "react";
 import Link from "next/link";
@@ -49,7 +50,7 @@ export function LoginForm({ next, consent, agreement }: { next?: string; consent
     }
     // Full navigation: guarantees the just-set session cookie accompanies the
     // first request to /app in every embedding context (incl. iframes).
-    navigateWithReload(target);
+    navigateWithReload(deviceAccessPath(target));
   }
 
   return (

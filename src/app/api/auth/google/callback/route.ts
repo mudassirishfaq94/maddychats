@@ -16,6 +16,7 @@ import { getSessionAuthTime, getSessionDeviceId, getSessionUser, newSessionBlock
 import { matchesGoogleLinkBinding } from "@/server/google-link-binding";
 import { AUTH_RATE_LIMIT, rateLimit } from "@/server/rate-limit";
 import { createGoogleMobileHandoff } from "@/server/google-mobile-handoff";
+import { deviceAccessPath } from "@/lib/device-access-navigation";
 
 const googleKeys = createRemoteJWKSet(new URL("https://www.googleapis.com/oauth2/v3/certs"));
 const GOOGLE_OAUTH_COOKIES = ["google_oauth_state", "google_oauth_nonce", "google_oauth_verifier", "google_oauth_next", "google_oauth_mode", "google_oauth_mobile", "google_oauth_code_challenge", "google_oauth_policy", "google_oauth_link"];
@@ -167,7 +168,7 @@ async function handleGoogleCallback(req: NextRequest) {
     const ticket = await createGoogleMobileHandoff(user.id, user.username, mobileChallenge);
     return finishGoogleOAuth(NextResponse.redirect(new URL(`ziptalks://auth/google?ticket=${encodeURIComponent(ticket)}`)));
   }
-  return finishGoogleOAuth(await beginSignIn(req, user, next.startsWith("/") && !next.startsWith("//") ? next : "/app"));
+  return finishGoogleOAuth(await beginSignIn(req, user, deviceAccessPath(next)));
 }
 
 async function handleGET(req: NextRequest) {

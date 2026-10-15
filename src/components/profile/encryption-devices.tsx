@@ -17,7 +17,7 @@ function maskEmail(email: string) {
   return `${local.slice(0, 1)}${local.length > 1 ? "•••" : "••"}@${domain}`;
 }
 
-export function EncryptionDevices({ recoveryEmail, openRecovery = false }: { recoveryEmail?: string; openRecovery?: boolean }) {
+export function EncryptionDevices({ recoveryEmail, openRecovery = false, setup = false, onTrusted, returnTo = "/app/profile?recovery=1#encryption-devices" }: { recoveryEmail?: string; openRecovery?: boolean; setup?: boolean; onTrusted?: () => void; returnTo?: string }) {
   const encryption = useSharedE2EE();
   const [devices, setDevices] = useState<Device[]>([]);
   const [verified, setVerified] = useState<string[]>([]);
@@ -29,6 +29,7 @@ export function EncryptionDevices({ recoveryEmail, openRecovery = false }: { rec
   const [codes, setCodes] = useState<Record<string, string>>({});
   const [status, setStatus] = useState("");
   const [recoveryOpen, setRecoveryOpen] = useState(openRecovery);
+  const [linkOpen, setLinkOpen] = useState(!setup);
   const [confirmation, setConfirmation] = useState("");
   const [password, setPassword] = useState("");
   const [mfaCode, setMfaCode] = useState("");
@@ -73,6 +74,8 @@ export function EncryptionDevices({ recoveryEmail, openRecovery = false }: { rec
   }, [encryption.initialized, refresh]);
 
   const current = devices.find(device => device.deviceId === encryption.deviceId);
+
+  useEffect(() => { if (current?.trustedAt) onTrusted?.(); }, [current?.trustedAt, onTrusted]);
 
   useEffect(() => {
     if (!recoveryOpen || !recoveryEmail) return;
@@ -150,31 +153,35 @@ export function EncryptionDevices({ recoveryEmail, openRecovery = false }: { rec
   }
 
   return <section id="encryption-devices" className="card-flat rounded-2xl p-3 sm:p-5">
-    <h2 className="font-semibold">Encryption devices</h2>
-    <p className="mt-1 text-sm text-[var(--muted)]">Manage access to your private chats. Link a new device or save a recovery file when you need one.</p>
-    {current && <div className="mt-4 rounded-2xl bg-[var(--surface-2)] p-4 text-sm"><p className="font-semibold">This device: {current.trustedAt ? "Trusted" : "Waiting for approval"}</p><p className="mt-1 text-[var(--muted)]">{current.trustedAt ? "Ready for private chats. You don’t need to do anything else." : "Link this device to access your private chats."}</p><p className="mt-2 text-xs text-[var(--muted)]">{current.deviceName || browserLabel(current.browser) || "This device"}{current.country ? ` · ${countryName(current.country)}` : ""}</p><details className="mt-3 text-xs"><summary className="cursor-pointer min-h-11 py-3">Security details</summary><p className="mt-2 break-all">Device ID: {current.deviceId}</p><p className="mt-2">Security fingerprint — compare only when approving a device.</p><code className="mt-1 block break-all select-all" aria-label="This device fingerprint">{current.fingerprint}</code><DeviceIdentityEditor key={current.deviceId} deviceId={current.deviceId} name={current.deviceName} country={current.country} onSaved={refresh} /></details></div>}
-    {current && !current.trustedAt && <p className="mt-3 text-sm text-[var(--muted)]">This browser cannot approve devices. Use a device marked Trusted to link this one, or choose recovery below.</p>}
+    <h2 className="font-semibold">{setup ? "Set up private chats" : "Encryption devices"}</h2>
+    <p className="mt-1 text-sm text-[var(--muted)]">{setup ? current ? current.trustedAt ? "This device is ready. Opening Circlo…" : "Choose how to use your existing account on this device." : "Checking this device…" : "Manage access to your private chats. Link a new device or save a recovery file when you need one."}</p>
+    {setup && current && !current.trustedAt && <div className="mt-4 grid gap-3">
+      <button type="button" aria-expanded={linkOpen} className="btn btn-secondary w-full flex-col items-start gap-1 p-4 text-left" onClick={() => { setLinkOpen(true); setRecoveryOpen(false); setStatus(""); }}><span className="font-semibold">Link this device</span><span className="text-xs font-normal">Have your old device? Enter its temporary code. Both devices stay signed in.</span></button>
+      <button type="button" aria-expanded={recoveryOpen} className="btn btn-secondary w-full flex-col items-start gap-1 p-4 text-left" onClick={() => { setRecoveryOpen(true); setLinkOpen(false); setStatus(""); }}><span className="font-semibold">Recover access</span><span className="text-xs font-normal">Lost your old device? Confirm your email and sign out your other devices.</span></button>
+    </div>}
+    {!setup && current && <div className="mt-4 rounded-2xl bg-[var(--surface-2)] p-4 text-sm"><p className="font-semibold">This device: {current.trustedAt ? "Trusted" : "Waiting for approval"}</p><p className="mt-1 text-[var(--muted)]">{current.trustedAt ? "Ready for private chats. You don’t need to do anything else." : "Link this device to access your private chats."}</p><p className="mt-2 text-xs text-[var(--muted)]">{current.deviceName || browserLabel(current.browser) || "This device"}{current.country ? ` · ${countryName(current.country)}` : ""}</p><details className="mt-3 text-xs"><summary className="cursor-pointer min-h-11 py-3">Security details</summary><p className="mt-2 break-all">Device ID: {current.deviceId}</p><p className="mt-2">Security fingerprint — compare only when approving a device.</p><code className="mt-1 block break-all select-all" aria-label="This device fingerprint">{current.fingerprint}</code><DeviceIdentityEditor key={current.deviceId} deviceId={current.deviceId} name={current.deviceName} country={current.country} onSaved={refresh} /></details></div>}
+    {!setup && current && !current.trustedAt && <p className="mt-3 text-sm text-[var(--muted)]">This browser cannot approve devices. Use a device marked Trusted to link this one, or choose recovery below.</p>}
 
-    {devices.some(device => device.trustedAt && device.deviceId !== encryption.deviceId && !device.sessionRevokedAt && device.sessionState !== "expired") && <details className="mt-4 rounded-xl border border-[var(--border)] p-3"><summary className="cursor-pointer min-h-11 py-2 text-sm font-semibold">Other linked devices ({devices.filter(device => device.trustedAt && device.deviceId !== encryption.deviceId && !device.sessionRevokedAt && device.sessionState !== "expired").length})</summary><ul className="space-y-2">{devices.filter(device => device.trustedAt && device.deviceId !== encryption.deviceId && !device.sessionRevokedAt && device.sessionState !== "expired").map(device => <li key={device.deviceId} className="border-t border-[var(--border)] py-3 text-sm"><p className="font-medium">{device.deviceName || browserLabel(device.browser) || "Linked device"}</p><p className="mt-1 text-xs text-[var(--muted)]">Trusted{device.country ? ` · ${countryName(device.country)}` : ""}{device.lastUsedAt ? ` · Last used ${new Date(device.lastUsedAt).toLocaleDateString()}` : ""}</p></li>)}</ul></details>}
-    {!devices.some(device => device.trustedAt) && current && <p className="mt-3 text-sm">No trusted device is available. Use a recovery file or account recovery below.</p>}
-    <details className="mt-4 rounded-xl border border-[var(--border)] p-3"><summary className="cursor-pointer min-h-11 py-2 text-sm font-semibold">Back up or restore chats</summary><DeviceRecovery /></details>
-    {current && !current.trustedAt && <div className="mt-4 rounded-xl border border-[var(--border)] p-3">
-      <button type="button" className="btn btn-secondary" disabled={busy} onClick={() => setRecoveryOpen(previous => !previous)}>Emergency recovery: no trusted device or recovery file</button>
+    {!setup && devices.some(device => device.trustedAt && device.deviceId !== encryption.deviceId && !device.sessionRevokedAt && device.sessionState !== "expired") && <details className="mt-4 rounded-xl border border-[var(--border)] p-3"><summary className="cursor-pointer min-h-11 py-2 text-sm font-semibold">Other linked devices ({devices.filter(device => device.trustedAt && device.deviceId !== encryption.deviceId && !device.sessionRevokedAt && device.sessionState !== "expired").length})</summary><ul className="space-y-2">{devices.filter(device => device.trustedAt && device.deviceId !== encryption.deviceId && !device.sessionRevokedAt && device.sessionState !== "expired").map(device => <li key={device.deviceId} className="border-t border-[var(--border)] py-3 text-sm"><p className="font-medium">{device.deviceName || browserLabel(device.browser) || "Linked device"}</p><p className="mt-1 text-xs text-[var(--muted)]">Trusted{device.country ? ` · ${countryName(device.country)}` : ""}{device.lastUsedAt ? ` · Last used ${new Date(device.lastUsedAt).toLocaleDateString()}` : ""}</p></li>)}</ul></details>}
+    {!setup && !devices.some(device => device.trustedAt) && current && <p className="mt-3 text-sm">No trusted device is available. Use a recovery file or account recovery below.</p>}
+    {(!setup || recoveryOpen) && <details className="mt-4 rounded-xl border border-[var(--border)] p-3"><summary className="cursor-pointer min-h-11 py-2 text-sm font-semibold">Back up or restore chats</summary><DeviceRecovery /></details>}
+    {current && !current.trustedAt && (!setup || recoveryOpen) && <div className="mt-4 rounded-xl border border-[var(--border)] p-3">
+      {!setup && <button type="button" className="btn btn-secondary" disabled={busy} onClick={() => setRecoveryOpen(previous => !previous)}>Emergency recovery: no trusted device or recovery file</button>}
       {recoveryOpen && <div className="mt-3 text-sm">
-        <p>First try the original browser where this account&apos;s chats still open. If none is trusted, this recovery enrolls only the browser you have open and revokes other devices&apos; sessions and encryption approvals. You will need to sign in and approve those devices again individually.</p>
-        <p className="mt-2">This proves control of your account and email; it cannot restore private keys or messages removed when an account was deleted. Old messages remain encrypted. A participant or original browser that can still read them must approve the changed identity or restore the original chat keys.</p>
+        <p>You will keep the same account. Recovery signs out your other devices and lets you use this one. Nothing is deleted from your account.</p>
+        <p className="mt-2">Your email code cannot bring back lost encryption keys. To read old messages, you still need a trusted device or a saved recovery file with the original keys.</p>
         {recoveryEmail ? <div className="my-3 rounded-xl border border-[var(--border)] p-3">
           <p className="text-xs">Confirm your verified email: <strong>{maskEmail(recoveryEmail)}</strong></p>
           <p className="mt-1 text-xs text-[var(--muted)]">You must also have signed in again within the last five minutes. If needed, use the sign-in link below and choose Google.</p>
-          {recoveryReadiness?.recentSignIn === false ? <div className="mt-2 rounded-lg bg-[var(--card-2)] p-3 text-xs"><p>Confirm your identity before sending the code. For Google accounts, use the button below; password accounts can fill in the password and authenticator fields.</p><Link className="btn btn-secondary mt-2" href={`/login?reauth=1&next=${encodeURIComponent("/app/profile?recovery=1#encryption-devices")}`}>Confirm with Google or sign in again</Link></div> : null}
+          {recoveryReadiness?.recentSignIn === false ? <div className="mt-2 rounded-lg bg-[var(--card-2)] p-3 text-xs"><p>For your safety, sign in again before requesting the code.</p><Link className="btn btn-secondary mt-2" href={`/login?reauth=1&next=${encodeURIComponent(returnTo)}`}>Confirm with Google or sign in again</Link></div> : null}
           {recoveryReadiness?.configured === false ? <p className="mt-2 text-xs">Email recovery is temporarily unavailable. Use a saved recovery file or another trusted browser.</p> : null}
           <button type="button" className="btn btn-secondary mt-2" disabled={busy || recoveryReadiness?.configured === false || (recoveryReadiness?.recentSignIn === false && !password)} onClick={() => void sendRecoveryEmailCode()}>{busy ? "Please wait…" : emailRecoveryCodeSent ? "Send another recovery code" : "Send recovery code"}</button>
           {status ? <p role="status" className="mt-2 text-sm">{status}</p> : null}
           <label className="mt-3 block text-xs">Six-digit email recovery code<input className="field-input mt-1 w-full tracking-[0.3em]" aria-label="Email recovery code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={emailRecoveryCode} onChange={event => setEmailRecoveryCode(event.target.value.replace(/\D/g, "").slice(0, 6))} /></label>
-        </div> : <p className="my-3 text-xs text-[var(--muted)]">This account has no verified email available for recovery. Use the password and recent sign-in options below, or verify an email in account settings first.</p>}
-        <FreshAuthentication password={password} code={mfaCode} onPassword={setPassword} onCode={setMfaCode} returnTo="/app/profile#encryption-devices" />
-        <label className="block text-xs">Type RESET ENCRYPTION TRUST to confirm<input className="field-input mt-1 w-full" aria-label="Encryption recovery confirmation" value={confirmation} maxLength={30} onChange={event => setConfirmation(event.target.value)} /></label>
-        <button type="button" className="btn btn-secondary mt-3" disabled={busy || confirmation !== "RESET ENCRYPTION TRUST" || Boolean(recoveryEmail && emailRecoveryCode.length !== 6)} onClick={() => {
+        </div> : <p className="my-3 text-xs text-[var(--muted)]">{setup ? "Email recovery needs a verified email on this account. Use your saved recovery file above, or return to Settings and verify your email first." : "This account has no verified email available for recovery. Use the password and recent sign-in options below, or verify an email in account settings first."}</p>}
+        {!setup && <FreshAuthentication password={password} code={mfaCode} onPassword={setPassword} onCode={setMfaCode} returnTo={returnTo} />}
+        {setup ? <label className="mt-3 flex items-start gap-3 text-sm"><input className="mt-1 shrink-0" type="checkbox" checked={confirmation === "RESET ENCRYPTION TRUST"} onChange={event => setConfirmation(event.target.checked ? "RESET ENCRYPTION TRUST" : "")} />I want to sign out my other devices and use this one. I understand that old messages still need their original keys.</label> : <label className="block text-xs">Type RESET ENCRYPTION TRUST to confirm<input className="field-input mt-1 w-full" aria-label="Encryption recovery confirmation" value={confirmation} maxLength={30} onChange={event => setConfirmation(event.target.value)} /></label>}
+        <button type="button" className="btn btn-secondary mt-3" disabled={busy || confirmation !== "RESET ENCRYPTION TRUST" || Boolean(recoveryEmail && emailRecoveryCode.length !== 6) || (setup && !recoveryEmail)} onClick={() => {
           setBusy(true); setStatus("Verifying your email, sign-in, and this browser's private key…");
           void encryption.approveDevice(current.deviceId, current.fingerprint, { decision: "recover", confirmation, password, mfaCode, ...(recoveryEmail ? { emailCode: emailRecoveryCode } : {}) }).then(async () => {
             setPassword(""); setMfaCode(""); setEmailRecoveryCode(""); setConfirmation(""); setRecoveryOpen(false); await refresh();
@@ -184,17 +191,17 @@ export function EncryptionDevices({ recoveryEmail, openRecovery = false }: { rec
         }}>{recoveryEmail ? "Confirm email and recover this browser" : "Recover encryption on this browser"}</button>
       </div>}
     </div>}
-    {current && !current.trustedAt && <div className="mt-3 rounded-xl border border-[var(--border)] p-3 text-sm">
+    {current && !current.trustedAt && linkOpen && <div className="mt-3 rounded-xl border border-[var(--border)] p-3 text-sm">
       <p className="font-semibold">Enter the linking code from your trusted device</p>
-      <p className="mt-1 text-xs text-[var(--muted)]">On a device marked Trusted, open Profile &gt; Encryption devices and choose Generate linking code for this device. The code expires after 10 minutes and can be used once.</p>
+      <p className="mt-1 text-xs text-[var(--muted)]">Keep this screen open. On your old device, open Settings → Manage secure devices. Find this new device and choose Generate linking code. Enter that code here within 10 minutes. It works once.</p>
       <label className="mt-3 block text-xs">Linking code<input className="field-input mt-1 w-full tracking-[0.3em]" aria-label="Device linking code" autoComplete="off" maxLength={12} value={code} onChange={event => setCode(event.target.value)} /></label>
       <label className="mt-2 block text-xs">Name this device (optional)<input className="field-input mt-1 w-full" aria-label="This device name" maxLength={60} value={deviceName} onChange={event => setDeviceName(event.target.value)} placeholder="e.g. Work laptop — Chrome" /></label>
       <button type="button" className="btn btn-secondary mt-3" disabled={busy || code.trim().length < 8} onClick={redeemCode}>Link this device</button>
       {links.filter(link => link.deviceId === encryption.deviceId).map(link => <p key={link.id} className="mt-2 text-xs text-[var(--muted)]" role="status">Linking request: {link.status}</p>)}
     </div>}
-    {encryption.error && !current?.trustedAt && <p role="status" className="mt-2 text-sm">{encryption.error}</p>}
+    {encryption.error && !current?.trustedAt && (!setup || !current) && <p role="status" className="mt-2 text-sm">{encryption.error}</p>}
     {status && !(recoveryOpen && recoveryEmail) && <p role="status" className="mt-2 text-sm">{status}</p>}
-    <ul className="mt-3 space-y-3">{devices.filter(device => !device.trustedAt && device.deviceId !== encryption.deviceId && !device.sessionRevokedAt && device.sessionState !== "expired").map(device => <li key={device.deviceId} className="border-t border-[var(--border)] pt-3">
+    {!setup && <ul className="mt-3 space-y-3">{devices.filter(device => !device.trustedAt && device.deviceId !== encryption.deviceId && !device.sessionRevokedAt && device.sessionState !== "expired").map(device => <li key={device.deviceId} className="border-t border-[var(--border)] pt-3">
       <p className="text-sm font-semibold">New device: {device.deviceName || browserLabel(device.browser) || "Device waiting to link"}</p>
       {current?.trustedAt ? <div className="mt-2 rounded-xl bg-[var(--surface-2)] p-3 text-xs"><p>Compare this security fingerprint with Security details on the new device before approving.</p><code className="mt-2 block break-all select-all">{device.fingerprint}</code></div> : null}
       {device.country ? <p className="mt-1 text-xs text-[var(--muted)]">Country: {countryName(device.country)}</p> : null}
@@ -218,8 +225,8 @@ export function EncryptionDevices({ recoveryEmail, openRecovery = false }: { rec
       }}>Approve encryption device</button>
       {!verified.includes(device.deviceId) && <p className="mt-1 text-xs text-[var(--muted)]">Compare the fingerprint on both browsers and check the box to enable approval.</p>}
       </>}
-    </li>)}</ul>
-    <details className="mt-4 text-sm"><summary className="cursor-pointer min-h-11 py-3">Troubleshooting</summary>
+    </li>)}</ul>}
+    <details className="mt-4 text-sm"><summary className="cursor-pointer min-h-11 py-3">{setup ? "Need help?" : "Troubleshooting"}</summary>
 <details className="mt-3 text-sm text-[var(--muted)]"><summary className="cursor-pointer">How browser trust and chat recovery work</summary><p className="mt-2">Trust belongs to this account and this browser&apos;s saved encryption key, not the laptop or phone itself. Signing in again in the same browser keeps its approval; a different browser, a different website address, or clearing browser storage creates a new device that needs linking once. Approval permits key sharing; it does not mean every chat key has synchronized.</p></details>
     {current?.trustedAt && <button type="button" className="btn btn-secondary mt-3 mr-2" disabled={busy} onClick={() => { setBusy(true); setStatus("Synchronizing existing chat keys…"); void syncKnownConversations().then(setStatus).catch(error => setStatus(error.message)).finally(() => setBusy(false)); }}>Sync chat keys to linked devices</button>}
     <button type="button" className="btn btn-secondary mt-3" disabled={busy || !encryption.initialized} onClick={() => { setBusy(true); setStatus("Checking device approval…"); void refresh().then(() => { setStatus("Encryption devices refreshed."); window.dispatchEvent(new Event("maddy:message-request-keys")); }).catch(cause => setStatus(cause instanceof Error ? cause.message : "Unable to load devices.")).finally(() => setBusy(false)); }}>{busy ? "Checking devices…" : "Refresh encryption devices"}</button>

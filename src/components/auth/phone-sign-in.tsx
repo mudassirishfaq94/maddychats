@@ -7,6 +7,7 @@ import { firebasePhoneAuth, firebasePhoneAuthConfigured } from "@/lib/firebase-c
 import { Field } from "./field";
 import { PolicyAgreement } from "./policy-agreement";
 import { acceptsPolicies, type PolicyConsent } from "@/lib/policy-consent";
+import { deviceAccessPath } from "@/lib/device-access-navigation";
 
 export function PhoneSignIn({ next = "/app", signup = false, consent }: { next?: string; signup?: boolean; consent?: PolicyConsent }) {
   const [localConsent, setLocalConsent] = useState({ acceptTerms: false, acceptPrivacy: false });
@@ -63,7 +64,7 @@ export function PhoneSignIn({ next = "/app", signup = false, consent }: { next?:
       if (response.status === 409 && data?.needsProfile) { setStage("profile"); return; }
       if (!response.ok) { setError(data?.fields?.username ?? data?.error ?? "Phone sign-in failed."); return; }
       const target = next.startsWith("/") && !next.startsWith("//") ? next : "/app";
-      window.location.assign(data?.mfaRequired ? `/login?mfa=1&next=${encodeURIComponent(target)}` : target);
+      window.location.assign(data?.mfaRequired ? `/login?mfa=1&next=${encodeURIComponent(target)}` : deviceAccessPath(target));
     } catch (reason) {
       setError(reason instanceof Error ? reason.message.replace(/^Firebase: /, "") : "The verification code was invalid or expired.");
     } finally { setPending(false); }

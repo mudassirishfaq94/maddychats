@@ -151,6 +151,7 @@ async function main() {
     assert.equal((await sql.query("select user_id from oauth_accounts where provider_account_id='disposable-google-identity'")).rows[0].user_id, alice.id);
     const signedInWithGoogle = await oauthRoundTrip("");
     assert.equal(signedInWithGoogle.status, 307);
+    assert.equal(new URL(signedInWithGoogle.headers.get("location")!).pathname, "/app/device-access", "Google offers device choices only after verified sign-in");
     const googleSession = signedInWithGoogle.headers.getSetCookie().find(cookie => cookie.startsWith("maddy_session="));
     assert(googleSession);
     assert.equal(JSON.parse(Buffer.from(googleSession.split("=")[1].split(".")[1], "base64url").toString()).sub, alice.id);
