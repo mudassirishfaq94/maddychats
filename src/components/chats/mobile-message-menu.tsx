@@ -4,6 +4,11 @@ import { createPortal } from "react-dom";
 import { useEffect, useRef, useState } from "react";
 import {
   Copy,
+  Pencil,
+  Pin,
+  PinOff,
+  Star,
+  StarOff,
   Flag,
   Forward,
   Reply,
@@ -26,6 +31,11 @@ interface MobileMessageMenuProps {
   onReply: () => void;
   onForward: () => void;
   onReact: (emoji: string) => void;
+  onEdit?: () => void;
+  onStar?: () => void;
+  onPin?: () => void;
+  starred?: boolean;
+  pinned?: boolean;
   onReport: () => void;
   onDeleteForMe: () => void;
   onDeleteForEveryone: () => void;
@@ -48,6 +58,11 @@ function MobileMessageMenuContent({
   onReply,
   onForward,
   onReact,
+  onEdit,
+  onStar,
+  onPin,
+  starred,
+  pinned,
   onReport,
   onDeleteForMe,
   onDeleteForEveryone,
@@ -253,6 +268,14 @@ function MobileMessageMenuContent({
                 </span>
               </button>
 
+              {[
+                ...(own && text && onEdit ? [{label:"Edit",icon:Pencil,action:onEdit}] : []),
+                ...(onStar ? [{label:starred?"Unstar":"Star",icon:starred?StarOff:Star,action:onStar}] : []),
+                ...(onPin ? [{label:pinned?"Unpin":"Pin",icon:pinned?PinOff:Pin,action:onPin}] : []),
+              ].map(({label,icon:Icon,action}) => <button key={label} type="button" onClick={()=>{action();onClose();}} className="flex flex-col items-center gap-1.5 rounded-2xl py-3 transition-colors hover:bg-[var(--surface-2)]">
+                <span className="flex h-12 w-12 items-center justify-center rounded-full bg-[var(--surface-2)]"><Icon className="h-5 w-5 text-[var(--muted)]"/></span>
+                <span className="text-[0.65rem] font-medium text-[var(--muted)]">{label}</span>
+              </button>)}
               {/* Report */}
               <button
                 type="button"

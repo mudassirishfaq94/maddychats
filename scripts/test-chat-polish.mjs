@@ -49,18 +49,35 @@ export async function testChatPolish(page, recipient) {
     const cdp = await page.context().newCDPSession(page);
     for (const viewport of [{ width: 390, height: 844 }, { width: 844, height: 390 }]) {
       await page.setViewportSize(viewport);
-      const bubble = page.locator(".message-history-row .inline-block.rounded-2xl").last(); await bubble.scrollIntoViewIfNeeded();
-      await bubble.click({trial:true});
-      const point = await bubble.evaluate(element => {
-        const box=element.getBoundingClientRect();let left=Math.max(0,box.left),right=Math.min(innerWidth,box.right),top=Math.max(0,box.top),bottom=Math.min(innerHeight,box.bottom);
-        for(let parent=element.parentElement;parent;parent=parent.parentElement){const css=getComputedStyle(parent),rect=parent.getBoundingClientRect();if(css.overflowY!=="visible"){top=Math.max(top,rect.top);bottom=Math.min(bottom,rect.bottom);}if(css.overflowX!=="visible"){left=Math.max(left,rect.left);right=Math.min(right,rect.right);}}
-        if(right<=left||bottom<=top)return null;const x=(left+right)/2,y=(top+bottom)/2;
-        return element.contains(document.elementFromPoint(x,y))?{x,y}:null;
-      });
-      assert(point,"Long press targets the visible image/message portion, including clipped landscape images");
-      await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [point] });
-      const menu = page.getByRole("dialog", { name: "Message options", exact: true }); await menu.waitFor();
-      await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+      const bubble = page.locator(".message-history-row .inline-block.rounded-2xl").last();
+      const menu = page.getByRole("dialog", { name: "Message options", exact: true });
+      const hold = async () => {
+        await bubble.scrollIntoViewIfNeeded(); await bubble.click({trial:true});
+        const point = await bubble.evaluate(element => {
+          const box=element.getBoundingClientRect();let left=Math.max(0,box.left),right=Math.min(innerWidth,box.right),top=Math.max(0,box.top),bottom=Math.min(innerHeight,box.bottom);
+          for(let parent=element.parentElement;parent;parent=parent.parentElement){const css=getComputedStyle(parent),rect=parent.getBoundingClientRect();if(css.overflowY!=="visible"){top=Math.max(top,rect.top);bottom=Math.min(bottom,rect.bottom);}if(css.overflowX!=="visible"){left=Math.max(left,rect.left);right=Math.min(right,rect.right);}}
+          if(right<=left||bottom<=top)return null;const x=(left+right)/2,y=(top+bottom)/2;
+          return element.contains(document.elementFromPoint(x,y))?{x,y}:null;
+        });
+        assert(point,"Long press targets the visible message, including clipped landscape images");
+        await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [point] });
+        await menu.waitFor(); await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+      };
+      await hold();
+      for (const action of ["Edit", "Star", "Pin", "Reply", "Forward", "React"]) assert.equal(await menu.getByRole("button",{name:action,exact:true}).count(),1,"Compact touch menus retain " + action);
+      if(viewport.width===390){
+        for(const action of ["Star","Unstar"]){
+          const response=page.waitForResponse(r=>new URL(r.url()).pathname.endsWith("/star")&&r.request().method()===(action==="Star"?"POST":"DELETE"));
+          await menu.getByRole("button",{name:action,exact:true}).click();const result=await response;assert.equal(result.status(),200);assert.equal((await result.json()).message.starred,action==="Star");await menu.waitFor({state:"detached"});await hold();
+        }
+        for(const action of ["Pin","Unpin"]){
+          const response=page.waitForResponse(r=>new URL(r.url()).pathname.endsWith("/pin")&&r.request().method()===(action==="Pin"?"POST":"DELETE"));
+          await menu.getByRole("button",{name:action,exact:true}).click();assert.equal((await response).status(),200);await menu.waitFor({state:"detached"});await hold();
+        }
+        await menu.getByRole("button",{name:"Edit",exact:true}).click();await menu.waitFor({state:"detached"});
+        const editing=page.locator(".message-history-row").filter({has:page.locator("textarea")});await editing.locator("textarea").waitFor();assert((await editing.locator("textarea").inputValue()).trim());
+        await editing.getByRole("button",{name:"Cancel",exact:true}).click();await hold();
+      }
       await menu.getByRole("button", { name: "Cancel", exact: true }).scrollIntoViewIfNeeded();
       assert(await menu.getByRole("button", { name: "Cancel", exact: true }).isVisible());
       await page.keyboard.press("Escape"); await menu.waitFor({ state: "detached" });

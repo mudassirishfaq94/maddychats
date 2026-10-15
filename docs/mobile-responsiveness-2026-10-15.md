@@ -50,3 +50,7 @@ hover controls; wider touch layouts reserve space for the larger control row.
 
 Encrypted file downloads have a dedicated 44px link target and an explicit
 real-browser check that message actions cannot intercept the download tap.
+
+The compact long-press menu retains Edit, Star/Unstar and Pin/Unpin alongside
+reply, forwarding, reactions, reporting and deletion, using the existing server
+authorization and encrypted edit handlers.

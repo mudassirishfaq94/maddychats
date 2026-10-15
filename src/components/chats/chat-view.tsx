@@ -2848,6 +2848,16 @@ export function ChatView({
         onReact={(emoji) => {
           if (mobileMenuMsg) void toggleReaction(mobileMenuMsg, emoji);
         }}
+        starred={mobileMenuMsg?.starred}
+        pinned={mobileMenuMsg?.pinned}
+        onStar={() => {if(mobileMenuMsg) void toggleStar(mobileMenuMsg);}}
+        onPin={() => {if(mobileMenuMsg) void togglePin(mobileMenuMsg);}}
+        onEdit={() => {
+          if(mobileMenuMsg && !isPendingDecrypt(mobileMenuMsg)){
+            setEditingId(mobileMenuMsg.id);
+            setEditDraft(copyableText(mobileMenuMsg));
+          }
+        }}
         onReport={() => {
           if (mobileMenuMsg) {
             setReportMsg(mobileMenuMsg);
