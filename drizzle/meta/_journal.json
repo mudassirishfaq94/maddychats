@@ -330,6 +330,13 @@
       "when": 1792281600003,
       "tag": "0045_policy_consent",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1792281600004,
+      "tag": "0046_contacts_audio_calls",
+      "breakpoints": true
     }
   ]
 }

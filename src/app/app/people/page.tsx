@@ -19,14 +19,13 @@ export default async function PeoplePage() {
       <section className="animate-fade-up">
         <span className="badge badge-accent">
           <Users className="h-3.5 w-3.5" />
-          Directory
+          Your circle
         </span>
         <h1 className="font-display mt-4 text-[2.2rem] font-bold leading-tight">
-          Find <span className="text-accent">people</span>
+          Your <span className="text-accent">people</span>
         </h1>
         <p className="mt-2.5 max-w-md text-[0.95rem] leading-relaxed text-[var(--muted)]">
-          Search by username or display name, view a profile, or start a direct
-          conversation.
+          Only people you add appear here. Search by full name, username or an exact verified phone number to find someone new.
         </p>
       </section>
 

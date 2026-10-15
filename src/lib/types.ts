@@ -290,6 +290,7 @@ export interface RealtimeTypingEvent {
 }
 
 export type RealtimeEvent =
+  | { type: "call:changed"; conversationId: string }
   | RealtimeMessageEvent
   | RealtimeConversationEvent
   | RealtimePresenceEvent

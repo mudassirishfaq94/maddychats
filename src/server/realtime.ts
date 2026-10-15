@@ -1,5 +1,5 @@
 import { and, asc, eq, gte, sql } from "drizzle-orm";
-import { db } from "@/db";
+import { db, pool } from "@/db";
 import { conversationMembers, realtimeEvents } from "@/db/schema";
 import type { RealtimeEvent } from "@/lib/types";
 
@@ -16,6 +16,7 @@ export async function publishToUsers(
 
 /** Expiry runs off the send path; one indexed bounded batch per worker run. */
 export async function cleanupRealtimeEvents() {
+  await pool.query("DELETE FROM audio_calls WHERE expires_at < now() OR state='ended'");
   const result = await db.execute(sql`
     WITH expired AS (
       SELECT id FROM realtime_events WHERE created_at < now() - interval '10 minutes'

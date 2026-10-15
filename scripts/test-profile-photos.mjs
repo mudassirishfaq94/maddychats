@@ -144,10 +144,10 @@ export async function testProfilePhotos(base, pool, owner, peer, source, unrelat
     if (screen === "/app/profile") assert(await source.page.locator("h1").evaluate(heading => heading.scrollWidth <= heading.clientWidth + 1), "Long profile names wrap inside their card");
   }
   const failure = route => route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "Temporary fixture failure. Please retry." }) });
-  await source.page.route("**/api/users/search?*", failure);
+  await source.page.route("**/api/contacts", failure);
   await source.page.goto(base + "/app/people"); await source.page.getByText("Search hit a snag", { exact: true }).waitFor();
-  await source.page.unroute("**/api/users/search?*", failure);
-  const retried = source.page.waitForResponse(r => r.url().includes("/api/users/search?") && r.status() === 200);
+  await source.page.unroute("**/api/contacts", failure);
+  const retried = source.page.waitForResponse(r => r.url().endsWith("/api/contacts") && r.status() === 200);
   await source.page.getByRole("button", { name: "Try again", exact: true }).click(); await retried;
   await source.page.route("**/api/communities", failure);
   await source.page.goto(base + "/app/communities"); await source.page.getByText("Could not load communities. Please try again.", { exact: true }).waitFor();

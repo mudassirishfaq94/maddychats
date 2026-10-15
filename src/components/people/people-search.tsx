@@ -30,6 +30,9 @@ export function PeopleSearch() {
   const { presence } = useRealtime();
   const [query, setQuery] = useState("");
   const [retry, setRetry] = useState(0);
+  const [saved, setSaved] = useState<string[]>([]);
+  const [contactBusy, setContactBusy] = useState<string | null>(null);
+  const [contactError, setContactError] = useState("");
   const [phase, setPhase] = useState<Phase>({ kind: "idle" });
   const abortRef = useRef<AbortController | null>(null);
 
@@ -41,7 +44,7 @@ export function PeopleSearch() {
     const timer = setTimeout(async () => {
       try {
         const res = await fetch(
-          `/api/users/search?q=${encodeURIComponent(q)}`,
+          q.length < 2 ? "/api/contacts" : `/api/users/search?q=${encodeURIComponent(q)}`,
           { signal: controller.signal, cache: "no-store" },
         );
         if (controller.signal.aborted) return;
@@ -57,6 +60,7 @@ export function PeopleSearch() {
           });
           return;
         }
+        if (q.length < 2) setSaved((data?.users ?? []).map(user => user.id));
         setPhase({ kind: "done", users: data?.users ?? [] });
       } catch {
         if (!controller.signal.aborted) {
@@ -90,12 +94,14 @@ export function PeopleSearch() {
               { kind: "loading" },
             );
           }}
-          placeholder="Search by username or display name…"
+          placeholder="Full name, username or +country phone number"
           aria-label="Search people"
           className="field-input rounded-2xl! py-3.5! pl-12! text-base!"
         />
       </div>
 
+      {contactError ? <p role="alert" className="mt-3 text-sm">{contactError}</p> : null}
+      <h2 className="mt-5 text-sm font-semibold">{q.length < 2 ? "Saved contacts" : "Search results"}</h2>
       {/* ---------- states ---------- */}
       <div className="mt-5">
         {phase.kind === "idle" ? (
@@ -103,8 +109,7 @@ export function PeopleSearch() {
             <Compass className="mx-auto h-8 w-8 text-[var(--accent)]" />
             <p className="mt-4 font-semibold">Find your people</p>
             <p className="mx-auto mt-1.5 max-w-xs text-sm leading-relaxed text-[var(--muted)]">
-              Type at least 2 characters to search everyone on Circlo by
-              username or display name.
+              Type at least 2 characters to find someone by full name or username, or enter an exact opted-in international phone number.
             </p>
           </div>
         ) : null}
@@ -145,10 +150,10 @@ export function PeopleSearch() {
           <div className="card-flat rounded-3xl px-8 py-14 text-center animate-fade-up">
             <SearchX className="mx-auto h-8 w-8 text-[var(--muted)]" />
             <p className="mt-4 font-semibold">
-              No people match &ldquo;{q}&rdquo;
+              {q.length < 2 ? "Your contacts will appear here" : `No people match “${q}”`}
             </p>
             <p className="mx-auto mt-1.5 max-w-xs text-sm text-[var(--muted)]">
-              Check the spelling, or try a different name or username.
+              Search for someone, then choose Add contact. Phone lookup requires an exact international number and their permission.
             </p>
           </div>
         ) : null}
@@ -196,10 +201,22 @@ export function PeopleSearch() {
                       </span>
                     )}
                   </span>
+                  <div className="flex shrink-0 flex-col items-end gap-2">
+                  <button type="button" className="btn btn-secondary min-h-11 px-3! text-xs!" disabled={contactBusy !== null} onClick={async () => {
+                    setContactBusy(person.id); setContactError("");
+                    const remove = saved.includes(person.id);
+                    try {
+                      const response = await fetch("/api/contacts", { method: remove ? "DELETE" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: person.id }), signal: AbortSignal.timeout(10000) });
+                      if (!response.ok) throw new Error("Could not update your contacts. Please try again.");
+                      setSaved(ids => remove ? ids.filter(id => id !== person.id) : [...ids, person.id]);
+                      if (q.length < 2) setRetry(value => value + 1);
+                    } catch { setContactError("Could not update your contacts. Please try again."); } finally { setContactBusy(null); }
+                  }}>{contactBusy === person.id ? "Saving…" : saved.includes(person.id) ? "Remove contact" : "Add contact"}</button>
                   <StartConversationButton
                     userId={person.id}
-                    className="btn-secondary shrink-0 px-3.5! py-2! text-xs!"
+                    className="btn-secondary min-h-11 shrink-0 px-3.5! py-2! text-xs!"
                   />
+                  </div>
                 </div>
               </li>
             ))}

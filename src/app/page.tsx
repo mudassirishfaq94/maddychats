@@ -14,6 +14,7 @@ const benefits = [
   { icon: MessageCircle, number: "03", title: "Small moments. Closer circles.", text: "One-to-one chats, groups, reactions and read receipts. Everything you need to stay close, with space to just talk." },
 ];
 const features = [
+  { title: "Direct audio calls", text: "Call an accepted one-to-one chat while both of you have Circlo open. Audio travels directly between browsers; some mobile or restricted networks cannot connect without a relay." },
   { title: "Chats that feel personal", text: "Keep up one-to-one or bring your people together in group conversations. Invites and member controls help you manage your groups; read receipts and typing indicators keep conversations flowing." },
   { title: "Say it your way", text: "Send voice messages, photos and files in chat. Add a reaction, a GIF or an animated sticker when words are not quite enough." },
   { title: "Find the important things", text: "Search your chats, star or pin useful details, reply and forward. Edit or delete your own messages when you need to." },
@@ -25,7 +26,7 @@ const features = [
   { title: "Control your account data", text: "Export your account data or request account deletion in settings. Understand what is kept and why in our Privacy Policy." },
 ];
 const roadmap = [
-  { title: "Voice and video calls", text: "A more immediate way to connect, with privacy and reliable call quality guiding the work." },
+  { title: "Video and broader calling support", text: "Video calls, background ringing and relay support for more networks remain planned work." },
   { title: "A stronger mobile experience", text: "Further Android and iOS app work, with better integration for everyday mobile use." },
   { title: "Simpler device recovery", text: "Clearer onboarding, device linking and recovery guidance while keeping encryption-key verification in place." },
   { title: "More transparency", text: "More accessible technical explanations of our encryption, and independent security review as resources allow." },
@@ -35,7 +36,7 @@ const questions = [
   { title: "What does end-to-end encryption mean here?", text: "Chat messages are encrypted on your device before sending and opened on approved participant devices. Keep your device keys and recovery backup safe. Public profile information and status posts are separate from private chat encryption." },
   { title: "Does encryption mean Circlo collects no data?", text: "No. Running the service still involves account details, device/session information and service metadata. Encryption protects chat content; our Privacy Policy explains the information handled separately." },
   { title: "What happens if I switch browsers or clear browser storage?", text: "Encryption keys belong to your account and browser storage. A new browser may need approval from a trusted device or secure recovery. Save a recovery backup before clearing browser data; email verification alone cannot recreate lost chat keys." },
-  { title: "Can I make calls or download the planned mobile apps now?", text: "Calls and further native mobile app work are on the roadmap, not features promised by this page today. Planned work may change and has no announced release date. The browser app is available now." },
+  { title: "Can I make calls or download the planned mobile apps now?", text: "Direct one-to-one audio calls are available while both people keep Circlo open, subject to network compatibility. Video, background ringing and further native mobile app work remain on the roadmap without an announced release date." },
 ];
 export default async function LandingPage() {
   if (await getSessionUser()) redirect("/app");

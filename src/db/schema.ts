@@ -1,6 +1,7 @@
 import { relations, sql } from "drizzle-orm";
 import {
   index,
+  primaryKey,
   boolean,
   bigint,
   integer,
@@ -44,6 +45,8 @@ export const users = pgTable(
     passwordHash: text("password_hash").notNull(),
     avatarUrl: text("avatar_url"),
     bio: text("bio"),
+    verifiedPhone: text("verified_phone"),
+    phoneDiscoverable: boolean("phone_discoverable").default(false).notNull(),
     /** Database-backed role: user | moderator | admin */
     role: userRoleEnum("role").default("user").notNull(),
     /** Suspension: null = not suspended */
@@ -75,6 +78,7 @@ export const users = pgTable(
     policyVersion: text("policy_version"),
   },
   (table) => [
+    index("users_discoverable_phone_idx").on(table.verifiedPhone).where(sql`${table.phoneDiscoverable}`),
     uniqueIndex("users_username_lower_unique").on(sql`lower(${table.username})`),
     uniqueIndex("users_email_lower_unique").on(sql`lower(${table.email})`),
   ],
@@ -1411,3 +1415,31 @@ export const deviceLinkRequests = pgTable("device_link_requests", {
   usedAt: timestamp("used_at", { withTimezone: true, mode: "date" }),
   createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
 }, table => [index("device_link_owner_idx").on(table.userId, table.expiresAt)]);
+
+/** Explicit one-way address book; never a global user directory. */
+export const userContacts = pgTable("user_contacts", {
+  ownerId: uuid("owner_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  contactId: uuid("contact_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+}, table => [primaryKey({ columns: [table.ownerId, table.contactId] })]);
+
+/** Ephemeral SDP only, no audio recordings or call history. */
+export const audioCalls = pgTable("audio_calls", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  conversationId: uuid("conversation_id").notNull().references(() => conversations.id, { onDelete: "cascade" }),
+  callerId: uuid("caller_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  calleeId: uuid("callee_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  callerClient: uuid("caller_client").notNull(),
+  calleeClient: uuid("callee_client"),
+  offer: text("offer").notNull(),
+  answer: text("answer"),
+  state: text("state").default("ringing").notNull(),
+  callerSeenAt: timestamp("caller_seen_at", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+  calleeSeenAt: timestamp("callee_seen_at", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true, mode: "date" }).default(sql`now() + interval '45 seconds'`).notNull(),
+}, table => [
+  index("audio_calls_caller_live_idx").on(table.callerId, table.expiresAt).where(sql`${table.state} <> 'ended'`),
+  index("audio_calls_callee_live_idx").on(table.calleeId, table.expiresAt).where(sql`${table.state} <> 'ended'`),
+  index("audio_calls_expiry_idx").on(table.expiresAt),
+]);

@@ -147,29 +147,28 @@ export async function updateUserProfile(
   return rows[0];
 }
 
-/**
- * People search — EXACT match only on full display name or full username
- * (case-insensitive). Users must type the complete name/username to find
- * someone. Normalizes whitespace so "John  Smith" matches "John Smith".
- */
+/** Literal name/username discovery, or exact opted-in verified phone.
+ * Empty input never enumerates registered accounts. */
 export async function searchUsers(
   query: string,
   excludeUserId: string,
   limit = 20,
 ): Promise<UserRow[]> {
   const trimmed = query.trim().replace(/\s+/g, " ");
-  if (!trimmed) {
-    return db.select().from(users).where(ne(users.id, excludeUserId)).orderBy(sql`${users.createdAt} DESC`).limit(limit);
-  }
+  if (trimmed.length < 2) return [];
+  const literal = trimmed.replace(/[\\%_]/g, "\\$&");
+  const phone = trimmed.replace(/[\s()\-]/g, "");
   return db
     .select()
     .from(users)
     .where(
       and(
         ne(users.id, excludeUserId),
+        sql`NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id = ${excludeUserId} AND b.blocked_id = ${users.id}) OR (b.blocked_id = ${excludeUserId} AND b.blocker_id = ${users.id}))`,
         or(
-          sql`${users.displayName} ILIKE ${`%${trimmed}%`}`,
-          sql`${users.username} ILIKE ${`%${trimmed}%`}`,
+          sql`${users.displayName} ILIKE ${`%${literal}%`}`,
+          sql`${users.username} ILIKE ${`%${literal}%`}`,
+          sql`(${users.phoneDiscoverable} AND ${users.verifiedPhone} = ${/^\+[1-9]\d{7,14}$/.test(phone) ? phone : ""})`,
         ),
       ),
     )

@@ -7,6 +7,7 @@ import {
   privacySettings,
   adminAuditLog,
   users,
+  userContacts,
   messages,
 } from "@/db/schema";
 
@@ -248,6 +249,8 @@ export async function exportUserData(userId: string) {
       username: users.username,
       displayName: users.displayName,
       email: users.email,
+      verifiedPhone: users.verifiedPhone,
+      phoneDiscoverable: users.phoneDiscoverable,
       avatarUrl: users.avatarUrl,
       bio: users.bio,
       createdAt: users.createdAt,
@@ -262,6 +265,7 @@ export async function exportUserData(userId: string) {
 
   return {
     profile: user[0] || null,
+    contacts: await db.select({ userId: userContacts.contactId, addedAt: userContacts.createdAt }).from(userContacts).where(eq(userContacts.ownerId, userId)),
     loginHistory: loginEntries.map((l) => ({
       success: l.success,
       ipAddress: l.ipAddress,

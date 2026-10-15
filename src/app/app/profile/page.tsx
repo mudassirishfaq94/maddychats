@@ -103,7 +103,7 @@ export default async function ProfilePage({
             </span>
           </div>
           <p className="mt-1.5 break-all text-[var(--muted)]">@{user.username}</p>
-          <p className="mt-3 max-w-lg text-sm leading-relaxed text-[var(--muted)]">
+          <p className="mt-3 max-w-lg break-words text-sm leading-relaxed text-[var(--muted)]">
             {user.bio ?? "No bio yet — hit Edit profile to introduce yourself."}
           </p>
         </div>
@@ -129,7 +129,7 @@ export default async function ProfilePage({
 
         <div className="min-w-0 space-y-4">
           <div className="card-flat rounded-2xl p-5"><h2 className="font-semibold">Account overview</h2><dl className="mt-3 divide-y divide-[var(--border)]">
-            {meta.map(({ icon: Icon, label, value }) => <div key={label} className="py-3"><dt className="flex items-center gap-2 text-xs text-[var(--muted)]"><Icon className="h-3.5 w-3.5" />{label}</dt><dd className="mt-1 break-words text-sm">{value}</dd></div>)}
+            {meta.map(({ icon: Icon, label, value }) => <div key={label} className="py-3"><dt className="flex items-center gap-2 text-xs text-[var(--muted)]"><Icon className="h-3.5 w-3.5" />{label}</dt><dd className="mt-1 break-all text-sm">{value}</dd></div>)}
           </dl></div>
           <div
             className="card-flat rounded-2xl p-5 animate-fade-up"

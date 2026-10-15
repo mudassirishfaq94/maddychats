@@ -1,3 +1,4 @@
+import { testAudioContacts } from "./test-audio-contacts.mjs";
 import { testChatOpeningFixture } from "./test-chat-opening.mjs";
 import { testDeviceRecoveryUI } from "./test-device-recovery-ui.mjs";
 import { testEncryptionDevices } from "./test-encryption-devices.mjs";
@@ -46,7 +47,9 @@ async function main() {
     let output = ""; server.stdout?.on("data", d => output += d); server.stderr?.on("data", d => output += d);
     for (let i = 0; i < 100; i++) { try { if ((await fetch(base + "/api/health")).status === 204) break; } catch {} await new Promise(r => setTimeout(r, 200)); }
     try {
-      if (process.env.CHAT_RACE_ONLY === "1") {
+      if (process.env.AUDIO_ONLY === "1") {
+        await testAudioContacts(base, pool, accounts[0], accounts[1], password, conversation!);
+      } else if (process.env.CHAT_RACE_ONLY === "1") {
         await testChatOpeningFixture(base, accounts[0], accounts[1], password, conversation!);
       } else if (process.env.PWA_ONLY === "1") {
         console.log(await testPwaNotifications(base, pool));
@@ -55,6 +58,7 @@ async function main() {
       } else if (process.env.PROFILE_ONLY === "1") {
         await testDeviceRecoveryUI(base, pool);
       } else {
+        if (process.env.GROUP_ONLY !== "1") await testAudioContacts(base, pool, accounts[0], accounts[1], password, conversation!);
         if (process.env.GROUP_ONLY !== "1") await testPwaNotifications(base, pool);
         if (process.env.GROUP_ONLY !== "1") await testDeviceRecoveryUI(base, pool);
         console.log(await testRestoredWorkflows(base, pool, accounts[0], accounts[1], password, conversation!, false, testSecret));

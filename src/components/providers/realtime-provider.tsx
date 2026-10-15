@@ -171,6 +171,12 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     };
   }, [status]);
 
+  useEffect(() => {
+    const ring = () => { if (notificationPreferences.current?.notificationSound) playNotificationSound(); };
+    window.addEventListener("circlo:incoming-call", ring);
+    return () => window.removeEventListener("circlo:incoming-call", ring);
+  }, [playNotificationSound]);
+
   // Full deployments retain cooperative scheduling; starter queues stay paused.
   useEffect(() => {
     if (status !== "authenticated" || process.env.NEXT_PUBLIC_STARTER_MODE === "1") return;

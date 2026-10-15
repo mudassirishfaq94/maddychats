@@ -1,4 +1,5 @@
 "use client";
+import { PhoneDiscovery } from "./phone-discovery";
 
 import { useState, type FormEvent } from "react";
 import { useRef } from "react";
@@ -339,6 +340,7 @@ export function ProfileEditor({ user }: { user: SafeUser }) {
           </div>
         ) : null}
       </form>
+      <PhoneDiscovery />
     </section>
   );
 }

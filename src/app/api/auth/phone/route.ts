@@ -93,6 +93,8 @@ async function handlePOST(req: NextRequest) {
     }
   }
 
+  // Only Firebase-verified numbers are searchable; owners must opt in separately.
+  await db.update(users).set({ verifiedPhone: decoded.phone_number }).where(eq(users.id, user.id));
   return beginSignIn(req, user);
 }
 

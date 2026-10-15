@@ -1,5 +1,6 @@
 "use client";
 
+import { useAudioCall } from "@/components/providers/audio-call-provider";
 import Image from "next/image";
 import { EncryptedMessageState } from "./encrypted-message-state";
 
@@ -22,6 +23,7 @@ import dynamic from "next/dynamic";
 import { useRouter, useSearchParams } from "next/navigation";
 import type * as React from "react";
 import {
+  Phone,
   AlertTriangle,
   ArrowDown,
   ArrowUp,
@@ -198,6 +200,7 @@ export function ChatView({
   const hydrated = useHydrated();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const audioCall = useAudioCall();
   const { subscribe, presence, connected } = useRealtime();
   const e2ee = useSharedE2EE();
   const encryptionRef = useRef<typeof e2ee | null>(null);
@@ -1817,6 +1820,7 @@ export function ChatView({
           </div>
         )}
 
+        {!isGroup && other ? <button type="button" aria-label="Start audio call" title="Direct audio call · keep Circlo open" disabled={audioCall.busy || conversation.blocked || conversation.requestPending || conversation.awaitingApproval} onClick={() => audioCall.start(conversationId, otherName)} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full hover:bg-[var(--surface-2)] disabled:opacity-40"><Phone className="h-5 w-5" /></button> : null}
         <MessageSearch open={showHeaderSearch} onOpenChange={setShowHeaderSearch} />
 
         <button
