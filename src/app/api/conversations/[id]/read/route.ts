@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { guardSameOrigin, jsonError } from "@/server/http";
 import { getSessionUser } from "@/server/session";
 import { isUuid } from "@/server/users";
-import { publishToConversation } from "@/server/realtime";
+import { getPrivacySettings } from "@/server/privacy";
+import { publishToUsers, publishToConversation } from "@/server/realtime";
 import { getConversationForUser, getMembership, markConversationRead } from "@/server/chat";
 
 export const dynamic = "force-dynamic";
@@ -38,13 +39,16 @@ export async function POST(
   const { messageIds, readAt } = await markConversationRead(id, me.id);
 
   if (messageIds.length > 0) {
-    await publishToConversation(id, {
-      type: "message:read",
+    const privacy = await getPrivacySettings(me.id);
+    const event = {
+      type: "message:read" as const,
       conversationId: id,
       userId: me.id,
       messageIds,
       readAt: readAt.toISOString(),
-    });
+    };
+    if (privacy?.readReceipts === false) await publishToUsers([me.id], event);
+    else await publishToConversation(id, event);
   }
 
   return NextResponse.json({

@@ -1,3 +1,4 @@
+import { testChatPresence } from "./test-chat-presence.mjs";
 import { openDeviceTools } from "./device-ui-tools.mjs";
 import { testChatOpeningRace } from "./test-chat-opening.mjs";
 import {testChatScroll} from "./test-chat-scroll.mjs";
@@ -192,6 +193,7 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     const capabilityRecovery = source.page.waitForResponse(response => response.url().endsWith("/api/chat-capabilities") && response.status() === 200, { timeout: 60000 });
     await chat(source.page); await chat(recipient.page);
     await capabilityRecovery;
+    await testChatPresence(base, conversationId, owner, peer, source, recipient, pool);
     await source.page.waitForFunction(() => {
       const button = document.querySelector('button[title="Record voice message"]');
       return button instanceof HTMLButtonElement && !button.disabled;

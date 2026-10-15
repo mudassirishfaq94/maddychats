@@ -288,6 +288,7 @@ export interface RealtimeTypingEvent {
   conversationId: string;
   userId: string;
   typing: boolean;
+  expiresAt: string;
 }
 
 export type RealtimeEvent =

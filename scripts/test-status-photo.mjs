@@ -39,9 +39,19 @@ export async function testStatusPhoto(base, pool, owner, peer, source, recipient
     assert.equal((await fetch(base + status.mediaUrl)).status, 401);
     assert.equal((await fetch(base + status.mediaUrl, { headers: { Cookie: unrelatedCookie } })).status, 404);
     await recipient.page.goto(base + "/app/status");
+    let releaseMedia;
+    const holdMedia = new Promise(resolve => { releaseMedia = resolve; });
+    await recipient.page.route("**" + status.mediaUrl, async route => { await holdMedia; await route.continue(); });
     await recipient.page.getByRole("button", { name: new RegExp(owner.username) }).click();
+    await recipient.page.getByText("Loading status…", { exact: true }).waitFor();
+    await recipient.page.waitForTimeout(400);
+    assert(await recipient.page.evaluate(() => document.getAnimations().some(a => a.effect?.target?.hasAttribute("data-status-progress") && a.playState === "paused")), "Photo timer waits for actual image load");
+    releaseMedia();
+
     await recipient.page.getByRole("img", { name: "Verified photo status", exact: true }).waitFor();
     await recipient.page.waitForFunction(() => [...document.images].some(image => image.alt === "Verified photo status" && image.complete && image.naturalWidth > 0));
+    await recipient.page.getByText("Loading status…", { exact: true }).waitFor({ state: "hidden" });
+    await recipient.page.unroute("**" + status.mediaUrl);
     await recipient.page.getByRole("button", { name: "Pause status", exact: true }).click();
     await recipient.page.waitForTimeout(100);
     const pausedTime = await recipient.page.evaluate(() => document.getAnimations().find(a => a.effect?.target?.hasAttribute("data-status-progress"))?.currentTime);
@@ -51,6 +61,18 @@ export async function testStatusPhoto(base, pool, owner, peer, source, recipient
     await recipient.page.getByRole("button", { name: "Resume status", exact: true }).click();
     await recipient.page.waitForTimeout(250);
     assert(await recipient.page.evaluate(() => document.getAnimations().some(a => a.effect?.target?.hasAttribute("data-status-progress") && a.playState === "running")));
+    await recipient.page.getByRole("button", { name: "Close status", exact: true }).click();
+    let failedOnce = false;
+    await recipient.page.route("**" + status.mediaUrl, async route => {
+      if (!failedOnce) { failedOnce = true; await route.fulfill({ status: 503, body: "Temporary fixture failure" }); }
+      else await route.continue();
+    });
+    await recipient.page.getByRole("button", { name: new RegExp(owner.username) }).click();
+    await recipient.page.getByText("Could not load this status. Check your connection and try again. It may also have expired.", { exact: true }).waitFor();
+    await recipient.page.getByRole("button", { name: "Try again", exact: true }).click();
+    await recipient.page.waitForFunction(() => [...document.images].some(image => image.alt === "Verified photo status" && image.complete && image.naturalWidth > 0));
+    await recipient.page.getByText("Loading status…", { exact: true }).waitFor({ state: "hidden" });
+    await recipient.page.unroute("**" + status.mediaUrl);
     await pool.query("update statuses set expires_at=now()-interval '1 second' where id=$1 and user_id=$2", [status.id, owner.id]);
     assert.equal((await fetch(base + status.mediaUrl, { headers: { Cookie: recipient.cookies } })).status, 404);
     return { photoStatus: true, statusAudience: true, statusExpiry: true, statusReconstruction: true };

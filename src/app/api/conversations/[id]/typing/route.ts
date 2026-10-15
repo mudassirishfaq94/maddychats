@@ -5,7 +5,6 @@ import {
   guardSameOrigin,
   jsonError,
   readJson,
-  clientIp,
 } from "@/server/http";
 import { rateLimit } from "@/server/rate-limit";
 import { isUuid } from "@/server/users";
@@ -14,6 +13,7 @@ import {
   isBlockedBetween,
   memberIdsOf,
 } from "@/server/chat";
+import { getPrivacySettings } from "@/server/privacy";
 import { publishToUsers } from "@/server/realtime";
 
 export const dynamic = "force-dynamic";
@@ -25,7 +25,8 @@ const typingSchema = z.object({ typing: z.boolean() });
  *
  * Authorization never comes from the body: the sender id is derived from the
  * verified session, membership is checked server-side, and block state is
- * enforced before any event is published. Nothing is persisted or polled.
+ * enforced before any event is published. Short-lived events expire even if
+ * retained by the transport for reconnect replay; the UI never polls.
  */
 export async function POST(
   req: NextRequest,
@@ -34,15 +35,11 @@ export async function POST(
   const blockedOrigin = guardSameOrigin(req);
   if (blockedOrigin) return blockedOrigin;
 
-  const rl = await rateLimit(
-    `typing:${clientIp(req)}`,
-    600,
-    10 * 60 * 1000,
-  );
-  if (!rl.allowed) return jsonError(429, "Too many typing updates.");
-
   const me = await getSessionUser();
   if (!me) return jsonError(401, "Not authenticated.");
+
+  const rl = await rateLimit(`typing:${me.id}`, 120, 60_000);
+  if (!rl.allowed) return jsonError(429, "Too many typing updates.");
 
   const { id } = await ctx.params;
   if (!isUuid(id)) return jsonError(404, "Conversation not found.");
@@ -55,6 +52,9 @@ export async function POST(
 
   const parsed = typingSchema.safeParse(body);
   if (!parsed.success) return jsonError(422, "Invalid typing state.");
+
+  const privacy = await getPrivacySettings(me.id);
+  if (parsed.data.typing && privacy?.typingIndicators === false) return NextResponse.json({ ok: true });
 
   const memberIds = await memberIdsOf(id);
   const recipients = memberIds.filter((userId) => userId !== me.id);
@@ -69,6 +69,7 @@ export async function POST(
     conversationId: id,
     userId: me.id,
     typing: parsed.data.typing,
+    expiresAt: new Date(Date.now() + 5000).toISOString(),
   });
 
   return NextResponse.json({ ok: true });

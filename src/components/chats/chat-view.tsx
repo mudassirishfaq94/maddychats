@@ -607,6 +607,8 @@ export function ChatView({
   const unreadSnapshotTaken = useRef(false);
   const nodeRefs = useRef(new Map<string, HTMLDivElement | null>());
   const typingActiveRef = useRef(false);
+  const lastTypingSentRef = useRef(0);
+  const remoteTypersRef = useRef(new Map<string, number>());
   const typingStopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const remoteTypingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const draftStorageReady = useRef(false);
@@ -748,8 +750,9 @@ export function ChatView({
 
   const signalTyping = useCallback(
     (typing: boolean) => {
-      if (typingActiveRef.current === typing) return;
+      if (typingActiveRef.current === typing && (!typing || Date.now() - lastTypingSentRef.current < 2000)) return;
       typingActiveRef.current = typing;
+      lastTypingSentRef.current = Date.now();
       void fetch(`/api/conversations/${conversationId}/typing`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -782,6 +785,22 @@ export function ChatView({
 
   useEffect(() => {
     return subscribe((event) => {
+      if (event.type === "typing:update" && event.conversationId === conversationId && event.userId !== me.id) {
+        const expiry = Date.parse(event.expiresAt);
+        if (!Number.isFinite(expiry) || expiry <= Date.now()) return;
+        const typers = remoteTypersRef.current;
+        if (event.typing) typers.set(event.userId, Math.min(expiry, Date.now() + 5000));
+        else typers.delete(event.userId);
+        const expire = () => {
+          const now = Date.now();
+          for (const [id, until] of typers) if (until <= now) typers.delete(id);
+          setOtherTyping(typers.size > 0);
+          if (typers.size) remoteTypingTimerRef.current = setTimeout(expire, Math.max(1, Math.min(...typers.values()) - now));
+        };
+        if (remoteTypingTimerRef.current) clearTimeout(remoteTypingTimerRef.current);
+        expire();
+        return;
+      }
       if ((event.type === "group:updated" || event.type === "group:member-added" || event.type === "group:member-removed" || event.type === "group:member-updated") && event.conversationId === conversationId) {
         router.refresh();
         return;
@@ -2588,7 +2607,7 @@ export function ChatView({
                 <span className="typing-dot h-2 w-2 rounded-full bg-[var(--muted)]" style={{ animationDelay: "0ms" }} />
                 <span className="typing-dot h-2 w-2 rounded-full bg-[var(--muted)]" style={{ animationDelay: "160ms" }} />
                 <span className="typing-dot h-2 w-2 rounded-full bg-[var(--muted)]" style={{ animationDelay: "320ms" }} />
-                <span className="sr-only">{otherName} is typing</span>
+                <span className="sr-only">{conversation.type === "group" ? "Someone" : otherName} is typing</span>
               </div>
             </div>
           ) : null}

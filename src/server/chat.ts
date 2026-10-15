@@ -8,6 +8,7 @@ import {
   messageDeletions,
   messageReactions,
   messageReads,
+  privacySettings,
   messageStars,
   messages,
   messageMentions,
@@ -45,7 +46,9 @@ const reactionQuery = db.select({ messageId: messageReactions.messageId,
   .where(sql`${messageReactions.messageId}=any(${sql.placeholder("ids")}::uuid[])`).prepare("");
 const readQuery = db.select({ messageId: messageReads.messageId,
   userId: messageReads.userId, readAt: messageReads.readAt }).from(messageReads)
-  .where(sql`${messageReads.messageId}=any(${sql.placeholder("ids")}::uuid[])`).prepare("");
+  .leftJoin(privacySettings, eq(privacySettings.userId, messageReads.userId))
+  .where(and(sql`${messageReads.messageId}=any(${sql.placeholder("ids")}::uuid[])`,
+    sql`coalesce(${privacySettings.readReceipts}, true)`)).prepare("");
 const attachmentQuery = db.select().from(messageAttachments)
   .where(sql`${messageAttachments.messageId}=any(${sql.placeholder("ids")}::uuid[])`).prepare("");
 const parentQuery = db.select({ message: messages, sender: users }).from(messages)

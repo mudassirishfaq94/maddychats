@@ -46,6 +46,14 @@ async function main() {
     server = spawn(process.execPath, [resolve(".next/standalone/server.js")], { windowsHide: true, stdio: "pipe", env: { ...process.env, DATABASE_URL: database, REALTIME_DATABASE_URL: database, PORT: "3120", HOSTNAME: "127.0.0.1", CLIENT_URL: base, JWT_SECRET: testSecret, STARTER_MODE: "1", CHAT_MEDIA_ENABLED: "1", SCHEDULED_MESSAGES_ENABLED: "1", SUPABASE_URL: "", SUPABASE_SERVICE_ROLE_KEY: "", RESEND_API_KEY: "", EMAIL_FROM: "", EMAIL_FROM_ADDRESS: "", CSP_ENFORCE: "1", VAPID_PUBLIC_KEY: pushKeys.publicKey, VAPID_PRIVATE_KEY: pushKeys.privateKey, VAPID_SUBJECT: "mailto:test@example.invalid" } });
     let output = ""; server.stdout?.on("data", d => output += d); server.stderr?.on("data", d => output += d);
     for (let i = 0; i < 100; i++) { try { if ((await fetch(base + "/api/health")).status === 204) break; } catch {} await new Promise(r => setTimeout(r, 200)); }
+    const robots = await fetch(base + "/robots.txt");
+    assert.equal(robots.status, 200);
+    assert((await robots.text()).includes("Sitemap: https://circlo.chat/sitemap.xml"));
+    const sitemap = await fetch(base + "/sitemap.xml");
+    assert.equal(sitemap.status, 200);
+    const xml = await sitemap.text();
+    assert.equal((xml.match(/<loc>/g) ?? []).length, 3);
+    assert(!xml.includes("/app") && !xml.includes("/login"));
     try {
       if (process.env.AUDIO_ONLY === "1") {
         await testAudioContacts(base, pool, accounts[0], accounts[1], password, conversation!);
