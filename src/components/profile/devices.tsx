@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { FreshAuthentication } from "./fresh-authentication";
 import { navigateWithReload } from "@/lib/navigation";
+import { browserLabel } from "@/server/device-meta";
 import { timeAgo } from "@/lib/utils";
 
 type DeviceSession = {
@@ -106,11 +107,10 @@ export function Devices() {
     <section className="card-flat rounded-2xl p-5">
       <h2 className="font-semibold">Devices</h2>
       <p className="mt-1 text-sm text-[var(--muted)]">
-        A device is one browser or app with its own saved encryption key. Signing in again in the same browser keeps
-        its approval; a different browser is a new device and needs to be linked once.
+        Review where you’re signed in. Sign out a device you no longer use.
       </p>
       {legacy && <p className="mt-2 text-sm">Sign in again to register this browser as a device.</p>}
-      <FreshAuthentication password={password} code={code} onPassword={setPassword} onCode={setCode} />
+      {signedInSessions > 0 ? <details className="mt-3"><summary className="min-h-11 cursor-pointer py-3 text-sm">Confirm identity to sign out devices</summary><FreshAuthentication password={password} code={code} onPassword={setPassword} onCode={setCode} /></details> : null}
       {loading && <p role="status">Loading devices…</p>}
       {error && (
         <p role="alert" className="text-sm text-[var(--danger)]">
@@ -119,7 +119,7 @@ export function Devices() {
       )}
 
       <ul className="mt-3 space-y-3">
-        {devices.map((device) => (
+        {devices.filter(device => device.sessions.length > 0).map((device) => (
           <li key={device.deviceId} className="border-t border-[var(--border)] pt-3">
             <div className="flex flex-wrap items-center gap-2">
               <p className="text-sm font-medium break-words">{device.label}</p>
@@ -132,7 +132,7 @@ export function Devices() {
               {" · "}
               Last used {timeAgo(device.lastUsedAt)}
             </p>
-            <p className="mt-1 break-all font-mono text-[0.7rem] text-[var(--muted)]">{device.deviceId}</p>
+
             {device.pendingLinkExpiresAt ? (
               <p className="mt-1 text-xs text-[var(--muted)]">
                 A linking code was issued for this device and expires {new Date(device.pendingLinkExpiresAt).toLocaleTimeString()}.
@@ -147,11 +147,11 @@ export function Devices() {
                   <li key={session.id} className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="text-xs break-words">
-                        {session.userAgent}
-                        {session.current ? " · This browser" : ""}
+                        {session.current ? "This device" : browserLabel(session.userAgent) || "Signed-in device"}
+
                       </p>
                       <p className="text-xs text-[var(--muted)]">
-                        Signed in {timeAgo(session.createdAt)} · expires {new Date(session.expiresAt).toLocaleDateString()}
+                        Active {timeAgo(session.lastSeenAt ?? session.createdAt)}
                       </p>
                     </div>
                     <button
@@ -174,21 +174,20 @@ export function Devices() {
 
       {unbound.length > 0 && (
         <div className="mt-4 rounded-xl border border-[var(--border)] p-3">
-          <p className="text-sm font-medium">Signed in without an encryption key</p>
+          <p className="text-sm font-medium">Devices finishing setup</p>
           <p className="mt-1 text-xs text-[var(--muted)]">
-            These browsers are signed in but have not registered and approved an encryption key yet, so they are not
-            listed as devices. Reload one of them in a different tab to finish setup.
+            These devices are signed in. Open Circlo on each device to finish setting up private chats.
           </p>
           <ul className="mt-2 space-y-2">
             {unbound.map((session) => (
               <li key={session.id} className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="text-xs break-words">
-                    {session.userAgent}
-                    {session.current ? " · This browser" : ""}
+                    {session.current ? "This device" : browserLabel(session.userAgent) || "Signed-in device"}
+
                   </p>
                   <p className="text-xs text-[var(--muted)]">
-                    Signed in {timeAgo(session.createdAt)} · expires {new Date(session.expiresAt).toLocaleDateString()}
+                    Active {timeAgo(session.lastSeenAt ?? session.createdAt)}
                   </p>
                 </div>
                 <button

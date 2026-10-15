@@ -1,8 +1,9 @@
+import { openDeviceTools } from "./device-ui-tools.mjs";
 import assert from "node:assert/strict";
 import { chromium } from "playwright";
 import { randomBytes } from "node:crypto";
 import bcrypt from "bcryptjs";
-import { readFile } from "node:fs/promises";
+import { readFile, mkdir } from "node:fs/promises";
 
 export async function testDeviceRecoveryUI(base, pool) {
   assert(["127.0.0.1", "localhost"].includes(new URL(base).hostname), "Recovery UI tests require a local fake database");
@@ -17,11 +18,21 @@ export async function testDeviceRecoveryUI(base, pool) {
   const open = async () => {
     const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, serviceWorkers: "block" });
     await login(context); const page = await context.newPage(); page.on("pageerror", error => errors.push(error.message));
-    await page.goto(base + "/app/profile#encryption-devices"); await page.getByLabel("This device fingerprint").waitFor();
+    await page.goto(base + "/app/profile#encryption-devices"); await openDeviceTools(page);
     return { context, page };
   };
   try {
     const source = await open(); await source.page.getByText("This device: Trusted", { exact: true }).waitFor();
+    const simple = await source.context.newPage();
+    await simple.goto(base + "/app/profile#encryption-devices");
+    await simple.getByText("This device: Trusted", { exact:true }).waitFor();
+    assert.equal(await simple.getByLabel("This device fingerprint").isVisible(),false,"Fingerprints are hidden in ordinary device settings");
+    assert(!await simple.locator("#encryption-devices").innerText().then(text=>text.includes("Device ID:")),"Identifiers do not clutter the main view");
+    await mkdir(".freebuff/performance",{recursive:true});
+    await simple.screenshot({path:".freebuff/performance/simple-devices.png",fullPage:true});
+    await simple.getByText("Security details",{exact:true}).click();
+    assert(await simple.getByLabel("This device fingerprint").isVisible(),"Verification remains available on demand");
+    await simple.close();
     const overview = await source.context.newPage();
     await overview.goto(base + "/app/profile");
     await overview.getByRole("heading", { name: username, exact: true }).waitFor();
@@ -53,6 +64,12 @@ export async function testDeviceRecoveryUI(base, pool) {
     assert.equal((await pool.query("select count(*)::int as n from push_subscriptions where user_id=$1", [user.id])).rows[0].n, 1);
     assert.equal((await source.context.request.delete(base + "/api/notifications/push", { data: { endpoint: "https://fcm.googleapis.com/fcm/send/circlo-disposable-ui-fixture" }, headers: { Origin: base } })).status(), 200);
     await notificationSection.locator(":scope > summary").click();
+    const settingsPage = await source.context.newPage();
+    await settingsPage.goto(base + "/app/settings");
+    await settingsPage.getByRole("link",{name:"Manage secure devices",exact:true}).waitFor();
+    assert.equal(await settingsPage.getByRole("heading",{name:"Notifications",exact:true}).count(),1,"Detailed preference forms stay collapsed until requested");
+    for(const width of [320,390,844]) { await settingsPage.setViewportSize({width,height:740}); assert(await settingsPage.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),"Simple settings fit mobile widths"); }
+    await settingsPage.close();
     console.log("PASS mobile profile disclosures and push permission, runtime public key, UI subscription, persisted account binding, and cleanup (browser push mocked)");
     await source.page.getByText("Name this browser and set its country", { exact: true }).click();
     await source.page.getByLabel("Device name", { exact: true }).fill("My trusted laptop");
@@ -82,6 +99,7 @@ export async function testDeviceRecoveryUI(base, pool) {
     await source.page.getByRole("button", { name: "Download encrypted recovery file", exact: true }).click();
     const file = await readFile(await (await downloadEvent).path());
     const recoveryCode = await source.page.locator('code[aria-label="Recovery file code"]').innerText();
+    await openDeviceTools(source.page);
     const sourceFingerprint = await source.page.getByLabel("This device fingerprint").innerText();
     await source.context.close();
     const restored = await open();
@@ -91,6 +109,7 @@ export async function testDeviceRecoveryUI(base, pool) {
     await restored.page.getByRole("checkbox", { name: /I saved a recovery file/ }).check();
     await restored.page.getByRole("button", { name: "Restore encryption identity", exact: true }).click();
     await restored.page.getByText("This device: Trusted", { exact: true }).waitFor({ timeout: 30000 });
+    await openDeviceTools(restored.page);
     assert.equal(await restored.page.getByLabel("This device fingerprint").innerText(), sourceFingerprint);
     assert.equal((await pool.query("select count(*)::int as n from e2ee_keys where user_id=$1 and trusted_at is not null", [user.id])).rows[0].n, 2, "Recovery preserves the other browser's trust");
     assert.equal(await restored.page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth), false, "Mobile recovery page fits the viewport");

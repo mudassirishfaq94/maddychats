@@ -189,7 +189,7 @@ export function ChatView({
   conversationId,
   me,
   other,
-  conversation,
+  conversation: serverConversation,
   initial,
 }: {
   conversationId: string;
@@ -198,6 +198,9 @@ export function ChatView({
   conversation: ConversationDetail;
   initial: MessagePage;
 }) {
+  const [metadataUpdate, setMetadataUpdate] = useState<Partial<ConversationDetail> | null>(null);
+  const conversation = metadataUpdate?.updatedAt && Date.parse(metadataUpdate.updatedAt) >= Date.parse(serverConversation.updatedAt)
+    ? { ...serverConversation, ...metadataUpdate } : serverConversation;
   const hydrated = useHydrated();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -1775,7 +1778,7 @@ export function ChatView({
         </Link>
         {isGroup ? (
           <button type="button" onClick={() => setShowDetails(true)} className="flex min-w-0 flex-1 items-center gap-2.5 text-left">
-            {conversation.avatarUrl ? <Image unoptimized width={1200} height={1200} src={conversation.avatarUrl} alt="" className="h-9 w-9 shrink-0 rounded-full object-cover" /> : <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--accent-soft)]"><Users className="h-4 w-4 text-[var(--accent-fg)]" /></span>}
+            {conversation.avatarUrl ? <Image unoptimized width={1200} height={1200} src={conversation.avatarUrl} alt="Group photo" className="h-9 w-9 shrink-0 rounded-full object-cover" /> : <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--accent-soft)]"><Users className="h-4 w-4 text-[var(--accent-fg)]" /></span>}
             <span className="min-w-0"><span className="block truncate text-[0.92rem] font-semibold leading-tight">{otherName}</span><span className="block truncate text-[0.72rem] text-[var(--muted)]">{conversation.members.length} members</span></span>
           </button>
         ) : other ? (
@@ -2796,6 +2799,7 @@ export function ChatView({
           other={other}
           conversation={conversation}
           localRevision={galleryRevision}
+          onMetadataUpdate={patch => setMetadataUpdate(previous => ({ ...(previous?.updatedAt && Date.parse(previous.updatedAt) >= Date.parse(serverConversation.updatedAt) ? previous : {}), ...patch }))}
           onClose={() => setShowDetails(false)}
         />
       ) : null}

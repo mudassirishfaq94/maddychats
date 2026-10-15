@@ -1,43 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Check, Loader2, Lock, ShieldCheck, Smartphone } from "lucide-react";
+import { Lock, ShieldCheck } from "lucide-react";
 import { useSharedE2EE } from "@/components/providers/e2ee-provider";
 
-interface DeviceKey {
-  id: string;
-  deviceId: string;
-  createdAt: string;
-  lastUsedAt: string | null;
-}
-
-/**
- * Shows users that their chats and data are end-to-end encrypted, lists the
- * devices holding keys for this account, and (by running the E2EE hook) makes
- * sure THIS device has registered its encryption key.
- */
-export function E2EEStatus({ userId }: { userId: string }) {
+export function E2EEStatus() {
   const e2ee = useSharedE2EE();
-  const [devices, setDevices] = useState<DeviceKey[] | null>(null);
-
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      try {
-        const res = await fetch("/api/e2ee/keys");
-        if (res.ok) {
-          const data = (await res.json()) as { keys?: DeviceKey[] };
-          if (alive) setDevices(data.keys ?? []);
-        }
-      } catch {
-        // best-effort
-      }
-    })();
-    return () => {
-      alive = false;
-    };
-  }, []);
-
   return (
     <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4">
       <div className="flex items-start gap-3">
@@ -69,49 +36,8 @@ export function E2EEStatus({ userId }: { userId: string }) {
         </div>
       </div>
 
-      {e2ee.loading ? (
-        <div className="mt-3 flex items-center gap-2 text-xs text-[var(--muted)]">
-          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          Generating secure keys for this device…
-        </div>
-      ) : e2ee.initialized ? (
-        <div className="mt-3">
-          <p className="flex items-center gap-1.5 text-[0.65rem] font-bold uppercase tracking-wider text-[var(--muted)]">
-            <Smartphone className="h-3 w-3" />
-            Devices holding your keys
-          </p>
-          {devices === null ? (
-            <p className="mt-1 text-xs text-[var(--muted)]">Loading devices…</p>
-          ) : devices.length === 0 ? (
-            <p className="mt-1 text-xs text-[var(--muted)]">
-              No registered devices yet.
-            </p>
-          ) : (
-            <ul className="mt-2 space-y-1.5">
-              {devices.map((d) => (
-                <li
-                  key={d.id}
-                  className="flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-xs"
-                >
-                  <Check className="h-3.5 w-3.5 shrink-0 text-[var(--accent-fg)]" />
-                  <span className="min-w-0 flex-1 truncate font-mono text-[0.7rem]">
-                    {d.deviceId}
-                  </span>
-                  <span className="shrink-0 text-[0.65rem] text-[var(--muted)]">
-                    {d.deviceId === e2ee.deviceId ? "This device" : "Other"}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      ) : null}
+      <a className="btn btn-secondary mt-4 min-h-11 text-xs" href="/app/profile#encryption-devices">Manage secure devices</a>
 
-      <p className="mt-3 text-[0.68rem] leading-relaxed text-[var(--muted)] opacity-80">
-        Encryption requires a secure connection. In conversations where the
-            other participant hasn&apos;t set up keys yet, Circlo clearly shows
-        encryption status on every chat until encryption becomes active.
-      </p>
     </div>
   );
 }

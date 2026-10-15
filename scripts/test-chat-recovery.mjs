@@ -1,3 +1,4 @@
+import { openDeviceTools } from "./device-ui-tools.mjs";
 import assert from "node:assert/strict";
 import { chromium } from "playwright";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -86,6 +87,8 @@ export async function testChatRecovery(base, cookieHeader, conversationId) {
     await target.goto(`${base}/app/profile#encryption-devices`);
     await target.getByText("This device: Waiting for approval", { exact: true }).waitFor({ timeout: 30000 });
     const targetId = await target.evaluate(() => localStorage.getItem("e2ee_device_id"));
+    await openDeviceTools(target);
+    await openDeviceTools(target);
     const targetFingerprint = await target.getByLabel("This device fingerprint").innerText();
     const pendingText = "A new device waits safely for approval";
     await target.goto(chatUrl);

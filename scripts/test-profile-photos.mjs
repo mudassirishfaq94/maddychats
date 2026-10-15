@@ -71,6 +71,7 @@ export async function testProfilePhotos(base, pool, owner, peer, source, unrelat
   await source.page.getByRole("button", { name: "Group settings", exact: true }).click();
   const settings = source.page.getByRole("region", { name: "Group settings", exact: true });
   assert(await source.page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), "Group settings fit a 320px phone");
+  await source.page.screenshot({path:".freebuff/performance/simple-group.png",fullPage:true});
   await settings.getByLabel("Group name", { exact: true }).fill("Edited group name");
   await settings.getByLabel("Group description", { exact: true }).fill("Description saved after creation");
   const saveSettings = source.page.waitForResponse(r => r.url().endsWith(`/api/groups/${group.id}/settings`) && r.request().method() === "PATCH");
@@ -89,6 +90,33 @@ export async function testProfilePhotos(base, pool, owner, peer, source, unrelat
   const photoResponse = await uploadedGroup; assert.equal(photoResponse.status(), 200);
   paths.push((await photoResponse.json()).avatarUrl.replace("/api/media/", ""));
   await settings.getByText("Group photo updated.", { exact: true }).waitFor();
+  // Changing an existing photo must update the chat header, open editor and list without reloading.
+  const staleDetails = await (await source.page.request.get(base + `/api/conversations/${group.id}`)).json();
+  let releaseStale, finishStale;
+  const staleGate = new Promise(resolve => { releaseStale = resolve; });
+  const staleDone = new Promise(resolve => { finishStale = resolve; });
+  let heldStale = false;
+  const staleRoute = async route => {
+    if (route.request().method() !== "GET" || heldStale) return route.continue();
+    heldStale = true; await staleGate;
+    await route.fulfill({ status:200, contentType:"application/json", body:JSON.stringify(staleDetails) }); finishStale();
+  };
+  await source.page.route(`**/api/conversations/${group.id}`,staleRoute);
+  const replacement = await sharp({ create: { width: 640, height: 640, channels: 3, background: "#8a674a" } }).png().toBuffer();
+  const replaced = source.page.waitForResponse(r => r.url().endsWith(`/api/groups/${group.id}/avatar`) && r.request().method() === "POST");
+  await settings.getByLabel("Group photo", { exact: true }).setInputFiles({ name: "replacement.png", mimeType: "image/png", buffer: replacement });
+  const replacementResponse = await replaced; assert.equal(replacementResponse.status(),200);
+  const replacementUrl = (await replacementResponse.json()).avatarUrl; paths.push(replacementUrl.replace("/api/media/", ""));
+  await source.page.waitForFunction(url => [...document.querySelectorAll('img[alt="Group photo"]')].some(image=>image.getAttribute("src")===url),replacementUrl);
+  releaseStale();
+  let staleDeadline;
+  try { await Promise.race([staleDone,new Promise((_,reject)=>{staleDeadline=setTimeout(()=>reject(new Error("Expected live group-details refresh")),15000);})]); } finally { clearTimeout(staleDeadline); await source.page.unroute(`**/api/conversations/${group.id}`,staleRoute); }
+  await source.page.waitForFunction(url => { const images=[...document.querySelectorAll('img[alt="Group photo"]')]; return images.length>=2 && images.every(image=>image.getAttribute("src")===url); },replacementUrl);
+  await source.page.getByRole("button", { name: "Close details", exact: true }).click();
+  await source.page.getByRole("button", { name: "Open group settings", exact: true }).click();
+  await source.page.getByRole("button", { name: "Group settings", exact: true }).click();
+  assert.equal(await settings.getByRole("img",{name:"Group photo",exact:true}).getAttribute("src"),replacementUrl);
+
   const failSettings = route => route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "Owned save failure. Retry safely." }) });
   await source.page.route(`**/api/groups/${group.id}/settings`, failSettings);
   await settings.getByRole("button", { name: "Save group settings", exact: true }).click();

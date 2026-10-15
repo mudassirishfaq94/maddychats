@@ -47,7 +47,7 @@ export async function PATCH(
   if (!parsed.success) return jsonError(422, "Use a group name of 1–200 characters, a description up to 5000 characters, and valid group settings.");
   const patch = parsed.data;
 
-  await db.update(conversations).set({ ...patch, updatedAt: new Date() }).where(eq(conversations.id, id));
+  const [saved] = await db.update(conversations).set({ ...patch, updatedAt: new Date() }).where(eq(conversations.id, id)).returning({ updatedAt: conversations.updatedAt });
 
   // Audit log
   await auditLog({
@@ -56,5 +56,5 @@ export async function PATCH(
     details: { groupId: id, fields: Object.keys(patch) },
   });
   await publishToConversation(id, { type: "group:updated", conversationId: id });
-  return NextResponse.json({ success: true, settings: patch });
+  return NextResponse.json({ success: true, settings: { ...patch, updatedAt: saved.updatedAt.toISOString() } });
 }

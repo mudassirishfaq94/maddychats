@@ -1,3 +1,4 @@
+import { openDeviceTools } from "./device-ui-tools.mjs";
 import assert from "node:assert/strict";
 import { chromium } from "playwright";
 import { createHash, createHmac } from "node:crypto";
@@ -50,7 +51,8 @@ export async function testEncryptionDevices(base, pool, owner, peer, password, c
     await device.page.goto(base + "/app/profile#encryption-devices");
     await device.page.getByText("This device: Waiting for approval", { exact: true }).waitFor();
     assert.equal(await device.page.getByRole("button", { name: "Approve encryption device", exact: true }).count(), 0, "Pending browsers do not offer impossible approval controls");
-    await device.page.getByText(/No trusted encryption device is registered/).waitFor();
+    await device.page.getByText(/No trusted device is available/).waitFor();
+    await openDeviceTools(device.page);
     const fingerprint = await device.page.getByLabel("This device fingerprint").innerText();
     const target = (await pool.query("select device_id,session_id,public_key from e2ee_keys where user_id=$1 and trusted_at is null order by created_at desc limit 1", [owner.id])).rows[0]; assert(target);
     assert.equal(createHash("sha256").update(target.public_key).digest("hex"), fingerprint);
@@ -86,7 +88,7 @@ export async function testEncryptionDevices(base, pool, owner, peer, password, c
     await device.page.context().addCookies([{ name: "maddy_session", value: currentToken, url: base, httpOnly: true, sameSite: "Lax" }]);
     const before = (await pool.query("select id,text,encrypted from messages where conversation_id=$1 order by id", [conversationId])).rows;
     const wrapsBefore = (await pool.query("select count(*)::int as n from e2ee_conversation_keys where conversation_id=$1", [conversationId])).rows[0].n;
-    await device.page.reload(); await device.page.getByLabel("This device fingerprint").waitFor();
+    await device.page.reload(); await openDeviceTools(device.page);
     await device.page.getByRole("button", { name: "Emergency recovery: no trusted device or recovery file", exact: true }).click();
     const section = device.page.locator("#encryption-devices");
     await section.getByLabel("Encryption recovery confirmation").fill("RESET ENCRYPTION TRUST");
@@ -126,6 +128,7 @@ export async function testEncryptionDevices(base, pool, owner, peer, password, c
     const verification = contact.page.getByRole("dialog", { name: "Verify encryption device changes", exact: true });
     const confirmation = verification.getByRole("button", { name: "Approve verified changes", exact: true });
     assert.equal(await confirmation.isEnabled(), false);
+    await openDeviceTools(device.page);
     const expectedFingerprint = await device.page.getByLabel("This device fingerprint").innerText();
     assert.equal(await verification.getByText(expectedFingerprint, { exact: true }).count(), 1);
     await verification.getByRole("checkbox").check(); await confirmation.click();

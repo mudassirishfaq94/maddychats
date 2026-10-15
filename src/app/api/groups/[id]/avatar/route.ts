@@ -33,7 +33,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const storedName = generateStoredName(prepared.extension);
   await saveBuffer("avatars", storedName, prepared.buffer);
   const avatarUrl = `/api/media/avatars/${storedName}`;
-  await db.update(conversations).set({ avatarUrl, updatedAt: new Date() }).where(eq(conversations.id, id));
+  const [saved] = await db.update(conversations).set({ avatarUrl, updatedAt: new Date() }).where(eq(conversations.id, id)).returning({ updatedAt: conversations.updatedAt });
   await publishToConversation(id, { type: "group:updated", conversationId: id });
-  return NextResponse.json({ avatarUrl });
+  return NextResponse.json({ avatarUrl, updatedAt: saved.updatedAt.toISOString() });
 }

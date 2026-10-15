@@ -9,7 +9,6 @@ import {
   User,
   Lock,
   Download,
-  Trash2,
   ExternalLink,
 } from "lucide-react";
 import { getSessionUser } from "@/server/session";
@@ -19,6 +18,7 @@ import { PrivacySettings } from "@/components/profile/privacy-settings";
 import { NotificationPreferences } from "@/components/profile/notification-preferences";
 import { TwoFactorAuth } from "@/components/profile/two-factor-auth";
 import { LoginHistory } from "@/components/profile/login-history";
+import { ProfileDisclosure } from "@/components/profile/profile-disclosure";
 import { E2EEStatus } from "@/components/profile/e2ee-status";
 import { AccountDataSection } from "@/components/profile/account-data";
 
@@ -29,44 +29,7 @@ export default async function SettingsPage() {
   const user = await getSessionUser();
   if (!user) redirect("/login?next=/app/settings");
 
-  const sections = [
-    {
-      icon: User,
-      label: "Profile",
-      description: "Edit your display name, username, bio, and photo",
-      href: "/app/profile",
-    },
-    {
-      icon: Palette,
-      label: "Appearance",
-      description: "Theme, dark mode, and visual preferences",
-      id: "appearance",
-    },
-    {
-      icon: Bell,
-      label: "Notifications",
-      description: "Control push, email, and in-app notifications",
-      id: "notifications",
-    },
-    {
-      icon: Shield,
-      label: "Privacy & Safety",
-      description: "Profile visibility, who can message you, and more",
-      id: "privacy",
-    },
-    {
-      icon: Lock,
-      label: "Security",
-      description: "Two-factor authentication and login history",
-      id: "security",
-    },
-    {
-      icon: Download,
-      label: "Your Data",
-      description: "Download your data or delete your account",
-      id: "data",
-    },
-  ];
+
 
   return (
     <AppShell user={user}>
@@ -88,31 +51,7 @@ export default async function SettingsPage() {
           </div>
         </div>
 
-        {/* Quick links */}
-        <div className="mt-6 space-y-2">
-          {sections.map((section) => {
-            const Icon = section.icon;
-            if (section.href) {
-              return (
-                <Link
-                  key={section.label}
-                  href={section.href}
-                  className="flex items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--surface-2)]"
-                >
-                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--accent-soft)]">
-                    <Icon className="h-5 w-5 text-[var(--accent-fg)]" />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-sm font-semibold">{section.label}</span>
-                    <span className="block text-xs text-[var(--muted)]">{section.description}</span>
-                  </span>
-                  <ExternalLink className="h-4 w-4 shrink-0 text-[var(--muted)]" />
-                </Link>
-              );
-            }
-            return null;
-          })}
-        </div>
+        <Link href="/app/profile" className="mt-6 flex min-h-16 items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4"><User className="h-5 w-5 shrink-0 text-[var(--accent-fg)]" /><span className="min-w-0 flex-1"><span className="block text-sm font-semibold">Your profile</span><span className="block text-xs text-[var(--muted)]">Photo, name, phone number and account details</span></span><ExternalLink className="h-4 w-4 shrink-0 text-[var(--muted)]" /></Link>
 
         {/* Inline sections */}
         <div className="mt-8 space-y-6">
@@ -139,7 +78,7 @@ export default async function SettingsPage() {
               <Bell className="h-4 w-4 text-[var(--accent)]" />
               Notifications
             </h2>
-            <NotificationPreferences />
+            <ProfileDisclosure title="Notification preferences" description="Choose which alerts you receive."><NotificationPreferences /></ProfileDisclosure>
           </section>
 
           {/* Privacy */}
@@ -148,7 +87,7 @@ export default async function SettingsPage() {
               <Shield className="h-4 w-4 text-[var(--accent)]" />
               Privacy & Safety
             </h2>
-            <PrivacySettings />
+            <ProfileDisclosure title="Privacy preferences" description="Choose who can see and contact you."><PrivacySettings /></ProfileDisclosure>
           </section>
 
           {/* Security */}
@@ -158,9 +97,9 @@ export default async function SettingsPage() {
               Security
             </h2>
             <div className="space-y-4">
-              <E2EEStatus userId={user.id} />
-              <TwoFactorAuth />
-              <LoginHistory />
+              <E2EEStatus />
+              <ProfileDisclosure title="Two-step verification" description="Add an extra sign-in check."><TwoFactorAuth /></ProfileDisclosure>
+              <ProfileDisclosure title="Recent sign-ins" description="Review recent account activity."><LoginHistory /></ProfileDisclosure>
             </div>
           </section>
 
@@ -170,7 +109,7 @@ export default async function SettingsPage() {
               <Download className="h-4 w-4 text-[var(--accent)]" />
               Your Data
             </h2>
-            <AccountDataSection />
+            <ProfileDisclosure title="Manage your data" description="Export your data or close your account."><AccountDataSection /></ProfileDisclosure>
           </section>
         </div>
 

@@ -8,8 +8,6 @@ import {
   AtSign,
   CalendarDays,
   Clock,
-  Fingerprint,
-  Globe,
   Mail,
 } from "lucide-react";
 import { getSessionUser } from "@/server/session";
@@ -66,8 +64,6 @@ export default async function ProfilePage({
     { icon: AtSign, label: "Username", value: `@${user.username}` },
     { icon: CalendarDays, label: "Member since", value: formatDate(user.createdAt) },
     { icon: Clock, label: "Last seen", value: timeAgo(user.lastSeenAt) },
-    { icon: Fingerprint, label: "Device name", value: user.deviceName ?? "Not set" },
-    { icon: Globe, label: "Country", value: user.country ?? "Not set" },
   ];
 
   return (
@@ -113,11 +109,11 @@ export default async function ProfilePage({
       <div className="mt-5 grid min-w-0 grid-cols-[minmax(0,1fr)] items-start gap-5 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
         <div className="min-w-0 space-y-5">
           <ProfileEditor user={user} />
-          <ProfileDisclosure title="Encryption & trusted devices" description="Link a browser, recover access, and save your encryption keys." anchors={["encryption-devices"]} defaultOpen={query.recovery === "1"}>
+          <ProfileDisclosure title="Encryption & trusted devices" description="Manage your devices and keep access to your private chats." anchors={["encryption-devices"]} defaultOpen={query.recovery === "1"}>
             <EncryptionDevices openRecovery={query.recovery === "1"} recoveryEmail={accountSecurity?.emailVerifiedAt && !user.email.endsWith("@auth.maddychats.invalid") ? user.email : undefined} />
           </ProfileDisclosure>
           <ProfileDisclosure title="Sign-in & account security" description="Google, passwords, two-step verification, and signed-in sessions." anchors={["account-security", "devices", "authentication-methods"]} defaultOpen={Boolean(notice)}>
-            <div id="account-security" className="space-y-4"><AuthenticationMethods initialMethods={initialMethods} notice={notice} /><PasswordSettings email={user.email} google={initialMethods.google} /><TwoFactorAuth /><Devices /><LoginHistory /></div>
+            <div id="account-security" className="space-y-4"><AuthenticationMethods initialMethods={initialMethods} notice={notice} /><ProfileDisclosure title="Password" description="Set or change your password."><PasswordSettings email={user.email} google={initialMethods.google} /></ProfileDisclosure><ProfileDisclosure title="Two-step verification" description="Add an extra sign-in check."><TwoFactorAuth /></ProfileDisclosure><Devices /><ProfileDisclosure title="Recent sign-ins" description="Review recent account activity."><LoginHistory /></ProfileDisclosure></div>
           </ProfileDisclosure>
           <ProfileDisclosure title="Notifications" description="Enable push alerts and choose which messages notify you." anchors={["notifications"]}>
             <div id="notifications"><NotificationPreferences /></div>
@@ -131,18 +127,7 @@ export default async function ProfilePage({
           <div className="card-flat rounded-2xl p-5"><h2 className="font-semibold">Account overview</h2><dl className="mt-3 divide-y divide-[var(--border)]">
             {meta.map(({ icon: Icon, label, value }) => <div key={label} className="py-3"><dt className="flex items-center gap-2 text-xs text-[var(--muted)]"><Icon className="h-3.5 w-3.5" />{label}</dt><dd className="mt-1 break-all text-sm">{value}</dd></div>)}
           </dl></div>
-          <div
-            className="card-flat rounded-2xl p-5 animate-fade-up"
-            style={{ "--d": "460ms" } as React.CSSProperties}
-          >
-            <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-[var(--muted)]">
-              <Fingerprint className="h-3.5 w-3.5 text-[var(--accent)]" />
-              User ID
-            </p>
-            <p className="mt-2.5 break-all font-mono text-[0.8rem] leading-relaxed text-[var(--muted)]">
-              {user.id}
-            </p>
-          </div>
+
         </div>
       </div>
     </div>

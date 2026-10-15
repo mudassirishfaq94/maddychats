@@ -54,12 +54,14 @@ export function ConversationDetails({
   other,
   conversation,
   localRevision = 0,
+  onMetadataUpdate,
   onClose,
 }: {
   conversationId: string;
   other: PublicUser | null;
   conversation: ConversationDetail;
   localRevision?: number;
+  onMetadataUpdate?: (patch: Partial<ConversationDetail>) => void;
   onClose: () => void;
 }) {
   const [tab, setTab] = useState<Tab>("media");
@@ -71,7 +73,8 @@ export function ConversationDetails({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [revision, setRevision] = useState(0);
-  const [group, setGroup] = useState(conversation);
+  const [groupState, setGroup] = useState(conversation);
+  const group = Date.parse(conversation.updatedAt) > Date.parse(groupState.updatedAt) ? conversation : groupState;
   const [groupBusy, setGroupBusy] = useState<string | null>(null);
   const [memberQuery, setMemberQuery] = useState("");
   const [memberResults, setMemberResults] = useState<PublicUser[]>([]);
@@ -171,7 +174,7 @@ export function ConversationDetails({
       if ((event.type === "group:updated" || event.type === "group:member-added" || event.type === "group:member-removed" || event.type === "group:member-updated") && event.conversationId === conversationId) {
         void fetch(`/api/conversations/${conversationId}`, { cache: "no-store" })
           .then(response => response.ok ? response.json() : null)
-          .then(data => { if (data?.conversation) setGroup(data.conversation); })
+          .then(data => { if (data?.conversation) setGroup(previous => Date.parse(data.conversation.updatedAt) >= Date.parse(previous.updatedAt) ? data.conversation : previous); })
           .catch(() => setError("Group details could not refresh. Close and reopen this panel to retry."));
       }
       if (
@@ -259,7 +262,7 @@ export function ConversationDetails({
                 conversationId={conversationId}
                 group={group}
                 busy={groupBusy !== null}
-                onUpdate={(patch) => { setGroup((prev) => ({ ...prev, ...patch })); router.refresh(); }}
+                onUpdate={(patch) => { setGroup((prev) => ({ ...prev, ...patch })); onMetadataUpdate?.(patch); router.refresh(); }}
               />
             ) : null}
             </div>
@@ -1377,7 +1380,7 @@ function clampPct(v: number): number {
 
 function GroupSettingsPanel({ conversationId, group, busy, onUpdate }: {
   conversationId: string; group: ConversationDetail; busy: boolean;
-  onUpdate: (patch: Record<string, unknown>) => void;
+  onUpdate: (patch: Partial<ConversationDetail>) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState({ name: group.name ?? "", description: group.description ?? "", rules: group.rules ?? "", announcements: group.announcements ?? "", adminOnlyMessaging: group.adminOnlyMessaging, slowModeSeconds: group.slowModeSeconds });
@@ -1403,27 +1406,29 @@ function GroupSettingsPanel({ conversationId, group, busy, onUpdate }: {
       });
       const result = await response.json().catch(() => null);
       if (!response.ok) throw new Error(result?.error ?? "Changes could not be saved. Please retry.");
-      onUpdate(file ? { avatarUrl: result.avatarUrl } : result.settings);
+      onUpdate(file ? { avatarUrl: result.avatarUrl, updatedAt: result.updatedAt } : result.settings);
       setNotice(file ? "Group photo updated." : "Group settings saved.");
     } catch (cause) { setError(cause instanceof Error && cause.name !== "TimeoutError" ? cause.message : "Connection timed out. Please retry."); }
     finally { setSaving(false); }
   }
   return <section className="mt-3 w-full min-w-0" aria-label="Group settings">
     <button type="button" aria-expanded={open} onClick={() => open ? setOpen(false) : edit()} className="btn min-h-11 w-full text-xs">{open ? "Hide settings" : "Group settings"}</button>
-    {open ? <div className="mt-2 space-y-4 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-3">
+    {open ? <div className="mt-2 space-y-4 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
       <p className="text-xs text-[var(--muted)]">Admins can edit these details. Group names, descriptions and photos are visible to the service; chat messages stay encrypted.</p>
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4"><p className="mb-3 text-xs font-semibold uppercase tracking-wider text-[var(--muted)]">Your group’s identity</p><div className="flex flex-wrap items-center gap-3">
         {group.avatarUrl ? <Image unoptimized src={group.avatarUrl} alt="Group photo" width={64} height={64} className="h-16 w-16 rounded-full object-cover" /> : null}
         <button type="button" disabled={locked} onClick={() => fileRef.current?.click()} className="btn min-h-11 text-xs">Change group photo</button>
         <input ref={fileRef} type="file" aria-label="Group photo" accept="image/jpeg,image/png,image/webp,image/gif,image/avif" hidden onChange={event => { const file = event.target.files?.[0]; event.target.value = ""; if (file) void submit(file); }} />
-      </div>
-      {([['name', 'Group name', 200], ['description', 'Group description', 5000], ['rules', 'Group rules', 2000], ['announcements', 'Announcements', 2000]] as const).map(([key, label, max]) => <div key={key} className="text-xs font-medium"><label htmlFor={`group-${conversationId}-${key}`}>{label}</label>
+      </div></div>
+      {([['name', 'Group name', 200], ['description', 'Group description', 5000]] as const).map(([key, label, max]) => <div key={key} className="text-xs font-medium"><label htmlFor={`group-${conversationId}-${key}`}>{label}</label>
         {key === 'name' ? <input id={`group-${conversationId}-${key}`} className="field-input mt-1" value={draft[key]} maxLength={max} disabled={locked} onChange={event => setDraft(previous => ({ ...previous, [key]: event.target.value }))} /> : <textarea id={`group-${conversationId}-${key}`} className="field-input mt-1 resize-y" rows={3} value={draft[key]} maxLength={max} disabled={locked} onChange={event => setDraft(previous => ({ ...previous, [key]: event.target.value }))} />}
       </div>)}
+      <details className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4"><summary className="min-h-11 cursor-pointer text-sm font-semibold">Permissions & group guidelines</summary><p className="mb-4 text-xs text-[var(--muted)]">Set the tone and choose how your group talks.</p>
+      {([['rules', 'Group rules', 2000], ['announcements', 'Announcements', 2000]] as const).map(([key,label,max]) => <label key={key} className="mb-3 block text-xs font-medium">{label}<textarea className="field-input mt-1 resize-y" rows={3} value={draft[key]} maxLength={max} disabled={locked} onChange={event => setDraft(previous => ({ ...previous, [key]: event.target.value }))} /></label>)}
       <div className="flex min-h-11 items-center justify-between gap-2"><span className="text-xs">Admin-only messaging</span><Toggle checked={draft.adminOnlyMessaging} onChange={value => setDraft(previous => ({ ...previous, adminOnlyMessaging: value }))} disabled={locked} label="Admin-only messaging" size="small" /></div>
       <label className="block text-xs font-medium">Slow mode<select className="field-input mt-1 min-h-11" value={draft.slowModeSeconds} disabled={locked} onChange={event => setDraft(previous => ({ ...previous, slowModeSeconds: Number(event.target.value) }))}>
         {[...new Set([0, 10, 30, 60, 300, group.slowModeSeconds])].sort((a,b) => a-b).map(seconds => <option key={seconds} value={seconds}>{seconds === 0 ? "Off" : `${seconds} seconds`}</option>)}
-      </select></label>
+      </select></label></details>
       {error ? <p role="alert" className="text-sm text-[var(--danger)]">{error}</p> : null}
       {notice ? <p role="status" className="text-sm text-[var(--success)]">{notice}</p> : null}
       <button type="button" disabled={locked} onClick={() => void submit()} className="btn btn-primary min-h-11 w-full text-xs">{saving ? "Saving…" : "Save group settings"}</button>

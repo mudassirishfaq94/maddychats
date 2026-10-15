@@ -68,7 +68,7 @@ const ConversationRow = memo(function ConversationRow({ conv, active, online, pr
         )}
       >
         {conv.type === "group" && conv.avatarUrl ? (
-          <Image unoptimized width={1200} height={1200} src={conv.avatarUrl} alt="" loading="lazy" decoding="async" className="h-12 w-12 shrink-0 rounded-full object-cover ring-1 ring-black/5" />
+          <Image unoptimized width={1200} height={1200} src={conv.avatarUrl} alt="Group photo" loading="lazy" decoding="async" className="h-12 w-12 shrink-0 rounded-full object-cover ring-1 ring-black/5" />
         ) : conv.otherMember ? (
           <span className="relative shrink-0">
             <Avatar user={conv.otherMember} size={48} />
