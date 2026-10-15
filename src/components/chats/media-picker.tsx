@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useSyncExternalStore, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { Loader2, X } from "lucide-react";
 import { EmojiPicker } from "./emoji-picker";
@@ -23,17 +23,18 @@ export function MediaPicker({ anchor, onEmoji, onFile, onClose, mediaDisabled }:
   const request = useRef<AbortController | null>(null);
   const reduceMotion = useSyncExternalStore(subscribeMotion, reducedMotion, () => true);
   useEffect(() => () => request.current?.abort(), []);
-  useEffect(() => {
+  useLayoutEffect(() => {
     const place = () => { const rect = anchor.current?.getBoundingClientRect(); if (!rect) return;
       const viewport = window.visualViewport; const bottom = viewport ? viewport.height + viewport.offsetTop : innerHeight;
       const available = rect.top - (viewport?.offsetTop ?? 0) - 16;
       setPosition({ left: Math.max(8, Math.min(rect.left, innerWidth - Math.min(360, innerWidth - 16) - 8)), bottom: Math.max(8, innerHeight - (available < 160 ? bottom : Math.min(rect.top, bottom)) + 8), maxHeight: Math.max(80, Math.min(380, available < 160 ? (viewport?.height ?? innerHeight) - 16 : available)) }); };
-    const frame = requestAnimationFrame(place);
+    // Position before paint so short viewports never display the fallback off-screen.
+    place();
     const outside = (event: PointerEvent) => { if (!ref.current?.contains(event.target as Node) && !anchor.current?.contains(event.target as Node)) onClose(); };
     const key = (event: KeyboardEvent) => { if (event.key === "Escape") { event.preventDefault(); onClose(); anchor.current?.focus(); } };
     window.addEventListener("resize", place); window.visualViewport?.addEventListener("resize", place); window.visualViewport?.addEventListener("scroll", place);
     document.addEventListener("pointerdown", outside); document.addEventListener("keydown", key);
-    return () => { cancelAnimationFrame(frame); window.removeEventListener("resize", place); window.visualViewport?.removeEventListener("resize", place); window.visualViewport?.removeEventListener("scroll", place); document.removeEventListener("pointerdown", outside); document.removeEventListener("keydown", key); };
+    return () => { window.removeEventListener("resize", place); window.visualViewport?.removeEventListener("resize", place); window.visualViewport?.removeEventListener("scroll", place); document.removeEventListener("pointerdown", outside); document.removeEventListener("keydown", key); };
   }, [anchor, onClose]);
   async function select(id: string) {
     if (busy || mediaDisabled) return; setBusy(id); setError(null);

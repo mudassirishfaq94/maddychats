@@ -54,3 +54,7 @@ real-browser check that message actions cannot intercept the download tap.
 The compact long-press menu retains Edit, Star/Unstar and Pin/Unpin alongside
 reply, forwarding, reactions, reporting and deletion, using the existing server
 authorization and encrypted edit handlers.
+
+The expanded audit covers 196 states. The media picker measures its anchor
+before paint, preventing fallback placement from briefly hiding its tabs above
+the viewport in landscape.
