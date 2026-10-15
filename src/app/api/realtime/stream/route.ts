@@ -63,6 +63,12 @@ export async function GET(req: NextRequest) {
       const deliver = (row: Delivery | null) => {
         if (!row) { cleanup(); return; }
         if (seen.has(row.id) || closed) return;
+        // Expire ephemeral state using the server clock, including reconnect
+        // replay. A phone with a mis-set clock must still see live typing.
+        if (row.payload.type === "typing:update") {
+          const expiry = Date.parse(row.payload.expiresAt);
+          if (!Number.isFinite(expiry) || expiry <= Date.now()) return;
+        }
         seen.add(row.id);
         if (seen.size > 5000) seen.delete(seen.values().next().value!);
         send(`id: ${row.id}\ndata: ${JSON.stringify(row.payload)}\n\n`);

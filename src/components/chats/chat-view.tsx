@@ -786,10 +786,11 @@ export function ChatView({
   useEffect(() => {
     return subscribe((event) => {
       if (event.type === "typing:update" && event.conversationId === conversationId && event.userId !== me.id) {
-        const expiry = Date.parse(event.expiresAt);
-        if (!Number.isFinite(expiry) || expiry <= Date.now()) return;
+        // The stream rejects expired events with its server clock. Use a
+        // relative local timer so clock skew on a phone cannot hide typing.
+        if (!Number.isFinite(Date.parse(event.expiresAt))) return;
         const typers = remoteTypersRef.current;
-        if (event.typing) typers.set(event.userId, Math.min(expiry, Date.now() + 5000));
+        if (event.typing) typers.set(event.userId, Date.now() + 5000);
         else typers.delete(event.userId);
         const expire = () => {
           const now = Date.now();

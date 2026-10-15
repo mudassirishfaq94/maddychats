@@ -72,14 +72,6 @@ function StatusViewer({ me, list, initialIndex, onClose }: { me:SafeUser;list:St
   const mediaFailed = mediaState?.id === status.id && mediaState.attempt === retry && mediaState.phase === "error";
   const mediaLoaded = () => setMediaState({ id: status.id, phase: "ready", attempt: retry });
   const mediaError = () => setMediaState({ id: status.id, phase: "error", attempt: retry });
-  // Warm only the next authorized photo while this viewer is open. No shared or persistent cache.
-  useEffect(() => {
-    const next = list[index + 1];
-    if (next?.type !== "image" || !next.mediaUrl) return;
-    const image = new window.Image();
-    image.src = next.mediaUrl;
-    return () => { image.src = ""; };
-  }, [index, list]);
   useEffect(() => {
     if (mediaReady || mediaFailed) return;
     const timeout = setTimeout(() => setMediaState({ id: status.id, phase: "error", attempt: retry }), 15000);

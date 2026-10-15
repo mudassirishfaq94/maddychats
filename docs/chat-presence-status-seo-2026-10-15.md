@@ -1,6 +1,7 @@
 # Chat presence, status loading and public search metadata
 
-Typing events were published but never handled by ChatView. The receiver now tracks
+Typing events were published but never handled by ChatView. The stream rejects expired typing on the server clock (phone clock skew does not
+hide live events). The receiver now tracks
 individual senders with five-second expiry, including overlapping group typers.
 The composer refreshes active typing at most every two seconds and sends idle/clear
 updates. Server-generated expiry prevents stale retained SSE events from showing
@@ -16,11 +17,11 @@ receipts makes saved reads visible again. Previously delivered receipts cannot b
 retracted from someone else's memory or already-open screen.
 
 Photo statuses previously used lazy loading and their seven-second timer began
-before decoding. The viewer requests the visible image eagerly, warms only the
-next authorized photo while open, shows a loading panel and pauses progression
+before decoding. The viewer requests the visible image eagerly, shows a loading panel and pauses progression
 until load. Errors and a 15-second stalled-load deadline offer Retry. Videos use
 ready/waiting/playing/error events for the same feedback. View counts begin only
-when content is available. No new shared media cache, service, dependency or fee.
+when content is available. No speculative full-size image preloads: private no-store media would otherwise
+be downloaded twice. No new shared media cache, service, dependency or fee.
 
 /robots.txt and /sitemap.xml use Next's metadata route conventions. Only the public
 landing page, Privacy and Terms enter the sitemap. App, API, authentication,
