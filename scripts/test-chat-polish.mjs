@@ -50,8 +50,15 @@ export async function testChatPolish(page, recipient) {
     for (const viewport of [{ width: 390, height: 844 }, { width: 844, height: 390 }]) {
       await page.setViewportSize(viewport);
       const bubble = page.locator(".message-history-row .inline-block.rounded-2xl").last(); await bubble.scrollIntoViewIfNeeded();
-      const box = await bubble.boundingBox();
-      await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: box.x + box.width / 2, y: box.y + box.height / 2 }] });
+      await bubble.click({trial:true});
+      const point = await bubble.evaluate(element => {
+        const box=element.getBoundingClientRect();let left=Math.max(0,box.left),right=Math.min(innerWidth,box.right),top=Math.max(0,box.top),bottom=Math.min(innerHeight,box.bottom);
+        for(let parent=element.parentElement;parent;parent=parent.parentElement){const css=getComputedStyle(parent),rect=parent.getBoundingClientRect();if(css.overflowY!=="visible"){top=Math.max(top,rect.top);bottom=Math.min(bottom,rect.bottom);}if(css.overflowX!=="visible"){left=Math.max(left,rect.left);right=Math.min(right,rect.right);}}
+        if(right<=left||bottom<=top)return null;const x=(left+right)/2,y=(top+bottom)/2;
+        return element.contains(document.elementFromPoint(x,y))?{x,y}:null;
+      });
+      assert(point,"Long press targets the visible image/message portion, including clipped landscape images");
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [point] });
       const menu = page.getByRole("dialog", { name: "Message options", exact: true }); await menu.waitFor();
       await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
       await menu.getByRole("button", { name: "Cancel", exact: true }).scrollIntoViewIfNeeded();
