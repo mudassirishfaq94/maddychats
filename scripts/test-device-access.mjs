@@ -9,8 +9,8 @@ export async function testDeviceAccess(base, pool, secret) {
   const name = "accessqa_" + randomBytes(6).toString("hex"), password = "Aa9" + randomBytes(20).toString("hex");
   const user = (await pool.query("insert into users(username,display_name,email,password_hash,email_verified_at) values($1,$1,$2,$3,now()) returning id", [name,name+"@example.invalid",await bcrypt.hash(password,12)])).rows[0];
   const browser = await chromium.launch(), errors = [];
-  const open = async () => {
-    const context = await browser.newContext({viewport:{width:320,height:740},isMobile:true,hasTouch:true,serviceWorkers:"block",extraHTTPHeaders:{"X-Forwarded-For":"198.51.100.232"}});
+  const open = async existingContext => {
+    const context = existingContext ?? await browser.newContext({viewport:{width:320,height:740},isMobile:true,hasTouch:true,serviceWorkers:"block",extraHTTPHeaders:{"X-Forwarded-For":"198.51.100.232"}});
     const page = await context.newPage(); page.on("pageerror",e=>errors.push(e.message));
     await page.goto(base+"/login?next=%2Fapp%2Fchats");
     await page.getByLabel("Email or username",{exact:true}).fill(name);
@@ -64,6 +64,11 @@ export async function testDeviceAccess(base, pool, secret) {
     await target.page.getByRole("button",{name:"Link this device",exact:true}).click();
     await target.page.waitForURL(base+"/app/chats");
     assert.equal((await source.context.request.get(base+"/api/auth/me")).status(),200,"Linking keeps the old browser signed in");
+    assert.equal((await source.context.request.post(base+"/api/auth/logout",{headers:{Origin:base}})).status(),200);
+    await source.page.close();
+    source.page = (await open(source.context)).page;
+    await source.page.waitForURL(base+"/app/chats");
+    assert.equal((await source.context.request.get(base+"/api/auth/me")).status(),200,"Returning trusted browsers prove their saved key without another linking code");
     const before = (await pool.query("select device_id,public_key from e2ee_keys where user_id=$1",[user.id])).rows;
     assert.equal(before.length,2);
     // Only this owned fake account loses trust, reproducing the no-trusted-device case.
@@ -102,6 +107,11 @@ export async function testDeviceAccess(base, pool, secret) {
     const after=(await pool.query("select device_id,public_key,trusted_at from e2ee_keys where user_id=$1",[user.id])).rows;
     assert.deepEqual(after.filter(row=>row.trusted_at).map(row=>row.device_id),[pending.device_id]);
     for(const old of before) assert.equal(after.find(row=>row.device_id===old.device_id).public_key,old.public_key,"Old keys are retained without being reconstructed");
+    const guessing = await open();
+    await guessing.page.getByRole("button",{name:/^Link this device Have/}).waitFor();
+    const guessDevice = (await pool.query("select device_id from e2ee_keys where user_id=$1 order by created_at desc limit 1",[user.id])).rows[0];
+    for (let attempt=0;attempt<4;attempt++) assert.equal((await guessing.context.request.post(base+"/api/e2ee/devices/link/verify",{headers:{Origin:base},data:{deviceId:guessDevice.device_id,code:"000000"}})).status(),403);
+    assert.equal((await guessing.context.request.post(base+"/api/e2ee/devices/link/verify",{headers:{Origin:base},data:{deviceId:guessDevice.device_id,code:"000000"}})).status(),429,"Six-digit guessing is blocked after the per-account budget");
     assert.deepEqual(errors,[]);
     console.log("PASS post-auth choices, trusted-device skip, actual code linking, no-trusted recovery, explicit revocation, same account, retained historical keys, mobile bounds (mailbox code fixture; no real email sent)");
   } finally { await browser.close(); await pool.query("delete from users where id=$1 and username=$2",[user.id,name]); }

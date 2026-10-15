@@ -107,11 +107,15 @@ async function main() {
     assert.deepEqual(await listConversationsFor(randomUUID()),[]);
     console.log("PASS: conversation membership, peers, unread totals, pins and latest messages preserved.");
     const { NextRequest } = await import("next/server");
-    const { issueDeviceSession } = await import("../src/server/device-sessions");
+    const { issueDeviceSession, rotateDeviceSession } = await import("../src/server/device-sessions");
     await local.query("UPDATE user_2fa SET enabled=false WHERE user_id=$1",[id]);
     const credentials=await issueDeviceSession(new NextRequest("http://localhost/login",{headers:{"user-agent":"Atomic login fixture","x-forwarded-for":"127.0.0.1"}}),{id,username:"session_test"},0);
     assert.equal(await resolveSessionToken(credentials.access),null,"A new sign-in has no app access before device proof");
     assert.equal((await resolveSessionAccess(credentials.access))?.approvalRequired,true);
+    const restrictedSid = JSON.parse(Buffer.from(credentials.access.split('.')[1],'base64url').toString()).sid;
+    await local.query("update device_sessions set auth_time=$2 where id=$1",[restrictedSid,Date.now()-16*60_000]);
+    assert.equal(await rotateDeviceSession(credentials.refresh),null,"Restricted sessions cannot be refreshed beyond the verification lifetime");
+    await local.query("update device_sessions set auth_time=$2 where id=$1",[restrictedSid,Date.now()]);
     await local.query("update device_sessions set approval_required=false where id=$1",[JSON.parse(Buffer.from(credentials.access.split('.')[1],'base64url').toString()).sid]);
     assert.equal((await resolveSessionToken(credentials.access))?.id,id);
     const audit=(await local.query("SELECT identifier,success,ip_address,user_agent FROM login_history WHERE user_id=$1",[id])).rows;
