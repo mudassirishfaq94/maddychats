@@ -1,7 +1,7 @@
 apply plugin: 'com.android.application'
 apply plugin: 'kotlin-android'
 
-// Reuse the existing package/storage. This build remains on Circlo's final origin.
+// Owner approved chat.circlo.app for a new Play listing; Java namespace stays unchanged.
 def appOrigin = System.getenv('CLIENT_URL') ?: 'https://circlo.chat'
 if (appOrigin != 'https://circlo.chat') throw new GradleException('Android builds must use the canonical https://circlo.chat origin.')
 
@@ -9,11 +9,11 @@ android {
     namespace = "app.ziptalks.android"
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "app.ziptalks.android"
+        applicationId "chat.circlo.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 12
-        versionName "0.9.3"
+        versionCode 13
+        versionName "0.9.4"
         manifestPlaceholders = [appLinkHost: 'circlo.chat']
         buildConfigField "String", "API_BASE_URL", '"' + appOrigin + '"'
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
@@ -71,11 +71,13 @@ dependencies {
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
 }
 
-try {
-    def servicesJSON = file('google-services.json')
-    if (servicesJSON.text) {
-        apply plugin: 'com.google.gms.google-services'
-    }
-} catch(Exception e) {
-    logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
+// Deployment-specific client configuration stays local. Never silently build a
+// release with another package's Firebase identity or disabled native push.
+def servicesJSON = file('google-services.json')
+if (!servicesJSON.exists()) throw new GradleException('Provide android/app/google-services.json from the existing Firebase project for chat.circlo.app. Do not use a server service-account file.')
+def firebaseClientConfig = new groovy.json.JsonSlurper().parse(servicesJSON)
+def firebasePackages = firebaseClientConfig.client.collect { it.client_info?.android_client_info?.package_name }
+if (!firebasePackages.contains(android.defaultConfig.applicationId)) {
+    throw new GradleException('Firebase Android client does not match chat.circlo.app. Download the matching google-services.json; do not reuse the legacy package client.')
 }
+apply plugin: 'com.google.gms.google-services'

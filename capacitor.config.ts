@@ -13,7 +13,7 @@ import { KeyboardResize, KeyboardStyle } from "@capacitor/keyboard";
  * dev server (e.g. http://10.0.2.2:3000 for Android emulator).
  */
 const config: CapacitorConfig = {
-  appId: "app.ziptalks.android",
+  appId: "chat.circlo.app",
   appName: "Circlo",
   webDir: "out",
   server: {

@@ -104,3 +104,10 @@ public/downloads/
 /android-twa/signing/
 /android-twa/node_modules/
 /android-twa/.local/
+
+# Deployment-specific Android Firebase client configuration (not a server credential)
+/android/app/google-services.json
+
+# Python verification-tool bytecode caches
+__pycache__/
+*.py[cod]
