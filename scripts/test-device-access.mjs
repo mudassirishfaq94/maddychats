@@ -37,13 +37,14 @@ export async function testDeviceAccess(base, pool, secret) {
     for (const route of ["/api/conversations","/api/calls","/api/status"]) assert.equal((await target.context.request.post(base+route,{headers:{Origin:base},data:{}})).status(),401,route+" cannot be mutated before device approval");
     const profile = await target.context.request.get(base+"/app/profile",{maxRedirects:0});
     assert.equal(profile.status(),307); assert(new URL(profile.headers().location,base).pathname === "/app/device-access");
-    const backup = (await pool.query("select device_id,public_key,encrypted_private_key from e2ee_keys where user_id=$1 and trusted_at is not null",[user.id])).rows[0];
+    const backup = (await pool.query("select device_id,public_key,encrypted_private_key,device_name from e2ee_keys where user_id=$1 and trusted_at is not null",[user.id])).rows[0];
     await pool.query("update e2ee_keys set encrypted_private_key='legacy-device-id-only-backup' where user_id=$1 and device_id=$2",[user.id,backup.device_id]);
     const restrictedKeys = await (await target.context.request.get(base+"/api/e2ee/keys")).json();
     assert.equal(restrictedKeys.keys.find(k=>k.deviceId===backup.device_id).encryptedPrivateKey,undefined,"Restricted sign-ins cannot download legacy weakly wrapped private keys");
-    const overwrite = await target.context.request.post(base+"/api/e2ee/keys",{headers:{Origin:base},data:{deviceId:backup.device_id,publicKey:backup.public_key,encryptedPrivateKey:"attacker-replacement"}});
+    const overwrite = await target.context.request.post(base+"/api/e2ee/keys",{headers:{Origin:base},data:{deviceId:backup.device_id,publicKey:backup.public_key,encryptedPrivateKey:"attacker-replacement",deviceName:"Spoofed trusted browser"}});
     assert.equal(overwrite.status(),200);
     assert.equal((await pool.query("select encrypted_private_key from e2ee_keys where user_id=$1 and device_id=$2",[user.id,backup.device_id])).rows[0].encrypted_private_key,"legacy-device-id-only-backup","A primary credential cannot overwrite an existing key backup without private-key proof");
+    assert.equal((await pool.query("select device_name from e2ee_keys where user_id=$1 and device_id=$2",[user.id,backup.device_id])).rows[0].device_name,backup.device_name,"Restricted sign-ins cannot spoof another browser's label");
     await pool.query("update e2ee_keys set encrypted_private_key=$3 where user_id=$1 and device_id=$2",[user.id,backup.device_id,backup.encrypted_private_key]);
     const oldCookies = await target.context.cookies();
     await target.context.addCookies(oldCookies.filter(c=>c.name==="maddy_session").map(c=>({...c,value:"invalid-access-force-refresh"})));

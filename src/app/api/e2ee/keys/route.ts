@@ -94,7 +94,7 @@ export async function POST(req: NextRequest) {
   const sessionId = await getSessionDeviceId();
   // Upsert: update if device already registered, insert otherwise
   const [existing] = await db
-    .select({ id: e2eeKeys.id })
+    .select({ id: e2eeKeys.id, sessionId: e2eeKeys.sessionId })
     .from(e2eeKeys)
     .where(and(eq(e2eeKeys.userId, user.id), eq(e2eeKeys.deviceId, deviceId)))
     .limit(1);
@@ -116,7 +116,9 @@ export async function POST(req: NextRequest) {
     // a device to a new session requires the bind-session proof, because the
     // session binding is what lets this device hand out trust to another one.
     const detectedCountry = sessionId ? await detectCountry(req) : null;
-    await db
+    // A restricted sign-in may describe its own pending key, never change the
+    // name, activity or backup of another browser just by knowing its public ID.
+    if (!(await getSessionAccess())?.approvalRequired || existing.sessionId === sessionId) await db
       .update(e2eeKeys)
       // The public key is immutable, but a legacy private-key backup can be
       // rewrapped with a device-only recovery secret during client upgrade.
