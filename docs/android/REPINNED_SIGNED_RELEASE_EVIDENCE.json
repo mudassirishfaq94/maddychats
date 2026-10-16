@@ -1,0 +1,82 @@
+{
+  "package": "chat.circlo.app",
+  "versionCode": 14,
+  "versionName": "0.9.5",
+  "aabFileName": "circlo-0.9.5-14-release.aab",
+  "sha256": "ff0593027b978c3474178434f74e41bfbffe0fbc4ba8104bb34b91c87dd58a86",
+  "bytes": 8971379,
+  "signed": true,
+  "signatureVerified": true,
+  "signerMatchesApprovedUploadCertificate": true,
+  "uploadCertificateSha256": "a1fda879f4ff03035d27ba941a7d4f3dec040897c61faa205529b10907a099bf",
+  "bundletoolValidated": true,
+  "targetSdk": 36,
+  "debuggable": false,
+  "permissions": [
+    "android.permission.INTERNET",
+    "android.permission.ACCESS_NETWORK_STATE",
+    "android.permission.RECORD_AUDIO",
+    "android.permission.POST_NOTIFICATIONS",
+    "android.permission.VIBRATE",
+    "android.permission.WAKE_LOCK",
+    "com.google.android.c2dm.permission.RECEIVE",
+    "chat.circlo.app.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+  ],
+  "nativeLibraries": [
+    {
+      "path": "base/lib/arm64-v8a/libandroidx.graphics.path.so",
+      "loadAlignments": [
+        16384,
+        16384,
+        16384
+      ]
+    },
+    {
+      "path": "base/lib/armeabi-v7a/libandroidx.graphics.path.so",
+      "loadAlignments": [
+        16384,
+        16384,
+        16384
+      ]
+    },
+    {
+      "path": "base/lib/x86/libandroidx.graphics.path.so",
+      "loadAlignments": [
+        16384,
+        16384,
+        16384
+      ]
+    },
+    {
+      "path": "base/lib/x86_64/libandroidx.graphics.path.so",
+      "loadAlignments": [
+        16384,
+        16384,
+        16384
+      ]
+    }
+  ],
+  "timestampAuthorityUsed": false,
+  "physicalDeviceVerified": false,
+  "playSubmissionApproved": false,
+  "note": "Cryptographic/build verification only; compliance and live configuration gates are separate.",
+  "apk": {
+    "fileName": "circlo-0.9.5-14-release.apk",
+    "sha256": "249212aad8adab5e91541476912c9b3a4f5bdddfd61b30965eef0b14b1815df7",
+    "bytes": 9487627,
+    "signatureVerified": true,
+    "signatureSchemes": [
+      "v2",
+      "v3"
+    ],
+    "signerMatchesApprovedUploadCertificate": true,
+    "package": "chat.circlo.app",
+    "versionCode": 14,
+    "versionName": "0.9.5",
+    "targetSdk": 36,
+    "debuggable": false,
+    "applicationClass": "app.ziptalks.android.CircloApplication",
+    "notificationFixInDex": true
+  },
+  "oldVersion13ArtifactsUnchanged": true
+}

@@ -1,0 +1,21 @@
+{
+  "package": "chat.circlo.app",
+  "versionCode": 14,
+  "versionName": "0.9.5",
+  "keyAlgorithm": "RSA",
+  "keyBits": 3072,
+  "uploadCertificateSha256": "A1:FD:A8:79:F4:FF:03:03:5D:27:BA:94:1A:7D:4F:3D:EC:04:08:97:C6:1F:AA:20:55:29:B1:09:07:A0:99:BF",
+  "uploadCertificateSha1": "B4:C7:01:5B:1F:2A:CB:69:D5:C7:80:B5:3C:F5:D7:3A:9C:25:33:FD",
+  "keyStorage": "outside Git, owner/SYSTEM ACL",
+  "passwordStorage": "Windows-user-bound DPAPI, outside Git",
+  "portableBackupVerified": false,
+  "playAppSigningCertificateKnown": false,
+  "signingAuthorized": true,
+  "playUploadAuthorized": false,
+  "firebaseProjectId": "ziptalks-5b402",
+  "firebaseNewPackageConfigVerified": true,
+  "signedBuildPrepared": true,
+  "signedArtifactsVerified": true,
+  "productionDeploymentAuthorized": false,
+  "physicalDeviceVerified": false
+}
