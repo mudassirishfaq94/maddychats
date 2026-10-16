@@ -69,3 +69,15 @@ Local implementation commit: `67690b4` (backup policy-role dependency checks and
 ## Owner-supplied Firebase Admin credential — local validation update
 
 Owner provided a local service-account JSON. Verified type=service_account, expected project ziptalks-5b402, matching project service-account identity and official OAuth token endpoint. RSA private key parses and local sign/verify succeeds. Provider IAM/FCM authorization and real delivery remain NOT VERIFIED; no provider token request/push was made. Protected copy is outside Git at `%USERPROFILE%\CircloRelease\secrets\firebase-admin.json`. Both original and protected copy have inheritance disabled and only owner/SYSTEM access (two ACL entries each). No credential values, private-key material or key identifiers are included here. Render variables remain unchanged; the credential is available for the separately approved configuration step. Missing0042/runtime-policy repair and physical testing remain open.
+
+## Follow-up: exact rollout prepared for approval
+
+Prepared application commit **bcdfc2b739e7aa28bdf58494030081376c72e23c** adds forward migration0050_restore_private_table_rls. It restores the intended0042postconditions with explicit backend policies in the same transaction; it does not fabricate or modify0042history. Expanded read-only inspection includes names containing digits:45tables checked,18without RLS,0PUBLIC/anon/authenticated table grants. The earlier38-table/12missing subset was incomplete. Production runtime role is LOGIN, NOSUPERUSER/NOCREATEDB/NOCREATEROLE/NOINHERIT/NOBYPASSRLS,0memberships; it passes migration guards.
+
+`node scripts/test-private-table-rls.mjs` with an explicit loopback RLS_TEST_DATABASE_URL passed: all45table rows retained and visible to the limited runtime role, public grant removed, audit INSERT allowed while UPDATE/DELETE/TRUNCATE denied, transactional rollback and repeat execution pass. Full item3 HTTP/browser/auth/deletion/push/reconnect-related authorization suite passed with0050in the journal. Lint passed. Migration0050does no row updates/deletes and preserves message/key content; production enforcement still awaits approval and execution.
+
+Real Firebase Admin FCM validation-only request **PASS** with the supplied private credential. No notification delivered; real phone notification tests remain unverified. Source: https://firebase.google.com/docs/reference/admin/node/firebase-admin.messaging.messaging . No Firebase/Render configuration modified.
+
+Timeout transport checked on a local PostgreSQL connection: node-postgres URL `options` sets lock_timeout1s, statement_timeout10s, idle_in_transaction_session_timeout15s. Installed Drizzle Kit uses a single node-postgres Pool with the connection URL. No global host setting needs changing.
+
+Remote main rechecked read-only: ca68422a7d6552d1557a65cb117104d7d5cf9abc. Exact next production actions are in APPROVAL_REQUIRED_ROLLOUT.md. No push, production migration or environment mutation has occurred. Deployment is prepared for explicit approval; official closed testing remains NO-GO until live/device/Console gates pass.

@@ -235,6 +235,36 @@
       "exposed_grants": 0
     },
     {
+      "relname": "e2ee_conversation_keys",
+      "relrowsecurity": false,
+      "exposed_grants": 0
+    },
+    {
+      "relname": "e2ee_key_history",
+      "relrowsecurity": true,
+      "exposed_grants": 0
+    },
+    {
+      "relname": "e2ee_keys",
+      "relrowsecurity": false,
+      "exposed_grants": 0
+    },
+    {
+      "relname": "e2ee_signal_devices",
+      "relrowsecurity": false,
+      "exposed_grants": 0
+    },
+    {
+      "relname": "e2ee_signal_envelopes",
+      "relrowsecurity": false,
+      "exposed_grants": 0
+    },
+    {
+      "relname": "e2ee_signal_prekeys",
+      "relrowsecurity": false,
+      "exposed_grants": 0
+    },
+    {
       "relname": "email_verification_tokens",
       "relrowsecurity": false,
       "exposed_grants": 0
@@ -375,12 +405,17 @@
       "exposed_grants": 0
     },
     {
+      "relname": "user_2fa",
+      "relrowsecurity": false,
+      "exposed_grants": 0
+    },
+    {
       "relname": "users",
       "relrowsecurity": true,
       "exposed_grants": 0
     }
   ],
-  "privateTableInspectionUtc": "2026-10-16T15:28:11.723Z",
+  "privateTableInspectionUtc": "2026-10-16T16:04:48.765Z",
   "configuration": {
     "time": "2026-10-16T15:28:08.766949+00:00",
     "renderEnvAccess": "PASS",
@@ -418,5 +453,22 @@
       "firebaseProject": false,
       "supportEmail": false
     }
+  },
+  "runtimeRole": [
+    {
+      "rolname": "circlo_runtime",
+      "rolsuper": false,
+      "rolcreatedb": false,
+      "rolcreaterole": false,
+      "rolinherit": false,
+      "rolbypassrls": false,
+      "rolcanlogin": true,
+      "memberships": 0
+    }
+  ],
+  "firebaseValidation": {
+    "dryRun": "PASS",
+    "notificationDelivered": false,
+    "productionConfigurationChanged": false
   }
 }
