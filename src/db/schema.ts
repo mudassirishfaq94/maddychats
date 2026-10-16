@@ -617,6 +617,7 @@ export const fcmTokens = pgTable(
     userId: uuid("user_id")
       .references(() => users.id, { onDelete: "cascade" })
       .notNull(),
+    sessionId: uuid("session_id").references(() => deviceSessions.id, { onDelete: "cascade" }),
     token: text("token").notNull().unique(),
     platform: text("platform").notNull().default("android"),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" })

@@ -1,3 +1,5 @@
+import { Capacitor } from "@capacitor/core";
+import { hasHostedPushBridge, hostedPush } from "@/lib/native-push-bridge";
 import { isNativeApp } from "@/lib/native-platform";
 import { notificationPath } from "@/lib/notification-navigation";
 
@@ -12,14 +14,16 @@ export function isCapacitor(): boolean {
  * Register for native push notifications via Capacitor.
  * Returns the device FCM token, or null if not available.
  */
-export async function registerCapacitorPush(): Promise<string | null> {
+export async function registerCapacitorPush(requestPermission = false): Promise<string | null> {
   if (!isCapacitor()) return null;
 
+  if (hasHostedPushBridge()) return hostedPush(requestPermission ? "request" : "token");
+  if (!Capacitor.isNativePlatform()) throw new Error("Update Circlo and Android System WebView, then retry notifications.");
   try {
     const { PushNotifications } = await import("@capacitor/push-notifications");
 
     // Request permission
-    let permResult = await PushNotifications.requestPermissions();
+    const permResult = requestPermission ? await PushNotifications.requestPermissions() : await PushNotifications.checkPermissions();
     if (permResult.receive !== "granted") {
       console.warn("[capacitor-push] Notification permission not granted:", permResult.receive);
       return null;
@@ -63,12 +67,14 @@ export async function sendTokenToServer(token: string): Promise<void> {
     const response = await fetch("/api/push/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token, platform: "android" }),
+      body: JSON.stringify({ token, platform: hasHostedPushBridge() ? "android-webview-v1" : "android" }),
       signal: AbortSignal.timeout(10000),
     });
     if (!response.ok) throw new Error("Push device registration was rejected.");
+    const result = await response.json() as { deliveryConfigured?: boolean };
+    if (result.deliveryConfigured === false) throw new Error("Android push delivery is not configured yet. Contact Circlo support.");
   } catch (error) {
-    console.error("[capacitor-push] Failed to send token to server:", error);
+    throw error;
   }
 }
 
@@ -76,7 +82,7 @@ export async function sendTokenToServer(token: string): Promise<void> {
  * Listen for notification taps — navigate to the relevant chat.
  */
 export async function setupNotificationTapListener(): Promise<() => void> {
-  if (!isCapacitor()) return () => {};
+  if (!isCapacitor() || hasHostedPushBridge() || !Capacitor.isNativePlatform()) return () => {};
   const { PushNotifications } = await import("@capacitor/push-notifications");
   const listener = await PushNotifications.addListener("pushNotificationActionPerformed", action => {
     const target = notificationPath(action.notification.data?.url, window.location.origin);

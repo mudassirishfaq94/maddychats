@@ -1,8 +1,10 @@
+import { deliverNativePush } from "@/lib/native-push-delivery";
+import { nativePushPayload } from "@/lib/native-push-payload";
 import { safeError } from "@/server/safe-error";
 import webPush from "web-push";
-import { eq } from "drizzle-orm";
+import { and, eq, gt, isNull } from "drizzle-orm";
 import { db } from "@/db";
-import { pushSubscriptions, fcmTokens } from "@/db/schema";
+import { pushSubscriptions, fcmTokens, deviceSessions } from "@/db/schema";
 import { pushConfiguration } from "./push-configuration";
 import { isSupportedPushEndpoint } from "@/lib/push-endpoint";
 
@@ -21,7 +23,7 @@ function configureWebPush(): boolean {
 
 /**
  * Lazily initialize Firebase Admin for FCM delivery.
- * Returns null if not configured (missing GOOGLE_APPLICATION_CREDENTIALS).
+ * Returns null if the server-only Firebase project/email/private-key settings are missing.
  */
 async function getFirebaseAdmin() {
   if (firebaseAdmin) return firebaseAdmin;
@@ -62,53 +64,17 @@ async function getFirebaseAdmin() {
  */
 async function sendFCM(
   tokens: { token: string; platform: string }[],
-  payload: { title: string; body: string; url: string; tag: string; silent?: boolean; ttl?: number },
+  payload: ReturnType<typeof nativePushPayload>,
 ): Promise<void> {
   const admin = await getFirebaseAdmin();
   if (!admin) return;
 
   const messaging = admin.messaging?.() ?? (admin as any).messaging;
 
-  await Promise.all(
-    tokens.map(async ({ token }) => {
-      try {
-        await messaging.send({
-          token,
-          notification: {
-            title: payload.title,
-            body: payload.body,
-          },
-          data: {
-            url: payload.url,
-            tag: payload.tag,
-          },
-          android: {
-            priority: "high",
-            ...(payload.ttl !== undefined ? { ttl: payload.ttl * 1000 } : {}),
-            notification: {
-              channelId: "maddychats-messages",
-              tag: payload.tag,
-              defaultSound: !payload.silent,
-              defaultVibrateTimings: !payload.silent,
-            },
-          },
-          webpush: {
-            headers: { TTL: String(payload.ttl ?? 86400) },
-          },
-        });
-      } catch (error: any) {
-        const code = error?.code || "";
-        // Token is invalid or unregistered — remove it
-        if (
-          code === "messaging/registration-token-not-registered" ||
-          code === "messaging/invalid-registration-token"
-        ) {
-          await db.delete(fcmTokens).where(eq(fcmTokens.token, token));
-        } else {
-          console.error("[push] FCM delivery failed:", code);
-        }
-      }
-    }),
+  await deliverNativePush(tokens, payload,
+    message => messaging.send(message),
+    async token => { await db.delete(fcmTokens).where(eq(fcmTokens.token, token)); },
+    code => console.error("[push] FCM delivery failed:", code),
   );
 }
 
@@ -117,7 +83,7 @@ async function sendFCM(
  * 1. FCM (Android native — fires OS tray notification even when app is backgrounded)
  * 2. VAPID web push (browser — fires in-browser notification)
  *
- * Both are sent in parallel; the one that reaches the device first wins.
+ * Separate installations receive their own channel; the hosted WebView never subscribes to Web Push.
  */
 export async function sendMessagePush(
   userId: string,
@@ -133,42 +99,28 @@ export async function sendMessagePush(
     messageId: string;
   },
 ): Promise<void> {
-  const notificationPayload = {
-    silent: payload.silent,
-    ttl: payload.callId ? (payload.callTtl ?? 45) : undefined,
-    title: payload.actorName,
-    body: payload.preview,
-    url: `/app/chats/${payload.conversationId}?${payload.callId ? `call=${payload.callId}` : `message=${payload.messageId}`}`,
-    tag: payload.callId ? `circlo-call-${payload.callId}` : `circlo-chat-${payload.conversationId}`,
-  };
-
   // 1. Send through FCM for Android devices
   const fcmDevices = await db
     .select({ token: fcmTokens.token, platform: fcmTokens.platform })
     .from(fcmTokens)
-    .where(eq(fcmTokens.userId, userId));
+    .innerJoin(deviceSessions, and(eq(deviceSessions.id, fcmTokens.sessionId), eq(deviceSessions.userId, fcmTokens.userId)))
+    .where(and(eq(fcmTokens.userId, userId), eq(fcmTokens.platform, "android-webview-v1"), isNull(deviceSessions.revokedAt), gt(deviceSessions.expiresAt, new Date()), eq(deviceSessions.approvalRequired, false)));
 
-  if (fcmDevices.length > 0 && !payload.webOnly) {
-    // Use the registered native scheme for FCM. This never needs Android's
-    // HTTPS domain verification, so a notification tap cannot fall back to
-    // Chrome and show a browser address bar.
-    sendFCM(fcmDevices, {
-      ...notificationPayload,
-      url: `ziptalks://chat/${payload.conversationId}?${payload.callId ? `call=${payload.callId}` : `message=${payload.messageId}`}`,
-    }).catch((err) =>
-      console.error("[push] FCM batch error:", safeError(err)),
-    );
-  }
+  // Kept within the caller's existing after() lifecycle; SSE/HTTP delivery does
+  // not wait on the provider. Do not abandon an untracked background promise.
+  const nativeDelivery = fcmDevices.length > 0 && !payload.webOnly
+    ? sendFCM(fcmDevices, nativePushPayload({ ...payload, recipientId: userId })).catch(err => console.error("[push] FCM batch error:", safeError(err)))
+    : Promise.resolve();
 
   // 2. Send through VAPID web push for browser
-  if (!configureWebPush()) return;
+  if (!configureWebPush()) { await nativeDelivery; return; }
 
   const subscriptions = await db
     .select()
     .from(pushSubscriptions)
     .where(eq(pushSubscriptions.userId, userId));
 
-  await Promise.all(
+  await Promise.all([nativeDelivery, ...
     subscriptions.map(async (subscription) => {
       if (!isSupportedPushEndpoint(subscription.endpoint)) return;
       try {
@@ -196,5 +148,5 @@ export async function sendMessagePush(
         }
       }
     }),
-  );
+  ]);
 }

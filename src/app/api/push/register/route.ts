@@ -1,8 +1,8 @@
 import { NextRequest } from "next/server";
-import { eq, and, ne } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { db } from "@/db";
 import { fcmTokens, users } from "@/db/schema";
-import { getSessionUser } from "@/server/session";
+import { getSessionUser, getSessionDeviceId } from "@/server/session";
 import { jsonError, readJson, guardSameOrigin } from "@/server/http";
 import { rateLimit } from "@/server/rate-limit";
 
@@ -31,17 +31,19 @@ export async function POST(req: NextRequest) {
     return jsonError(400, "Valid FCM token required.");
   }
 
+  const sessionId = await getSessionDeviceId();
+  if (!sessionId) return jsonError(403, "Sign in again to register this device.");
   const platform = typeof body.platform === "string" ? body.platform.slice(0, 20) : "android";
 
   // The same physical device can switch accounts without rotating its FCM
   // token. Route future alerts to the signed-in account, never the old owner.
   await db.transaction(async tx => {
     await tx.select({ id: users.id }).from(users).where(eq(users.id, user.id)).for("update");
-    await tx.delete(fcmTokens).where(and(eq(fcmTokens.userId, user.id), eq(fcmTokens.platform, platform), ne(fcmTokens.token, body.token as string)));
-    await tx.insert(fcmTokens).values({ userId: user.id, token: body.token as string, platform })
-      .onConflictDoUpdate({ target: fcmTokens.token, set: { userId: user.id, platform, updatedAt: new Date() } });
+    await tx.delete(fcmTokens).where(and(eq(fcmTokens.userId, user.id), eq(fcmTokens.sessionId, sessionId)));
+    await tx.insert(fcmTokens).values({ userId: user.id, token: body.token as string, platform, sessionId })
+      .onConflictDoUpdate({ target: fcmTokens.token, set: { userId: user.id, platform, sessionId, updatedAt: new Date() } });
   });
-  return Response.json({ ok: true }, { headers: { "Cache-Control": "private, no-store" } });
+  return Response.json({ ok: true, deliveryConfigured: Boolean(process.env.FIREBASE_PROJECT_ID && process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREBASE_PRIVATE_KEY) }, { headers: { "Cache-Control": "private, no-store" } });
 }
 
 /**
@@ -53,6 +55,7 @@ export async function DELETE(req: NextRequest) {
   const user = await getSessionUser();
   if (!user) return jsonError(401, "Not authenticated.");
 
-  await db.delete(fcmTokens).where(eq(fcmTokens.userId, user.id));
+  const sessionId = await getSessionDeviceId();
+  if (sessionId) await db.delete(fcmTokens).where(and(eq(fcmTokens.userId, user.id), eq(fcmTokens.sessionId, sessionId)));
   return Response.json({ ok: true }, { headers: { "Cache-Control": "private, no-store" } });
 }

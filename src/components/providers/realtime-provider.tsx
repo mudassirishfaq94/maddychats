@@ -115,23 +115,59 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     return () => { stopped = true; document.removeEventListener("visibilitychange", visible); };
   }, [status, user?.id]);
 
-  // Install the tap handler before token registration (including cold starts).
+  // Hosted Android owns taps; rebind permitted tokens on account change/resume/refresh.
+  // Permission prompts happen only through the explicit Settings button.
   useEffect(() => {
+    if (!isNativeApp()) return;
     let stopped = false;
+    let running = false;
+    let preferenceEpoch = 0;
+    let resyncRequested = false;
     let removeTap: (() => void) | undefined;
-    void (async () => {
+    const sync = async (): Promise<void> => {
+      if (stopped || document.visibilityState !== "visible") return;
+      if (running) { resyncRequested = true; return; }
+      running = true;
+      const epoch = preferenceEpoch;
       try {
+        const bridge = await import("@/lib/native-push-bridge");
         const native = await import("@/lib/capacitor-push");
-        if (!native.isCapacitor() || stopped) return;
-        removeTap = await native.setupNotificationTapListener();
-        if (stopped) { removeTap(); return; }
-        if (status === "authenticated") {
-          const token = await native.registerCapacitorPush();
-          if (token && !stopped) await native.sendTokenToServer(token);
+        if (stopped) return;
+        if (status !== "authenticated" || !user?.id) {
+          if (status !== "loading" && bridge.hasHostedPushBridge()) await bridge.hostedPush("clear");
+          return;
         }
-      } catch { /* Plugins are absent in browser builds. */ }
-    })();
-    return () => { stopped = true; removeTap?.(); };
+        if (bridge.hasHostedPushBridge()) await bridge.hostedPush("clear");
+        const preferenceResponse = await fetch("/api/notifications/preferences", { cache: "no-store", signal: AbortSignal.timeout(10000) });
+        if (!preferenceResponse.ok || stopped) return;
+        const settings = await preferenceResponse.json() as { preferences?: NotificationPreferences };
+        if (!settings.preferences?.pushNotifications) return;
+        const token = await native.registerCapacitorPush(false);
+        if (token && !stopped && epoch === preferenceEpoch) {
+          await native.sendTokenToServer(token);
+          if (!stopped && epoch === preferenceEpoch && bridge.hasHostedPushBridge()) await bridge.hostedPush("bind", user.id);
+        }
+      } catch { /* No false success; Settings provides an explicit retry and error. */ }
+      finally {
+        running = false;
+        if (resyncRequested && !stopped) { resyncRequested = false; void sync(); }
+      }
+    };
+    void import("@/lib/capacitor-push").then(async native => {
+      removeTap = await native.setupNotificationTapListener();
+      if (stopped) removeTap();
+    }).catch(() => {});
+    const preferenceChanged = (event: Event) => {
+      const enabled = (event as CustomEvent<NotificationPreferences>).detail?.pushNotifications;
+      preferenceEpoch++;
+      if (!enabled) void import("@/lib/native-push-bridge").then(bridge => bridge.hasHostedPushBridge() ? bridge.hostedPush("clear") : null).catch(() => {});
+      else void sync();
+    };
+    void sync();
+    window.addEventListener("maddy:notification-preferences", preferenceChanged);
+    document.addEventListener("visibilitychange", sync);
+    window.addEventListener("circlo:native-push-refresh", sync);
+    return () => { stopped = true; removeTap?.(); window.removeEventListener("maddy:notification-preferences", preferenceChanged); document.removeEventListener("visibilitychange", sync); window.removeEventListener("circlo:native-push-refresh", sync); };
   }, [status, user?.id]);
 
 

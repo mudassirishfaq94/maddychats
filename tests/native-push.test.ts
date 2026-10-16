@@ -1,0 +1,29 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { nativePushPayload } from "../src/lib/native-push-payload";
+import { deliverNativePush } from "../src/lib/native-push-delivery";
+
+test("FCM payload contains only routing metadata and uses a single data-only delivery path", () => {
+  const input = { recipientId: "recipient", notificationId: "event", conversationId: "chat", messageId: "message", actorName: "PRIVATE NAME", preview: "PRIVATE MESSAGE", encryptionKey: "PRIVATE KEY" };
+  const payload = nativePushPayload(input, 1000);
+  assert.deepEqual(Object.keys(payload).sort(), ["android", "data"]);
+  assert.equal(JSON.stringify(payload).includes("PRIVATE"), false);
+  assert.equal(payload.data.url, "ziptalks://chat/chat?message=message");
+  assert.equal(payload.data.expiresAt, "3601000");
+  assert.equal(payload.android.ttl, 3600000);
+  assert.equal(nativePushPayload({ ...input, callId: "call", callTtl: 999 }, 1000).android.ttl, 45000);
+  assert.equal(nativePushPayload({ ...input, callId: "call", callTtl: 1, silent: true }, 1000).data.silent, "true");
+});
+
+test("native delivery waits for sends and retires only invalid/unregistered tokens", async () => {
+  const sent: string[] = [], retired: string[] = [], failed: string[] = [];
+  const payload = nativePushPayload({ recipientId: "recipient", notificationId: "event", conversationId: "chat", messageId: "message" });
+  await deliverNativePush(["ok", "invalid", "unregistered", "temporary"].map(token => ({ token })), payload, async message => {
+    await new Promise(resolve => setTimeout(resolve, 5));
+    sent.push(message.token);
+    if (message.token !== "ok") throw { code: message.token === "invalid" ? "messaging/invalid-registration-token" : message.token === "unregistered" ? "messaging/registration-token-not-registered" : "messaging/server-unavailable" };
+  }, async token => { retired.push(token); }, code => { failed.push(code); });
+  assert.equal(sent.length, 4);
+  assert.deepEqual(retired.sort(), ["invalid", "unregistered"]);
+  assert.deepEqual(failed, ["messaging/server-unavailable"]);
+});

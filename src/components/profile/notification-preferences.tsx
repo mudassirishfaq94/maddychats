@@ -78,7 +78,20 @@ export function NotificationPreferences() {
   async function subscribeForPush(): Promise<boolean> {
     // The Capacitor FCM registration runs after sign-in. There is no browser
     // service-worker subscription in the installed app.
-    if (isNativeApp()) return true;
+    if (isNativeApp()) {
+      setSubscribing(true);
+      try {
+        const native = await import("@/lib/capacitor-push");
+        const token = await native.registerCapacitorPush(true);
+        if (!token) throw new Error("Allow notifications in Android Settings, then try again.");
+        await native.sendTokenToServer(token);
+        setPushSubscribed(true);
+        window.dispatchEvent(new Event("circlo:native-push-refresh"));
+        setMessage("Push alerts enabled on this device.");
+        return true;
+      } catch (error) { setMessage(error instanceof Error ? error.message : "Notifications unavailable."); return false; }
+      finally { setSubscribing(false); }
+    }
     if (!("Notification" in window) || !("serviceWorker" in navigator) || !("PushManager" in window)) {
       setMessage("Push notifications are not supported on this device or browser.");
       return false;
@@ -173,7 +186,7 @@ export function NotificationPreferences() {
         <div className="flex justify-center py-10">{message ? <p className="text-sm text-[var(--danger)]">{message}</p> : <Loader2 className="h-5 w-5 animate-spin text-[var(--muted)]" />}</div>
       ) : (
         <>
-        {preferences.pushNotifications && !isNativeApp() && !pushSubscribed && browserPermission !== "unsupported" ? (
+        {preferences.pushNotifications && !pushSubscribed && (isNativeApp() || browserPermission !== "unsupported") ? (
           <div className="mt-5 flex items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--card-2)] p-4">
             <BellRing className="h-5 w-5 shrink-0 text-[var(--accent-fg)]" />
             <div className="min-w-0 flex-1">
@@ -181,7 +194,7 @@ export function NotificationPreferences() {
               <p className="text-xs text-[var(--muted)]">Receive messages in Android&apos;s notification panel, even when Circlo is closed.</p>
             </div>
             <button type="button" disabled={subscribing} onClick={() => void enableBrowserNotifications()} className="rounded-xl bg-[var(--accent)] px-3 py-2 text-xs font-semibold text-white disabled:opacity-60">
-              {subscribing ? "Enabling…" : browserPermission === "denied" ? "Try again" : "Enable"}
+              {subscribing ? "Enabling…" : !isNativeApp() && browserPermission === "denied" ? "Try again" : "Enable"}
             </button>
           </div>
         ) : null}

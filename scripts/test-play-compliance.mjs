@@ -11,6 +11,24 @@ export async function testPlayCompliance({base,sql,api,account,login}) {
   const owner=await account('play_delete_owner'), peer=await account('play_delete_peer');
   const cookie=await login(owner.username);
   const peerCookie=await login(peer.username);
+  // Real local DB/session registration. No Firebase calls or production tokens.
+  const pushOwner=await account('push_owner'), pushPeer=await account('push_peer');
+  const pushCookie=await login(pushOwner.username), secondCookie=await login(pushOwner.username), foreignCookie=await login(pushPeer.username);
+  const tokenA='fake-fcm-a-'+randomUUID(), tokenB='fake-fcm-b-'+randomUUID();
+  assert.equal((await api('/api/push/register','','POST',{token:tokenA})).status,401);
+  assert.equal((await api('/api/push/register',pushCookie,'POST',{token:tokenA},{origin:'https://attacker.invalid'})).status,403);
+  assert.equal((await api('/api/push/register',pushCookie,'POST',{token:'short'})).status,400);
+  assert.equal((await api('/api/push/register',pushCookie,'POST',{token:tokenA,platform:'android-webview-v1'})).status,200);
+  assert.equal((await api('/api/push/register',secondCookie,'POST',{token:tokenB,platform:'android-webview-v1'})).status,200);
+  assert.equal((await sql.query('select count(*)::int n from fcm_tokens where user_id=$1',[pushOwner.id])).rows[0].n,2,'Second device must not remove first device');
+  assert.equal((await api('/api/push/register',foreignCookie,'DELETE')).status,200);
+  assert.equal((await sql.query('select count(*)::int n from fcm_tokens where user_id=$1',[pushOwner.id])).rows[0].n,2,'Another account cannot delete tokens');
+  assert.equal((await api('/api/auth/logout',pushCookie,'POST')).status,200);
+  assert.equal((await sql.query('select token from fcm_tokens where user_id=$1',[pushOwner.id])).rows[0].token,tokenB,'Logout removes only current session token');
+  assert.equal((await api('/api/push/register',pushCookie,'POST',{token:tokenA})).status,401);
+  assert.equal((await api('/api/push/register',foreignCookie,'POST',{token:tokenB,platform:'android-webview-v1'})).status,200);
+  assert.equal((await sql.query('select user_id from fcm_tokens where token=$1',[tokenB])).rows[0].user_id,pushPeer.id,'Account switch rebinds the same physical token');
+  console.log('PASS native push API: authentication, CSRF, token validation, two devices, logout isolation, revoked session and account switch. No provider delivery asserted.');
   const dm=(await sql.query("insert into conversations(type,created_by_id) values('dm',$1) returning id",[owner.id])).rows[0];
   await sql.query('insert into conversation_members(conversation_id,user_id,accepted_at) values($1,$2,now()),($1,$3,now())',[dm.id,owner.id,peer.id]);
   assert.equal((await api(`/api/conversations/${dm.id}/typing`,'','POST',{typing:true})).status,401);
@@ -27,6 +45,33 @@ export async function testPlayCompliance({base,sql,api,account,login}) {
   console.log('PASS typing API: authentication, recipient targeting, five-second expiry, privacy opt-out and explicit stop. Android display remains a device test.');
   const browser=await chromium.launch();
   try {
+    const nativeContext=await browser.newContext({viewport:{width:360,height:780},serviceWorkers:'block',userAgent:'CircloFixture ZipTalkAndroid/0.8'});
+    try {
+      const [nativeName,...nativeValue]=cookie.split('=');
+      await nativeContext.addCookies([{name:nativeName,value:nativeValue.join('='),url:base,httpOnly:true,sameSite:'Lax'}]);
+      await nativeContext.addInitScript(() => {
+        window.__pushRequests=0;
+        const port={onmessage:null,postMessage(raw){
+          const input=JSON.parse(raw),reply={id:input.id};
+          if(input.command==='request') { window.__pushRequests++; if(window.__pushRequests>1) reply.token='fake-native-ui-registration-token'; }
+          queueMicrotask(()=>port.onmessage?.({data:JSON.stringify(reply)}));
+        }};
+        window.CircloPush=port;
+      });
+      const nativePage=await nativeContext.newPage();
+      await nativePage.goto(`${base}/app/profile#notifications`);
+      const section=nativePage.locator('#notifications');
+      const enable=section.getByRole('button',{name:'Enable',exact:true});
+      await enable.waitFor();
+      assert.equal(await nativePage.evaluate(()=>window.__pushRequests),0,'Login must not prompt for Android notification permission');
+      await enable.click();
+      await section.getByText('Allow notifications in Android Settings, then try again.',{exact:true}).waitFor();
+      await enable.click();
+      await section.getByText('Android push delivery is not configured yet. Contact Circlo support.',{exact:true}).waitFor();
+      assert.equal(await nativePage.evaluate(()=>window.__pushRequests),2);
+      assert(await nativePage.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'Native-style settings fits360px');
+      console.log('PASS hosted-push frontend with simulated port: no automatic permission prompt, denied permission and missing server configuration explained at360px. This is not a physical bridge/FCM test.');
+    } finally { await nativeContext.close(); }
     const context=await browser.newContext({viewport:{width:320,height:740},serviceWorkers:'block'});
     const [name,...value]=cookie.split('='); await context.addCookies([{name,value:value.join('='),url:base,httpOnly:true,sameSite:'Lax'}]);
     const page=await context.newPage();
