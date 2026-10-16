@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useAdminData } from "@/hooks/use-admin-data";
+import { AdminLoadError } from "@/components/admin/admin-load-error";
 import {
   Users,
   MessageSquare,
@@ -42,16 +43,9 @@ interface Stats {
 }
 
 export default function AdminOverviewPage() {
-  const [stats, setStats] = useState<Stats | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetch("/api/admin/stats")
-      .then((r) => r.json())
-      .then(setStats)
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, []);
+  const { data, error, loading, retry } = useAdminData<Stats>("/api/admin/stats");
+  const stats = data;
+  if (error) return <AdminLoadError message={error} retry={retry} />;
 
   if (loading) {
     return (

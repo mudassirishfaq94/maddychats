@@ -38,7 +38,16 @@ export async function testPublicPages(base, { live = false } = {}) {
     const preview = await page.request.get(origin + "/circlo-landing.html", { maxRedirects: 0 }); assert.equal(preview.status(), 308);
     assert.equal(new URL(preview.headers().location, origin).pathname, "/");
     assert.match((await page.request.get(origin + "/offline.html")).headers()["x-robots-tag"] ?? "", /noindex/i);
-    assert.equal((await page.request.get(origin + "/not-a-real-circlo-page")).status(), 404);
+    for (const width of [320, 390, 1280]) {
+      await page.setViewportSize({ width, height: 740 });
+      const missing = await page.goto(origin + "/not-a-real-circlo-page"); assert.equal(missing.status(), 404);
+      await page.getByRole("heading", { name: "We couldn’t find that page", exact: true }).waitFor();
+      assert.equal(await page.getByRole("link", { name: "Go to homepage", exact: true }).getAttribute("href"), "/");
+      assert.equal(await page.getByRole("link", { name: "Open my chats", exact: true }).getAttribute("href"), "/app/chats");
+      assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+    }
+    const adminAlias = await page.request.get(origin + "/admin", { maxRedirects: 0 }); assert.equal(adminAlias.status(), 307);
+    assert.equal(new URL(adminAlias.headers().location, origin).pathname, "/app/admin");
     const sitemap = await page.request.get(origin + "/sitemap.xml"); assert.equal(sitemap.status(), 200);
     const locations = [...(await sitemap.text()).matchAll(/<loc>([^<]+)<\/loc>/g)].map(match => match[1]);
     assert.deepEqual(locations, paths.map(path => "https://circlo.chat" + path));

@@ -1,5 +1,7 @@
 "use client";
 
+import { AdminLoadError } from "@/components/admin/admin-load-error";
+
 import { useEffect, useState, useCallback } from "react";
 import {
   Loader2,
@@ -26,22 +28,24 @@ interface ActivityEntry {
 }
 
 export default function AdminActivityPage() {
+  const [error, setError] = useState<string | null>(null);
   const [activities, setActivities] = useState<ActivityEntry[]>([]);
   const [pagination, setPagination] = useState({ page: 1, limit: 50, total: 0, totalPages: 1 });
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("all");
 
   const fetchActivities = useCallback(async (page = 1) => {
-    setLoading(true);
+    setLoading(true); setError(null);
     try {
       const params = new URLSearchParams({ page: String(page), limit: "50" });
       if (filter !== "all") params.set("type", filter);
-      const res = await fetch(`/api/admin/activity?${params}`);
+      const res = await fetch(`/api/admin/activity?${params}`, { cache: "no-store", signal: AbortSignal.timeout(15000) });
       const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Could not load this admin page.");
       setActivities(data.activities ?? []);
       setPagination(data.pagination);
-    } catch {
-      // silently fail
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not load this admin page. Try again.");
     } finally {
       setLoading(false);
     }
@@ -61,6 +65,8 @@ export default function AdminActivityPage() {
       default: return <Clock className="h-3.5 w-3.5 text-[var(--muted)]" />;
     }
   }
+
+  if (error) return <AdminLoadError message={error} retry={() => void fetchActivities()} />;
 
   return (
     <div className="space-y-4">

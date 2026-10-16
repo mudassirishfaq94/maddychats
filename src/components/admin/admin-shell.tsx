@@ -21,6 +21,8 @@ import { LogoMark } from "@/components/brand/logo";
 const NAV_ITEMS = [
   { href: "/app/admin", label: "Overview", icon: BarChart3 },
   { href: "/app/admin/users", label: "Users", icon: Users },
+  { href: "/app/admin/messages", label: "Messages", icon: MessageSquare },
+  { href: "/app/admin/activity", label: "Activity", icon: Activity },
   { href: "/app/admin/reports", label: "Reports", icon: Flag },
   { href: "/app/admin/storage", label: "Storage", icon: HardDrive },
   { href: "/app/admin/security", label: "Security", icon: Lock },
@@ -50,7 +52,8 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
         <div className="flex h-14 items-center gap-2 border-b border-[var(--border)] px-4">
           <Link
             href="/app"
-            className="flex h-8 w-8 items-center justify-center rounded-full text-[var(--muted)] hover:bg-[var(--surface-2)]"
+            aria-label="Back to Circlo"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[var(--muted)] hover:bg-[var(--surface-2)]"
           >
             <ChevronLeft className="h-4 w-4" />
           </Link>
@@ -106,7 +109,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
             type="button"
             onClick={() => setSidebarOpen(true)}
             aria-label="Open admin navigation"
-            className="flex h-8 w-8 items-center justify-center rounded-full text-[var(--muted)] hover:bg-[var(--surface-2)]"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[var(--muted)] hover:bg-[var(--surface-2)]"
           >
             <Menu className="h-4 w-4" />
           </button>

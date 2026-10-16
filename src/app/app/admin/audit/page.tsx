@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useAdminData } from "@/hooks/use-admin-data";
+import { AdminLoadError } from "@/components/admin/admin-load-error";
 import { ScrollText, Loader2 } from "lucide-react";
 
 interface AuditEntry {
@@ -12,16 +13,9 @@ interface AuditEntry {
 }
 
 export default function AdminAuditPage() {
-  const [entries, setEntries] = useState<AuditEntry[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetch("/api/admin/audit-log")
-      .then((r) => r.json())
-      .then(setEntries)
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, []);
+  const { data, error, loading, retry } = useAdminData<AuditEntry[]>("/api/admin/audit-log");
+  const entries = data ?? [];
+  if (error) return <AdminLoadError message={error} retry={retry} />;
 
   function formatAction(action: string) {
     return action

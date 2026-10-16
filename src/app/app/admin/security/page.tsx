@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useAdminData } from "@/hooks/use-admin-data";
+import { AdminLoadError } from "@/components/admin/admin-load-error";
 import {
   ShieldAlert,
   ShieldCheck,
@@ -41,23 +43,14 @@ function formatUserAgent(ua: string | null): string {
 }
 
 export default function AdminSecurityPage() {
-  const [logins, setLogins] = useState<LoginEntry[]>([]);
-  const [retention, setRetention] = useState<RetentionStats | null>(null);
-  const [loading, setLoading] = useState(true);
+  const history = useAdminData<{ logins: LoginEntry[] }>("/api/admin/security/login-history");
+  const storage = useAdminData<RetentionStats>("/api/admin/security/retention");
   const [tab, setTab] = useState<"logins" | "retention">("logins");
-
-  useEffect(() => {
-    Promise.all([
-      fetch("/api/admin/security/login-history").then((r) => r.json()),
-      fetch("/api/admin/security/retention").then((r) => r.json()),
-    ])
-      .then(([loginsData, retentionData]) => {
-        setLogins(loginsData.logins ?? []);
-        setRetention(retentionData);
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, []);
+  const logins = history.data?.logins ?? [];
+  const retention = storage.data;
+  const loading = history.loading || storage.loading;
+  const error = history.error || storage.error;
+  if (error) return <AdminLoadError message={error} retry={() => { history.retry(); storage.retry(); }} />;
 
   const failedLogins = logins.filter((l) => !l.success);
   const successLogins = logins.filter((l) => l.success);

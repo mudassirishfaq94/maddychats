@@ -57,6 +57,11 @@ async function main() {
 
     assert.equal((await api("/api/admin/users", aliceCookie, "PATCH", { userId: target.id, action: "role", role: "admin" })).status, 403);
     assert.equal((await api("/api/admin/stats", noMfaCookie)).status, 403, "Admin reads require MFA enrollment");
+    const setupPage = await api("/app/admin", noMfaCookie);
+    assert.equal(setupPage.status, 200);
+    const setupHtml = await setupPage.text();
+    assert(setupHtml.includes("Secure your admin account") && setupHtml.includes("/app/profile#two-step-verification"));
+    assert(!setupHtml.includes("Admin Dashboard v1.0"), "MFA setup screen never includes privileged admin children");
     assert.equal((await api("/api/e2ee/signal/send", aliceCookie, "POST", {})).status, 503, "Experimental send cannot bypass production policies");
     assert.equal((await api("/api/admin/users", noMfaCookie, "PATCH", { userId: target.id, action: "role", role: "moderator" })).status, 403, "Admin writes require MFA enrollment");
     const factorSecret = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ";
@@ -110,13 +115,13 @@ async function main() {
         const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
         await context.addCookies([{ name: "maddy_session", value: ownerCookie.split("=")[1], url: base, httpOnly: true, sameSite: "Lax" }]);
         const page = await context.newPage();
-        for (const path of ["/app/admin/users", "/app/admin/reports", "/app/admin/messages", "/app/admin/audit"]) {
+        for (const path of ["/app/admin", "/app/admin/users", "/app/admin/reports", "/app/admin/messages", "/app/admin/audit", "/app/admin/activity", "/app/admin/security", "/app/admin/storage"]) {
           const errors: string[] = []; const record = (error: Error) => errors.push(error.message);
           page.on("pageerror", record);
           const response = await page.goto(base + path, { waitUntil: "load" });
           assert.equal(response?.status(), 200);
           await page.getByRole("heading", { level: 1 }).waitFor();
-          if (!path.endsWith("audit")) await page.getByText("Administrative changes require two-factor authentication and a recent sign-in.").waitFor();
+          if (["users", "reports", "messages"].some(segment => path.endsWith("/" + segment))) await page.getByText("Administrative changes require two-factor authentication and a recent sign-in.").waitFor();
           if (path.endsWith("users")) {
             await page.getByText(htmlName, { exact: true }).waitFor();
             assert.equal(await page.locator('img[src="x"]').count(), 0, "Profile markup is rendered as text");
@@ -125,9 +130,21 @@ async function main() {
           assert.deepEqual(errors, [], `Admin browser errors on ${path}`);
           page.off("pageerror", record);
         }
+        for (const [path, endpoint, heading] of [["/app/admin", "/api/admin/stats", "Dashboard Overview"], ["/app/admin/storage", "/api/admin/storage", "Storage Dashboard"], ["/app/admin/audit", "/api/admin/audit-log", "Audit Log"], ["/app/admin/security", "/api/admin/security/login-history", "Security & Retention"]]) {
+          const pattern = "**" + endpoint;
+          const failures: string[] = []; const onError = (error: Error) => failures.push(error.message); page.on("pageerror", onError);
+          await page.route(pattern, route => route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "Temporary admin service interruption." }) }));
+          await page.goto(base + path);
+          await page.getByRole("heading", { name: "Couldn’t load this admin page", exact: true }).waitFor();
+          assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+          await page.unroute(pattern);
+          await page.getByRole("button", { name: "Try again", exact: true }).click();
+          await page.getByRole("heading", { name: heading, exact: true }).waitFor();
+          assert.deepEqual(failures, [], path); page.off("pageerror", onError);
+        }
         await context.close();
       } finally { await browser.close(); }
-      console.log("Four authenticated administrative browser pages passed");
+      console.log("Eight authenticated admin pages and four API failure/retry flows passed");
     }
     await sql.query("insert into rate_limit_buckets(key,window_started_at,count) values($1,now(),240) on conflict(key) do update set window_started_at=now(),count=240", [`api-write:${alice.id}`]);
     const limitedWrite = await api("/api/privacy/settings", aliceCookie, "PUT", { readReceipts: false }, { "x-forwarded-for": "198.51.100.55" });

@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useAdminData } from "@/hooks/use-admin-data";
+import { AdminLoadError } from "@/components/admin/admin-load-error";
 import { HardDrive, Image, FileText, Mic, Loader2 } from "lucide-react";
 
 interface StorageStats {
@@ -19,16 +20,9 @@ function formatBytes(bytes: number): string {
 }
 
 export default function AdminStoragePage() {
-  const [stats, setStats] = useState<StorageStats | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetch("/api/admin/storage")
-      .then((r) => r.json())
-      .then(setStats)
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, []);
+  const { data, error, loading, retry } = useAdminData<StorageStats>("/api/admin/storage");
+  const stats = data;
+  if (error) return <AdminLoadError message={error} retry={retry} />;
 
   if (loading) {
     return <div className="flex justify-center py-20"><Loader2 className="h-6 w-6 animate-spin text-[var(--muted)]" /></div>;

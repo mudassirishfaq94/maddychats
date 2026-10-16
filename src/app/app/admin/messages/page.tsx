@@ -1,5 +1,7 @@
 "use client";
 
+import { AdminLoadError } from "@/components/admin/admin-load-error";
+
 import { useAdminProof } from "@/components/admin-authentication";
 
 import { useEffect, useState, useCallback } from "react";
@@ -36,16 +38,17 @@ export default function AdminMessagesPage() {
   const [busy, setBusy] = useState(false);
 
   const fetchMessages = useCallback(async (page = 1, q = search) => {
-    setLoading(true);
+    setLoading(true); setError(null);
     try {
       const params = new URLSearchParams({ page: String(page), limit: "30" });
       if (q) params.set("q", q);
-      const res = await fetch(`/api/admin/messages?${params}`);
+      const res = await fetch(`/api/admin/messages?${params}`, { cache: "no-store", signal: AbortSignal.timeout(15000) });
       const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Could not load this admin page.");
       setMessages(data.messages ?? []);
       setPagination(data.pagination);
-    } catch {
-      // silently fail
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not load this admin page. Try again.");
     } finally {
       setLoading(false);
     }
@@ -71,6 +74,8 @@ export default function AdminMessagesPage() {
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Message deletion failed."); }
     finally { clearProof(); setBusy(false); }
   }
+
+  if (error) return <AdminLoadError message={error} retry={() => void fetchMessages()} />;
 
   return (
     <div className="space-y-4">

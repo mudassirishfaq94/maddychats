@@ -44,7 +44,7 @@ const nextConfig: NextConfig = {
     root: process.cwd(),
   },
   async redirects() {
-    return [{ source: "/circlo-landing.html", destination: "/", permanent: true }];
+    return [{ source: "/circlo-landing.html", destination: "/", permanent: true }, { source: "/admin/:path*", destination: "/app/admin/:path*", permanent: false }];
   },
   async headers() {
     return [
@@ -60,7 +60,7 @@ const nextConfig: NextConfig = {
         source: "/api/:path*",
         headers: [{ key: "Cache-Control", value: "private, no-store" }, { key: "X-Robots-Tag", value: "noindex, nofollow" }],
       },
-      ...["/app/:path*", "/invite/:path*", "/login", "/signup", "/register", "/forgot-password", "/reset-password", "/verify-email", "/device-migration", "/offline.html"].map(source => ({ source, headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }] })),
+      ...["/app/:path*", "/admin/:path*", "/invite/:path*", "/login", "/signup", "/register", "/forgot-password", "/reset-password", "/verify-email", "/device-migration", "/offline.html"].map(source => ({ source, headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }] })),
       { source: "/stickers/:path*", headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }] },
       { source: "/gifs/:path*", headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }] },
     ];
