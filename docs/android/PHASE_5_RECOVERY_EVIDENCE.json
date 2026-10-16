@@ -1,0 +1,422 @@
+{
+  "backupStartedUtc": "2026-10-16T15:18:56.640745+00:00",
+  "backupCompletedUtc": "2026-10-16T15:20:01.330155+00:00",
+  "restoreCheckedUtc": "2026-10-16T15:22:57.200508+00:00",
+  "plaintextSha256": "73b3c3f6c2657a78bc54c5d428fec223b1d43689247cb0cb21495ab34cf1f1de",
+  "archiveBytes": 717962,
+  "encrypted": "AES-256-GCM; authentication/decrypted checksum verified",
+  "keyProtection": "Current Windows user DPAPI, not portable independent recovery",
+  "archiveToRestoredCountsMatch": true,
+  "tableCount": 50,
+  "foreignKeysChecked": 84,
+  "danglingReferences": 0,
+  "invalidIndexes": 0,
+  "unvalidatedForeignKeys": 0,
+  "extensions": [
+    {
+      "extname": "pg_trgm",
+      "extversion": "1.6"
+    },
+    {
+      "extname": "plpgsql",
+      "extversion": "1.0"
+    }
+  ],
+  "objects": [
+    {
+      "relkind": "S",
+      "count": 2
+    },
+    {
+      "relkind": "i",
+      "count": 161
+    },
+    {
+      "relkind": "r",
+      "count": 50
+    }
+  ],
+  "restoreSeconds": 1.23,
+  "totalLocalRehearsalSeconds": 6.99,
+  "counts": {
+    "drizzle.__drizzle_migrations": 49,
+    "public.admin_audit_log": 99,
+    "public.audio_calls": 0,
+    "public.blocks": 0,
+    "public.channels": 3,
+    "public.communities": 2,
+    "public.community_members": 2,
+    "public.conversation_members": 68,
+    "public.conversations": 90,
+    "public.device_link_requests": 1,
+    "public.device_recovery_email_codes": 2,
+    "public.device_sessions": 39,
+    "public.e2ee_conversation_keys": 444,
+    "public.e2ee_key_history": 477,
+    "public.e2ee_keys": 62,
+    "public.e2ee_signal_devices": 0,
+    "public.e2ee_signal_envelopes": 0,
+    "public.e2ee_signal_prekeys": 0,
+    "public.email_verification_tokens": 2,
+    "public.fcm_tokens": 0,
+    "public.group_invite_links": 1,
+    "public.login_history": 66,
+    "public.message_attachments": 14,
+    "public.message_deletions": 0,
+    "public.message_mentions": 0,
+    "public.message_reactions": 0,
+    "public.message_reads": 77,
+    "public.message_stars": 1,
+    "public.messages": 277,
+    "public.mfa_challenges": 0,
+    "public.notification_preferences": 49,
+    "public.notifications": 524,
+    "public.oauth_accounts": 10,
+    "public.password_reset_tokens": 0,
+    "public.pinned_messages": 0,
+    "public.playing_with_neon": 30,
+    "public.privacy_settings": 2,
+    "public.push_subscriptions": 10,
+    "public.rate_limit_buckets": 331,
+    "public.realtime_events": 0,
+    "public.reports": 0,
+    "public.scheduled_messages": 0,
+    "public.status_reactions": 0,
+    "public.status_recipients": 0,
+    "public.status_views": 6,
+    "public.statuses": 4,
+    "public.stored_uploads": 32,
+    "public.user_2fa": 0,
+    "public.user_contacts": 3,
+    "public.users": 49
+  },
+  "migrationComparison": {
+    "expectedCount": 51,
+    "actualCount": 49,
+    "missing": [
+      "0042_private_application_tables",
+      "0049_fcm_session_binding"
+    ],
+    "mismatched": [],
+    "unexpected": [],
+    "duplicateTimes": [],
+    "lineEndingOnly": [
+      "0000_oval_wolverine",
+      "0001_group_chats",
+      "0002_message_requests",
+      "0003_temporary_status",
+      "0004_status_interactions",
+      "0005_notification_preferences",
+      "0006_chat_backgrounds",
+      "0008_google_oauth",
+      "0009_password_reset",
+      "0010_vercel_realtime",
+      "0011_postgres_api_hardening",
+      "0012_web_push_subscriptions",
+      "0013_auth_identity_uniqueness",
+      "0008_search_index",
+      "0009_message_forwarded",
+      "0011_group_invite_links",
+      "0012_scheduled_messages",
+      "0013_admin_roles_suspension",
+      "0014_group_settings",
+      "0015_communities_e2ee_transcripts",
+      "0016_e2ee_messages",
+      "0023_message_performance",
+      "0024_distributed_rate_limits",
+      "0025_email_verification",
+      "0026_signal_device_prekeys",
+      "0027_signal_prekey_kind_unique",
+      "0028_signal_device_envelopes",
+      "0029_signal_kyber_prekeys",
+      "0030_signal_envelope_sender",
+      "0031_signal_protocol_device_id",
+      "0035_upload_retention",
+      "0036_device_sessions",
+      "0037_realtime_and_admin_guards",
+      "0038_realtime_expiry_index",
+      "0039_signal_prekey_uint32",
+      "0040_device_link_requests",
+      "0041_device_identity",
+      "0042_user_device_identity",
+      "0046_contacts_audio_calls"
+    ],
+    "historicalEquivalent": [
+      "0033_account_security"
+    ],
+    "note": "LF-equivalent historical hashes are distinguished from actual content mismatches. No normalization or ledger mutation is performed."
+  },
+  "databaseProvider": "Neon",
+  "databaseVersion": [
+    {
+      "server_version": "18.6 (653b019)"
+    }
+  ],
+  "databaseTargetFingerprint": "0c0f36b8a9b64def",
+  "inspectionUtc": "2026-10-16T15:15:57.738Z",
+  "activity": [
+    {
+      "relname": "fcm_tokens",
+      "n_live_tup": "0",
+      "n_dead_tup": "2",
+      "n_tup_ins": "1",
+      "n_tup_upd": "1",
+      "n_tup_del": "1",
+      "total_bytes": "65536"
+    },
+    {
+      "relname": "device_sessions",
+      "n_live_tup": "39",
+      "n_dead_tup": "50",
+      "n_tup_ins": "310",
+      "n_tup_upd": "631",
+      "n_tup_del": "271",
+      "total_bytes": "114688"
+    }
+  ],
+  "locks": [],
+  "transactions": [
+    {
+      "active_transactions": 0,
+      "oldest_seconds": null
+    }
+  ],
+  "isolatedClusterStopped": true,
+  "scopeLimitations": [
+    "public/drizzle logical snapshot; not cluster roles/ACLs or object storage",
+    "source and restored live counts not compared across separate snapshots",
+    "provider PITR window not verified",
+    "local restore time is not production recovery time"
+  ],
+  "privateTableState": [
+    {
+      "relname": "admin_audit_log",
+      "relrowsecurity": false,
+      "exposed_grants": 0
+    },
+    {
+      "relname": "blocks",
+      "relrowsecurity": true,
+      "exposed_grants": 0
+    },
+    {
+      "relname": "channels",
+      "relrowsecurity": false,
+      "exposed_grants": 0
+    },
+    {
+      "relname": "communities",
+      "relrowsecurity": false,
+      "exposed_grants": 0
+    },
+    {
+      "relname": "community_members",
+      "relrowsecurity": false,
+      "exposed_grants": 0
+    },
+    {
+      "relname": "conversation_members",
+      "relrowsecurity": true,
+      "exposed_grants": 0
+    },
+    {
+      "relname": "conversations",
+      "relrowsecurity": true,
+      "exposed_grants": 0
+    },
+    {
+      "relname": "device_link_requests",
+      "relrowsecurity": false,
+      "exposed_grants": 0
+    },
+    {
+      "relname": "device_sessions",
+      "relrowsecurity": true,
+      "exposed_grants": 0
+    },
+    {
+      "relname": "email_verification_tokens",
+      "relrowsecurity": false,
+      "exposed_grants": 0
+    },
+    {
+      "relname": "fcm_tokens",
+      "relrowsecurity": true,
+      "exposed_grants": 0
+    },
+    {
+      "relname": "group_invite_links",
+      "relrowsecurity": false,
+      "exposed_grants": 0
+    },
+    {
+      "relname": "login_history",
+      "relrowsecurity": false,
+      "exposed_grants": 0
+    },
+    {
+      "relname": "message_attachments",
+      "relrowsecurity": true,
+      "exposed_grants": 0
+    },
+    {
+      "relname": "message_deletions",
+      "relrowsecurity": true,
+      "exposed_grants": 0
+    },
+    {
+      "relname": "message_mentions",
+      "relrowsecurity": true,
+      "exposed_grants": 0
+    },
+    {
+      "relname": "message_reactions",
+      "relrowsecurity": true,
+      "exposed_grants": 0
+    },
+    {
+      "relname": "message_reads",
+      "relrowsecurity": true,
+      "exposed_grants": 0
+    },
+    {
+      "relname": "message_stars",
+      "relrowsecurity": true,
+      "exposed_grants": 0
+    },
+    {
+      "relname": "messages",
+      "relrowsecurity": true,
+      "exposed_grants": 0
+    },
+    {
+      "relname": "mfa_challenges",
+      "relrowsecurity": true,
+      "exposed_grants": 0
+    },
+    {
+      "relname": "notification_preferences",
+      "relrowsecurity": true,
+      "exposed_grants": 0
+    },
+    {
+      "relname": "notifications",
+      "relrowsecurity": true,
+      "exposed_grants": 0
+    },
+    {
+      "relname": "oauth_accounts",
+      "relrowsecurity": true,
+      "exposed_grants": 0
+    },
+    {
+      "relname": "password_reset_tokens",
+      "relrowsecurity": true,
+      "exposed_grants": 0
+    },
+    {
+      "relname": "pinned_messages",
+      "relrowsecurity": true,
+      "exposed_grants": 0
+    },
+    {
+      "relname": "privacy_settings",
+      "relrowsecurity": false,
+      "exposed_grants": 0
+    },
+    {
+      "relname": "push_subscriptions",
+      "relrowsecurity": true,
+      "exposed_grants": 0
+    },
+    {
+      "relname": "rate_limit_buckets",
+      "relrowsecurity": false,
+      "exposed_grants": 0
+    },
+    {
+      "relname": "realtime_events",
+      "relrowsecurity": true,
+      "exposed_grants": 0
+    },
+    {
+      "relname": "reports",
+      "relrowsecurity": false,
+      "exposed_grants": 0
+    },
+    {
+      "relname": "scheduled_messages",
+      "relrowsecurity": false,
+      "exposed_grants": 0
+    },
+    {
+      "relname": "status_reactions",
+      "relrowsecurity": true,
+      "exposed_grants": 0
+    },
+    {
+      "relname": "status_recipients",
+      "relrowsecurity": true,
+      "exposed_grants": 0
+    },
+    {
+      "relname": "status_views",
+      "relrowsecurity": true,
+      "exposed_grants": 0
+    },
+    {
+      "relname": "statuses",
+      "relrowsecurity": true,
+      "exposed_grants": 0
+    },
+    {
+      "relname": "stored_uploads",
+      "relrowsecurity": true,
+      "exposed_grants": 0
+    },
+    {
+      "relname": "users",
+      "relrowsecurity": true,
+      "exposed_grants": 0
+    }
+  ],
+  "privateTableInspectionUtc": "2026-10-16T15:28:11.723Z",
+  "configuration": {
+    "time": "2026-10-16T15:28:08.766949+00:00",
+    "renderEnvAccess": "PASS",
+    "paginationReachedLimit": false,
+    "presence": {
+      "DATABASE_URL": true,
+      "REALTIME_DATABASE_URL": true,
+      "MIGRATION_DATABASE_URL": true,
+      "JWT_SECRET": true,
+      "CLIENT_URL": true,
+      "GOOGLE_CLIENT_ID": true,
+      "GOOGLE_CLIENT_SECRET": true,
+      "GOOGLE_CALLBACK_URL": true,
+      "FIREBASE_PROJECT_ID": false,
+      "FIREBASE_CLIENT_EMAIL": false,
+      "FIREBASE_PRIVATE_KEY": false,
+      "SUPABASE_URL": true,
+      "SUPABASE_SERVICE_ROLE_KEY": true,
+      "SUPABASE_STORAGE_BUCKET": true,
+      "PUBLIC_SUPPORT_EMAIL": false,
+      "VAPID_PUBLIC_KEY": true,
+      "NEXT_PUBLIC_VAPID_PUBLIC_KEY": true,
+      "VAPID_PRIVATE_KEY": true,
+      "VAPID_SUBJECT": true,
+      "RESEND_API_KEY": true,
+      "EMAIL_FROM": true,
+      "EMAIL_FROM_NAME": true,
+      "EMAIL_FROM_ADDRESS": true,
+      "CRON_SECRET": true,
+      "CSP_ENFORCE": true
+    },
+    "matches": {
+      "canonicalClient": true,
+      "canonicalCallback": true,
+      "firebaseProject": false,
+      "supportEmail": false
+    }
+  }
+}
