@@ -18,6 +18,14 @@
 *.p12
 *.pfx
 *.jks
+*.keystore
+*.apk
+*.aab
+*.apks
+**/key.properties
+**/local.properties
+**/twa-manifest.json
+**/bubblewrap-config.json
 secrets/
 
 # database
@@ -89,3 +97,10 @@ public/downloads/
 /android/app/src/main/assets/capacitor.config.json
 /out/
 /ios/
+
+# Isolated TWA generation, release artifacts and local signing configuration
+/android-twa/project/
+/android-twa/release/
+/android-twa/signing/
+/android-twa/node_modules/
+/android-twa/.local/

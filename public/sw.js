@@ -1,4 +1,4 @@
-const CACHE_NAME = "circlo-offline-notifications-v5";
+const CACHE_NAME = "circlo-offline-notifications-v6";
 const OFFLINE_URL = "/offline.html";
 
 self.addEventListener("install", (event) => {

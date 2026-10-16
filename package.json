@@ -22,6 +22,7 @@
     "test:item2": "tsx scripts/test-item2-deployment.ts",
     "audit:dependencies": "tsx scripts/audit-dependencies.ts",
     "test:unit": "tsx --test tests/*.test.ts",
+    "test:pwa-offline": "tsx scripts/test-pwa-offline.ts",
     "test:item3": "tsx scripts/test-item3-authorization.ts",
     "test": "npm run test:unit && npm run test:item1 && npm run test:item2 && npm run test:item3 && npm run test:items4-6 && npm run test:remaining && npm run test:restored",
     "test:remaining": "tsx scripts/test-remaining-hardening.ts",
