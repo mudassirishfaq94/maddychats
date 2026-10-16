@@ -1,4 +1,4 @@
-import { notFound, redirect } from "next/navigation";
+import { redirect } from "next/navigation";
 import Link from "next/link";
 import { requireAdmin } from "@/server/admin";
 import AdminShell from "@/components/admin/admin-shell";
@@ -8,7 +8,13 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     await requireAdmin();
   } catch (error) {
     if (error instanceof Error && error.message === "UNAUTHENTICATED") redirect("/login?next=%2Fapp%2Fadmin");
-    if (error instanceof Error && error.message === "FORBIDDEN") notFound();
+    if (error instanceof Error && error.message === "FORBIDDEN") {
+      return <main className="mx-auto flex min-h-dvh max-w-xl flex-col justify-center px-5 py-12">
+        <h1 className="font-display text-3xl font-semibold">Administrator access required</h1>
+        <p className="mt-4 text-sm leading-7 text-[var(--muted)]">This account does not have an administrator role. Sign in with your administrator account, or ask an existing administrator to assign access.</p>
+        <div className="mt-6 flex flex-wrap gap-3"><Link href="/login?reauth=1&next=%2Fapp%2Fadmin" className="btn btn-primary">Use another account</Link><Link href="/app/chats" className="btn btn-secondary">Back to chats</Link></div>
+      </main>;
+    }
     if (error instanceof Error && error.message === "ADMIN_MFA_REQUIRED") {
       return <main className="mx-auto flex min-h-dvh max-w-xl flex-col justify-center px-5 py-12">
         <h1 className="font-display text-3xl font-semibold">Secure your admin account</h1>

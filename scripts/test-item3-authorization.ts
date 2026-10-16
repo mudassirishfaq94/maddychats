@@ -221,6 +221,7 @@ async function main() {
     assert.equal((await api(historyPath, aliceCookie, "POST", { text: "ciphertext", encrypted: true }, { origin: "https://evil.example" })).status, 403);
     const adminPage = await api("/app/admin", bobCookie);
     const adminHtml = await adminPage.text();
+    assert(adminHtml.includes("Administrator access required"), "Signed-in regular users receive clear permission guidance");
     assert(!adminHtml.includes("Admin Dashboard v1.0"), "Regular users never receive the admin shell");
     assert.equal((await api("/api/admin/stats", bobCookie)).status, 403);
     await sql.query("update users set role='moderator' where id=$1", [bob.id]);
