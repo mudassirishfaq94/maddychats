@@ -19,8 +19,8 @@ const config: CapacitorConfig = {
   server: {
     // This is intentionally an in-app Capacitor WebView, not a browser/TWA.
     // Keep navigation constrained to our first-party origin.
-    url: "https://maddychats.onrender.com",
-    allowNavigation: ["maddychats.onrender.com"],
+    url: "https://circlo.chat",
+    allowNavigation: ["circlo.chat"],
     // Cleartext for local dev (emulator / device on same network):
     // url: "http://10.0.2.2:3000",
     // allowNavigation: ["*"],

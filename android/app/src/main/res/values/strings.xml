@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">ZipTalk</string>
-    <string name="title_activity_main">ZipTalk</string>
+    <string name="app_name">Circlo</string>
+    <string name="title_activity_main">Circlo</string>
     <string name="package_name">app.ziptalks.android</string>
     <string name="custom_url_scheme">ziptalks</string>
 </resources>

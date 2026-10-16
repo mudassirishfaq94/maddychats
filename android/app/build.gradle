@@ -1,6 +1,10 @@
 apply plugin: 'com.android.application'
 apply plugin: 'kotlin-android'
 
+// Reuse the existing package/storage. This build remains on Circlo's final origin.
+def appOrigin = System.getenv('CLIENT_URL') ?: 'https://circlo.chat'
+if (appOrigin != 'https://circlo.chat') throw new GradleException('Android builds must use the canonical https://circlo.chat origin.')
+
 android {
     namespace = "app.ziptalks.android"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -10,7 +14,8 @@ android {
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 12
         versionName "0.9.3"
-        buildConfigField "String", "API_BASE_URL", '"https://maddychats.onrender.com"'
+        manifestPlaceholders = [appLinkHost: 'circlo.chat']
+        buildConfigField "String", "API_BASE_URL", '"' + appOrigin + '"'
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

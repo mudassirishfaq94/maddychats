@@ -30,10 +30,12 @@ import androidx.activity.OnBackPressedCallback
 import androidx.credentials.CredentialManager
 import androidx.credentials.GetCredentialRequest
 import androidx.credentials.CustomCredential
+import androidx.credentials.exceptions.NoCredentialException
 import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
@@ -106,7 +108,7 @@ private class ZipTalkApi(context: Context) {
     fun register(name: String, username: String, email: String, password: String) = request("/api/auth/register", "POST", JSONObject()
         .put("displayName", name).put("username", username).put("email", email).put("password", password))
     fun googleClientId(): String = request("/api/auth/google/native").getString("clientId")
-    fun loginWithGoogle(idToken: String) = request("/api/auth/google/native", "POST", JSONObject().put("idToken", idToken))
+    fun loginWithGoogle(idToken: String, policiesAccepted: Boolean) = request("/api/auth/google/native", "POST", JSONObject().put("idToken", idToken).put("acceptTerms", policiesAccepted).put("acceptPrivacy", policiesAccepted))
     fun exchangeGoogleMobileTicket(ticket: String, verifier: String) = request("/api/auth/google/native", "POST", JSONObject().put("ticket", ticket).put("verifier", verifier))
     fun cookiesForWeb(): List<String> = cookies.values.toList()
     fun currentUserId(): String? = runCatching { request("/api/auth/me").getJSONObject("user").getString("id") }.getOrNull()
@@ -191,7 +193,7 @@ class MainActivity : ComponentActivity() {
     ) { granted ->
         val request = pendingWebPermission ?: return@registerForActivityResult
         pendingWebPermission = null
-        if (granted) request.grant(arrayOf(PermissionRequest.RESOURCE_AUDIO_CAPTURE))
+        if (granted && WebOriginPolicy.isAllowed(request.origin.toString(), BuildConfig.API_BASE_URL) && WebOriginPolicy.isAllowed(webView?.url.orEmpty(), BuildConfig.API_BASE_URL)) request.grant(arrayOf(PermissionRequest.RESOURCE_AUDIO_CAPTURE))
         else request.deny()
     }
 
@@ -290,12 +292,15 @@ class MainActivity : ComponentActivity() {
     override fun onDestroy() { webView?.destroy(); webView = null; super.onDestroy() }
 
     fun hostedWebChromeClient() = object : WebChromeClient() {
+        override fun onPermissionRequestCanceled(request: PermissionRequest) {
+            runOnUiThread { if (pendingWebPermission === request) pendingWebPermission = null }
+        }
         override fun onPermissionRequest(request: PermissionRequest) {
             // getUserMedia() needs both Android's runtime approval and a
             // WebView resource grant. Approve audio only, never camera or
             // unrelated browser permissions.
             runOnUiThread {
-                if (!request.resources.contains(PermissionRequest.RESOURCE_AUDIO_CAPTURE)) {
+                if (!WebOriginPolicy.isAllowed(request.origin.toString(), BuildConfig.API_BASE_URL) || !WebOriginPolicy.isAllowed(webView?.url.orEmpty(), BuildConfig.API_BASE_URL) || !request.resources.contains(PermissionRequest.RESOURCE_AUDIO_CAPTURE)) {
                     request.deny()
                     return@runOnUiThread
                 }
@@ -344,6 +349,8 @@ class MainActivity : ComponentActivity() {
         setBackgroundColor(AndroidColor.WHITE)
         settings.javaScriptEnabled = true
         settings.domStorageEnabled = true
+        settings.allowFileAccess = false
+        settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
         @Suppress("DEPRECATION")
         settings.databaseEnabled = true
         settings.cacheMode = WebSettings.LOAD_NO_CACHE
@@ -355,31 +362,40 @@ class MainActivity : ComponentActivity() {
         clearCache(true)
         val cookieManager = CookieManager.getInstance()
         cookieManager.setAcceptCookie(true)
-        cookieManager.setAcceptThirdPartyCookies(this, true)
+        cookieManager.setAcceptThirdPartyCookies(this, false)
         // Carry sessions created by the earlier native client into the WebView.
         api.cookiesForWeb().forEach { cookieManager.setCookie(BuildConfig.API_BASE_URL, it) }
         cookieManager.flush()
         webChromeClient = hostedWebChromeClient()
-        webViewClient = object : WebViewClient() {
+        webViewClient = hostedWebClient()
+        loadUrl(notificationDestination(intent) ?: "${BuildConfig.API_BASE_URL}/app")
+    }
+
+    fun hostedWebClient() = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView, url: String): Boolean {
-                if (url.startsWith("${BuildConfig.API_BASE_URL}/api/auth/google")) {
+                if (WebOriginPolicy.isAllowed(url, BuildConfig.API_BASE_URL) && Uri.parse(url).path == "/api/auth/google") {
+                    val entry = Uri.parse(url)
+                    val accepted = entry.getQueryParameter("terms") == "1" && entry.getQueryParameter("privacy") == "1" && entry.getQueryParameter("mode") != "link"
+                    val next = entry.getQueryParameter("next")?.takeIf { it.startsWith("/") && !it.startsWith("//") && !it.contains("\\") && !it.contains("\r") && !it.contains("\n") } ?: "/app"
                     val activity = this@MainActivity
                     CoroutineScope(Dispatchers.Main).launch {
-                        runCatching { nativeGoogleSignIn(activity, api) }
-                            .onSuccess {
+                        runCatching { nativeGoogleSignIn(activity, api, accepted) }
+                            .onSuccess { result ->
+                                val cookieManager = CookieManager.getInstance()
                                 api.cookiesForWeb().forEach { cookieManager.setCookie(BuildConfig.API_BASE_URL, it) }
                                 cookieManager.flush()
-                                view.loadUrl(notificationDestination(intent) ?: "${BuildConfig.API_BASE_URL}/app")
+                                view.loadUrl(if (result.optBoolean("mfaRequired")) "${BuildConfig.API_BASE_URL}/login?mfa=1&next=${Uri.encode(next)}" else notificationDestination(intent) ?: "${BuildConfig.API_BASE_URL}$next")
                             }
                             .onFailure { view.loadUrl("${BuildConfig.API_BASE_URL}/login?error=google_native_failed") }
                     }
                     return true
                 }
-                return false
+                if (WebOriginPolicy.isAllowed(url, BuildConfig.API_BASE_URL)) return false
+                val external = Uri.parse(url)
+                if (external.scheme in listOf("https", "mailto", "tel")) runCatching { startActivity(Intent(Intent.ACTION_VIEW, external)) }
+                return true
             }
         }
-        loadUrl(notificationDestination(intent) ?: "${BuildConfig.API_BASE_URL}/app")
-    }
 }
 
 /**
@@ -422,6 +438,8 @@ class MainActivity : ComponentActivity() {
             WebView(context).apply {
                 settings.javaScriptEnabled = true
                 settings.domStorageEnabled = true
+                settings.allowFileAccess = false
+                settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
                 settings.databaseEnabled = true
                 settings.cacheMode = WebSettings.LOAD_NO_CACHE
                 settings.mediaPlaybackRequiresUserGesture = false
@@ -432,7 +450,7 @@ class MainActivity : ComponentActivity() {
                 // Clearing only HTTP resources guarantees that an APK update
                 // cannot keep rendering stale Next.js scripts.
                 clearCache(true)
-                CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
+                CookieManager.getInstance().setAcceptThirdPartyCookies(this, false)
                 // Older native builds saved the login cookie in OkHttp. Move it
                 // into WebView before the first server-rendered page request so
                 // the hosted UI receives the same signed-in session and data.
@@ -440,28 +458,7 @@ class MainActivity : ComponentActivity() {
                 api.cookiesForWeb().forEach { cookieManager.setCookie(BuildConfig.API_BASE_URL, it) }
                 cookieManager.flush()
                 webChromeClient = (context as? MainActivity)?.hostedWebChromeClient() ?: WebChromeClient()
-                webViewClient = object : WebViewClient() {
-                    override fun shouldOverrideUrlLoading(view: WebView, url: String): Boolean {
-                        // Google does not permit OAuth inside embedded browsers.
-                        // Use Android Credential Manager and return its session to
-                        // this app-owned web window instead.
-                        if (url.startsWith("${BuildConfig.API_BASE_URL}/api/auth/google")) {
-                            val activity = context as? Activity ?: return false
-                            CoroutineScope(Dispatchers.Main).launch {
-                                runCatching { nativeGoogleSignIn(activity, api) }
-                                    .onSuccess {
-                                        val manager = CookieManager.getInstance()
-                                        api.cookiesForWeb().forEach { manager.setCookie(BuildConfig.API_BASE_URL, it) }
-                                        manager.flush()
-                                        view.loadUrl(BuildConfig.API_BASE_URL)
-                                    }
-                                    .onFailure { view.loadUrl("${BuildConfig.API_BASE_URL}/login?error=google_native_failed") }
-                            }
-                            return true
-                        }
-                        return false
-                    }
-                }
+                webViewClient = (context as? MainActivity)?.hostedWebClient() ?: WebViewClient()
                 loadUrl(startUrl!!)
                 onReady(this)
             }
@@ -469,19 +466,24 @@ class MainActivity : ComponentActivity() {
     )
 }
 
-private suspend fun nativeGoogleSignIn(activity: Activity, api: ZipTalkApi) {
+private suspend fun nativeGoogleSignIn(activity: Activity, api: ZipTalkApi, policiesAccepted: Boolean = false): JSONObject {
+    if (!policiesAccepted) throw IOException("Agree to both policies on the sign-in page. Link Google accounts in a browser.")
     val clientId = withContext(Dispatchers.IO) { api.googleClientId() }
     val googleOption = GetSignInWithGoogleOption.Builder(clientId).build()
-    val result = CredentialManager.create(activity).getCredential(
-        activity,
-        GetCredentialRequest.Builder().addCredentialOption(googleOption).build(),
-    )
+    val result = try {
+        CredentialManager.create(activity).getCredential(
+            activity,
+            GetCredentialRequest.Builder().addCredentialOption(googleOption).build(),
+        )
+    } catch (_: NoCredentialException) {
+        throw IOException("No Google account is available. Add an account on this phone or use your Circlo password.")
+    }
     val credential = result.credential
     if (credential !is CustomCredential || credential.type != GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
         throw IOException("Google sign-in did not return an ID token.")
     }
     val token = GoogleIdTokenCredential.createFrom(credential.data).idToken
-    withContext(Dispatchers.IO) { api.loginWithGoogle(token) }
+    return withContext(Dispatchers.IO) { api.loginWithGoogle(token, policiesAccepted) }
 }
 
 private fun authErrorMessage(error: Throwable): String {
@@ -505,7 +507,7 @@ private fun authErrorMessage(error: Throwable): String {
     MaterialTheme(colorScheme = colors) {
         if (restoring) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
         else if (!signedIn) {
-            val activity = LocalContext.current as? Activity
+            val activity = LocalActivity.current
             LoginScreen(error,
                 signIn = { email, password -> scope.launch { runCatching { withContext(Dispatchers.IO) { api.login(email, password) } }.onSuccess { signedIn = true }.onFailure { error = authErrorMessage(it) } } },
                 signUp = { name, username, email, password -> scope.launch { runCatching { withContext(Dispatchers.IO) { api.register(name, username, email, password) } }.onSuccess { signedIn = true }.onFailure { error = authErrorMessage(it) } } },

@@ -5,37 +5,29 @@
     <!-- Network (required for realtime chat, E2EE, media upload) -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
 
     <!-- Camera (photo/video attachments) -->
-    <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
 
     <!-- Microphone (voice messages, voice transcription) -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
-    <!-- Storage (file attachments, media download) -->
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
-    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
-    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
-    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+    <!-- Attachments use ACTION_OPEN_DOCUMENT and its user-selected URI grants. -->
 
     <!-- Push notifications -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
-    <!-- Biometric / secure lock screen (for future 2FA unlock) -->
-    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
 
     <!-- ===== Application ===== -->
     <!-- Do not let platform backups copy potentially authenticated app or
          WebView state to a different device/account. -->
     <application
         android:allowBackup="false"
+        android:fullBackupContent="@xml/backup_rules"
+        android:dataExtractionRules="@xml/data_extraction_rules"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
@@ -70,8 +62,7 @@
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="https" android:host="maddychats.onrender.com" />
-                <data android:scheme="https" android:host="circlo.chat" />
+                <data android:scheme="https" android:host="${appLinkHost}" />
             </intent-filter>
 
         </activity>
