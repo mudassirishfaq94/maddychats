@@ -114,6 +114,8 @@ jobs:
         run: npm test
       - name: Offline PWA fallback under enforced CSP
         run: npm run test:pwa-offline
+      - name: TWA configuration boundaries without Android tooling or credentials
+        run: node --test android-twa/tests/*.test.mjs
       - name: Session, password-reset and mobile retry regressions
         env:
           LOAD_TEST_ADMIN_URL: postgresql://circlo_ci:disposable-ci-database-only@127.0.0.1:5432/postgres

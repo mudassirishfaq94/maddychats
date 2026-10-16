@@ -7,6 +7,7 @@ node_modules
 out
 .freebuff
 android
+android-twa
 ios
 server
 signal-bridge
@@ -24,6 +25,7 @@ public/downloads
 **/*.p12
 **/*.pfx
 **/*.jks
+**/*.keystore
 secrets
 backups
 .idea
