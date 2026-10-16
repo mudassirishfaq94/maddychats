@@ -358,6 +358,13 @@
       "when": 1792281600007,
       "tag": "0049_fcm_session_binding",
       "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1792281600008,
+      "tag": "0050_restore_private_table_rls",
+      "breakpoints": true
     }
   ]
 }
