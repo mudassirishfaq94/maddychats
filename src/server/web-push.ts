@@ -9,7 +9,7 @@ import { pushConfiguration } from "./push-configuration";
 import { isSupportedPushEndpoint } from "@/lib/push-endpoint";
 
 let configured = false;
-let firebaseAdmin: any = null;
+let firebaseMessaging: import("firebase-admin/messaging").Messaging | null = null;
 
 function configureWebPush(): boolean {
   if (configured) return true;
@@ -25,33 +25,19 @@ function configureWebPush(): boolean {
  * Lazily initialize Firebase Admin for FCM delivery.
  * Returns null if the server-only Firebase project/email/private-key settings are missing.
  */
-async function getFirebaseAdmin() {
-  if (firebaseAdmin) return firebaseAdmin;
+async function getFirebaseMessaging() {
+  if (firebaseMessaging) return firebaseMessaging;
   try {
-
-    const admin: any = await import("firebase-admin");
-
-    if (!admin.apps.length) {
-      const projectId = process.env.FIREBASE_PROJECT_ID;
-      const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-      const privateKey = process.env.FIREBASE_PRIVATE_KEY;
-
-      if (!projectId || !clientEmail || !privateKey) {
-        console.warn("[push] Firebase Admin not configured — FCM delivery disabled.");
-        return null;
-      }
-
-      admin.initializeApp({
-        credential: admin.credential.cert({
-          projectId,
-          clientEmail,
-          privateKey: privateKey.replace(/\\n/g, "\n"),
-        }),
-      });
+    const projectId = process.env.FIREBASE_PROJECT_ID;
+    const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+    const privateKey = process.env.FIREBASE_PRIVATE_KEY;
+    if (!projectId || !clientEmail || !privateKey) {
+      console.warn("[push] Firebase Admin not configured — FCM delivery disabled.");
+      return null;
     }
-
-    firebaseAdmin = admin;
-    return firebaseAdmin;
+    const { nativeFirebaseMessaging } = await import("./native-firebase");
+    firebaseMessaging = nativeFirebaseMessaging({ projectId, clientEmail, privateKey });
+    return firebaseMessaging;
   } catch (error) {
     console.error("[push] Firebase Admin init failed:", safeError(error));
     return null;
@@ -66,10 +52,8 @@ async function sendFCM(
   tokens: { token: string; platform: string }[],
   payload: ReturnType<typeof nativePushPayload>,
 ): Promise<void> {
-  const admin = await getFirebaseAdmin();
-  if (!admin) return;
-
-  const messaging = admin.messaging?.() ?? (admin as any).messaging;
+  const messaging = await getFirebaseMessaging();
+  if (!messaging) return;
 
   await deliverNativePush(tokens, payload,
     message => messaging.send(message),
