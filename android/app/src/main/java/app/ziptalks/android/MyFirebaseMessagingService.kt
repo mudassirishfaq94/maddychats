@@ -4,6 +4,9 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import com.google.firebase.messaging.FirebaseMessagingService
@@ -18,8 +21,11 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
     override fun onMessageReceived(remoteMessage: RemoteMessage) {
         super.onMessageReceived(remoteMessage)
 
-        val title = remoteMessage.notification?.title ?: "New message"
-        val body = remoteMessage.notification?.body ?: ""
+        // Drop other accounts, expired events and duplicates; never display provider plaintext.
+        if (!NativePushState.accept(this, remoteMessage.data["recipientId"], remoteMessage.data["eventId"], remoteMessage.data["expiresAt"])) return
+        if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return
+        val title = "Circlo"
+        val body = "New activity. Open Circlo to view it."
         val url = remoteMessage.data["url"]
         val tag = remoteMessage.data["tag"]
 
@@ -28,10 +34,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             url?.let { putExtra("notification_url", it); data = android.net.Uri.parse(it).buildUpon().clearQuery().build() }
         }
 
-        var pendingIntentFlags = PendingIntent.FLAG_UPDATE_CURRENT
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            pendingIntentFlags = pendingIntentFlags or PendingIntent.FLAG_IMMUTABLE
-        }
+        val pendingIntentFlags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
 
         val pendingIntent = PendingIntent.getActivity(
             this, tag?.hashCode() ?: 0, intent, pendingIntentFlags
@@ -42,6 +45,9 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             .setContentTitle(title)
             .setContentText(body)
             .setAutoCancel(true)
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .setOnlyAlertOnce(true)
+            .setSilent(remoteMessage.data["silent"] == "true")
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setContentIntent(pendingIntent)
             .setVibrate(longArrayOf(100, 50, 100))
@@ -56,6 +62,8 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
 
     override fun onNewToken(token: String) {
         super.onNewToken(token)
-        // Token refresh will be handled by Capacitor push registration on next app open
+        // Firebase invokes this callback off the UI thread. Bound work to eight
+        // seconds; failed/expired-session registration is retried on resume.
+        NativeTokenSync.refresh(this, token)
     }
 }

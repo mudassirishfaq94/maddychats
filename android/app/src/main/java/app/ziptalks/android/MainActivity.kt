@@ -188,6 +188,19 @@ class MainActivity : ComponentActivity() {
         }
         callback.onReceiveValue(uris)
     }
+    private var notificationPermissionResult: (() -> Unit)? = null
+    private val notificationPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) {
+        notificationPermissionResult?.invoke(); notificationPermissionResult = null
+    }
+    private fun requestNotifications(done: () -> Unit) {
+        if (Build.VERSION.SDK_INT < 33 || ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) { done(); return }
+        if (notificationPermissionResult != null) { done(); return }
+        notificationPermissionResult = done
+        notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+    }
+    override fun onResume() { super.onResume(); NativePushState.foreground = true }
+    override fun onPause() { NativePushState.foreground = false; super.onPause() }
+
     private val microphonePermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { granted ->
@@ -262,8 +275,9 @@ class MainActivity : ComponentActivity() {
         } ?: return null
         val uuid = Regex("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
         if (!uuid.matches(id)) return null
+        val call = uri.getQueryParameter("call")?.takeIf { uuid.matches(it) }
         val message = uri.getQueryParameter("message")?.takeIf { uuid.matches(it) }
-        return "${BuildConfig.API_BASE_URL}/app/chats/$id?" + (message?.let { "message=$it" } ?: "latest=1")
+        return "${BuildConfig.API_BASE_URL}/app/chats/$id?" + (call?.let { "call=$it" } ?: message?.let { "message=$it" } ?: "latest=1")
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -282,7 +296,7 @@ class MainActivity : ComponentActivity() {
                 description = "New message notifications"
                 enableVibration(true)
                 vibrationPattern = longArrayOf(100, 50, 100)
-                lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
+                lockscreenVisibility = android.app.Notification.VISIBILITY_PRIVATE
             }
             val notificationManager = getSystemService(NotificationManager::class.java)
             notificationManager?.createNotificationChannel(channel)
@@ -366,6 +380,7 @@ class MainActivity : ComponentActivity() {
         // Carry sessions created by the earlier native client into the WebView.
         api.cookiesForWeb().forEach { cookieManager.setCookie(BuildConfig.API_BASE_URL, it) }
         cookieManager.flush()
+        HostedPushBridge(this@MainActivity) { done -> requestNotifications(done) }.install(this)
         webChromeClient = hostedWebChromeClient()
         webViewClient = hostedWebClient()
         loadUrl(notificationDestination(intent) ?: "${BuildConfig.API_BASE_URL}/app")
