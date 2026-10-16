@@ -160,9 +160,14 @@ export async function testAudioContacts(base, pool, owner, peer, password, conve
     for (const size of [{ width: 320, height: 640 }, { width: 390, height: 844 }, { width: 844, height: 390 }, { width: 1280, height: 800 }]) {
       await a.setViewportSize(size); await a.goto(base + "/app/profile");
       await a.getByRole("heading", { name: "W".repeat(50), exact: true }).waitFor();
-      for (const detail of await a.locator("details").all()) {
-        const summary = detail.locator(":scope > summary"); if (await summary.isVisible()) await summary.click();
+      // Opening lazy sections inserts nested disclosures. Re-query each time
+      // instead of retaining positional locators that can move to hidden children.
+      for (let opened = 0; opened < 40; opened++) {
+        const summary = a.locator("details:not([open]) > summary:visible").first();
+        if (!(await summary.count())) break;
+        await summary.click();
       }
+      assert.equal(await a.locator("details:not([open]) > summary:visible").count(), 0);
       assert(await a.evaluate(() => document.documentElement.scrollWidth <= innerWidth), "Profile must not overflow horizontally");
       await a.getByRole("button", { name: "Edit profile", exact: true }).click();
       assert(await a.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
