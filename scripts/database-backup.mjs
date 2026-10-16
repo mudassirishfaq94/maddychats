@@ -34,7 +34,13 @@ if (action === "backup") {
       from pg_extension e join pg_namespace n on n.oid=e.extnamespace
       where e.extname <> 'plpgsql' and (n.nspname in ('public','drizzle') or e.extname='pg_trgm')
       order by e.extname`)).rows;
-    await writeFile(manifestFile, JSON.stringify({ version: 1, extensions }, null, 2), { mode: 0o600, flag: "wx" });
+    const requiredRoles = (await client.query(`select distinct r.rolname as name
+      from pg_policy p join pg_class c on c.oid=p.polrelid
+      join pg_namespace n on n.oid=c.relnamespace
+      cross join lateral unnest(p.polroles) role_id
+      join pg_roles r on r.oid=role_id
+      where n.nspname in ('public','drizzle') order by r.rolname`)).rows.map(row => row.name);
+    await writeFile(manifestFile, JSON.stringify({ version: 1, extensions, requiredRoles }, null, 2), { mode: 0o600, flag: "wx" });
   } finally { await client.end(); }
 } else {
   await stat(path);
@@ -51,6 +57,12 @@ if (action === "backup") {
       join pg_namespace n on n.oid=c.relnamespace where n.nspname in ('public','drizzle')
       and c.relkind in ('r','p','v','m','S')`);
     if (existing.rows[0].count) throw new Error("Restore requires an empty destination database; existing data is never overwritten");
+    if (manifest.requiredRoles !== undefined) {
+      if (!Array.isArray(manifest.requiredRoles) || manifest.requiredRoles.some(role => typeof role !== "string")) throw new Error("Invalid policy role manifest");
+      const roles = (await client.query("select rolname from pg_roles where rolname = any($1::text[])", [manifest.requiredRoles])).rows.map(row => row.rolname);
+      const missing = manifest.requiredRoles.filter(role => !roles.includes(role));
+      if (missing.length) throw new Error("Destination is missing required policy roles. Prepare reviewed non-login roles in the isolated database cluster before restoration; roles are never created automatically.");
+    }
     for (const extension of manifest.extensions) {
       const name = identifier(extension.name), schema = identifier(extension.schema);
       const installed = (await client.query(`select n.nspname as schema from pg_extension e
