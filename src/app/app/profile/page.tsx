@@ -118,7 +118,7 @@ export default async function ProfilePage({
           <ProfileDisclosure title="Notifications" description="Enable push alerts and choose which messages notify you." anchors={["notifications"]}>
             <div id="notifications"><NotificationPreferences /></div>
           </ProfileDisclosure>
-          <ProfileDisclosure title="Privacy & your data" description="Visibility settings, account export, and account deletion." anchors={["privacy-settings"]}>
+          <ProfileDisclosure title="Privacy & your data" description="Visibility settings, account export, and account deletion." anchors={["privacy-settings", "account-data"]}>
             <div id="privacy-settings" className="space-y-4"><PrivacySettings /><AccountDataSection /></div>
           </ProfileDisclosure>
         </div>

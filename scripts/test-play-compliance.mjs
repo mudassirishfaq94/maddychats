@@ -82,6 +82,14 @@ export async function testPlayCompliance({base,sql,api,account,login}) {
       if(blockAttempts===1) await route.fulfill({status:503,contentType:'application/json',body:'{"error":"fixture block failure"}'});
       else await route.continue();
     });
+    let deletionRequests=0;
+    page.on('request',request=>{ if(new URL(request.url()).pathname==='/api/privacy/delete-account' && request.method()==='POST') deletionRequests++; });
+    await page.goto(`${base}/app/profile#account-data`);
+    await page.getByRole('button',{name:'Delete my account',exact:true}).waitFor();
+    await page.reload();
+    await page.getByRole('button',{name:'Delete my account',exact:true}).waitFor();
+    assert.equal(deletionRequests,0,'Navigating or refreshing deletion settings must never delete an account');
+    console.log('PASS deletion deep link: account-data opens collapsed settings on direct navigation and refresh; no deletion mutation triggered.');
     await page.goto(`${base}/app/chats/${dm.id}`);
     await page.getByRole('button',{name:'Chat options',exact:true}).click();
     await page.getByRole('menuitem',{name:'Report contact',exact:true}).click();
