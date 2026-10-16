@@ -186,7 +186,7 @@ async function main() {
     const valid = await upload(png); assert.equal(valid.status, 200); const avatar = await valid.json();
     testFiles.push(avatar.attachment.path); assert.equal(avatar.attachment.mimeType, "image/webp");
     assert.equal((await api(avatar.user.avatarUrl, aliceCookie)).status, 200); assert(scans >= 4);
-    const large = new ReadableStream<Uint8Array>({ start(controller) { controller.enqueue(new Uint8Array(4 * 1024 * 1024 + 1)); controller.close(); } });
+    const large = new ReadableStream<Uint8Array>({ start(controller) { controller.enqueue(new Uint8Array(11 * 1024 * 1024 + 1)); controller.close(); } });
     const oversized = await fetch(`${base}/api/upload/avatar`, { method: "POST", headers: { cookie: aliceCookie, origin: base, "content-type": "multipart/form-data; boundary=fixture" }, body: large, duplex: "half" } as RequestInit);
     assert.equal(oversized.status, 413, "Chunked multipart bodies enforce the real byte limit");
     const background = await api(`/api/conversations/${conversation.id}/background`, aliceCookie, "PATCH", { backgroundStyle: "data:image/png;base64,PHNjcmlwdD4=" }); assert.equal(background.status, 422, "JSON cannot bypass image processing");
@@ -198,6 +198,19 @@ async function main() {
     assert.equal((await fetch(`${base}/api/upload/message`, { method: "POST", headers: { cookie: bobCookie, origin: base }, body: envelope })).status, 403, "Attachments obey admin-only group messaging");
 
     // Cleanup removes orphan/expired bytes, preserves live and recent references, and retries failures.
+    // Exact 10 MB plaintext budget plus AES-GCM overhead must survive multipart parsing.
+    const largeMedia = new FormData(); largeMedia.set("conversationId", conversation.id); largeMedia.set("encrypted", "true");
+    largeMedia.set("files", new File([new Uint8Array(10 * 1024 * 1024 + 28)], "large.mp4", { type: "application/octet-stream" }));
+    largeMedia.set("keys", "isolated-opaque-media-key"); largeMedia.set("origTypes", "video/mp4");
+    const acceptedMedia = await fetch(`${base}/api/upload/message`, { method: "POST", headers: { cookie: aliceCookie, origin: base }, body: largeMedia });
+    assert.equal(acceptedMedia.status, 201, await acceptedMedia.clone().text());
+    const uploaded = (await acceptedMedia.json()).message;
+    assert(uploaded.attachments.length === 1 && uploaded.attachments[0].encrypted);
+    const storedLarge = (await sql.query("select path from message_attachments where message_id=$1", [uploaded.id])).rows[0].path;
+    testFiles.push(storedLarge);
+    largeMedia.set("files", new File([new Uint8Array(10 * 1024 * 1024 + 29)], "large.mp4", { type: "application/octet-stream" }));
+    assert.equal((await fetch(`${base}/api/upload/message`, { method: "POST", headers: { cookie: aliceCookie, origin: base }, body: largeMedia })).status, 413);
+
     const fixture = async (name: string, age = "2 days", directory = false) => {
       const relative = `files/item456-${randomUUID()}-${name}.bin`; const absolute = join(uploadDir, relative);
       await mkdir(resolve(uploadDir, "files"), { recursive: true });

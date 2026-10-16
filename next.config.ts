@@ -30,7 +30,9 @@ const nextConfig: NextConfig = {
   productionBrowserSourceMaps: false,
   // Cached compiler output retained old styles/version metadata across releases.
   // Keep development caching, but compile production releases from current source.
-  experimental: { turbopackFileSystemCacheForBuild: false },
+  // Proxy otherwise truncates at 10 MB before the bounded multipart reader can
+  // receive a full 10 MB encrypted file plus its form and encryption overhead.
+  experimental: { turbopackFileSystemCacheForBuild: false, proxyClientMaxBodySize: "12mb" },
   reactProductionProfiling: process.env.PROFILE_BUILD === "1",
   env: {
     NEXT_PUBLIC_APP_VERSION: process.env.APP_VERSION ?? "development",
@@ -40,6 +42,9 @@ const nextConfig: NextConfig = {
   // contains a lockfile (common in local preview workspaces).
   turbopack: {
     root: process.cwd(),
+  },
+  async redirects() {
+    return [{ source: "/circlo-landing.html", destination: "/", permanent: true }];
   },
   async headers() {
     return [
@@ -53,8 +58,9 @@ const nextConfig: NextConfig = {
       },
       {
         source: "/api/:path*",
-        headers: [{ key: "Cache-Control", value: "private, no-store" }],
+        headers: [{ key: "Cache-Control", value: "private, no-store" }, { key: "X-Robots-Tag", value: "noindex, nofollow" }],
       },
+      ...["/app/:path*", "/invite/:path*", "/login", "/signup", "/register", "/forgot-password", "/reset-password", "/verify-email", "/device-migration", "/offline.html"].map(source => ({ source, headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }] })),
       { source: "/stickers/:path*", headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }] },
       { source: "/gifs/:path*", headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }] },
     ];

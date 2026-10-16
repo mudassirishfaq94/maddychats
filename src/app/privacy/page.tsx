@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import { publicMetadata } from "@/lib/public-metadata";
 import {
   BellRing,
   CheckCheck,
@@ -30,11 +30,7 @@ import {
   LegalSection,
 } from "@/components/legal/legal-shell";
 
-export const metadata: Metadata = {
-  title: "Privacy Policy — Circlo",
-  description:
-    "How Circlo handles your data: end-to-end encrypted messages, what our servers can and cannot read, the metadata we must handle, and the controls you have.",
-};
+export const metadata = publicMetadata("/privacy", "Privacy Policy — Circlo", "How Circlo handles your data: end-to-end encrypted messages, service metadata, account recovery and the privacy controls you have.");
 
 const LAST_UPDATED = "14 October 2026";
 

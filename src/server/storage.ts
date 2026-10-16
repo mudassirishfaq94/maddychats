@@ -51,19 +51,19 @@ const BUCKETS: Record<Bucket, string> = {
 /** Size limits (bytes), configurable via environment. */
 function envBytes(name: string, fallbackMb: number): number {
   const raw = Number(process.env[name]);
-  const mb = Number.isFinite(raw) && raw > 0 ? raw : fallbackMb;
+  const mb = Number.isFinite(raw) && raw > 0 ? Math.min(raw, 10) : fallbackMb;
   return Math.floor(mb * 1024 * 1024);
 }
 
 export const LIMITS = {
   get avatar() {
-    return envBytes("MAX_AVATAR_MB", 3);
+    return envBytes("MAX_AVATAR_MB", 10);
   },
   get image() {
-    return envBytes("MAX_IMAGE_MB", 3);
+    return envBytes("MAX_IMAGE_MB", 10);
   },
   get file() {
-    return envBytes("MAX_FILE_MB", 3);
+    return envBytes("MAX_FILE_MB", 10);
   },
 };
 

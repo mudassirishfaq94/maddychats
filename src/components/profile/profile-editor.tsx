@@ -169,7 +169,7 @@ export function ProfileEditor({ user }: { user: SafeUser }) {
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold">Profile photo</p>
           <p className="mt-0.5 text-xs leading-relaxed text-[var(--muted)]">
-            Static JPG, PNG or WebP · up to 3 MB
+            Static JPG, PNG or WebP · up to 10 MB
           </p>
         </div>
         <button

@@ -32,6 +32,7 @@ import {
   sanitizeName,
 } from "@/server/storage";
 import { eq, sql } from "drizzle-orm";
+import { ENCRYPTED_MEDIA_OVERHEAD, MEDIA_MAX_BYTES } from "@/lib/media-limits";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -104,6 +105,7 @@ export async function POST(req: NextRequest) {
   if (entries.length > 5) {
     return jsonError(422, "You can attach up to 5 files at a time.");
   }
+  if (entries.reduce((total, file) => total + file.size, 0) > MEDIA_MAX_BYTES + entries.length * ENCRYPTED_MEDIA_OVERHEAD) return jsonError(413, "Attachments must total 10 MB or less. Send larger batches separately.");
 
   // Per-file wrapped media keys and original mime types (aligned with files).
   const wrappedKeys = form
@@ -131,8 +133,8 @@ export async function POST(req: NextRequest) {
         origTypes[i]?.trim().toLowerCase().split(";")[0] ??
         "application/octet-stream";
       if (!/^[a-z0-9.+-]+\/[a-z0-9.+-]+$/.test(originalMime) || originalMime.length > 100) return jsonError(422, "Invalid media type.");
-      if (file.size < 29 || file.size > LIMITS.file) return jsonError(413, "Invalid encrypted attachment size.");
-      const metadataCheck = validateUpload(file.name, originalMime, file.size, "message");
+      if (file.size < 29 || file.size > LIMITS.file + ENCRYPTED_MEDIA_OVERHEAD) return jsonError(413, "Attachments must be 10 MB or smaller.");
+      const metadataCheck = validateUpload(file.name, originalMime, file.size - ENCRYPTED_MEDIA_OVERHEAD, "message");
       if (!metadataCheck.ok) return jsonError(422, metadataCheck.error);
       if (!wrappedKeys[i] || wrappedKeys[i]!.length > 16384) return jsonError(422, "An encrypted media key is required.");
       let kind: "image" | "video" | "file" | "audio" = "file";
@@ -210,7 +212,7 @@ export async function POST(req: NextRequest) {
 
       for (const item of prepared) {
         const buffer = Buffer.from(await item.file.arrayBuffer());
-        const limit = LIMITS.file;
+        const limit = LIMITS.file + ENCRYPTED_MEDIA_OVERHEAD;
         if (buffer.byteLength > limit) throw new Error("too_large");
 
         const bucket = item.kind === "image" ? "images" : "files";

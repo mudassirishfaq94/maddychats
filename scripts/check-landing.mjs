@@ -3,7 +3,7 @@ import { createServer } from "node:http";
 import { readFile, mkdir } from "node:fs/promises";
 import assert from "node:assert/strict";
 
-const html = await readFile(new URL("../public/circlo-landing.html", import.meta.url));
+const html = await readFile(new URL("../tests/fixtures/circlo-landing.html", import.meta.url));
 const server = createServer((req, res) => {
   if (req.url !== "/") { res.writeHead(404); res.end(); return; }
   res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });

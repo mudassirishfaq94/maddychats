@@ -1,4 +1,6 @@
 import { fixtureAppSession } from "./fixture-app-session.mjs";
+import { testAuthFields } from "./test-auth-fields.mjs";
+import { testPublicPages } from "./test-public-pages.mjs";
 /** Production HTTP authorization checks, restricted to one disposable loopback DB. */
 import assert from "node:assert/strict";
 import { randomUUID, createHash, generateKeyPairSync } from "node:crypto";
@@ -93,6 +95,8 @@ async function main() {
       assert.equal(refused.status, 422, "Both explicit policy acceptances are required server-side");
       assert.equal(refused.headers.getSetCookie().length, 0, "Missing consent cannot issue a session");
     }
+    await testPublicPages(base);
+    await testAuthFields(base, sql, alice.username, password);
     const login = async (username: string) => {
       const response = await api("/api/auth/login", "", "POST", { acceptTerms: true, acceptPrivacy: true, identifier: username, password });
       assert.equal(response.status, 200);

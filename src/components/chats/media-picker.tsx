@@ -67,7 +67,7 @@ export function MediaPicker({ anchor, onEmoji, onFile, onClose, mediaDisabled }:
         </button>)}</div>
         {!items.length ? <p className="py-4 text-sm text-[var(--muted)]">No matching animations.</p> : null}
         <button type="button" disabled={mediaDisabled || busy !== null} onClick={() => input.current?.click()} className="btn btn-secondary mt-3 min-h-11 w-full">Upload your own GIF</button>
-        <input ref={input} aria-label="Choose GIF" type="file" accept="image/gif,.gif" className="hidden" onChange={event => { const file = event.target.files?.[0]; if (file) { if (file.type !== "image/gif" || file.size > 3 * 1024 * 1024) setError("Choose a GIF up to 3 MB."); else { onFile(file); onClose(); } } event.target.value = ""; }} />
+        <input ref={input} aria-label="Choose GIF" type="file" accept="image/gif,.gif" className="hidden" onChange={event => { const file = event.target.files?.[0]; if (file) { if (file.type !== "image/gif" || file.size > 10 * 1024 * 1024) setError("Choose a GIF up to 10 MB."); else { onFile(file); onClose(); } } event.target.value = ""; }} />
         <p className="mt-3 text-xs text-[var(--muted)]">First-party artwork. Sent through encrypted attachments.</p>
       </div>}
     </div>

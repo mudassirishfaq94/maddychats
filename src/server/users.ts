@@ -1,4 +1,5 @@
 import { and, asc, eq, ilike, ne, or, sql } from "drizzle-orm";
+import { randomInt } from "node:crypto";
 import { db } from "@/db";
 import { notificationPreferences, users, type UserRow } from "@/db/schema";
 import type { PublicUser, SafeUser } from "@/lib/types";
@@ -65,6 +66,16 @@ export async function findUserByUsername(
 ): Promise<UserRow | null> {
   const rows = await usernameLookup.execute({ identifier: username.trim().toLowerCase() });
   return rows[0] ?? null;
+}
+
+/** A bounded lookup only after registration collision; suggestions are not reservations. */
+export async function availableUsernameSuggestions(username: string): Promise<string[]> {
+  const stem = username.toLowerCase().replace(/[^a-z0-9_]/g, "").slice(0, 14);
+  const candidates = [...new Set(Array.from({ length: 24 }, () => `${stem}_${randomInt(10000, 100000)}`))];
+  const taken = await db.select({ name: users.username }).from(users)
+    .where(sql`lower(${users.username}) in (${sql.join(candidates.map(name => sql`${name}`), sql`, `)})`);
+  const existing = new Set(taken.map(row => row.name.toLowerCase()));
+  return candidates.filter(name => !existing.has(name)).slice(0, 3);
 }
 
 /** Login accepts either an email address or a username. */

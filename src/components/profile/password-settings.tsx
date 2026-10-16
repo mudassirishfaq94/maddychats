@@ -2,6 +2,7 @@
 import { useState, type FormEvent } from "react";
 import Link from "next/link";
 import { navigateWithReload } from "@/lib/navigation";
+import { fieldErrors, resetPasswordSchema } from "@/lib/schemas";
 export function PasswordSettings({ email, google }: { email: string; google: boolean }) {
   const [currentPassword, setCurrent] = useState("");
   const [password, setPassword] = useState("");
@@ -10,7 +11,12 @@ export function PasswordSettings({ email, google }: { email: string; google: boo
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   async function change(event: FormEvent) {
-    event.preventDefault(); setBusy(true); setMessage("");
+    event.preventDefault();
+    if (busy) return;
+    const validation = resetPasswordSchema.safeParse({ token: "profile-password-change-validation-only", password, confirmPassword });
+    if (!validation.success) { setMessage(Object.values(fieldErrors(validation.error))[0]); return; }
+    if (!currentPassword || new TextEncoder().encode(currentPassword).length > 72) { setMessage("Enter your current Circlo password, or use the password recovery link below."); return; }
+    setBusy(true); setMessage("");
     try {
       const response = await fetch("/api/auth/change-password", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ currentPassword, password, confirmPassword, mfaCode }), signal: AbortSignal.timeout(15000) });
       const data = await response.json();
@@ -20,6 +26,7 @@ export function PasswordSettings({ email, google }: { email: string; google: boo
     finally { setBusy(false); }
   }
   async function emailReset() {
+    if (busy) return;
     setBusy(true); setMessage("");
     try {
       const response = await fetch("/api/auth/forgot-password", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email }), signal: AbortSignal.timeout(20000) });

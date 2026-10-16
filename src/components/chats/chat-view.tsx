@@ -1292,7 +1292,7 @@ export function ChatView({
         form.append("keys", wrapped);
         form.append("origTypes", attachment.mimeType);
         totalBytes += bytes.byteLength;
-        if (totalBytes > 3 * 1024 * 1024) throw new Error("These attachments are too large to forward together (3 MB maximum).");
+        if (totalBytes > 10 * 1024 * 1024) throw new Error("These attachments are too large to forward together (10 MB maximum).");
         form.append("files", new Blob([bytes], { type: "application/octet-stream" }), attachment.originalName);
       }
       res = await fetch("/api/upload/message", { method: "POST", body: form, signal: AbortSignal.timeout(60000) });

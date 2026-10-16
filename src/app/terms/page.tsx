@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import { publicMetadata } from "@/lib/public-metadata";
 import Link from "next/link";
 import {
   Ban,
@@ -30,11 +30,7 @@ import {
   LegalSection,
 } from "@/components/legal/legal-shell";
 
-export const metadata: Metadata = {
-  title: "Terms of Service — Circlo",
-  description:
-    "The agreement between you and Circlo: what the service does, how encryption affects your account and your rights, what we expect from you, and what happens if something goes wrong.",
-};
+export const metadata = publicMetadata("/terms", "Terms of Service — Circlo", "The agreement between you and Circlo: service terms, encrypted messaging, account responsibilities and your rights.");
 
 const LAST_UPDATED = "14 October 2026";
 

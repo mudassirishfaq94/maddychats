@@ -50,7 +50,8 @@ export async function POST(req: NextRequest) {
       mediaPath = await db.transaction(async tx => {
         await tx.execute(sql`select pg_advisory_xact_lock(847221905)`);
         const inventory = await tx.execute<{ count: string }>(sql`select count(*)::text as count from stored_uploads where path like 'statuses/%'`);
-        // At most 150 MB at the hard 3 MB/file limit; separate headroom from chat.
+        // Reconstructed photos remain capped at 3 MB; scanner-backed media can
+        // use the 10 MB input budget. Keep a separate bounded inventory from chat.
         if (Number(inventory.rows[0]?.count ?? 0) >= 50) throw new UploadSafetyError(503, "Photo status storage is full. Try again after older updates expire.");
         return saveBuffer("statuses", storedName, prepared.buffer);
       });

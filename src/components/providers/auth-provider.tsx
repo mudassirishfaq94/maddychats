@@ -21,6 +21,7 @@ export interface AuthResult {
   emailSent?: boolean;
   error?: string;
   fields?: Record<string, string>;
+  suggestions?: string[];
 }
 
 interface AuthContextValue {
@@ -175,12 +176,14 @@ export function AuthProvider({ children, initialUser }: { children: ReactNode; i
           user?: SafeUser;
           error?: string;
           fields?: Record<string, string>;
+          suggestions?: string[];
         } | null;
         if (!res.ok) {
           return {
             ok: false,
             error: data?.error ?? "Something went wrong. Please try again.",
             fields: data?.fields,
+            suggestions: data?.suggestions,
             verificationRequired: data?.verificationRequired,
           };
         }

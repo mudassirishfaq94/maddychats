@@ -2,9 +2,9 @@ name: Circlo landing preview
 on:
   push:
     branches: ['codex/circlo-landing-*']
-    paths: ['public/circlo-landing.html', 'scripts/check-landing.mjs', '.github/workflows/landing-preview.yml']
+    paths: ['tests/fixtures/circlo-landing.html', 'scripts/check-landing.mjs', '.github/workflows/landing-preview.yml']
   pull_request:
-    paths: ['public/circlo-landing.html', 'scripts/check-landing.mjs', '.github/workflows/landing-preview.yml']
+    paths: ['tests/fixtures/circlo-landing.html', 'scripts/check-landing.mjs', '.github/workflows/landing-preview.yml']
 permissions:
   contents: read
 jobs:

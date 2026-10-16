@@ -54,7 +54,7 @@ async function main() {
     const sitemap = await fetch(base + "/sitemap.xml");
     assert.equal(sitemap.status, 200);
     const xml = await sitemap.text();
-    assert.equal((xml.match(/<loc>/g) ?? []).length, 3);
+    assert.equal((xml.match(/<loc>/g) ?? []).length, 4);
     assert(!xml.includes("/app") && !xml.includes("/login"));
     try {
       if (process.env.DEVICE_ACCESS_ONLY === "1") {

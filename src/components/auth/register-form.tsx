@@ -46,6 +46,7 @@ export function RegisterForm({ consent, agreement }: { consent: PolicyConsent; a
   const [pending, setPending] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [suggestions, setSuggestions] = useState<string[]>([]);
 
   const score = useMemo(() => passwordScore(form.password), [form.password]);
 
@@ -56,7 +57,9 @@ export function RegisterForm({ consent, agreement }: { consent: PolicyConsent; a
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
+    if (pending) return;
     setFormError(null);
+    setSuggestions([]);
 
     const parsed = registerSchema.safeParse({ ...form, ...consent });
     if (!parsed.success) {
@@ -72,6 +75,7 @@ export function RegisterForm({ consent, agreement }: { consent: PolicyConsent; a
     if (!result.ok) {
       setFormError(result.error ?? "Registration failed.");
       if (result.fields) setErrors(result.fields);
+      setSuggestions(result.suggestions ?? []);
       return;
     }
     navigateWithReload(result.emailSent ? "/verify-email" : "/verify-email?delivery=unavailable");
@@ -111,6 +115,7 @@ export function RegisterForm({ consent, agreement }: { consent: PolicyConsent; a
         error={errors.username}
       />
 
+      {suggestions.length > 0 ? <div className="rounded-xl border border-[var(--border)] p-3 text-sm" role="status"><p>Available now — tap a username to use it:</p><div className="mt-2 flex flex-wrap gap-2">{suggestions.map(username => <button type="button" key={username} className="btn btn-secondary min-w-0 break-all text-xs" disabled={pending} onClick={() => { setForm(value => ({ ...value, username })); setSuggestions([]); setErrors(value => ({ ...value, username: "" })); setFormError(null); }}>{username}</button>)}</div><p className="mt-2 text-xs text-[var(--muted)]">We check again when you create your account.</p></div> : null}
       <Field
         label="Email"
         type="email"

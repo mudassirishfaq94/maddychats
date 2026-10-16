@@ -1,12 +1,12 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import type { Metadata } from "next";
+import { publicMetadata } from "@/lib/public-metadata";
 import { ArrowDown, ArrowUpRight, CheckCheck, Fingerprint, KeyRound, LockKeyhole, MessageCircle, Send, ShieldCheck } from "lucide-react";
 import { getSessionUser } from "@/server/session";
 import { LogoWordmark, LogoMark } from "@/components/brand/logo";
 import { ThemeToggle } from "@/components/theme-toggle";
 
-export const metadata: Metadata = { title: "Circlo — Your circle. Your secrets. Sealed.", description: "Get to know Circlo: end-to-end encrypted chats, voice messages, groups, sharing and device controls. Explore our privacy approach and what we plan to build next." };
+export const metadata = publicMetadata("/", "Circlo — Private messaging with end-to-end encryption", "Privacy-first messaging for your circle. Discover encrypted chats, voice messages, groups, sharing and trusted-device controls on mobile and desktop.");
 export const dynamic = "force-dynamic";
 const benefits = [
   { icon: LockKeyhole, number: "01", title: "Private from the first hello.", text: "Chat messages are encrypted on your device before they leave it. Your conversation belongs with the people in it." },
@@ -108,7 +108,7 @@ export default async function LandingPage() {
       </section>
       <section id="questions" aria-labelledby="questions-title" className="border-y border-[var(--border)] bg-[var(--surface)]"><div className="mx-auto max-w-4xl px-5 py-16 sm:px-10"><h2 id="questions-title" className="font-display text-3xl font-semibold tracking-tight sm:text-4xl">Clear answers before your first hello.</h2><div className="mt-8 divide-y divide-[var(--border)]">{questions.map(({title,text})=><details key={title} className="py-4"><summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-[var(--accent)]">{title}</summary><p className="pb-3 text-sm leading-7 text-[var(--muted)]">{text}</p></details>)}</div><div className="mt-6 flex flex-wrap gap-5 text-sm font-semibold text-[var(--accent-fg)]"><Link href="/privacy" className="underline">Read our Privacy Policy</Link><Link href="/terms" className="underline">Read our Terms and Conditions</Link></div></div></section>
       <section className="relative mx-auto max-w-7xl px-5 py-20 text-center sm:px-10"><LogoMark size={54} className="mx-auto" /><h2 className="font-display mt-6 text-3xl font-semibold tracking-tight sm:text-4xl">Make room for your people.</h2><p className="mt-3 text-sm text-[var(--muted)]">Your next hello belongs in your circle.</p><Link href="/signup" className="btn btn-primary mt-7">Join Circlo <ArrowUpRight className="h-4 w-4" /></Link></section>
-      <footer className="border-t border-[var(--border)]"><div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-5 px-5 py-7 sm:px-10"><LogoWordmark size={28} /><p className="text-xs text-[var(--muted)]">Your circle. Your secrets. Sealed.</p><div className="flex gap-5 text-xs text-[var(--muted)]"><Link href="/privacy">Privacy</Link><Link href="/terms">Terms</Link></div></div></footer>
+      <footer className="border-t border-[var(--border)]"><div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-5 px-5 py-7 sm:px-10"><LogoWordmark size={28} /><p className="text-xs text-[var(--muted)]">Your circle. Your secrets. Sealed.</p><div className="flex flex-wrap gap-5 text-xs text-[var(--muted)]"><Link href="/whatsapp-alternative">A WhatsApp alternative</Link><Link href="/privacy">Privacy</Link><Link href="/terms">Terms</Link></div></div></footer>
     </main>
   );
 }

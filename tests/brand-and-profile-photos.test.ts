@@ -31,7 +31,7 @@ test("starter profile photos use bounded pixel reconstruction; configured scanne
     assert.equal(result.mimeType, "image/webp"); assert(metadata.width! <= 1024 && metadata.height! <= 1024);
     assert(!result.buffer.includes(Buffer.from("TRAILING_PAYLOAD")) && !metadata.exif);
     await assert.rejects(prepareAvatarPhoto(new File(["<svg/>"], "fake.png", { type: "image/png" })), /contents do not match/);
-    await assert.rejects(prepareAvatarPhoto(new File([new Uint8Array(3 * 1024 * 1024 + 1)], "huge.png", { type: "image/png" })), /large|smaller/);
+    await assert.rejects(prepareAvatarPhoto(new File([new Uint8Array(10 * 1024 * 1024 + 1)], "huge.png", { type: "image/png" })), /large|smaller/);
     process.env.CLAMAV_HOST = "127.0.0.1"; process.env.CLAMAV_PORT = "0";
     await assert.rejects(prepareAvatarPhoto(file), /scanning is unavailable/);
   } finally {

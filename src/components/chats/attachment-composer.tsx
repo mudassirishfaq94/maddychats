@@ -5,6 +5,7 @@ import { Paperclip } from "lucide-react";
 import type { MessageDTO } from "@/lib/types";
 export { AttachmentReview as AttachmentPreviews } from "./attachment-review";
 import { cn } from "@/lib/utils";
+import { MEDIA_MAX_BYTES } from "@/lib/media-limits";
 
 export interface PendingFile {
   id: string;
@@ -97,7 +98,13 @@ export function useAttachmentUpload() {
     return new Promise((resolve) => {
       const selected = [...files];
       if (selected.length === 0) {
+        finish();
         resolve({ ok: false, error: "No files selected." });
+        return;
+      }
+      if (selected.reduce((total, item) => total + item.file.size, 0) > MEDIA_MAX_BYTES) {
+        finish();
+        resolve({ ok: false, error: "Attachments must total 10 MB or less. Send larger batches separately." });
         return;
       }
       (async () => {

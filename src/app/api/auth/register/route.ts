@@ -8,6 +8,7 @@ import {
   createUser,
   findUserByEmail,
   findUserByUsername,
+  availableUsernameSuggestions,
 } from "@/server/users";
 import { AUTH_RATE_LIMIT, rateLimit } from "@/server/rate-limit";
 import { policyAcceptance } from "@/lib/policy-consent";
@@ -19,6 +20,10 @@ import {
 } from "@/server/http";
 
 export const dynamic = "force-dynamic";
+
+async function usernameTaken(username: string) {
+  return NextResponse.json({ error: "This username is taken. Choose another or try a suggestion.", fields: { username: "This username is taken" }, suggestions: await availableUsernameSuggestions(username) }, { status: 409, headers: { "Cache-Control": "private, no-store" } });
+}
 
 async function handlePOST(req: NextRequest) {
   const blocked = guardSameOrigin(req);
@@ -53,9 +58,7 @@ async function handlePOST(req: NextRequest) {
     });
   }
   if (await findUserByUsername(username)) {
-    return jsonError(409, "This username is taken.", {
-      username: "This username is taken",
-    });
+    return usernameTaken(username);
   }
 
   const passwordHash = await hashPassword(password);
@@ -74,9 +77,7 @@ async function handlePOST(req: NextRequest) {
           email: "This email is already registered",
         });
       }
-      return jsonError(409, "This username is taken.", {
-        username: "This username is taken",
-      });
+      return usernameTaken(username);
     }
     console.error("[maddy-chats] register error:", safeError(err));
     return jsonError(500, "Something went wrong. Please try again.");

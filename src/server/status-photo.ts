@@ -2,12 +2,13 @@ import { spawn } from "node:child_process";
 import path from "node:path";
 import { prepareReadableUpload, UploadSafetyError } from "./upload-safety";
 import { validateUpload } from "./storage";
+import { MEDIA_MAX_BYTES, PHOTO_OUTPUT_MAX_BYTES } from "@/lib/media-limits";
 
 let processing = false;
 
 /** Photo-only reconstruction; never used to accept raw videos or other files. */
 export async function reconstructStatusPhoto(file: File, mode: "avatar" | "message" = "message") {
-  if (file.size > 3 * 1024 * 1024) throw new UploadSafetyError(413, "Photos must be 3 MB or smaller.");
+  if (file.size > MEDIA_MAX_BYTES) throw new UploadSafetyError(413, "Photos must be 10 MB or smaller.");
   const check = validateUpload(file.name, file.type, file.size, mode);
   const mime = file.type.split(";")[0].trim().toLowerCase();
   if (!check.ok || check.kind !== "image" || !["image/jpeg", "image/png", "image/webp"].includes(mime)) throw new UploadSafetyError(422, "Choose a JPG, PNG, or WebP photo.");
@@ -39,7 +40,7 @@ export async function reconstructStatusPhoto(file: File, mode: "avatar" | "messa
       child.stdin.on("error", () => finish(new UploadSafetyError(422, "That photo cannot be safely processed.")));
       child.stdout.on("data", (chunk: Buffer) => {
         total += chunk.length;
-        if (total > 3 * 1024 * 1024) finish(new UploadSafetyError(413, "That photo is too large."));
+        if (total > PHOTO_OUTPUT_MAX_BYTES) finish(new UploadSafetyError(413, "That photo is too large after processing. Try a smaller image."));
         else chunks.push(chunk);
       });
       child.on("close", code => finish(code === 0 && total > 0 ? undefined : new UploadSafetyError(422, "That photo cannot be safely processed. Use a static JPG, PNG, or WebP up to 12 megapixels.")));

@@ -10,6 +10,9 @@ z.config({ jitless: true });
  */
 
 export const USERNAME_PATTERN = /^[a-zA-Z0-9_]{3,20}$/;
+const emailAddress = z.string().trim().max(254, "Email address is too long").pipe(z.email("Enter a valid email address"));
+const boundedPassword = z.string().max(72, "Password must be 72 characters or fewer")
+  .refine(value => new TextEncoder().encode(value).length <= 72, "Password must fit within 72 UTF-8 bytes");
 
 export const registerSchema = z
   .object({
@@ -22,9 +25,7 @@ export const registerSchema = z
       .string()
       .trim()
       .regex(USERNAME_PATTERN, "3–20 characters: letters, numbers, underscores only"),
-    email: z
-      .email("Enter a valid email address")
-      .max(254, "Email address is too long"),
+    email: emailAddress,
     password: z
       .string()
       .min(8, "Password must be at least 8 characters")
@@ -33,7 +34,7 @@ export const registerSchema = z
       .regex(/[a-z]/, "Password is too weak — add a lowercase letter")
       .regex(/[A-Z]/, "Password is too weak — add an uppercase letter")
       .regex(/[0-9]/, "Password is too weak — add a number"),
-    confirmPassword: z.string(),
+    confirmPassword: boundedPassword,
     acceptTerms: z.literal(true, { error: "Agree to the Terms and Conditions" }),
     acceptPrivacy: z.literal(true, { error: "Agree to the Privacy Policy" }),
   })
@@ -43,19 +44,19 @@ export const registerSchema = z
   });
 
 export const loginSchema = z.object({
-  identifier: z.string().trim().min(1, "Enter your email or username"),
-  password: z.string().min(1, "Enter your password"),
+  identifier: z.string().trim().min(1, "Enter your email or username").max(254, "Email or username is too long"),
+  password: boundedPassword.refine(value => value.length > 0, "Enter your password"),
 });
 
 export const forgotPasswordSchema = z.object({
-  email: z.email("Enter a valid email address"),
+  email: emailAddress,
 });
 
 export const resetPasswordSchema = z
   .object({
-    token: z.string().min(32, "This reset link is invalid"),
+    token: z.string().min(32, "This reset link is invalid").max(128, "This reset link is invalid"),
     password: z.string().min(8, "Password must be at least 8 characters").max(72, "Password must be 72 characters or fewer").refine((value) => new TextEncoder().encode(value).length <= 72, "Password must fit within 72 UTF-8 bytes").regex(/[a-z]/, "Add a lowercase letter").regex(/[A-Z]/, "Add an uppercase letter").regex(/[0-9]/, "Add a number"),
-    confirmPassword: z.string(),
+    confirmPassword: boundedPassword,
   })
   .refine((value) => value.password === value.confirmPassword, { message: "Passwords do not match", path: ["confirmPassword"] });
 

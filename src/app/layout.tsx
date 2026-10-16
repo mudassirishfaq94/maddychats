@@ -26,6 +26,7 @@ const sora = Sora({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://circlo.chat"),
   applicationName: "Circlo",
   manifest: "/manifest.webmanifest",
   icons: {

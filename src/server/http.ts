@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { clientUrl } from "./config";
 import { resolveClientIp } from "./client-ip";
+import { UPLOAD_BODY_MAX_BYTES } from "@/lib/media-limits";
 
 /** Consistent, safe error envelope: never leaks internals. */
 export function jsonError(
@@ -56,7 +57,7 @@ export async function readBoundedBody(req: Request, limit: number, timeoutMs = 3
 }
 
 export async function readUploadForm(req: Request): Promise<FormData> {
-  const bytes = await readBoundedBody(req, 4 * 1024 * 1024);
+  const bytes = await readBoundedBody(req, UPLOAD_BODY_MAX_BYTES);
   return new Response(new Uint8Array(bytes), { headers: { "content-type": req.headers.get("content-type") ?? "" } }).formData();
 }
 
@@ -80,16 +81,15 @@ export async function readJson(
 }
 
 /**
- * Vercel Functions cap request bodies at 4.5 MB. Keep multipart uploads below
- * 4 MB (including form overhead); larger direct-to-storage uploads can be
- * added later without changing the private media-serving contract.
+ * Render accepts bounded multipart requests with 10 MB of media and 1 MB
+ * of encryption/form overhead. The streamed reader enforces the same ceiling.
  */
 export function guardUploadSize(req: NextRequest, enabledMedia = false): NextResponse | null {
   if (process.env.STARTER_MODE === "1" && !(enabledMedia && process.env.CHAT_MEDIA_ENABLED === "1")) {
     return jsonError(503, "Uploads and voice messages are paused. Text chat is available.");
   }
   const length = Number(req.headers.get("content-length"));
-  if (Number.isFinite(length) && length > 4 * 1024 * 1024) {
+  if (Number.isFinite(length) && length > UPLOAD_BODY_MAX_BYTES) {
     return jsonError(413, "Upload too large.");
   }
   return null;
