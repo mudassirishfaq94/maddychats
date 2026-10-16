@@ -1,0 +1,9 @@
+{
+  "appName": "Circlo",
+  "origin": "https://circlo.chat",
+  "candidatePackageId": "chat.circlo.app",
+  "status": "proposed-not-approved-for-final-signing",
+  "legacyPackageId": "app.ziptalks.android",
+  "legacySourceVersionCode": 12,
+  "productionSigningAuthorized": false
+}

@@ -29,7 +29,7 @@ export async function proxy(req: NextRequest) {
     const destination = canonicalDestination(req.headers.get("host"), pathname, req.nextUrl.search, clientUrl(), process.env.RENDER_EXTERNAL_URL);
     if (destination) return NextResponse.redirect(destination, 307);
   }
-  const publicMetadata = ["/api/app-version", "/api/auth/methods"].includes(pathname);
+  const publicMetadata = ["/api/app-version", "/api/auth/methods", "/.well-known/assetlinks.json"].includes(pathname);
 
   let token = req.cookies.get(SESSION_COOKIE)?.value;
   let claims = token ? await verifySessionToken(token) : null;
