@@ -54,7 +54,11 @@ async function main() {
     const sitemap = await fetch(base + "/sitemap.xml");
     assert.equal(sitemap.status, 200);
     const xml = await sitemap.text();
-    assert.equal((xml.match(/<loc>/g) ?? []).length, 4);
+    assert.deepEqual(
+      Array.from(xml.matchAll(/<loc>(.*?)<\/loc>/g), match => match[1]).sort(),
+      ["/", "/privacy", "/terms", "/whatsapp-alternative", "/support", "/delete-account"]
+        .map(path => `https://circlo.chat${path}`).sort(),
+    );
     assert(!xml.includes("/app") && !xml.includes("/login"));
     try {
       if (process.env.DEVICE_ACCESS_ONLY === "1") {
