@@ -2,12 +2,14 @@
 
 Separate release tooling for the existing `https://circlo.chat` PWA. This does not change the web architecture or the legacy `../android` project. **No signed APK/AAB or generated Android project is included.** See [readiness report](../docs/android/GOOGLE_PLAY_READINESS_2026-10-16.md).
 
+**Phase2 update:** an existing debug APK was located and inspected, and the owner confirmed informal phone/friends testing. It uses the existing hosted-WebView/native-helper project. That project is being reused; no replacement TWA is generated. See [Phase2 results](../docs/android/GOOGLE_PLAY_PHASE_2_RESULTS.md). The optional Bubblewrap tree now has13 findings (9high/4moderate) after a tested UUID fix; its guard remains closed. The JDK/SDK were subsequently located outside PATH.
+
 ## Current stop conditions
 
 1. Confirm whether `app.ziptalks.android` is already in Play and retain its signing/package identity if this is an update. Existing source versionCode is12; Play may have a higher one. No new package is selected here.
 2. Confirm the **Play app-signing** certificate SHA-256. The upload certificate can differ. Do not publish debug trust. No keystore or password is provided or generated.
 3. **Bubblewrap1.27.0 tooling audit is currently failing:** initial pinned install reports14 findings (9high/5moderate), including unpatched extract-zip and node-forge and old Google API/Jimp dependencies. This is isolated development tooling, not a new web runtime dependency. Do not give it production credentials, run its downloader on untrusted archives or sign/release with this unresolved toolchain. Do not run `npm audit fix --force`: npm proposes an obsolete0.5.1 downgrade, not an acceptable fix. Use a reviewed patched upstream release or a separately reviewed minimal patch/container workflow before building. The lockfile preserves exactly what was inspected, not a security endorsement.
-4. Java/Android SDK/ADB were not on PATH; no physical Android test, Play Console review or live DAL verification has occurred.
+4. Java/SDK/ADB were subsequently found outside PATH. The owner reports informal physical APK testing; no phone is currently attached for agent testing of the rebuilt artifact. Play Console and live DAL verification remain outstanding.
 
 `android-twa` is excluded from the production Docker context and has its own package/lockfile. Never add Bubblewrap to root application dependencies.
 

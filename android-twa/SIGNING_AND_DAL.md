@@ -1,6 +1,6 @@
 # Package identity, signing and Digital Asset Links
 
-Owner response16 October2026: keep `chat.circlo.app` proposed; **no final signing yet**. Android identifier syntax is valid. Do not rename the existing `app.ziptalks.android` code or assume package availability/Play ownership. VersionCode must exceed every previously uploaded version for the final package. `identity.proposed.json` is a decision record, not release configuration.
+Owner response16 October 2026: keep `chat.circlo.app` proposed; **no final signing yet**. Android identifier syntax is valid. Do not rename the existing `app.ziptalks.android` code or assume package availability/Play ownership. VersionCode must exceed every previously uploaded version for the final package. `identity.proposed.json` is a decision record, not release configuration.
 
 ## Signing checklist
 
@@ -13,6 +13,8 @@ Owner response16 October2026: keep `chat.circlo.app` proposed; **no final signin
 7. Build and verify artifact signatures using `apksigner verify --verbose --print-certs <apk>` and `jarsigner -verify -strict -verbose <aab>`. Inspect package/version/target SDK with Android tooling. Archive checksums/public cert hashes alongside private release records; APK/AAB/keystores remain ignored.
 
 No signing, key generation, app registration or artifact upload is currently authorized. Documentation is not an executed build.
+
+Phase 2 discovery: the existing sideloaded-project APK is debug-signed under `app.ziptalks.android`; no production signing key/listing has been established. A new debug test APK reused that existing debug certificate. This is **not** final release signing approval. Google Play must not receive a debug-signed release. A production certificate or different final package may prevent in-place updates from friends' debug APKs. Keep the old trusted installation until the new app is linked or a verified recovery backup is saved; do not uninstall or clear its data as a migration shortcut. Moving WebView storage into Chrome/TWA also requires deliberate secure enrollment. No account deletion or automatic trust reset is part of that migration.
 
 ## DAL implementation and approval-gated deployment
 

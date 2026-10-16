@@ -13,6 +13,18 @@ export async function testPlayCompliance({base,sql,api,account,login}) {
   const peerCookie=await login(peer.username);
   const dm=(await sql.query("insert into conversations(type,created_by_id) values('dm',$1) returning id",[owner.id])).rows[0];
   await sql.query('insert into conversation_members(conversation_id,user_id,accepted_at) values($1,$2,now()),($1,$3,now())',[dm.id,owner.id,peer.id]);
+  assert.equal((await api(`/api/conversations/${dm.id}/typing`,'','POST',{typing:true})).status,401);
+  assert.equal((await api(`/api/conversations/${dm.id}/typing`,cookie,'POST',{typing:true})).status,200);
+  const typingEvents=async()=> (await sql.query("select payload from realtime_events where user_id=$1 and payload->>'type'='typing:update' and payload->>'conversationId'=$2 order by created_at",[peer.id,dm.id])).rows;
+  assert.equal((await typingEvents()).length,1);
+  assert.equal((await typingEvents())[0].payload.userId,owner.id);
+  assert(new Date((await typingEvents())[0].payload.expiresAt).getTime()<=Date.now()+5500);
+  assert.equal((await api('/api/privacy/settings',cookie,'PUT',{typingIndicators:false})).status,200);
+  assert.equal((await api(`/api/conversations/${dm.id}/typing`,cookie,'POST',{typing:true})).status,200);
+  assert.equal((await typingEvents()).length,1,'Privacy opt-out suppresses new typing events');
+  assert.equal((await api(`/api/conversations/${dm.id}/typing`,cookie,'POST',{typing:false})).status,200);
+  assert.equal((await typingEvents()).at(-1).payload.typing,false,'Stop typing clears prior presence even after opting out');
+  console.log('PASS typing API: authentication, recipient targeting, five-second expiry, privacy opt-out and explicit stop. Android display remains a device test.');
   const browser=await chromium.launch();
   try {
     const context=await browser.newContext({viewport:{width:320,height:740},serviceWorkers:'block'});

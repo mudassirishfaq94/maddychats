@@ -75,7 +75,7 @@ async function main() {
     const googlePublic = { ...googlePair.publicKey.export({ format: "jwk" }), kid: "disposable-google-jwk", alg: "RS256", use: "sig" };
     const env = { ...process.env, NODE_ENV: "production" as const, DATABASE_URL: runtimeUrl.toString(), REALTIME_DATABASE_URL: runtimeUrl.toString(), HOSTNAME: "127.0.0.1", PORT: "3109", CLIENT_URL: base,
       TEST_GOOGLE_PRIVATE_KEY: googlePair.privateKey.export({ type: "pkcs8", format: "pem" }).toString(), TEST_GOOGLE_PUBLIC_JWK: JSON.stringify(googlePublic), JWT_SECRET: "item3-disposable-test-secret-at-least-thirty-two-characters", GOOGLE_CLIENT_ID: "disposable-google-client", GOOGLE_CLIENT_SECRET: "disposable-google-secret", CLIENT_IP_TRUSTED_HOPS: "1", HEALTHCHECK_SECRET: "item3-health", CRON_SECRET: "item3-cron",
-      SUPABASE_URL: "", SUPABASE_SERVICE_ROLE_KEY: "", RESEND_API_KEY: "", VAPID_PRIVATE_KEY: "", FIREBASE_PROJECT_ID: "", FIREBASE_CLIENT_EMAIL: "", FIREBASE_PRIVATE_KEY: "" };
+      SUPABASE_URL: "", SUPABASE_SERVICE_ROLE_KEY: "", RESEND_API_KEY: "", VAPID_PRIVATE_KEY: "", FIREBASE_PROJECT_ID: "", FIREBASE_CLIENT_EMAIL: "", FIREBASE_PRIVATE_KEY: "", TWA_DAL_ENABLED: "0" };
     await cp(resolve(".next/static"), resolve(".next/standalone/.next/static"), { recursive: true });
     await cp(resolve("public"), resolve(".next/standalone/public"), { recursive: true });
     server = spawn(process.execPath, ["--require", resolve("scripts/mock-google-provider.cjs"), resolve(".next/standalone/server.js")], { env, stdio: "pipe", windowsHide: true });
@@ -97,6 +97,9 @@ async function main() {
       assert.equal(refused.headers.getSetCookie().length, 0, "Missing consent cannot issue a session");
     }
     await testPublicPages(base);
+    const dal = await api("/.well-known/assetlinks.json", "maddy_session=invalid; maddy_refresh=invalid");
+    assert.equal(dal.status, 503, "Public DAL fails closed when not configured, without redirecting an expired-cookie visitor to login");
+    assert.match(dal.headers.get("content-type")!, /application\/json/);
     await testAuthFields(base, sql, alice.username, password);
     const login = async (username: string) => {
       const response = await api("/api/auth/login", "", "POST", { acceptTerms: true, acceptPrivacy: true, identifier: username, password });

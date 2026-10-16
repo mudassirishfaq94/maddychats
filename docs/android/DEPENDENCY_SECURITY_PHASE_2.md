@@ -1,8 +1,8 @@
-# Android tooling dependency investigation —16 October2026
+# Android tooling dependency investigation —16 October 2026
 
 Scope: isolated `android-twa/package-lock.json`, Bubblewrap CLI/core1.27.0. It is not shipped in the web app or the existing hosted-WebView APK. Root production dependency audit independently reports zero findings. No risk acceptance, advisory suppression, forced CLI downgrade or production credential use was performed.
 
-The original **14 entries (9high/5moderate) are not14 distinct vulnerabilities**: npm propagates vulnerable leaf dependencies to their parents. There are five distinct advisory identifiers across four leaf packages. Original tree and advisory details were obtained through `npm audit --json`; package versions were read from the lockfile and npm registry.
+The original **14 entries (9 high/5 moderate) are not14 distinct vulnerabilities**: npm propagates vulnerable leaf dependencies to their parents. There are five distinct advisory identifiers across four leaf packages. Original tree and advisory details were obtained through `npm audit --json`; package versions were read from the lockfile and npm registry.
 
 ## Leaf advisories and remediation
 
@@ -33,11 +33,11 @@ The original **14 entries (9high/5moderate) are not14 distinct vulnerabilities**
 | node-forge |1.4.0|high|Direct signature advisory; unresolved |
 | uuid |8.3.2→11.1.1|moderate|Resolved by scoped compatible override and regression |
 
-After the fix: **13 entries:9high/4moderate**. The fail-closed CLI wrapper still refuses to load Bubblewrap. `npm audit fix --force` proposes obsolete CLI0.5.1 and was not used. No ignored findings were added.
+After the fix: **13 entries:9 high/4 moderate**. The fail-closed CLI wrapper still refuses to load Bubblewrap. `npm audit fix --force` proposes obsolete CLI0.5.1 and was not used. No ignored findings were added.
 
 ## Reproducible commands
 
-From `android-twa`: `npm ci --ignore-scripts`, `npm test`, `npm run test:dependencies`, `npm audit --json`, `npm run bubblewrap -- doctor`. Expected final command: STOP with9high/4moderate, before SDK downloads or generation. In root: `npm audit --omit=dev --audit-level=high` reports zero vulnerabilities. No audit result guarantees absence of all security defects.
+From `android-twa`: `npm ci --ignore-scripts`, `npm test`, `npm run test:dependencies`, `npm audit --json`, `npm run bubblewrap -- doctor`. Expected final command: STOP with9 high/4 moderate, before SDK downloads or generation. In root: `npm audit --omit=dev --audit-level=high` reports zero vulnerabilities. No audit result guarantees absence of all security defects.
 
 ## Safe route forward
 
