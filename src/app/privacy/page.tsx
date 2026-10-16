@@ -1,4 +1,5 @@
 import { publicMetadata } from "@/lib/public-metadata";
+import Link from "next/link";
 import {
   BellRing,
   CheckCheck,
@@ -53,7 +54,7 @@ const INDEX = [
 
 const HIGHLIGHTS = [
   { icon: LockKeyhole, text: "Encrypted on your device before anything is uploaded" },
-  { icon: KeyRound, text: "No message keys on our servers — none exist there to leak" },
+  { icon: KeyRound, text: "Your devices hold the keys needed to read your chats" },
   { icon: Fingerprint, text: "New browsers and phones must be approved by a device you already trust" },
 ];
 
@@ -468,8 +469,7 @@ export default function PrivacyPage() {
           <LegalChecklist items={RETENTION} />
           <p>
             Deleting your account removes your account data, the messages you sent and the encryption keys registered to
-            you. It cannot remove a copy that another participant&apos;s device has already decrypted and stored locally,
-            and we cannot recover anything once it is gone.
+            you from the live database. Unreferenced uploads are eligible for cleanup after 24 hours; failed storage deletions are retried. Files still referenced by other users or groups remain. Limited security and moderation records may be retained for abuse investigation, and provider backups follow their configured lifecycle. Deletion does not erase a copy that another participant&apos;s device has already decrypted or downloaded. Read the <Link className="underline" href="/delete-account">account-deletion instructions</Link> before proceeding.
           </p>
         </LegalSection>
 
@@ -501,10 +501,7 @@ export default function PrivacyPage() {
 
         <LegalSection id="contact" number="13" title="Contact us" icon={ShieldCheck}>
           <p>
-            Questions about this policy, your data or our encryption can be sent from inside Circlo, through the support
-            and report options in your profile. Those messages create a record we can act on and audit. If you are making
-            a data protection request, say so explicitly and we will answer through the same channel, so you have a
-            written record of the exchange.
+            Visit <Link className="underline" href="/support">Circlo support</Link> for account access, reporting and the available contact options. You can <Link className="underline" href="/delete-account">request account deletion from your browser</Link> without installing the Android app. Do not send your password, verification codes or encryption recovery material with a request.
           </p>
         </LegalSection>
       </LegalBody>

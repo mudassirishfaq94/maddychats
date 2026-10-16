@@ -233,10 +233,12 @@ export function LegalFooter({ label, lastUpdated }: { label: string; lastUpdated
         <p className="text-xs text-[var(--muted)]">
           {label} · Last updated {lastUpdated}
         </p>
-        <div className="flex gap-5 text-xs text-[var(--muted)]">
+        <div className="flex flex-wrap gap-5 text-xs text-[var(--muted)]">
           <Link href="/">Home</Link>
           <Link href="/terms">Terms</Link>
           <Link href="/privacy">Privacy</Link>
+          <Link href="/support">Support</Link>
+          <Link href="/delete-account">Delete account</Link>
         </div>
       </div>
     </footer>

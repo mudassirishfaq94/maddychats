@@ -3,10 +3,10 @@ import { PUBLIC_COMMUNITIES_CACHE_TAG } from "@/server/communities";
 import { verifyFreshAuthentication } from "@/server/authentication";
 import { rateLimit } from "@/server/rate-limit";
 import { NextRequest, NextResponse } from "next/server";
-import { getSessionUser } from "@/server/session";
+import { getSessionUser, sessionCookieOptions } from "@/server/session";
 import { deleteAccount } from "@/server/privacy";
-import { guardSameOrigin, jsonError, readJson } from "@/server/http";
-import { SESSION_COOKIE } from "@/server/config";
+import { guardSameOrigin, jsonError, readJson, requestIsSecure } from "@/server/http";
+import { SESSION_COOKIE, REFRESH_COOKIE } from "@/server/config";
 
 export const dynamic = "force-dynamic";
 
@@ -34,6 +34,8 @@ export async function POST(req: NextRequest) {
   revalidateTag(PUBLIC_COMMUNITIES_CACHE_TAG, { expire: 0 });
 
   const res = NextResponse.json({ success: true });
-  res.cookies.set(SESSION_COOKIE, "", { maxAge: 0, path: "/" });
+  res.cookies.set(SESSION_COOKIE, "", { ...sessionCookieOptions(requestIsSecure(req)), maxAge: 0 });
+  res.cookies.set(REFRESH_COOKIE, "", { ...sessionCookieOptions(requestIsSecure(req)), maxAge: 0 });
+  res.headers.set("Cache-Control", "no-store");
   return res;
 }

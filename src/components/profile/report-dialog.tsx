@@ -4,6 +4,7 @@ import { useState } from "react";
 import { createPortal } from "react-dom";
 import { Ban, X, Flag, Loader2, CheckCircle, AlertTriangle } from "lucide-react";
 import { Toggle } from "@/components/ui/toggle";
+import { requestUserBlock } from "@/lib/report-block";
 
 const REASONS = [
   { value: "spam", label: "Spam" },
@@ -38,6 +39,7 @@ export function ReportDialog({
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState("");
+  const [blockFailed, setBlockFailed] = useState(false);
 
   const handleSubmit = async () => {
     if (!reason) {
@@ -62,17 +64,10 @@ export function ReportDialog({
         const data = await res.json();
         throw new Error(data.error || "Failed to submit report.");
       }
+      const failed = Boolean(blockAfter && targetUserId && !(await requestUserBlock(targetUserId)));
+      setBlockFailed(failed);
       setSubmitted(true);
-
-      // Block the user after reporting if requested
-      if (blockAfter && targetUserId) {
-        try {
-          await fetch(`/api/users/${targetUserId}/block`, { method: "POST" });
-        } catch {
-          // Block failed but report succeeded — don't worry user about it
-        }
-      }
-
+      if (failed) return; // Keep the successful report visible; retry only the block.
       setTimeout(onClose, 2000);
     } catch (e) {
       setError((e as Error).message);
@@ -93,6 +88,15 @@ export function ReportDialog({
               Thank you for helping keep Circlo safe. We&apos;ll review your
               report.
             </p>
+            {blockFailed && targetUserId ? <div role="alert" className="mt-4 space-y-3 text-sm">
+              <p>Your report was saved, but this person was not blocked. Try again to block them.</p>
+              <button type="button" className="btn btn-primary" disabled={submitting} onClick={async () => {
+                setSubmitting(true);
+                const ok = await requestUserBlock(targetUserId);
+                setBlockFailed(!ok); setSubmitting(false);
+              }}>{submitting ? "Blocking…" : "Try blocking again"}</button>
+            </div> : blockAfter ? <p role="status" className="mt-3 text-sm">This person is blocked.</p> : null}
+            <button type="button" className="btn btn-secondary mt-4" onClick={onClose}>Done</button>
           </div>
         ) : (
           <>
@@ -150,6 +154,7 @@ export function ReportDialog({
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="Provide any additional context..."
                 rows={3}
+                maxLength={5000}
                 className="w-full resize-none rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2.5 text-sm text-[var(--text)] placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:outline-none"
               />
             </div>

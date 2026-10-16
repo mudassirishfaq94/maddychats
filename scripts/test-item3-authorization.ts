@@ -14,6 +14,7 @@ import { Pool } from "pg";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { hashPassword } from "../src/server/password";
+import { testPlayCompliance } from "./test-play-compliance.mjs";
 
 async function main() {
   const url = process.env.ITEM3_TEST_DATABASE_URL;
@@ -232,9 +233,12 @@ async function main() {
     assert.equal((await api(`/api/conversations/${conversation.id}`, aliceCookie, "DELETE", undefined, { "sec-fetch-site": "cross-site" })).status, 403);
     assert.equal((await sql.query("select count(*)::int as count from conversations where id=$1", [conversation.id])).rows[0].count, 1);
     assert.equal((await api(historyPath, outsiderCookie, "POST", { text: "ciphertext", encrypted: true })).status, 404);
-    await sql.query("insert into blocks(blocker_id,blocked_id) values($1,$2)", [bob.id, alice.id]);
+    assert.equal((await api(`/api/users/${alice.id}/block`, bobCookie, "POST")).status, 200, "Blocking persists through the authenticated API");
     assert.equal((await api(historyPath, aliceCookie, "POST", { text: "ciphertext", encrypted: true })).status, 403);
-    await sql.query("delete from blocks where blocker_id=$1", [bob.id]);
+    assert.equal((await api(historyPath, bobCookie, "POST", { text: "ciphertext", encrypted: true })).status, 403, "Blocking is symmetric");
+    assert.equal((await api(`/api/conversations/${conversation.id}/typing`, aliceCookie, "POST", { typing: true })).status, 403);
+    assert.equal((await api("/api/calls", aliceCookie, "POST", { action: "invite", conversationId: conversation.id, clientId: randomUUID(), sdp: "v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\n" })).status, 403);
+    assert.equal((await api(`/api/users/${alice.id}/block`, bobCookie, "DELETE")).status, 200);
     assert.equal((await api(`/api/conversations/${group.id}/messages`, bobCookie, "POST", { text: "ciphertext", encrypted: true })).status, 403);
     assert.equal((await api(`/api/groups/${group.id}/members`, bobCookie, "POST", { userId: outsider.id })).status, 403);
     const settingsPath = `/api/groups/${group.id}/settings`;
@@ -340,6 +344,7 @@ async function main() {
     assert.equal((await api("/api/auth/change-password", mfaCookie, "POST", mfaChange)).status, 403, "Correct current password does not bypass enabled MFA");
     assert.equal((await api("/api/auth/change-password", mfaCookie, "POST", { ...mfaChange, mfaCode: recoveryCode })).status, 200);
     console.log("PASS mobile profile password UI: Google setup option, wrong-password rejection without mutation, successful change, old-session revocation, new-password login, CSRF and MFA enforcement.");
+    await testPlayCompliance({ base, sql, api, account, login });
     console.log("Authorization checks passed: membership, CSRF, blocking, group roles, cursor boundaries, private media, deletion, and session revocation");
   } finally {
     if (server && server.exitCode === null && server.signalCode === null) {

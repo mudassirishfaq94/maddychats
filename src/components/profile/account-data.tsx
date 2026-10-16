@@ -72,7 +72,7 @@ export function AccountDataSection() {
   };
 
   return (
-    <div className="card-glass rounded-2xl p-5 sm:p-6 animate-fade-up">
+    <div id="account-data" className="card-glass rounded-2xl p-5 sm:p-6 animate-fade-up">
       <div className="flex items-center gap-2.5">
         <Download className="h-4.5 w-4.5 text-[var(--accent)]" />
         <h2 className="text-sm font-bold">Your Data</h2>
@@ -118,8 +118,7 @@ export function AccountDataSection() {
                 <CheckCircle className="h-12 w-12 text-[var(--success)]" />
                 <h3 className="mt-4 text-lg font-bold">Account Deleted</h3>
                 <p className="mt-2 text-sm text-[var(--muted)]">
-                  Your account and all associated data have been permanently
-                  removed.
+                  Your account was deleted and its sessions ended. Uploaded files are cleaned up separately; recipient copies and limited security records may remain.
                 </p>
               </div>
             ) : (
@@ -146,10 +145,10 @@ export function AccountDataSection() {
                 <div className="mt-4 rounded-xl bg-[color-mix(in_srgb,var(--danger)_8%,transparent)] p-4 text-xs text-[var(--danger)]">
                   <p className="font-semibold">This action is permanent and cannot be undone.</p>
                   <ul className="mt-2 space-y-1">
-                    <li>• All your messages will be deleted</li>
-                    <li>• All your conversations will be removed</li>
-                    <li>• Your profile and avatar will be deleted</li>
-                    <li>• All your uploaded media will be removed</li>
+                    <li>• Your account, sign-ins and sent messages will be deleted</li>
+                    <li>• Other members&apos; group content and downloaded copies may remain</li>
+                    <li>• Unreferenced media is eligible for cleanup after 24 hours</li>
+                    <li>• Limited security records and provider backups may remain</li>
                     <li>• You will be permanently logged out</li>
                   </ul>
                 </div>

@@ -5,7 +5,7 @@ import { chromium } from "playwright";
 export async function testPublicPages(base, { live = false } = {}) {
   const origin = new URL(base).origin;
   assert(["127.0.0.1", "localhost"].includes(new URL(base).hostname) || (live && origin === "https://circlo.chat"));
-  const paths = ["/", "/privacy", "/terms", "/whatsapp-alternative"];
+  const paths = ["/", "/privacy", "/terms", "/whatsapp-alternative", "/support", "/delete-account"];
   const browser = await chromium.launch(); const errors = []; const links = new Set(); let layouts = 0;
   try {
     const page = await browser.newPage(); page.on("pageerror", error => errors.push(error.message));

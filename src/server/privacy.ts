@@ -235,7 +235,7 @@ export async function getAuditLog(limit = 100) {
 export async function deleteAccount(userId: string) {
   // The event and deletion commit together; no success event survives a failed deletion.
   await db.transaction(async (tx) => {
-    await tx.insert(adminAuditLog).values({ adminId: userId, action: "account_self_deleted", targetUserId: userId, details: { actorUserId: userId } });
+    await tx.insert(adminAuditLog).values({ adminId: userId, action: "account_self_deleted", targetUserId: userId, details: { source: "self-service" } });
     await tx.delete(users).where(eq(users.id, userId));
   });
 }

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-export const PUBLIC_PATHS = ["/", "/privacy", "/terms", "/whatsapp-alternative"] as const;
+export const PUBLIC_PATHS = ["/", "/privacy", "/terms", "/whatsapp-alternative", "/support", "/delete-account"] as const;
 export function publicMetadata(path: string, title: string, description: string): Metadata {
   return {
     title: { absolute: title }, description,
