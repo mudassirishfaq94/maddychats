@@ -1,5 +1,7 @@
 # Circlo — Google Play Phase 3 results
 
+Later owner-approved signing follow-up: package `chat.circlo.app` and a new upload key are now approved and signed candidates prepared. See [current signed-release results](SIGNED_RELEASE_RESULTS.md) and [final compliance checklist](FINAL_PLAY_COMPLIANCE_CHECKLIST.md). This document remains the historical Phase3 snapshot.
+
 16 October 2026. **Local notification implementation/build work completed; official closed-testing readiness remains BLOCKED.** Existing Android architecture retained. No GitHub push, deployment, production migration/configuration change, Firebase project/billing change, permanent key generation, release signing, Play upload or publication occurred.
 
 PASS is limited to the evidence stated. FAIL means a demonstrated missing/defective requirement; BLOCKED means a prerequisite or owner action is missing; NOT VERIFIED means no adequate runtime/operational evidence. No Play approval, universal delivery or performance guarantee is made.
