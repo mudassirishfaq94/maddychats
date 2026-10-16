@@ -22,9 +22,10 @@ class HostedPushBridge(private val activity: MainActivity, private val requestPe
             val data = runCatching { JSONObject(raw) }.getOrNull() ?: return@addWebMessageListener
             val id = data.optString("id")
             if (!Regex("[a-zA-Z0-9-]{1,64}").matches(id)) return@addWebMessageListener
-            fun respond(token: String? = null, error: String? = null) {
+            fun respond(token: String? = null, error: String? = null, status: JSONObject? = null) {
                 if (!WebOriginPolicy.isAllowed(source.url.orEmpty(), BuildConfig.API_BASE_URL) || activity.isDestroyed) return
                 val result = JSONObject().put("id", id)
+                status?.let { result.put("status", it) }
                 token?.let { result.put("token", it) }; error?.let { result.put("error", it) }
                 runCatching { reply.postMessage(result.toString()) }
             }
@@ -38,6 +39,8 @@ class HostedPushBridge(private val activity: MainActivity, private val requestPe
                 }.onFailure { respond(error = "Notifications are not configured for this Android build.") }
             }
             when (data.optString("command")) {
+                "settings" -> { runCatching { NotificationChannels.openSettings(activity) }.onSuccess { respond() }.onFailure { respond(error = "Open Android Settings > Apps > Circlo > Notifications.") } }
+                "status" -> respond(status = NotificationChannels.status(activity))
                 "token" -> token()
                 "request" -> requestPermission { token() }
                 "clear" -> { NativePushState.clear(activity); respond() }

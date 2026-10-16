@@ -25,6 +25,7 @@
     <!-- Do not let platform backups copy potentially authenticated app or
          WebView state to a different device/account. -->
     <application
+        android:name=".CircloApplication"
         android:allowBackup="false"
         android:fullBackupContent="@xml/backup_rules"
         android:dataExtractionRules="@xml/data_extraction_rules"

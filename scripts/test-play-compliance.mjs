@@ -53,6 +53,8 @@ export async function testPlayCompliance({base,sql,api,account,login}) {
         window.__pushRequests=0;
         const port={onmessage:null,postMessage(raw){
           const input=JSON.parse(raw),reply={id:input.id};
+          if(input.command==='status') reply.status={enabled:true,messagesImportance:2};
+          if(input.command==='settings') window.__androidSettingsOpened=(window.__androidSettingsOpened||0)+1;
           if(input.command==='request') { window.__pushRequests++; if(window.__pushRequests>1) reply.token='fake-native-ui-registration-token'; }
           queueMicrotask(()=>port.onmessage?.({data:JSON.stringify(reply)}));
         }};
@@ -64,6 +66,10 @@ export async function testPlayCompliance({base,sql,api,account,login}) {
       const enable=section.getByRole('button',{name:'Enable',exact:true});
       await enable.waitFor();
       assert.equal(await nativePage.evaluate(()=>window.__pushRequests),0,'Login must not prompt for Android notification permission');
+      await section.getByText('Android has set Messages to quiet or blocked. Open settings to choose Alerting and Pop on screen.',{exact:true}).waitFor();
+      await section.getByRole('button',{name:'Open Android notification settings',exact:true}).click();
+      assert.equal(await nativePage.evaluate(()=>window.__androidSettingsOpened),1,'Settings button uses native channel-settings command');
+      assert.equal(await nativePage.evaluate(()=>window.__pushRequests),0,'Opening settings must not prompt notification permission');
       await enable.click();
       await section.getByText('Allow notifications in Android Settings, then try again.',{exact:true}).waitFor();
       await enable.click();

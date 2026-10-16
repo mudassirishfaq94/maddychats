@@ -7,7 +7,6 @@ import android.content.pm.PackageManager
 import android.Manifest
 import android.net.Uri
 import android.provider.OpenableColumns
-import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.os.Build
 import android.os.Bundle
@@ -286,22 +285,7 @@ class MainActivity : ComponentActivity() {
         notificationDestination(intent)?.let { webView?.loadUrl(it) }
     }
 
-    private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                "maddychats-messages",
-                "Messages",
-                NotificationManager.IMPORTANCE_HIGH
-            ).apply {
-                description = "New message notifications"
-                enableVibration(true)
-                vibrationPattern = longArrayOf(100, 50, 100)
-                lockscreenVisibility = android.app.Notification.VISIBILITY_PRIVATE
-            }
-            val notificationManager = getSystemService(NotificationManager::class.java)
-            notificationManager?.createNotificationChannel(channel)
-        }
-    }
+    private fun createNotificationChannel() { NotificationChannels.ensure(this) }
 
     override fun onDestroy() { webView?.destroy(); webView = null; super.onDestroy() }
 

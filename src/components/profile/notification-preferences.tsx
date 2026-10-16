@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Bell, BellRing, Loader2, Smartphone, Volume2, Users } from "lucide-react";
 import { Toggle } from "@/components/ui/toggle";
 import { isNativeApp } from "@/lib/native-platform";
+import { hasHostedPushBridge, hostedPush, androidNotificationStatus, type AndroidNotificationStatus } from "@/lib/native-push-bridge";
 
 interface Preferences {
   messageNotifications: boolean;
@@ -35,6 +36,21 @@ function subscriptionMatchesKey(subscription: PushSubscription, expected: Uint8A
 }
 
 export function NotificationPreferences() {
+  const [androidStatus, setAndroidStatus] = useState<AndroidNotificationStatus | null>(null);
+  const [hasAndroidSettings, setHasAndroidSettings] = useState(false);
+  useEffect(() => {
+    let stopped = false;
+    const refresh = () => {
+      if (!hasHostedPushBridge()) return;
+      setHasAndroidSettings(true);
+      void androidNotificationStatus().then(status => { if (!stopped) setAndroidStatus(status); }).catch(() => {});
+    };
+    refresh();
+    const visible = () => { if (document.visibilityState === "visible") refresh(); };
+    document.addEventListener("visibilitychange", visible);
+    window.addEventListener("circlo:native-push-refresh", refresh);
+    return () => { stopped = true; document.removeEventListener("visibilitychange", visible); window.removeEventListener("circlo:native-push-refresh", refresh); };
+  }, []);
   const [preferences, setPreferences] = useState<Preferences | null>(null);
   const [saving, setSaving] = useState<keyof Preferences | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -182,6 +198,17 @@ export function NotificationPreferences() {
           <p className="mt-2 leading-relaxed">On Android, press and hold a Circlo notification, open its settings, then enable Alerting and Pop on screen (or Floating notifications). Check that Do Not Disturb is off and Notification sound is enabled below. Menu names vary by phone. Android controls banners; a website cannot override these settings.</p>
         </details>
       </div>
+      {hasAndroidSettings ? (
+        <div className="mt-4 rounded-2xl border border-[var(--border)] bg-[var(--card-2)] p-4">
+          <p className="text-sm font-semibold">Android message alerts</p>
+          <p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">{androidStatus && !androidStatus.enabled
+            ? "Android has blocked Circlo notifications. Allow them in Android settings."
+            : androidStatus?.messagesImportance != null && androidStatus.messagesImportance < 4
+              ? "Android has set Messages to quiet or blocked. Open settings to choose Alerting and Pop on screen."
+              : "Android controls pop-ups, Do Not Disturb and sounds. If banners are missing, check Messages and Pop on screen (sometimes called Floating notifications)."}</p>
+          <button type="button" className="mt-3 max-w-full rounded-xl border border-[var(--border)] px-3 py-2 text-sm font-semibold whitespace-normal" onClick={() => void hostedPush("settings").catch(() => setMessage("Open Android Settings > Apps > Circlo > Notifications > Messages. Older app versions may call this General."))}>Open Android notification settings</button>
+        </div>
+      ) : null}
       {!preferences ? (
         <div className="flex justify-center py-10">{message ? <p className="text-sm text-[var(--danger)]">{message}</p> : <Loader2 className="h-5 w-5 animate-spin text-[var(--muted)]" />}</div>
       ) : (

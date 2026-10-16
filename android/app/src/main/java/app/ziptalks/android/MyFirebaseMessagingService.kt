@@ -8,14 +8,14 @@ import android.Manifest
 import android.content.pm.PackageManager
 import androidx.core.content.ContextCompat
 import android.os.Build
-import androidx.core.app.NotificationCompat
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 
 class MyFirebaseMessagingService : FirebaseMessagingService() {
 
-    companion object {
-        private const val CHANNEL_ID = "maddychats-messages"
+    override fun onCreate() {
+        super.onCreate()
+        NotificationChannels.ensure(this)
     }
 
     override fun onMessageReceived(remoteMessage: RemoteMessage) {
@@ -24,6 +24,8 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         // Drop other accounts, expired events and duplicates; never display provider plaintext.
         if (!NativePushState.accept(this, remoteMessage.data["recipientId"], remoteMessage.data["eventId"], remoteMessage.data["expiresAt"])) return
         if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return
+        // Quiet activity must never bypass a user-blocked Messages channel.
+        if (!NotificationChannels.messagesAllowed(this)) return
         val title = "Circlo"
         val body = "New activity. Open Circlo to view it."
         val url = remoteMessage.data["url"]
@@ -40,17 +42,14 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             this, tag?.hashCode() ?: 0, intent, pendingIntentFlags
         )
 
-        val builder = NotificationCompat.Builder(this, CHANNEL_ID)
+        val silent = remoteMessage.data["silent"] == "true"
+        val builder = NotificationChannels.builder(this, silent)
             .setSmallIcon(R.drawable.ic_stat_ic_notification)
             .setContentTitle(title)
             .setContentText(body)
             .setAutoCancel(true)
-            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
-            .setOnlyAlertOnce(true)
-            .setSilent(remoteMessage.data["silent"] == "true")
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setContentIntent(pendingIntent)
-            .setVibrate(longArrayOf(100, 50, 100))
+
 
         val notificationManager =
             getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
