@@ -60,7 +60,7 @@ export async function testDeviceRecoveryUI(base, pool) {
     assert.equal(Buffer.from(pushConfig.publicKey, "base64url").length, 65);
     assert.deepEqual(Object.keys(pushConfig), ["publicKey"], "Only the public push key is exposed");
     await notificationSection.getByRole("button", { name: "Enable", exact: true }).click();
-    await notificationSection.getByText("Push alerts enabled on this device.", { exact: true }).waitFor();
+    await notificationSection.getByText("Push alerts enabled. Floating banners and sounds also depend on your browser and Android settings.", { exact: true }).waitFor();
     assert.equal(await source.page.evaluate(() => window.__pushHasKey), true);
     assert.equal(await source.page.evaluate(() => window.__pushReplacedKey), true, "Subscriptions made with a previous deployment key are replaced");
     assert.equal((await pool.query("select count(*)::int as n from push_subscriptions where user_id=$1", [user.id])).rows[0].n, 1);
