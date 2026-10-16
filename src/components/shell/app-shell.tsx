@@ -125,7 +125,7 @@ export function AppShell({
         </div>
       </header>
 
-      <main id="main-content" className="min-h-0 flex-1 overflow-hidden pb-[calc(56px+env(safe-area-inset-bottom))] sm:pb-0">
+      <main id="main-content" className="min-h-0 flex-1 overflow-hidden">
         {children}
       </main>
 

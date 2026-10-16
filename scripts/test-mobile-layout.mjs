@@ -67,7 +67,58 @@ async function expandDetails(page) {
   }
 }
 
-export async function testMobileLayout(base, pool, { recordOnly = false } = {}) {
+async function testNavigationSpace(page) {
+  const enable = page.getByRole("button", { name: "Enable two-factor authentication", exact: true });
+  const twoFactor = page.locator(".card-glass").filter({ has: enable }).last();
+  const measurements = [];
+  for (const [width, height] of [[320, 740], [360, 800], [390, 844]]) {
+    for (const fontSize of [20, 16, 24]) {
+      for (const inset of [0, 32]) {
+        await page.setViewportSize({ width, height });
+        await page.evaluate(({ fontSize, inset }) => {
+          document.documentElement.style.fontSize = `${fontSize}px`;
+          // Simulate a phone's additional bottom safe-area padding, without
+          // claiming desktop Chromium emulates the Android window manager.
+          document.querySelector('nav[aria-label="Mobile navigation"]').style.paddingBottom = `${inset}px`;
+        }, { fontSize, inset });
+        await expandDetails(page);
+        const boundary = await page.evaluate(() => {
+          const content = document.querySelector("#main-content > :first-child").getBoundingClientRect();
+          const nav = document.querySelector('nav[aria-label="Mobile navigation"]').getBoundingClientRect();
+          return { contentBottom: content.bottom, navTop: nav.top, navBottom: nav.bottom, height: innerHeight };
+        });
+        measurements.push({ width, height, fontSize, inset, ...boundary });
+        assert(boundary.contentBottom <= boundary.navTop + 1, `Content overlaps mobile navigation: ${JSON.stringify(measurements.at(-1))}`);
+        assert(boundary.navBottom <= boundary.height + 1);
+        await enable.scrollIntoViewIfNeeded(); await enable.click({ trial: true });
+        const recover = page.getByRole("button", { name: "Confirm email and recover this browser", exact: true });
+        await recover.scrollIntoViewIfNeeded();
+        assert(await recover.evaluate(node => {
+          const box = node.getBoundingClientRect();
+          const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+          return hit === node || node.contains(hit);
+        }), "Recovery confirmation remains visible without bypassing its disabled verification gate");
+        // Real keyboard focus traversal, with a smaller visual layout to model
+        // space lost to a keyboard. Physical Android IME behavior is separate.
+        await page.setViewportSize({ width, height: height - 300 });
+        await twoFactor.getByLabel("Current password", { exact: true }).focus();
+        await page.keyboard.press("Tab");
+        assert(await twoFactor.getByLabel("Authenticator or recovery code (if enabled)", { exact: true }).evaluate(node => node === document.activeElement));
+        await enable.click({ trial: true });
+      }
+    }
+  }
+  await page.evaluate(() => {
+    document.documentElement.style.fontSize = "";
+    document.querySelector('nav[aria-label="Mobile navigation"]').style.removeProperty("padding-bottom");
+  });
+  await mkdir(".freebuff/performance", { recursive: true });
+  await writeFile(".freebuff/performance/mobile-navigation.json", JSON.stringify(measurements, null, 2));
+  console.log("PASS mobile navigation: 18 viewport/font/safe-area combinations, recovery/MFA hit testing and keyboard focus with reduced viewport; physical Android IME not asserted");
+  return measurements.length;
+}
+
+export async function testMobileLayout(base, pool, { recordOnly = false, navigationOnly = false } = {}) {
   assert(["127.0.0.1", "localhost"].includes(new URL(base).hostname), "Broad audit runs only on disposable local data");
   const browser = await chromium.launch();
   // Dedicated documentation address isolates login counters in the loopback fixture gateway.
@@ -101,6 +152,8 @@ export async function testMobileLayout(base, pool, { recordOnly = false } = {}) 
     await pending.goto(base + "/app/profile#encryption-devices");
     await pending.getByText("This device: Waiting for approval", { exact: true }).waitFor();
     await pending.getByRole("button", { name: "Emergency recovery: no trusted device or recovery file", exact: true }).click();
+    const navigationScreens = await testNavigationSpace(pending);
+    if (navigationOnly) { assert.deepEqual(errors, []); return { screens: navigationScreens, observations: [], browserErrors: errors }; }
     const group = (await pool.query("insert into conversations(type,name,description,created_by_id) values('group',$1,$2,$3) returning id", ["Circle".repeat(16), "Long mobile group description ".repeat(8), accounts[0].id])).rows[0];
     await pool.query("insert into conversation_members(conversation_id,user_id,role,accepted_at) values($1,$2,'owner',now())", [group.id, accounts[0].id]);
     for (const [width,height] of [[320,740],[360,800],[390,844],[412,915],[768,1024],[844,390],[390,360]]) {
