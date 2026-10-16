@@ -1,0 +1,172 @@
+{
+  "at": "2026-10-16T10:04:37.222Z",
+  "requests": [
+    {
+      "path": "/",
+      "status": 200,
+      "finalUrl": "https://circlo.chat/",
+      "type": "text/html; charset=utf-8",
+      "csp": "default-src 'self'; script-src 'self' 'nonce-REDACTED' 'strict-dynamic' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' blob:; font-src 'self'; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://*.firebaseapp.com; frame-src https://www.google.com https://www.recaptcha.net https://*.firebaseapp.com; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'; report-uri /api/security/csp-report",
+      "hsts": "max-age=31536000; includeSubDomains"
+    },
+    {
+      "path": "/manifest.webmanifest",
+      "status": 200,
+      "finalUrl": "https://circlo.chat/manifest.webmanifest",
+      "type": "application/manifest+json",
+      "csp": "base-uri 'self'; form-action 'self'; frame-ancestors 'self'; object-src 'none'",
+      "hsts": "max-age=31536000; includeSubDomains"
+    },
+    {
+      "path": "/sw.js",
+      "status": 200,
+      "finalUrl": "https://circlo.chat/sw.js",
+      "type": "application/javascript; charset=UTF-8",
+      "csp": "base-uri 'self'; form-action 'self'; frame-ancestors 'self'; object-src 'none'",
+      "hsts": "max-age=31536000; includeSubDomains"
+    },
+    {
+      "path": "/offline.html",
+      "status": 200,
+      "finalUrl": "https://circlo.chat/offline.html",
+      "type": "text/html; charset=UTF-8",
+      "csp": "default-src 'self'; script-src 'self' 'nonce-REDACTED' 'strict-dynamic' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' blob:; font-src 'self'; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://*.firebaseapp.com; frame-src https://www.google.com https://www.recaptcha.net https://*.firebaseapp.com; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'; report-uri /api/security/csp-report",
+      "hsts": "max-age=31536000; includeSubDomains"
+    },
+    {
+      "path": "/.well-known/assetlinks.json",
+      "status": 404,
+      "finalUrl": "https://circlo.chat/.well-known/assetlinks.json",
+      "type": "text/html; charset=utf-8",
+      "csp": "default-src 'self'; script-src 'self' 'nonce-REDACTED' 'strict-dynamic' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' blob:; font-src 'self'; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://*.firebaseapp.com; frame-src https://www.google.com https://www.recaptcha.net https://*.firebaseapp.com; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'; report-uri /api/security/csp-report",
+      "hsts": "max-age=31536000; includeSubDomains"
+    },
+    {
+      "path": "/privacy",
+      "status": 200,
+      "finalUrl": "https://circlo.chat/privacy",
+      "type": "text/html; charset=utf-8",
+      "csp": "default-src 'self'; script-src 'self' 'nonce-REDACTED' 'strict-dynamic' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' blob:; font-src 'self'; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://*.firebaseapp.com; frame-src https://www.google.com https://www.recaptcha.net https://*.firebaseapp.com; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'; report-uri /api/security/csp-report",
+      "hsts": "max-age=31536000; includeSubDomains"
+    },
+    {
+      "path": "/terms",
+      "status": 200,
+      "finalUrl": "https://circlo.chat/terms",
+      "type": "text/html; charset=utf-8",
+      "csp": "default-src 'self'; script-src 'self' 'nonce-REDACTED' 'strict-dynamic' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' blob:; font-src 'self'; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://*.firebaseapp.com; frame-src https://www.google.com https://www.recaptcha.net https://*.firebaseapp.com; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'; report-uri /api/security/csp-report",
+      "hsts": "max-age=31536000; includeSubDomains"
+    },
+    {
+      "path": "/delete-account",
+      "status": 404,
+      "finalUrl": "https://circlo.chat/delete-account",
+      "type": "text/html; charset=utf-8",
+      "csp": "default-src 'self'; script-src 'self' 'nonce-REDACTED' 'strict-dynamic' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' blob:; font-src 'self'; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://*.firebaseapp.com; frame-src https://www.google.com https://www.recaptcha.net https://*.firebaseapp.com; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'; report-uri /api/security/csp-report",
+      "hsts": "max-age=31536000; includeSubDomains"
+    },
+    {
+      "path": "/robots.txt",
+      "status": 200,
+      "finalUrl": "https://circlo.chat/robots.txt",
+      "type": "text/plain",
+      "csp": "default-src 'self'; script-src 'self' 'nonce-REDACTED' 'strict-dynamic' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' blob:; font-src 'self'; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://*.firebaseapp.com; frame-src https://www.google.com https://www.recaptcha.net https://*.firebaseapp.com; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'; report-uri /api/security/csp-report",
+      "hsts": "max-age=31536000; includeSubDomains"
+    },
+    {
+      "path": "/sitemap.xml",
+      "status": 200,
+      "finalUrl": "https://circlo.chat/sitemap.xml",
+      "type": "application/xml",
+      "csp": "default-src 'self'; script-src 'self' 'nonce-REDACTED' 'strict-dynamic' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' blob:; font-src 'self'; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://*.firebaseapp.com; frame-src https://www.google.com https://www.recaptcha.net https://*.firebaseapp.com; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'; report-uri /api/security/csp-report",
+      "hsts": "max-age=31536000; includeSubDomains"
+    }
+  ],
+  "icons": [
+    {
+      "src": "/icons/circlo-192.png?v=linked-c-2",
+      "status": 200,
+      "width": 192,
+      "height": 192
+    },
+    {
+      "src": "/icons/circlo-512.png?v=linked-c-2",
+      "status": 200,
+      "width": 512,
+      "height": 512
+    },
+    {
+      "src": "/icons/circlo-maskable-512.png?v=linked-c-2",
+      "purpose": "maskable",
+      "status": 200,
+      "width": 512,
+      "height": 512
+    }
+  ],
+  "manifest": {
+    "id": "/",
+    "name": "Circlo",
+    "short_name": "Circlo",
+    "description": "Your circle. Your secrets. Sealed.",
+    "start_url": "/app/chats",
+    "scope": "/",
+    "display": "standalone",
+    "orientation": "any",
+    "categories": [
+      "social",
+      "communication"
+    ],
+    "shortcuts": [
+      {
+        "name": "Chats",
+        "url": "/app/chats",
+        "icons": [
+          {
+            "src": "/icons/circlo-192.png?v=linked-c-2",
+            "sizes": "192x192"
+          }
+        ]
+      },
+      {
+        "name": "People",
+        "url": "/app/people",
+        "icons": [
+          {
+            "src": "/icons/circlo-192.png?v=linked-c-2",
+            "sizes": "192x192"
+          }
+        ]
+      }
+    ],
+    "background_color": "#151719",
+    "theme_color": "#151719",
+    "icons": [
+      {
+        "src": "/icons/circlo-192.png?v=linked-c-2",
+        "sizes": "192x192",
+        "type": "image/png"
+      },
+      {
+        "src": "/icons/circlo-512.png?v=linked-c-2",
+        "sizes": "512x512",
+        "type": "image/png"
+      },
+      {
+        "src": "/icons/circlo-maskable-512.png?v=linked-c-2",
+        "sizes": "512x512",
+        "type": "image/png",
+        "purpose": "maskable"
+      }
+    ]
+  },
+  "offline": {
+    "title": "Circlo - Offline",
+    "retryNavigations": 0,
+    "elapsedMs": 833,
+    "errors": [
+      "Failed to load resource: the server responded with a status of 401 ()",
+      "Executing inline script violates the following Content Security Policy directive 'script-src 'self' 'nonce-92dfh/WMzUbC/1QE7jejsDec' 'strict-dynamic' 'wasm-unsafe-eval''. Either the 'unsafe-inline' keyword, a hash ('sha256-jj82A59tzXkggNxMDvudX+P63r3EwB9bXSmYh1Q9Nlc='), or a nonce ('nonce-...') is required to enable inline execution. The action has",
+      "Failed to load resource: net::ERR_INTERNET_DISCONNECTED"
+    ]
+  }
+}
