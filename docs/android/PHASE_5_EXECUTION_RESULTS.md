@@ -65,3 +65,7 @@ After missing0042provenance is resolved and required config prepared, present th
 **Final status: recovery/access and local tooling improved; production rollout and official closed testing remain NO-GO.**
 
 Local implementation commit: `67690b4` (backup policy-role dependency checks and offline migration provenance verifier); unpushed. Backup, keys, client config and private operator helpers are not staged. Documentation/evidence is committed separately.
+
+## Owner-supplied Firebase Admin credential — local validation update
+
+Owner provided a local service-account JSON. Verified type=service_account, expected project ziptalks-5b402, matching project service-account identity and official OAuth token endpoint. RSA private key parses and local sign/verify succeeds. Provider IAM/FCM authorization and real delivery remain NOT VERIFIED; no provider token request/push was made. Protected copy is outside Git at `%USERPROFILE%\CircloRelease\secrets\firebase-admin.json`. Both original and protected copy have inheritance disabled and only owner/SYSTEM access (two ACL entries each). No credential values, private-key material or key identifiers are included here. Render variables remain unchanged; the credential is available for the separately approved configuration step. Missing0042/runtime-policy repair and physical testing remain open.
