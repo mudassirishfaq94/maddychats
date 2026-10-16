@@ -46,6 +46,12 @@ export async function testPwaNotifications(base, pool) {
     release(); await page.unrouteAll({ behavior: "wait" });
     await page.getByRole("status", { name: "Opening Circlo", exact: true }).waitFor({ state: "detached" });
     await page.getByRole("heading", { name: owner.username, exact: true }).waitFor();
+    await page.locator("summary").filter({ has: page.getByText("Notifications", { exact: true }) }).click();
+    const help = page.locator("#notifications details").filter({ has: page.getByText("Notifications arrive, but no pop-up?", { exact: true }) });
+    await help.locator("summary").click();
+    assert(await help.getByText(/Android and your browser decide whether to show a banner/).isVisible());
+    assert(await help.getByText(/Press and hold an actual Circlo message/).isVisible());
+    assert.equal(await page.getByRole("button", { name: "Open Android notification settings", exact: true }).count(), 0, "Browser UI must not promise a native settings bridge");
     await page.evaluate(async () => { await navigator.serviceWorker.register("/sw.js", { scope: "/" }); await navigator.serviceWorker.ready; });
     let worker = context.serviceWorkers().find(value => value.url().endsWith("/sw.js"));
     if (!worker) worker = await context.waitForEvent("serviceworker");
@@ -55,7 +61,7 @@ export async function testPwaNotifications(base, pool) {
     await cdp.send("ServiceWorker.enable");
     for (let i = 0; i < 100 && !registrationId; i++) await new Promise(resolve => setTimeout(resolve, 50));
     assert(registrationId, "Actual service worker registration must be visible to Chromium");
-    const cards = () => worker.evaluate("self.registration.getNotifications().then(cards => cards.map(card => ({ title: card.title, body: card.body, tag: card.tag, silent: card.silent, data: card.data })))");
+    const cards = () => worker.evaluate("self.registration.getNotifications().then(cards => cards.map(card => ({ title: card.title, body: card.body, tag: card.tag, silent: card.silent, renotify: card.renotify, vibrate: card.vibrate, data: card.data })))");
     const push = async index => {
       await cdp.send("ServiceWorker.deliverPushMessage", { origin: base, registrationId, data: JSON.stringify({ notificationId: notices[index].id, recipientId: owner.id }) });
       await worker.evaluate("pushWork.then(() => true)");
@@ -121,6 +127,32 @@ export async function testPwaNotifications(base, pool) {
     assert.equal(new URL(loginPage.url()).searchParams.get("next"), tapped.url, "Sign-in preserves the exact message link");
     await loggedOut.close();
     await worker.evaluate("self.registration.getNotifications().then(cards => cards.forEach(card => card.close()))");
+    await pool.query("update notification_preferences set notification_sound=false where user_id=$1", [owner.id]);
+    await push(4);
+    let quiet = (await cards())[0];
+    assert.equal(quiet.silent, true); assert.equal(quiet.renotify, false);
+    assert.equal(quiet.data.lastAlertAt, 0, "A quiet card must not consume the audible re-alert cooldown");
+    await pool.query("update notification_preferences set notification_sound=true where user_id=$1", [owner.id]);
+    await push(0);
+    const audible = (await cards())[0];
+    assert.equal(audible.silent, false); assert.equal(audible.renotify, true, "First audible replacement requests attention after a quiet card");
+    assert(audible.vibrate.length > 0); assert(audible.data.lastAlertAt > 0);
+    await worker.evaluate("self.registration.getNotifications().then(cards => cards.forEach(card => card.close()))");
+    await worker.evaluate(() => {
+      self.savedDeliveryFetch = self.fetch;
+      self.fetch = async (input, init) => String(input).startsWith("/api/notifications/push/delivery")
+        ? new Response("{}", { status: 503 }) : self.savedDeliveryFetch(input, init);
+    });
+    try {
+      await push(4); quiet = (await cards())[0];
+      assert.equal(quiet.silent, true); assert.equal(quiet.renotify, false);
+      assert.equal(quiet.vibrate.length, 0); assert.equal(quiet.title, "Circlo");
+      assert.equal(quiet.data.url, "/app/chats");
+      await push(4); assert.equal((await cards())[0].data.count, 1, "Offline redelivery must not duplicate the generic alert");
+    } finally {
+      await worker.evaluate("self.fetch = self.savedDeliveryFetch; delete self.savedDeliveryFetch");
+      await worker.evaluate("self.registration.getNotifications().then(cards => cards.forEach(card => card.close()))");
+    }
     await login(peer); assert.equal((await delivery()).status(), 404); await push(4); assert.equal((await cards()).length, 0, "Account switching cannot reveal the previous account's sender");
     await context.request.post(base + "/api/auth/logout", { headers: { Origin: base } });
     assert.equal((await delivery()).status(), 401); await push(4); assert.equal((await cards()).length, 0, "Logged-out clients cannot fetch private presentation");

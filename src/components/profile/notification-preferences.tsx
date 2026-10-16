@@ -149,7 +149,7 @@ export function NotificationPreferences() {
       if (!response.ok) throw new Error("The device could not be registered.");
       setPushSubscribed(true);
       try { localStorage.setItem("maddy:web-push-subscribed", "1"); } catch { /* Subscription does not depend on optional browser storage. */ }
-      setMessage("Push alerts enabled on this device.");
+      setMessage("Push alerts enabled. Floating banners and sounds also depend on your browser and Android settings.");
       return true;
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Push notifications could not be enabled.");
@@ -195,7 +195,13 @@ export function NotificationPreferences() {
         <p className="mt-2 text-xs text-[var(--muted)]">Install Circlo from your browser menu, then enable alerts here. On iPhone, use Add to Home Screen first. Your phone controls notification sounds, appearance and battery restrictions.</p>
         <details className="mt-3 rounded-xl border border-[var(--border)] p-3 text-xs text-[var(--muted)]">
           <summary className="cursor-pointer font-semibold text-[var(--text)]">Notifications arrive, but no pop-up?</summary>
-          <p className="mt-2 leading-relaxed">On Android, press and hold a Circlo notification, open its settings, then enable Alerting and Pop on screen (or Floating notifications). Check that Do Not Disturb is off and Notification sound is enabled below. Menu names vary by phone. Android controls banners; a website cannot override these settings.</p>
+          <p className="mt-2 leading-relaxed">Receiving an alert and showing a floating banner are separate settings. Circlo can request an alert; Android and your browser decide whether to show a banner.</p>
+          <ol className="mt-2 list-decimal space-y-2 pl-5 leading-relaxed">
+            <li>Press and hold an actual Circlo message in your notification panel, then tap Settings. This opens the correct app or channel, which may belong to Circlo or Chrome.</li>
+            <li>Choose Alerting and enable Pop on screen, Pop-up notifications or Floating notifications if your phone offers it. The channel may be called General, Messages or a site name.</li>
+            <li>Check Do Not Disturb, your phone&apos;s notification sound and Circlo&apos;s Notification sound setting below. Muted chats stay quiet.</li>
+          </ol>
+          <p className="mt-2 leading-relaxed">For the Chrome-installed app, also check Chrome → Settings → Site settings → Notifications → circlo.chat. The separately installed Android APK has different settings. Your saved Android preferences are preserved; Circlo cannot turn these switches on for you.</p>
         </details>
       </div>
       {hasAndroidSettings ? (

@@ -49,7 +49,7 @@ test("push is quiet on every visible app screen, but displays with hidden or clo
 
 test("per-chat cards coalesce, deduplicate delivery, respect silent mode and safe navigation", async () => {
   const h = harness(); await h.push(); await h.push(); assert.equal(h.cards[0].data.count, 1);
-  h.setDetail({ messageId: notice, silent: true }); await h.push();
+  h.setDetail({ messageId: notice, silent: true }); await h.push({ notificationId: message });
   assert.equal(h.cards.length, 1); assert.equal(h.cards[0].data.count, 2); assert.equal(h.cards[0].silent, true); assert.equal(h.cards[0].vibrate, undefined);
   await h.click(h.cards[0]); assert.equal(h.opened[0], `https://circlo.chat/app/chats/${chat}?message=${notice}`);
   await h.click({ data: { url: "https://evil.invalid/app/chats" }, close() {} });
@@ -61,7 +61,19 @@ test("stale account, logged-out, read, muted and unavailable deliveries never ex
   const swapped = harness(); swapped.setDetail({ recipientId: chat }); await swapped.push(); assert.equal(swapped.cards.length, 0);
   const offline = harness(); offline.setOffline(); await offline.push(); assert.equal(offline.cards[0].title, "Circlo");
   assert(!offline.cards[0].body.includes("Alex"));
+  assert.equal(offline.cards[0].silent, true);
+  assert.equal(offline.cards[0].renotify, false);
+  assert.equal(offline.cards[0].vibrate, undefined);
+  await offline.push(); assert.equal(offline.cards[0].data.count, 1);
   await offline.click(offline.cards[0], "dismiss"); assert.equal(offline.opened.length, 0);
+});
+
+test("a quiet first card does not prevent the next audible message requesting attention", async () => {
+  const h = harness(); h.setDetail({ silent: true }); await h.push();
+  assert.equal(h.cards[0].data.lastAlertAt, 0);
+  h.setDetail({ messageId: notice, silent: false }); await h.push({ notificationId: message });
+  assert.equal(h.cards[0].silent, false); assert.equal(h.cards[0].renotify, true);
+  assert(h.cards[0].data.lastAlertAt > 0);
 });
 
 

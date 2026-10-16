@@ -1,4 +1,4 @@
-const CACHE_NAME = "circlo-offline-notifications-v6";
+const CACHE_NAME = "circlo-offline-notifications-v7";
 const OFFLINE_URL = "/offline.html";
 
 self.addEventListener("install", (event) => {
@@ -88,13 +88,17 @@ self.addEventListener("push", event => {
     } catch {
       if (uuid.test(data.callId)) return; // Never invent a ringing call without a live, authorized lookup.
       // Offline: preserve a generic alert without disclosing account or sender.
-      detail = { title: "Circlo", body: "New activity. Open Circlo to check your messages.", silent: false };
+      // Permission to deliver does not establish permission to interrupt: a
+      // failed lookup cannot tell us whether this conversation is muted.
+      detail = { title: "Circlo", body: "New activity. Open Circlo to check your messages.", silent: true };
     }
     // The user can foreground the app while the authenticated lookup runs.
     if ((await appWindows()).some(client => client.visibilityState === "visible")) { await clearAlerts(); return; }
     const url = detail.conversationId ? `/app/chats/${detail.conversationId}?message=${detail.messageId}` : "/app/chats";
     const tag = detail.conversationId ? `circlo-${data.recipientId}-${detail.conversationId}` : "circlo-activity";
     const previous = (await self.registration.getNotifications({ tag }))[0];
+    const notificationIds = previous?.data?.notificationIds ?? [];
+    if (notificationIds.includes(data.notificationId)) return;
     const ids = previous?.data?.messageIds ?? [];
     if (detail.messageId && ids.includes(detail.messageId)) return;
     const count = Math.min(99, (previous?.data?.count ?? 0) + 1);
@@ -103,10 +107,10 @@ self.addEventListener("push", event => {
     await self.registration.showNotification(detail.title || "Circlo", {
       body: count > 1 && detail.conversationId ? `${count} new encrypted messages. Open Circlo to read them.` : detail.body,
       icon: "/icons/circlo-192.png?v=linked-c-2", badge: "/icons/circlo-badge-96.png",
-      tag, renotify: Boolean(previous && alertAgain), silent: Boolean(detail.silent),
+      tag, renotify: Boolean(!detail.silent && previous && alertAgain), silent: Boolean(detail.silent),
       ...(!detail.silent ? { vibrate: [100, 50, 100] } : {}),
       actions: [{ action: "open", title: "Open chat" }, { action: "dismiss", title: "Dismiss" }],
-      data: { url, notificationId: data.notificationId, count, recipientId: data.recipientId, messageIds: [...ids, detail.messageId].filter(Boolean).slice(-20), lastAlertAt: alertAgain ? now : previous.data.lastAlertAt },
+      data: { url, notificationId: data.notificationId, notificationIds: [...notificationIds, data.notificationId].slice(-100), count, recipientId: data.recipientId, messageIds: [...ids, detail.messageId].filter(Boolean).slice(-20), lastAlertAt: !detail.silent && alertAgain ? now : previous?.data?.lastAlertAt ?? 0 },
     });
 
   };
