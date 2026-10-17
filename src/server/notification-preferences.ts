@@ -8,6 +8,7 @@ export interface NotificationPreferencesDTO {
   groupNotifications: boolean;
   pushNotifications: boolean;
   notificationSound: boolean;
+  showNotificationDetails: boolean;
 }
 
 const defaults: NotificationPreferencesDTO = {
@@ -15,6 +16,7 @@ const defaults: NotificationPreferencesDTO = {
   groupNotifications: true,
   pushNotifications: true,
   notificationSound: true,
+  showNotificationDetails: false,
 };
 
 function toDTO(row: typeof notificationPreferences.$inferSelect): NotificationPreferencesDTO {
@@ -23,6 +25,7 @@ function toDTO(row: typeof notificationPreferences.$inferSelect): NotificationPr
     groupNotifications: row.groupNotifications,
     pushNotifications: row.pushNotifications,
     notificationSound: row.notificationSound,
+    showNotificationDetails: row.showNotificationDetails,
   };
 }
 

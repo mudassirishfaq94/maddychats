@@ -7,6 +7,7 @@ import { getSessionUser } from "@/server/session";
 import { guardSameOrigin, jsonError } from "@/server/http";
 import { isUuid } from "@/server/users";
 import { getNotificationPreferences } from "@/server/notification-preferences";
+import { messageNotificationPresentation } from "@/lib/notification-presentation";
 
 export const dynamic = "force-dynamic";
 
@@ -25,7 +26,7 @@ export async function GET(req: NextRequest) {
   const conversationId = notice?.data?.conversationId;
   const messageId = notice?.data?.messageId;
   if (!notice || notice.readAt || typeof conversationId !== "string" || !isUuid(conversationId) || typeof messageId !== "string" || !isUuid(messageId)) return jsonError(404, "Notification unavailable.");
-  const [context] = await db.select({ type: conversations.type, name: conversations.name, deletedAt: conversations.deletedAt, mutedAt: conversationMembers.mutedAt, archivedAt: conversationMembers.archivedAt, messageDeletedAt: messages.deletedAt, expiresAt: messages.expiresAt,
+  const [context] = await db.select({ type: conversations.type, name: conversations.name, deletedAt: conversations.deletedAt, mutedAt: conversationMembers.mutedAt, archivedAt: conversationMembers.archivedAt, messageDeletedAt: messages.deletedAt, expiresAt: messages.expiresAt, encrypted: messages.encrypted,
     hidden: sql<boolean>`exists(select 1 from message_deletions d where d.message_id=${messages.id} and d.user_id=${user.id})`,
     blocked: sql<boolean>`exists(select 1 from blocks b where (b.blocker_id=${user.id} and b.blocked_id=${messages.senderId}) or (b.blocked_id=${user.id} and b.blocker_id=${messages.senderId}))`,
   }).from(conversations)
@@ -35,10 +36,16 @@ export async function GET(req: NextRequest) {
   if (!context || context.deletedAt || context.messageDeletedAt || context.hidden || context.mutedAt || context.archivedAt || (context.expiresAt && context.expiresAt <= new Date()) || (context.type === "dm" && context.blocked)) return jsonError(404, "Notification unavailable.");
   const preferences = await getNotificationPreferences(user.id);
   if (!preferences.pushNotifications || !(context.type === "group" ? preferences.groupNotifications : preferences.messageNotifications)) return jsonError(404, "Notification unavailable.");
-  const actor = typeof notice.data?.actorName === "string" ? notice.data.actorName.slice(0, 80) : "Someone";
+  const presentation = messageNotificationPresentation({
+    showDetails: preferences.showNotificationDetails,
+    isGroup: context.type === "group",
+    groupName: context.name,
+    actorName: typeof notice.data?.actorName === "string" ? notice.data.actorName : "Someone",
+    preview: typeof notice.data?.preview === "string" ? notice.data.preview : "",
+    encrypted: Boolean(context.encrypted),
+  });
   return NextResponse.json({ recipientId: user.id, conversationId, messageId,
-    title: context.type === "group" ? `${context.name?.slice(0, 80) || "Group chat"} · Circlo` : `${actor} · Circlo`,
-    body: context.type === "group" ? `${actor}: New encrypted message` : "New encrypted message. Open Circlo to read it.",
+    ...presentation,
     silent: !preferences.notificationSound,
   }, { headers: { "Cache-Control": "private, no-store" } });
 }

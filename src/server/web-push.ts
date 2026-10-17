@@ -79,6 +79,7 @@ export async function sendMessagePush(
     notificationId: string;
     actorName: string;
     preview: string;
+    showDetails?: boolean;
     conversationId: string;
     messageId: string;
   },

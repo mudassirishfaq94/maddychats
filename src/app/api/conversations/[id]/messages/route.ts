@@ -214,7 +214,7 @@ export async function POST(
       preview: detail.type === "dm" && detail.request_pending
         ? "Message request — accept to continue the conversation"
         : isEncrypted
-        ? "New message"
+        ? "New encrypted message"
         : parsed.data.text,
     });
     if (!isEncrypted) {

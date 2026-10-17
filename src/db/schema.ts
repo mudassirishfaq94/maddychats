@@ -579,6 +579,7 @@ export const notificationPreferences = pgTable("notification_preferences", {
   groupNotifications: boolean("group_notifications").default(true).notNull(),
   pushNotifications: boolean("push_notifications").default(true).notNull(),
   notificationSound: boolean("notification_sound").default(true).notNull(),
+  showNotificationDetails: boolean("show_notification_details").default(false).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true, mode: "date" })
     .defaultNow()
     .notNull(),

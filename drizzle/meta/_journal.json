@@ -365,6 +365,13 @@
       "when": 1792281600008,
       "tag": "0050_restore_private_table_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "7",
+      "when": 1792281600009,
+      "tag": "0051_notification_details_preference",
+      "breakpoints": true
     }
   ]
 }

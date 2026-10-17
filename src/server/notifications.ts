@@ -172,6 +172,7 @@ export async function notifyNewMessage(input: {
             notificationId,
             actorName: input.actorName,
             preview: input.preview.slice(0, 140),
+            showDetails: preferences.showNotificationDetails,
             silent: !preferences.notificationSound,
             conversationId: input.conversationId,
             messageId: input.messageId,

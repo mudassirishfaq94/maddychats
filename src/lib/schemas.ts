@@ -145,6 +145,7 @@ export const notificationPreferencesSchema = z
     groupNotifications: z.boolean().optional(),
     pushNotifications: z.boolean().optional(),
     notificationSound: z.boolean().optional(),
+    showNotificationDetails: z.boolean().optional(),
   })
   .refine((value) => Object.values(value).some((item) => item !== undefined), {
     message: "Provide at least one preference to update",

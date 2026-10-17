@@ -16,6 +16,11 @@ test("FCM payload carries bounded presentation text and routing metadata in a da
   assert.equal(payload.data.url, "ziptalks://chat/chat?message=message");
   assert.equal(payload.data.expiresAt, "3601000");
   assert.equal(payload.android.ttl, 3600000);
+  const privatePayload = nativePushPayload({ ...input, showDetails: false }, 1000);
+  assert.equal(privatePayload.data.actorName, "Circlo");
+  assert.equal(privatePayload.data.preview, "New message. Open Circlo to read it.");
+  assert.equal(JSON.stringify(privatePayload).includes("Alex"), false);
+  assert.equal(JSON.stringify(privatePayload).includes("Are you free later?"), false);
   assert.equal(nativePushPayload({ ...input, callId: "call", callTtl: 999 }, 1000).android.ttl, 45000);
   assert.equal(nativePushPayload({ ...input, callId: "call", callTtl: 1, silent: true }, 1000).data.silent, "true");
 });

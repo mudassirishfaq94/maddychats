@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Bell, BellRing, Loader2, Smartphone, Volume2, Users } from "lucide-react";
+import { Bell, BellRing, Eye, Loader2, Smartphone, Volume2, Users } from "lucide-react";
 import { Toggle } from "@/components/ui/toggle";
 import { isNativeApp } from "@/lib/native-platform";
 import { hasHostedPushBridge, hostedPush, androidNotificationStatus, type AndroidNotificationStatus } from "@/lib/native-push-bridge";
@@ -11,6 +11,7 @@ interface Preferences {
   groupNotifications: boolean;
   pushNotifications: boolean;
   notificationSound: boolean;
+  showNotificationDetails: boolean;
 }
 
 const rows = [
@@ -18,6 +19,7 @@ const rows = [
   { key: "groupNotifications", label: "Group notifications", hint: "Alerts for activity in group chats", icon: Users },
   { key: "pushNotifications", label: "Desktop and mobile push", hint: "Allow push alerts on supported devices", icon: Smartphone },
   { key: "notificationSound", label: "Notification sound", hint: "Play a sound when an alert arrives", icon: Volume2 },
+  { key: "showNotificationDetails", label: "Show sender and message preview", hint: "Show who sent it and a preview in notifications", icon: Eye },
 ] as const;
 
 function applicationServerKey(value: string): Uint8Array<ArrayBuffer> {
@@ -240,6 +242,7 @@ export function NotificationPreferences() {
             </div>
           ))}
         </div>
+        <p className="mt-3 text-xs leading-relaxed text-[var(--muted)]">Off by default for privacy. When enabled, previews for non-encrypted messages may appear on your lock screen and are sent through your push provider. End-to-end encrypted message text stays private; those alerts show the sender and “New encrypted message.”</p>
         </>
       )}
       {preferences && message ? <p role="status" className={`mt-3 text-xs ${message.includes("saved") ? "text-[var(--success)]" : "text-[var(--danger)]"}`}>{message}</p> : null}
