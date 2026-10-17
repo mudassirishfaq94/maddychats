@@ -4,6 +4,7 @@ import { conversationMembers, conversations, notifications } from "@/db/schema";
 import { publishToUsers } from "./realtime";
 import { getNotificationPreferences } from "./notification-preferences";
 import { sendMessagePush } from "./web-push";
+import { messageNotificationPresentation } from "@/lib/notification-presentation";
 
 /**
  * Notification service. Rows persist in PostgreSQL so unread counts survive
@@ -126,23 +127,26 @@ export async function notifyNewMessage(input: {
   actorName: string;
   preview: string;
   persistedRequest?: boolean;
+  /** Encrypted messages must never expose their text. Defaults to private. */
+  encrypted?: boolean;
 }): Promise<void> {
   const members = await db
     .select()
     .from(conversationMembers)
     .where(eq(conversationMembers.conversationId, input.conversationId));
   const conversation = await db
-    .select({ type: conversations.type })
+    .select({ type: conversations.type, name: conversations.name })
     .from(conversations)
     .where(eq(conversations.id, input.conversationId))
     .limit(1);
+  const isGroup = conversation[0]?.type === "group";
 
   await Promise.all(
     members
       .filter((m) => m.userId !== input.actorId && m.mutedAt === null && m.archivedAt === null)
       .map(async (m) => {
         const preferences = await getNotificationPreferences(m.userId);
-        const enabled = conversation[0]?.type === "group"
+        const enabled = isGroup
           ? preferences.groupNotifications
           : preferences.messageNotifications;
         if (!enabled) return;
@@ -168,11 +172,27 @@ export async function notifyNewMessage(input: {
           input.actorId,
         )).id;
         if (preferences.pushNotifications) {
+          // Resolve the alert text here, where the conversation, the encryption
+          // state and the recipient's own preference are all known. Every
+          // channel then shows the same sender and preview.
+          const presentation = messageNotificationPresentation({
+            showDetails: preferences.showNotificationDetails,
+            isGroup,
+            groupName: conversation[0]?.name ?? null,
+            actorName: input.actorName,
+            preview: input.preview.slice(0, 140),
+            encrypted: input.encrypted !== false,
+          });
           await sendMessagePush(m.userId, {
             notificationId,
+            title: presentation.title,
+            body: presentation.body,
             actorName: input.actorName,
             preview: input.preview.slice(0, 140),
             showDetails: preferences.showNotificationDetails,
+            isGroup,
+            groupName: conversation[0]?.name ?? null,
+            encrypted: input.encrypted !== false,
             silent: !preferences.notificationSound,
             conversationId: input.conversationId,
             messageId: input.messageId,

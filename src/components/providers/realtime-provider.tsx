@@ -22,6 +22,17 @@ type Listener = (event: RealtimeEvent) => void;
 interface NotificationPreferences {
   pushNotifications: boolean;
   notificationSound: boolean;
+  showNotificationDetails: boolean;
+}
+
+/**
+ * Latest notification preferences. Every surface that renders an alert reads
+ * this snapshot so the sender and preview follow the same rule everywhere.
+ */
+let notificationPreferencesSnapshot: NotificationPreferences | null = null;
+
+export function useNotificationPreferences(): NotificationPreferences | null {
+  return notificationPreferencesSnapshot;
 }
 
 interface RealtimeContextValue {
@@ -56,7 +67,6 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
   const [connected, setConnected] = useState(false);
   const [presence, setPresence] = useState<PresenceState>({});
   const listeners = useRef(new Set<Listener>());
-  const notificationPreferences = useRef<NotificationPreferences | null>(null);
   const audioContext = useRef<AudioContext | null>(null);
 
   const playNotificationSound = useCallback(() => {
@@ -189,16 +199,20 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (status !== "authenticated") return;
+    if (status !== "authenticated") {
+      // A signed-out device must not keep the previous account's alert rules.
+      notificationPreferencesSnapshot = null;
+      return;
+    }
     const controller = new AbortController();
     void fetch("/api/notifications/preferences", { cache: "no-store", signal: controller.signal })
       .then((response) => response.ok ? response.json() : null)
       .then((data: { preferences?: NotificationPreferences } | null) => {
-        if (data?.preferences) notificationPreferences.current = data.preferences;
+        if (data?.preferences) notificationPreferencesSnapshot = data.preferences;
       })
       .catch(() => undefined);
     const update = (event: Event) => {
-      notificationPreferences.current = (event as CustomEvent<NotificationPreferences>).detail;
+      notificationPreferencesSnapshot = (event as CustomEvent<NotificationPreferences>).detail;
     };
     window.addEventListener("maddy:notification-preferences", update);
     return () => {
@@ -208,7 +222,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
   }, [status]);
 
   useEffect(() => {
-    const ring = () => { if (notificationPreferences.current?.notificationSound) playNotificationSound(); };
+    const ring = () => { if (notificationPreferencesSnapshot?.notificationSound) playNotificationSound(); };
     window.addEventListener("circlo:incoming-call", ring);
     return () => window.removeEventListener("circlo:incoming-call", ring);
   }, [playNotificationSound]);
@@ -277,7 +291,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
         }));
       }
       if (event.type === "notification:new" && event.notification.type === "message") {
-        const preferences = notificationPreferences.current;
+        const preferences = notificationPreferencesSnapshot;
         const data = event.notification.data;
         const actor = String(data?.actorName ?? "Someone");
         const preview = String(data?.preview ?? "New message");
@@ -304,11 +318,14 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
           Notification.permission === "granted" &&
           (document.visibilityState === "hidden" || !document.hasFocus())
         ) {
-          const title = actor;
+          // The same rule the server and the Android app apply: the sender and
+          // the preview appear only when the user asked for them.
+          const showDetails = preferences?.showNotificationDetails === true;
+          const title = showDetails ? actor : "Circlo";
           const message = String(data?.messageId ?? "");
           const url = `/app/chats/${conversationId}?message=${encodeURIComponent(message)}`;
           const options: NotificationOptions = {
-            body: preview,
+            body: showDetails ? preview : "New message. Open Circlo to read it.",
             tag: `circlo-${user?.id}-${conversationId}`,
             icon: "/icons/circlo-192.png",
             badge: "/icons/circlo-badge-96.png",

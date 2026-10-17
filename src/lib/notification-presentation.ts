@@ -1,3 +1,15 @@
+/** One presentation for every delivery channel: browser worker, in-app alert and Android push. */
+const BRAND = "· Circlo";
+const MAX_TITLE_LENGTH = 80;
+const MAX_BODY_LENGTH = 140;
+/** Leaves room for the brand suffix so a truncated sender never eats it. */
+const MAX_LABEL_LENGTH = MAX_TITLE_LENGTH - BRAND.length;
+
+export interface NotificationPresentation {
+  title: string;
+  body: string;
+}
+
 function cleanText(value: string, fallback: string, maxLength: number): string {
   const normalized = value
     .replace(/[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/g, " ")
@@ -13,17 +25,20 @@ export function messageNotificationPresentation(input: {
   actorName: string;
   preview: string;
   encrypted: boolean;
-}) {
+}): NotificationPresentation {
   if (!input.showDetails) {
     return { title: "Circlo", body: "New message. Open Circlo to read it." };
   }
 
-  const actor = cleanText(input.actorName, "Someone", 80);
+  const actor = cleanText(input.actorName, "Someone", MAX_LABEL_LENGTH);
   const message = input.encrypted
     ? "New encrypted message. Open Circlo to read it."
-    : cleanText(input.preview, "New message. Open Circlo to read it.", 140);
+    : cleanText(input.preview, "New message. Open Circlo to read it.", MAX_BODY_LENGTH);
 
   return input.isGroup
-    ? { title: `${cleanText(input.groupName ?? "", "Group chat", 80)} · Circlo`, body: `${actor}: ${message}` }
-    : { title: `${actor} · Circlo`, body: message };
+    ? {
+        title: `${cleanText(input.groupName ?? "", "Group chat", MAX_LABEL_LENGTH)} ${BRAND}`,
+        body: cleanText(`${actor}: ${message}`, "New message. Open Circlo to read it.", MAX_BODY_LENGTH),
+      }
+    : { title: `${actor} ${BRAND}`, body: message };
 }

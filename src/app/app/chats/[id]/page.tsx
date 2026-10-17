@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Ghost } from "lucide-react";
 import { getSessionUser } from "@/server/session";
 import { isUuid } from "@/server/users";
+import { chatLoginDestination } from "@/lib/notification-navigation";
 import {
   getConversationForUser,
   listMessages,
@@ -16,13 +17,16 @@ export const dynamic = "force-dynamic";
 
 export default async function ChatPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ message?: string }>;
 }) {
   const me = await getSessionUser();
-  if (!me) redirect("/login?next=/app/chats");
-
   const { id } = await params;
+  const { message } = await searchParams;
+  // A notification tap must land on the same conversation after sign-in.
+  if (!me) redirect(chatLoginDestination(id, message));
   // Metadata and the initial history are both needed for a valid chat. Start
   // them together to avoid a full extra database round-trip on navigation.
   const detailPromise = isUuid(id) ? getConversationForUser(id, me.id) : Promise.resolve(null);

@@ -80,6 +80,12 @@ export async function sendMessagePush(
     actorName: string;
     preview: string;
     showDetails?: boolean;
+    isGroup?: boolean;
+    groupName?: string | null;
+    encrypted?: boolean;
+    /** Ready-to-display alert text; resolved by the caller. */
+    title?: string;
+    body?: string;
     conversationId: string;
     messageId: string;
   },

@@ -27,6 +27,7 @@ export async function sendCallAlert(notificationId: string, userId: string, call
   if (!cancelled && !detail) return;
   await sendMessagePush(userId, { notificationId, conversationId, messageId: "", callId,
     actorName: "Circlo", preview: "Incoming audio call. Open Circlo to answer.",
+    title: detail?.title, body: detail?.body,
     callTtl: detail ? Math.max(1, Math.min(45, Math.ceil((Date.parse(detail.expiresAt)-Date.now())/1000))) : 30,
     silent: detail?.silent, webOnly: cancelled });
 }
