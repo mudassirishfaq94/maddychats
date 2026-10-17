@@ -33,17 +33,32 @@ export async function testChatPolish(page, recipient) {
     await mkdir(".freebuff/performance", { recursive: true });
     await rows.last().scrollIntoViewIfNeeded(); await rows.last().hover(); await rows.last().getByRole("button", { name: "More actions", exact: true }).click();
     await page.screenshot({ path: ".freebuff/performance/message-menu-polish.png" }); await page.keyboard.press("Escape");
+    // A resize can land a document scroll right after the click; the popover legitimately
+    // closes on scroll, so settle the resize and retry instead of treating that as a defect.
+    const openChatOptions = async () => {
+      const menu = page.getByRole("menu", { name: "Chat options", exact: true });
+      for (let attempt = 0; ; attempt++) {
+        assert(attempt < 3, "Chat options menu must stay open after being clicked");
+        await page.getByRole("button", { name: "Chat options", exact: true }).click();
+        try { await menu.waitFor({ timeout: 5000 }); return menu; }
+        catch {
+          await page.keyboard.press("Escape");
+          await menu.waitFor({ state: "detached", timeout: 5000 }).catch(() => {});
+        }
+      }
+    };
     for (const viewport of [{ width: 320, height: 390 }, { width: 390, height: 844 }]) {
-      await page.setViewportSize(viewport); await page.getByRole("button", { name: "Chat options", exact: true }).click();
-      const menu = page.getByRole("menu", { name: "Chat options", exact: true }); await menu.waitFor(); await hitTest(menu);
+      await page.setViewportSize(viewport);
+      await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      const menu = await openChatOptions(); await hitTest(menu);
       await menu.getByRole("menuitem", { name: "Close chat", exact: true }).scrollIntoViewIfNeeded(); await hitTest(menu);
       await page.keyboard.press("Escape"); await menu.waitFor({ state: "detached" });
     }
     await page.route("**/api/conversations/*/controls", route => route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "temporary" }) }));
     const beforeFailure = page.url();
-    await page.getByRole("button", { name: "Chat options", exact: true }).click();
-    await page.getByRole("menuitem", { name: "Close chat", exact: true }).click();
-    await page.getByRole("menu", { name: "Chat options", exact: true }).getByRole("alert").waitFor();
+    const failureMenu = await openChatOptions();
+    await failureMenu.getByRole("menuitem", { name: "Close chat", exact: true }).click();
+    await failureMenu.getByRole("alert").waitFor();
     assert.equal(page.url(), beforeFailure, "A failed archive must not silently navigate away");
     await page.keyboard.press("Escape"); await page.unroute("**/api/conversations/*/controls");
     const cdp = await page.context().newCDPSession(page);
