@@ -109,6 +109,7 @@ export async function testChatPolish(page, recipient) {
     assert.equal(await caption.inputValue(), "A caption worth keeping");
     for (const viewport of [{ width: 320, height: 740 }, { width: 844, height: 390 }, { width: 1280, height: 800 }]) {
       await page.setViewportSize(viewport);
+      await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
       assert(await review.evaluate(element => element.scrollWidth <= element.clientWidth + 1 && element.scrollHeight <= element.clientHeight + 1), "Review must fit portrait and landscape");
       await hitTest(review);
     }
