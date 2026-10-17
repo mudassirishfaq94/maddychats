@@ -3,11 +3,16 @@ import assert from "node:assert/strict";
 import { nativePushPayload } from "../src/lib/native-push-payload";
 import { deliverNativePush } from "../src/lib/native-push-delivery";
 
-test("FCM payload contains only routing metadata and uses a single data-only delivery path", () => {
-  const input = { recipientId: "recipient", notificationId: "event", conversationId: "chat", messageId: "message", actorName: "PRIVATE NAME", preview: "PRIVATE MESSAGE", encryptionKey: "PRIVATE KEY" };
+test("FCM payload carries bounded presentation text and routing metadata in a data-only delivery", () => {
+  const input = { recipientId: "recipient", notificationId: "event", conversationId: "chat", messageId: "message", actorName: "Alex", preview: "Are you free later?", encryptionKey: "PRIVATE KEY" };
   const payload = nativePushPayload(input, 1000);
   assert.deepEqual(Object.keys(payload).sort(), ["android", "data"]);
-  assert.equal(JSON.stringify(payload).includes("PRIVATE"), false);
+  assert.equal(payload.data.actorName, "Alex");
+  assert.equal(payload.data.preview, "Are you free later?");
+  assert.equal(JSON.stringify(payload).includes("PRIVATE KEY"), false);
+  const bounded = nativePushPayload({ ...input, actorName: "Alex\n\u202eFriend", preview: "x".repeat(200) });
+  assert.equal(bounded.data.actorName, "Alex Friend");
+  assert.equal(bounded.data.preview.length, 140);
   assert.equal(payload.data.url, "ziptalks://chat/chat?message=message");
   assert.equal(payload.data.expiresAt, "3601000");
   assert.equal(payload.android.ttl, 3600000);

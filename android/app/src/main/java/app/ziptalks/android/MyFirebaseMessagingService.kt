@@ -21,13 +21,13 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
     override fun onMessageReceived(remoteMessage: RemoteMessage) {
         super.onMessageReceived(remoteMessage)
 
-        // Drop other accounts, expired events and duplicates; never display provider plaintext.
+        // Drop other accounts, expired events and duplicates before displaying the approved preview.
         if (!NativePushState.accept(this, remoteMessage.data["recipientId"], remoteMessage.data["eventId"], remoteMessage.data["expiresAt"])) return
         if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return
         // Quiet activity must never bypass a user-blocked Messages channel.
         if (!NotificationChannels.messagesAllowed(this)) return
-        val title = "Circlo"
-        val body = "New activity. Open Circlo to view it."
+        val title = NativeNotificationText.title(remoteMessage.data)
+        val body = NativeNotificationText.body(remoteMessage.data)
         val url = remoteMessage.data["url"]
         val tag = remoteMessage.data["tag"]
 
@@ -47,6 +47,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             .setSmallIcon(R.drawable.ic_stat_ic_notification)
             .setContentTitle(title)
             .setContentText(body)
+            .setStyle(androidx.core.app.NotificationCompat.BigTextStyle().bigText(body))
             .setAutoCancel(true)
             .setContentIntent(pendingIntent)
 
