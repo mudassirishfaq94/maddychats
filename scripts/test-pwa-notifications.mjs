@@ -21,6 +21,7 @@ export async function testPwaNotifications(base, pool) {
       accounts.push((await pool.query("insert into users(username,display_name,email,password_hash,email_verified_at) values($1,$1,$2,$3,now()) returning id,username", [name, name + "@example.invalid", hash])).rows[0]);
     }
     const [owner, peer] = accounts;
+    await pool.query("insert into notification_preferences(user_id,show_notification_details) values($1,true)", [owner.id]);
     conversation = (await pool.query("insert into conversations(type,created_by_id) values('dm',$1) returning id", [peer.id])).rows[0].id;
     await pool.query("insert into conversation_members(conversation_id,user_id,accepted_at) values($1,$2,now()),($1,$3,now())", [conversation, owner.id, peer.id]);
     const notices = [];
