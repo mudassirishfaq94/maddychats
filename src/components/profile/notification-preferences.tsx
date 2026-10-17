@@ -204,7 +204,7 @@ export function NotificationPreferences() {
             <li>Check Do Not Disturb, your phone&apos;s notification sound and Circlo&apos;s Notification sound setting below. Muted chats stay quiet.</li>
           </ol>
           <p className="mt-2 leading-relaxed">For the Chrome-installed app, also check Chrome → Settings → Site settings → Notifications → circlo.chat. The separately installed Android APK has different settings. Your saved Android preferences are preserved; Circlo cannot turn these switches on for you.</p>
-          <p className="mt-2 leading-relaxed">Alerts name the sender and show a preview only while “Show sender and message preview” is on, and only in an app build that supports it. End-to-end encrypted chats keep their text private: those alerts show the sender and “New encrypted message.”</p>
+          <p className="mt-2 leading-relaxed">When previews are enabled, unlocked chats can show the sender and message text while Circlo can securely read them on this device. Requests and locked chats hide message text. A closed or suspended app may show a generic alert.</p>
         </details>
       </div>
       {hasAndroidSettings ? (
@@ -243,7 +243,7 @@ export function NotificationPreferences() {
             </div>
           ))}
         </div>
-        <p className="mt-3 text-xs leading-relaxed text-[var(--muted)]">Off by default for privacy. When enabled, previews for non-encrypted messages may appear on your lock screen and are sent through your push provider. End-to-end encrypted message text stays private; those alerts show the sender and “New encrypted message.”</p>
+        <p className="mt-3 text-xs leading-relaxed text-[var(--muted)]">Off by default for privacy. Previews are created on this device and may appear on your lock screen or remain in device notification history. Locked chats hide the sender and message text; message requests show a generic request alert.</p>
         </>
       )}
       {preferences && message ? <p role="status" className={`mt-3 text-xs ${message.includes("saved") ? "text-[var(--success)]" : "text-[var(--danger)]"}`}>{message}</p> : null}

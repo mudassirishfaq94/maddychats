@@ -6,12 +6,31 @@ import android.content.Context
 /** No message content or session credentials are kept here. */
 object NativePushState {
     @Volatile var foreground = false
+    @Volatile var previewWebView: java.lang.ref.WeakReference<android.webkit.WebView>? = null
+    fun requestPreview(recipient: String?, event: String?) {
+        if (recipient == null || event == null) return
+        val view = previewWebView?.get() ?: return
+        view.post {
+            if (!WebOriginPolicy.isAllowed(view.url.orEmpty(), BuildConfig.API_BASE_URL)) return@post
+            val detail = org.json.JSONObject().put("recipientId", recipient).put("notificationId", event)
+            view.evaluateJavascript("window.dispatchEvent(new CustomEvent('circlo:native-notification', {detail: $detail}))", null)
+        }
+    }
+    fun dismiss(context: Context) {
+        context.getSystemService(NotificationManager::class.java)?.cancelAll()
+    }
     fun clear(context: Context) {
         context.getSharedPreferences("circlo_push", Context.MODE_PRIVATE).edit().remove("user").apply()
         context.getSystemService(NotificationManager::class.java)?.cancelAll()
     }
     fun bind(context: Context, user: String) {
         context.getSharedPreferences("circlo_push", Context.MODE_PRIVATE).edit().putString("user", user).apply()
+    }
+    fun locked(context: Context, chat: String): Boolean {
+        val prefs = context.getSharedPreferences("circlo_push", Context.MODE_PRIVATE)
+        val user = prefs.getString("user", null) ?: return true
+        val ids = runCatching { org.json.JSONArray(prefs.getString("locks_$user", "null")) }.getOrNull() ?: return true
+        return (0 until ids.length()).any { ids.optString(it) == chat }
     }
     @Synchronized fun accept(context: Context, recipient: String?, event: String?, expires: String?): Boolean {
         if (recipient == null || event == null) return false

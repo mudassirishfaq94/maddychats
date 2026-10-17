@@ -3,16 +3,16 @@ import assert from "node:assert/strict";
 import { nativePushPayload } from "../src/lib/native-push-payload";
 import { deliverNativePush } from "../src/lib/native-push-delivery";
 
-test("FCM payload carries bounded presentation text and routing metadata in a data-only delivery", () => {
+test("FCM carries private fallback text and routing metadata only", () => {
   const input = { recipientId: "recipient", notificationId: "event", conversationId: "chat", messageId: "message", actorName: "Alex", preview: "Are you free later?", encrypted: false, encryptionKey: "PRIVATE KEY" };
   const payload = nativePushPayload(input, 1000);
   assert.deepEqual(Object.keys(payload).sort(), ["android", "data"]);
-  assert.equal(payload.data.actorName, "Alex");
-  assert.equal(payload.data.preview, "Are you free later?");
+  assert.equal(payload.data.actorName, "Circlo");
+  assert.equal(payload.data.preview, "New message. Open Circlo to read it.");
   assert.equal(JSON.stringify(payload).includes("PRIVATE KEY"), false);
   const bounded = nativePushPayload({ ...input, actorName: "Alex\n\u202eFriend", preview: "x".repeat(200) });
-  assert.equal(bounded.data.actorName, "Alex Friend");
-  assert.equal(bounded.data.preview.length, 140);
+  assert.equal(bounded.data.actorName, "Circlo");
+  assert.equal(bounded.data.preview, "New message. Open Circlo to read it.");
   assert.equal(payload.data.url, "ziptalks://chat/chat?message=message");
   assert.equal(payload.data.expiresAt, "3601000");
   assert.equal(payload.android.ttl, 3600000);
@@ -25,19 +25,19 @@ test("FCM payload carries bounded presentation text and routing metadata in a da
   assert.equal(nativePushPayload({ ...input, callId: "call", callTtl: 1, silent: true }, 1000).data.silent, "true");
 });
 
-test("the Android alert shows the sender and preview the user asked for", () => {
+test("remote Android alerts never carry previews even with details enabled", () => {
   const input = { recipientId: "recipient", notificationId: "event", conversationId: "chat", messageId: "message", actorName: "Alex", preview: "Are you free later?", encrypted: false };
   const payload = nativePushPayload(input, 1000);
   // The installed app renders these ready-to-display fields.
-  assert.equal(payload.data.title, "Alex · Circlo");
-  assert.equal(payload.data.body, "Are you free later?");
+  assert.equal(payload.data.title, "Circlo");
+  assert.equal(payload.data.body, "New message received.");
 });
 
 test("a private account still receives the generic alert and no sender", () => {
   const input = { recipientId: "recipient", notificationId: "event", conversationId: "chat", messageId: "message", actorName: "Alex", preview: "Are you free later?", encrypted: false, showDetails: false };
   const payload = nativePushPayload(input, 1000);
   assert.equal(payload.data.title, "Circlo");
-  assert.equal(payload.data.body, "New message. Open Circlo to read it.");
+  assert.equal(payload.data.body, "New message received.");
   assert.equal(JSON.stringify(payload).includes("Alex"), false);
   assert.equal(JSON.stringify(payload).includes("Are you free later?"), false);
 });
@@ -45,19 +45,19 @@ test("a private account still receives the generic alert and no sender", () => {
 test("encrypted messages never carry their text in the push payload", () => {
   const input = { recipientId: "recipient", notificationId: "event", conversationId: "chat", messageId: "message", actorName: "Alex", preview: "ciphertext that must stay secret", encrypted: true };
   const payload = nativePushPayload(input, 1000);
-  assert.equal(payload.data.title, "Alex · Circlo");
-  assert.equal(payload.data.body, "New encrypted message. Open Circlo to read it.");
+  assert.equal(payload.data.title, "Circlo");
+  assert.equal(payload.data.body, "New message received.");
   assert.equal(JSON.stringify(payload).includes("ciphertext that must stay secret"), false);
   // An unknown message is treated as encrypted: the preview is never shown.
   const unknown = nativePushPayload({ ...input, encrypted: undefined }, 1000);
-  assert.equal(unknown.data.body, "New encrypted message. Open Circlo to read it.");
+  assert.equal(unknown.data.body, "New message received.");
   assert.equal(JSON.stringify(unknown).includes("ciphertext that must stay secret"), false);
 });
 
-test("group alerts name the group and the sender", () => {
+test("remote group alerts disclose neither group nor sender", () => {
   const payload = nativePushPayload({ recipientId: "recipient", notificationId: "event", conversationId: "chat", messageId: "message", actorName: "Alex", preview: "Are you free later?", encrypted: false, isGroup: true, groupName: "Weekend plans" }, 1000);
-  assert.equal(payload.data.title, "Weekend plans · Circlo");
-  assert.equal(payload.data.body, "Alex: Are you free later?");
+  assert.equal(payload.data.title, "Circlo");
+  assert.equal(payload.data.body, "New message received.");
 });
 
 test("a call alert keeps the resolved caller and answer prompt", () => {

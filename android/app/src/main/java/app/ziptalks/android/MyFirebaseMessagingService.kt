@@ -26,8 +26,12 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return
         // Quiet activity must never bypass a user-blocked Messages channel.
         if (!NotificationChannels.messagesAllowed(this)) return
-        val title = NativeNotificationText.title(remoteMessage.data)
-        val body = NativeNotificationText.body(remoteMessage.data)
+        val isCall = remoteMessage.data["url"]?.contains("?call=") == true
+        val chat = android.net.Uri.parse(remoteMessage.data["url"].orEmpty()).pathSegments.firstOrNull().orEmpty()
+        val request = remoteMessage.data["messageRequest"] == "true"
+        val locked = NativePushState.locked(this, chat)
+        val title = if (isCall) NativeNotificationText.title(remoteMessage.data) else NativeMessagePrivacy.title(request, locked)
+        val body = if (isCall) NativeNotificationText.body(remoteMessage.data) else NativeMessagePrivacy.body(request, locked)
         val url = remoteMessage.data["url"]
         val tag = remoteMessage.data["tag"]
 
@@ -48,6 +52,8 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             .setContentTitle(title)
             .setContentText(body)
             .setStyle(androidx.core.app.NotificationCompat.BigTextStyle().bigText(body))
+            .setVisibility(androidx.core.app.NotificationCompat.VISIBILITY_PRIVATE)
+            .setOnlyAlertOnce(true)
             .setAutoCancel(true)
             .setContentIntent(pendingIntent)
 
@@ -58,6 +64,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             tag ?: "circlo-messages", 0,
             builder.build()
         )
+        if (!isCall) NativePushState.requestPreview(remoteMessage.data["recipientId"], remoteMessage.data["eventId"])
     }
 
     override fun onNewToken(token: String) {

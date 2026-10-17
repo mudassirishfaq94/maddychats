@@ -172,11 +172,11 @@ export async function notifyNewMessage(input: {
           input.actorId,
         )).id;
         if (preferences.pushNotifications) {
-          // Resolve the alert text here, where the conversation, the encryption
-          // state and the recipient's own preference are all known. Every
-          // channel then shows the same sender and preview.
+          // Remote delivery cannot read device-local locks or decrypt. Only
+          // the recipient may upgrade this fallback to a message preview.
           const presentation = messageNotificationPresentation({
-            showDetails: preferences.showNotificationDetails,
+            showDetails: false,
+            messageRequest: !isGroup && m.acceptedAt === null,
             isGroup,
             groupName: conversation[0]?.name ?? null,
             actorName: input.actorName,
@@ -189,7 +189,8 @@ export async function notifyNewMessage(input: {
             body: presentation.body,
             actorName: input.actorName,
             preview: input.preview.slice(0, 140),
-            showDetails: preferences.showNotificationDetails,
+            showDetails: false,
+            messageRequest: !isGroup && m.acceptedAt === null,
             isGroup,
             groupName: conversation[0]?.name ?? null,
             encrypted: input.encrypted !== false,

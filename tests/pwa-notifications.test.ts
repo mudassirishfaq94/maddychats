@@ -26,7 +26,30 @@ function harness() {
       },
     },
   };
-  vm.runInNewContext(readFileSync("public/sw.js", "utf8"), { self, clients: self.clients, URL, AbortSignal, Date,
+  class TestMessageChannel {
+    port1 = { onmessage: null as null | ((event: { data: unknown }) => void), close() {} };
+    port2 = { postMessage: (data: unknown) => this.port1.onmessage?.({ data }), close() {} };
+  }
+  const locks = new Map<string, unknown>();
+  const indexedDB = { open() {
+    const request: any = {};
+    queueMicrotask(() => {
+      request.result = {
+        createObjectStore() {}, close() {},
+        transaction() {
+          const tx: any = {};
+          tx.objectStore = () => ({
+            get(key: string) { const result = { result: locks.get(key) }; queueMicrotask(() => tx.oncomplete?.()); return result; },
+            put(value: unknown, key: string) { locks.set(key, value); queueMicrotask(() => tx.oncomplete?.()); return {}; },
+          });
+          return tx;
+        },
+      };
+      request.onupgradeneeded?.(); request.onsuccess?.();
+    });
+    return request;
+  } };
+  vm.runInNewContext(readFileSync("public/sw.js", "utf8"), { self, clients: self.clients, URL, AbortSignal, Date, MessageChannel: TestMessageChannel, indexedDB, setTimeout, clearTimeout,
     crypto: { randomUUID: () => message },
     fetch: async (url: string, options?: { body?: string }) => { fetches.push({ url, body: options?.body }); if (offline) throw new Error("offline"); return { status, ok: status === 200, json: async () => detail }; },
   });
@@ -34,6 +57,7 @@ function harness() {
   return { cards, opened, fetches, setWindows: (value: any[]) => { windows = value; }, setDetail: (value: any) => { detail = { ...detail, ...value }; }, setStatus: (value: number) => { status = value; }, setOffline: (value = true) => { offline = value; },
     push: (extra: Record<string, unknown> = {}) => dispatch("push", { data: { json: () => ({ notificationId: notice, recipientId: user, ...extra }) } }),
     click: (notification: any, action = "open") => dispatch("notificationclick", { notification, action }),
+    privacy: (lockedChats: string[] | null = [chat]) => dispatch("message", { source: { url: "https://circlo.chat/app/profile" }, data: { type: "CIRCLO_PRIVACY_CHANGED", recipientId: user, lockedChats } }),
     visible: () => dispatch("message", { source: { url: "https://circlo.chat/app/profile" }, data: { type: "CIRCLO_APP_VISIBLE" } }),
   };
 }
@@ -42,7 +66,7 @@ test("push is quiet on every visible app screen, but displays with hidden or clo
   const h = harness();
   h.setWindows([{ visibilityState: "visible", url: "https://circlo.chat/app/profile" }]); await h.push(); assert.equal(h.cards.length, 0);
   h.setWindows([{ visibilityState: "hidden", url: "https://circlo.chat/app/profile" }]); await h.push(); assert.equal(h.cards.length, 1);
-  assert.equal(h.cards[0].title, "Alex · Circlo"); assert.equal(h.cards[0].badge, "/icons/circlo-badge-96.png");
+  assert.equal(h.cards[0].title, "Circlo"); assert.equal(h.cards[0].badge, "/icons/circlo-badge-96.png");
   await h.visible(); assert.equal(h.cards.length, 0);
   h.setWindows([]); await h.push(); assert.equal(h.cards.length, 1);
 });
@@ -127,4 +151,46 @@ test("a call can be declined from its notification only after recipient authoriz
   const other = harness(); other.setDetail({ callId: message, recipientId: chat });
   await other.click({ data: { callId: message, notificationId: notice, recipientId: user }, close() {} },"decline");
   assert(!other.fetches.some(item => item.url === "/api/calls"));
+});
+
+
+test("worker shows live recipient preview and preserves newest text when grouping", async () => {
+  const h = harness();
+  let latest = "Are we meeting tonight?";
+  h.setWindows([{ visibilityState: "hidden", url: "https://circlo.chat/app/chats",
+    postMessage: (request: any, ports: any[]) => {
+      assert.equal(request.recipientId, user);
+      ports[0].postMessage({ conversationId: chat, messageId: latest === "Are we meeting tonight?" ? message : notice, title: "Alex", body: latest });
+    },
+  }]);
+  await h.push(); assert.equal(h.cards[0].body, latest);
+  latest = "See you at eight"; h.setDetail({ messageId: notice });
+  await h.push({ notificationId: message }); assert.equal(h.cards[0].data.count, 2); assert.equal(h.cards[0].body, latest);
+  await h.privacy(); assert.equal(h.cards.length, 0);
+});
+
+test("locking during a preview request invalidates the in-flight alert", async () => {
+  const h = harness();
+  let reply: any;
+  h.setWindows([{ visibilityState: "hidden", url: "https://circlo.chat/app/chats",
+    postMessage: (_request: any, ports: any[]) => { reply = ports[0]; },
+  }]);
+  const pending = h.push();
+  while (!reply) await new Promise(resolve => setTimeout(resolve, 1));
+  await h.privacy();
+  reply.postMessage({ conversationId: chat, messageId: message, title: "Alex", body: "must not appear" });
+  await pending;
+  assert.equal(h.cards.length, 0);
+});
+
+
+test("closed-app requests use synchronized lock state and unknown state stays private", async () => {
+  const h = harness(); h.setDetail({ messageRequest: true });
+  await h.push(); assert.equal(h.cards[0].title, "Circlo");
+  await h.privacy([]); await h.push();
+  assert.equal(h.cards[0].title, "New Message Request");
+  assert.equal(h.cards[0].body, "You have received a new message request.");
+  await h.privacy([chat]); await h.push();
+  assert.equal(h.cards[0].title, "Circlo"); assert.equal(h.cards[0].body, "New message received.");
+  await h.privacy(null); await h.push(); assert.equal(h.cards[0].title, "Circlo");
 });

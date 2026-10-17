@@ -1,4 +1,4 @@
-const CACHE_NAME = "circlo-offline-notifications-v7";
+const CACHE_NAME = "circlo-offline-notifications-v8";
 const OFFLINE_URL = "/offline.html";
 
 self.addEventListener("install", (event) => {
@@ -48,9 +48,36 @@ const appWindows = async () => (await self.clients.matchAll({ type: "window", in
 const clearAlerts = async () => {
   for (const notification of await self.registration.getNotifications()) notification.close();
 };
+// Store only device-local lock IDs, keyed by account; never keys or previews.
+async function lockState(recipientId, value) {
+  try {
+    const database = await new Promise((resolve, reject) => {
+      const request = indexedDB.open("circlo-notification-privacy", 1);
+      request.onupgradeneeded = () => request.result.createObjectStore("locks");
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    try {
+      return await new Promise((resolve, reject) => {
+        const tx = database.transaction("locks", value === undefined ? "readonly" : "readwrite");
+        const request = value === undefined ? tx.objectStore("locks").get(recipientId) : tx.objectStore("locks").put(value, recipientId);
+        tx.oncomplete = () => resolve(value === undefined ? request.result : value);
+        tx.onerror = () => reject(tx.error);
+        tx.onabort = () => reject(tx.error);
+      });
+    } finally { database.close(); }
+  } catch { return null; } // Missing/unavailable state is always private.
+}
+let privacyEpoch = 0;
 self.addEventListener("message", event => {
   if (!event.source?.url || new URL(event.source.url).origin !== self.location.origin) return;
   if (event.data?.type === "SKIP_WAITING") self.skipWaiting();
+  if (event.data?.type === "CIRCLO_PRIVACY_CHANGED") {
+    privacyEpoch++;
+    const ids = event.data.lockedChats;
+    const valid = Array.isArray(ids) && ids.every(id => uuid.test(id));
+    event.waitUntil(Promise.all([clearAlerts(), uuid.test(event.data.recipientId) ? lockState(event.data.recipientId, valid ? ids : null) : Promise.resolve()]));
+  }
   if (event.data?.type === "CIRCLO_APP_VISIBLE" || event.data?.type === "CIRCLO_SIGNED_OUT") event.waitUntil(clearAlerts());
 });
 
@@ -94,6 +121,35 @@ self.addEventListener("push", event => {
     }
     // The user can foreground the app while the authenticated lookup runs.
     if ((await appWindows()).some(client => client.visibilityState === "visible")) { await clearAlerts(); return; }
+    const epoch = privacyEpoch;
+    let local = null;
+    const windows = await appWindows();
+    if (detail.conversationId && windows.length) {
+      // Only the authenticated recipient window owns decryption keys. No key
+      // or preview is persisted in worker storage or sent to a push provider.
+      local = await Promise.any(windows.map(client => new Promise((resolve, reject) => {
+        const channel = new MessageChannel();
+        const timer = setTimeout(() => { channel.port1.close(); reject(new Error("suspended")); }, 800);
+        channel.port1.onmessage = event => {
+          clearTimeout(timer); channel.port1.close();
+          const value = event.data;
+          if (value && value.conversationId === detail.conversationId && value.messageId === detail.messageId) resolve(value);
+          else reject(new Error("unavailable"));
+        };
+        try { client.postMessage({ type: "CIRCLO_PREVIEW", notificationId: data.notificationId, recipientId: data.recipientId }, [channel.port2]); }
+        catch { clearTimeout(timer); channel.port1.close(); reject(new Error("unavailable")); }
+      }))).catch(() => null);
+    }
+    if (epoch !== privacyEpoch) return;
+    if ((await appWindows()).some(client => client.visibilityState === "visible")) { await clearAlerts(); return; }
+    // Without a live lock-state check, even a sender name is private.
+    const locks = await lockState(data.recipientId);
+    const knownUnlocked = Array.isArray(locks) && !locks.includes(detail.conversationId);
+    const requestFallback = detail.messageRequest && knownUnlocked;
+    detail = { ...detail,
+      title: local?.title ?? (requestFallback ? "New Message Request" : "Circlo"),
+      body: local?.body ?? (requestFallback ? "You have received a new message request." : "New message received."),
+    };
     const url = detail.conversationId ? `/app/chats/${detail.conversationId}?message=${detail.messageId}` : "/app/chats";
     const tag = detail.conversationId ? `circlo-${data.recipientId}-${detail.conversationId}` : "circlo-activity";
     const previous = (await self.registration.getNotifications({ tag }))[0];
@@ -104,8 +160,9 @@ self.addEventListener("push", event => {
     const count = Math.min(99, (previous?.data?.count ?? 0) + 1);
     const now = Date.now();
     const alertAgain = !previous || now - (previous.data?.lastAlertAt ?? 0) > 5000;
+    if (epoch !== privacyEpoch) return;
     await self.registration.showNotification(detail.title || "Circlo", {
-      body: count > 1 && detail.conversationId ? `${count} new encrypted messages. Open Circlo to read them.` : detail.body,
+      body: detail.body,
       icon: "/icons/circlo-192.png?v=linked-c-2", badge: "/icons/circlo-badge-96.png",
       tag, renotify: Boolean(!detail.silent && previous && alertAgain), silent: Boolean(detail.silent),
       ...(!detail.silent ? { vibrate: [100, 50, 100] } : {}),

@@ -20,12 +20,16 @@ function cleanText(value: string, fallback: string, maxLength: number): string {
 
 export function messageNotificationPresentation(input: {
   showDetails: boolean;
+  messageRequest?: boolean;
+  locked?: boolean;
   isGroup: boolean;
   groupName: string | null;
   actorName: string;
   preview: string;
   encrypted: boolean;
 }): NotificationPresentation {
+  if (input.locked) return { title: "Circlo", body: "New message received." };
+  if (input.messageRequest) return { title: "New Message Request", body: "You have received a new message request." };
   if (!input.showDetails) {
     return { title: "Circlo", body: "New message. Open Circlo to read it." };
   }

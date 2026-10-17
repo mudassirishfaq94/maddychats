@@ -14,11 +14,12 @@ import org.json.JSONObject
 /** Exact HTTPS origin and main-frame restriction, including asynchronous responses. */
 class HostedPushBridge(private val activity: MainActivity, private val requestPermission: (() -> Unit) -> Unit) {
     fun install(view: WebView) {
+        NativePushState.previewWebView = java.lang.ref.WeakReference(view)
         if (!WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) return
         WebViewCompat.addWebMessageListener(view, "CircloPush", setOf(BuildConfig.API_BASE_URL)) { source, message, origin, mainFrame, reply ->
             if (!PushPolicy.allowsBridge(mainFrame, origin.toString(), source.url.orEmpty(), BuildConfig.API_BASE_URL)) return@addWebMessageListener
             val raw = runCatching { message.data }.getOrNull() ?: return@addWebMessageListener
-            if (raw.length > 512) return@addWebMessageListener
+            if (raw.length > 4096) return@addWebMessageListener
             val data = runCatching { JSONObject(raw) }.getOrNull() ?: return@addWebMessageListener
             val id = data.optString("id")
             if (!Regex("[a-zA-Z0-9-]{1,64}").matches(id)) return@addWebMessageListener
@@ -43,6 +44,21 @@ class HostedPushBridge(private val activity: MainActivity, private val requestPe
                 "status" -> respond(status = NotificationChannels.status(activity))
                 "token" -> token()
                 "request" -> requestPermission { token() }
+                "privacy" -> {
+                    val user = data.optString("userId")
+                    val prefs = activity.getSharedPreferences("circlo_push", android.content.Context.MODE_PRIVATE)
+                    if (prefs.getString("user", null) == user) {
+                        prefs.edit().putString("locks_$user", data.optJSONArray("lockedChats")?.toString() ?: "null").apply()
+                        NativePushState.dismiss(activity)
+                    }
+                    respond()
+                }
+                "dismiss" -> { NativePushState.dismiss(activity); respond() }
+                "preview" -> {
+                    val notice = data.optJSONObject("notification")
+                    if (notice != null) LocalMessageNotification.show(activity, notice)
+                    respond()
+                }
                 "clear" -> { NativePushState.clear(activity); respond() }
                 "bind" -> {
                     val user = data.optString("userId")

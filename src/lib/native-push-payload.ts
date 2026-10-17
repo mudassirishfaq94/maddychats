@@ -9,11 +9,10 @@ function safeNotificationText(value: string | undefined, fallback: string, limit
 }
 
 /**
- * Ready-to-display notification text travels with the push so the installed
- * Android app shows exactly what the browser shows. `actorName`/`preview`
- * remain for clients that still compose their own text.
+ * Message pushes carry a private fallback only. A running recipient WebView
+ * may replace it locally after decryption. Call presentation remains separate.
  */
-export function nativePushPayload(input: { recipientId: string; notificationId: string; conversationId: string; messageId: string; actorName?: string; preview?: string; showDetails?: boolean; isGroup?: boolean; groupName?: string | null; encrypted?: boolean; title?: string; body?: string; callId?: string; silent?: boolean; callTtl?: number }, now = Date.now()) {
+export function nativePushPayload(input: { messageRequest?: boolean; recipientId: string; notificationId: string; conversationId: string; messageId: string; actorName?: string; preview?: string; showDetails?: boolean; isGroup?: boolean; groupName?: string | null; encrypted?: boolean; title?: string; body?: string; callId?: string; silent?: boolean; callTtl?: number }, now = Date.now()) {
   const ttl = input.callId ? Math.min(45, Math.max(1, input.callTtl ?? 45)) : 3600;
   const showDetails = input.showDetails !== false;
   // Encrypted is the safe default: an unknown message must never leak text.
@@ -28,15 +27,17 @@ export function nativePushPayload(input: { recipientId: string; notificationId: 
         preview: input.preview ?? "",
         encrypted,
       });
+  const safePresentation = input.callId ? presentation : { title: "Circlo", body: "New message received." };
   return {
     data: {
       url: `ziptalks://chat/${input.conversationId}?${input.callId ? `call=${input.callId}` : `message=${input.messageId}`}`,
       tag: input.callId ? `circlo-call-${input.callId}` : `circlo-chat-${input.conversationId}`,
+      messageRequest: String(input.messageRequest === true),
       recipientId: input.recipientId, eventId: input.notificationId,
-      title: presentation.title, body: presentation.body,
-      actorName: showDetails ? safeNotificationText(input.actorName, "Circlo", 80) : "Circlo",
-      // Only a message the server stored as readable text may travel as text.
-      preview: !showDetails
+      title: safePresentation.title, body: safePresentation.body,
+      actorName: !input.callId ? "Circlo" : showDetails ? safeNotificationText(input.actorName, "Circlo", 80) : "Circlo",
+      // Message content never travels through FCM, even for legacy readable rows.
+      preview: !input.callId || !showDetails
         ? "New message. Open Circlo to read it."
         : encrypted
         ? "New encrypted message. Open Circlo to read it."

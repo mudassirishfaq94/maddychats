@@ -1,5 +1,7 @@
 "use client";
 
+import { LOCKED_CHATS_KEY, notificationLockedChatIds, resolveLocalNotification } from "@/lib/local-notification-preview";
+import { useSharedE2EE } from "./e2ee-provider";
 import { navigateWithReload } from "@/lib/navigation";
 import { useRouter } from "next/navigation";
 
@@ -63,11 +65,60 @@ function isOpenConversation(conversationId: string): boolean {
  */
 export function RealtimeProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
+  const { decrypt } = useSharedE2EE();
   const { status, user } = useAuth();
   const [connected, setConnected] = useState(false);
   const [presence, setPresence] = useState<PresenceState>({});
+  const privacyVersion = useRef(0);
   const listeners = useRef(new Set<Listener>());
   const audioContext = useRef<AudioContext | null>(null);
+
+  useEffect(() => {
+    if (status !== "authenticated" || !user?.id) return;
+    let active = true;
+    let privacyEpoch = 0;
+    const resolve = (id: string) => resolveLocalNotification(id, user.id, decrypt, () => active);
+    const workerMessage = (event: MessageEvent) => {
+      if (event.data?.type !== "CIRCLO_PREVIEW" || event.data.recipientId !== user.id || !event.ports[0]) return;
+      const epoch = privacyEpoch;
+      void resolve(event.data.notificationId).then(detail => {
+        event.ports[0].postMessage(active && epoch === privacyEpoch ? detail : null);
+        event.ports[0].close();
+      }).catch(() => { event.ports[0].postMessage(null); event.ports[0].close(); });
+    };
+    const nativeMessage = (event: Event) => {
+      const payload = (event as CustomEvent<{ recipientId: string; notificationId: string }>).detail;
+      if (!payload || payload.recipientId !== user.id || document.visibilityState === "visible") return;
+      const epoch = privacyEpoch;
+      void resolve(payload.notificationId).then(async detail => {
+        if (!detail || !active || epoch !== privacyEpoch || document.visibilityState === "visible") return;
+        const bridge = await import("@/lib/native-push-bridge");
+        if (!active || epoch !== privacyEpoch) return;
+        await bridge.showLocalNotification({ ...detail, recipientId: user.id, notificationId: payload.notificationId });
+      }).catch(() => {});
+    };
+    const privacyChanged = () => {
+      privacyEpoch++;
+      privacyVersion.current++;
+      if ("serviceWorker" in navigator) void navigator.serviceWorker.ready.then(registration => registration.active?.postMessage({ type: "CIRCLO_PRIVACY_CHANGED", recipientId: user.id, lockedChats: notificationLockedChatIds() }));
+      if (isNativeApp()) void import("@/lib/native-push-bridge").then(bridge => bridge.syncNotificationPrivacy(user.id, notificationLockedChatIds())).catch(() => {});
+    };
+    const storageChanged = (event: StorageEvent) => { if (event.key === null || event.key === LOCKED_CHATS_KEY) privacyChanged(); };
+    privacyChanged();
+    navigator.serviceWorker?.addEventListener("message", workerMessage);
+    window.addEventListener("circlo:native-notification", nativeMessage);
+    window.addEventListener("maddy:locked-chats", privacyChanged);
+    window.addEventListener("maddy:notification-preferences", privacyChanged);
+    window.addEventListener("storage", storageChanged);
+    return () => {
+      active = false;
+      navigator.serviceWorker?.removeEventListener("message", workerMessage);
+      window.removeEventListener("circlo:native-notification", nativeMessage);
+      window.removeEventListener("maddy:locked-chats", privacyChanged);
+      window.removeEventListener("maddy:notification-preferences", privacyChanged);
+      window.removeEventListener("storage", storageChanged);
+    };
+  }, [status, user?.id, decrypt]);
 
   const playNotificationSound = useCallback(() => {
     const AudioContextClass = window.AudioContext ??
@@ -155,7 +206,10 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
         const token = await native.registerCapacitorPush(false);
         if (token && !stopped && epoch === preferenceEpoch) {
           await native.sendTokenToServer(token);
-          if (!stopped && epoch === preferenceEpoch && bridge.hasHostedPushBridge()) await bridge.hostedPush("bind", user.id);
+          if (!stopped && epoch === preferenceEpoch && bridge.hasHostedPushBridge()) {
+            await bridge.hostedPush("bind", user.id);
+            await bridge.syncNotificationPrivacy(user.id, notificationLockedChatIds());
+          }
         }
       } catch { /* No false success; Settings provides an explicit retry and error. */ }
       finally {
@@ -254,6 +308,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (status !== "authenticated") return;
 
+    let disposed = false;
     const es = new EventSource("/api/realtime/stream");
     let hadConnection = false;
     es.onopen = () => {
@@ -293,8 +348,6 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
       if (event.type === "notification:new" && event.notification.type === "message") {
         const preferences = notificationPreferencesSnapshot;
         const data = event.notification.data;
-        const actor = String(data?.actorName ?? "Someone");
-        const preview = String(data?.preview ?? "New message");
         const conversationId = String(data?.conversationId ?? "");
         const activeConversation = isOpenConversation(conversationId);
 
@@ -310,39 +363,37 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
           listeners.current.forEach(fn => { try { fn(event); } catch {} });
           return;
         }
+        const version = privacyVersion.current;
+        if (isNativeApp() && preferences?.pushNotifications && user?.id) {
+          void resolveLocalNotification(event.notification.id, user.id, decrypt, () => !disposed && version === privacyVersion.current).then(async detail => {
+            if (!detail || disposed || version !== privacyVersion.current || document.visibilityState === "visible") return;
+            const bridge = await import("@/lib/native-push-bridge");
+            if (disposed || version !== privacyVersion.current) return;
+            await bridge.showLocalNotification({ ...detail, recipientId: user.id, notificationId: event.notification.id });
+          }).catch(() => {});
+        }
         if (preferences?.notificationSound && localStorage.getItem("maddy:web-push-subscribed") !== "1") playNotificationSound();
         if (
-          preferences?.pushNotifications &&
+          !isNativeApp() && preferences?.pushNotifications &&
           localStorage.getItem("maddy:web-push-subscribed") !== "1" &&
           "Notification" in window &&
           Notification.permission === "granted" &&
           (document.visibilityState === "hidden" || !document.hasFocus())
         ) {
-          // The same rule the server and the Android app apply: the sender and
-          // the preview appear only when the user asked for them.
-          const showDetails = preferences?.showNotificationDetails === true;
-          const title = showDetails ? actor : "Circlo";
-          const message = String(data?.messageId ?? "");
-          const url = `/app/chats/${conversationId}?message=${encodeURIComponent(message)}`;
-          const options: NotificationOptions = {
-            body: showDetails ? preview : "New message. Open Circlo to read it.",
-            tag: `circlo-${user?.id}-${conversationId}`,
-            icon: "/icons/circlo-192.png",
-            badge: "/icons/circlo-badge-96.png",
-            data: { url },
-          };
-          if ("serviceWorker" in navigator) {
-            void navigator.serviceWorker.ready.then((registration) =>
-              registration.showNotification(title, options),
-            );
-          } else {
-            const notification = new Notification(title, options);
-            notification.onclick = () => {
-              window.focus();
-              navigateWithReload(url);
-              notification.close();
+          void resolveLocalNotification(event.notification.id, user!.id, decrypt, () => !disposed && version === privacyVersion.current).then(detail => {
+            if (!detail || disposed || version !== privacyVersion.current || document.visibilityState === "visible") return;
+            const url = `/app/chats/${detail.conversationId}?message=${detail.messageId}`;
+            const options: NotificationOptions = {
+              body: detail.body, tag: `circlo-${user?.id}-${conversationId}`,
+              icon: "/icons/circlo-192.png", badge: "/icons/circlo-badge-96.png", data: { url }, silent: detail.silent,
             };
-          }
+            if ("serviceWorker" in navigator) {
+              void navigator.serviceWorker.ready.then(registration => { if (!disposed && version === privacyVersion.current) return registration.showNotification(detail.title, options); });
+            } else {
+              const notification = new Notification(detail.title, options);
+              notification.onclick = () => { window.focus(); navigateWithReload(url); notification.close(); };
+            }
+          }).catch(() => {});
         }
       }
       listeners.current.forEach((fn) => {
@@ -355,11 +406,12 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     };
 
     return () => {
+      disposed = true;
       es.close();
       setConnected(false);
       setPresence({});
     };
-  }, [playNotificationSound, router, status, user?.id]);
+  }, [playNotificationSound, router, status, user, decrypt]);
 
   const value = useMemo<RealtimeContextValue>(
     () => ({ connected, subscribe, presence }),
