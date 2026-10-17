@@ -361,8 +361,10 @@ class MainActivity : ComponentActivity() {
         val cookieManager = CookieManager.getInstance()
         cookieManager.setAcceptCookie(true)
         cookieManager.setAcceptThirdPartyCookies(this, false)
-        // Carry sessions created by the earlier native client into the WebView.
-        api.cookiesForWeb().forEach { cookieManager.setCookie(BuildConfig.API_BASE_URL, it) }
+        // Migrate legacy native sessions only when WebView has no session.
+        // Never overwrite the current WebView login with an older saved cookie.
+        WebSessionCookieMigration.cookiesToImport(cookieManager.getCookie(BuildConfig.API_BASE_URL), api.cookiesForWeb())
+            .forEach { cookieManager.setCookie(BuildConfig.API_BASE_URL, it) }
         cookieManager.flush()
         HostedPushBridge(this@MainActivity) { done -> requestNotifications(done) }.install(this)
         webChromeClient = hostedWebChromeClient()
@@ -454,7 +456,8 @@ class MainActivity : ComponentActivity() {
                 // into WebView before the first server-rendered page request so
                 // the hosted UI receives the same signed-in session and data.
                 val cookieManager = CookieManager.getInstance()
-                api.cookiesForWeb().forEach { cookieManager.setCookie(BuildConfig.API_BASE_URL, it) }
+                WebSessionCookieMigration.cookiesToImport(cookieManager.getCookie(BuildConfig.API_BASE_URL), api.cookiesForWeb())
+                    .forEach { cookieManager.setCookie(BuildConfig.API_BASE_URL, it) }
                 cookieManager.flush()
                 webChromeClient = (context as? MainActivity)?.hostedWebChromeClient() ?: WebChromeClient()
                 webViewClient = (context as? MainActivity)?.hostedWebClient() ?: WebViewClient()
