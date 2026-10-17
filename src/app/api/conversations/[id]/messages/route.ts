@@ -211,6 +211,8 @@ export async function POST(
       actorId: me.id,
       actorName: me.displayName,
       persistedRequest: detail.type === "dm" && detail.request_pending,
+      // A message request is a fixed notice, not private message text.
+      encrypted: detail.type === "dm" && detail.request_pending ? false : isEncrypted,
       preview: detail.type === "dm" && detail.request_pending
         ? "Message request — accept to continue the conversation"
         : isEncrypted

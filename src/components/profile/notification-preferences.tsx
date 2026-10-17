@@ -204,6 +204,7 @@ export function NotificationPreferences() {
             <li>Check Do Not Disturb, your phone&apos;s notification sound and Circlo&apos;s Notification sound setting below. Muted chats stay quiet.</li>
           </ol>
           <p className="mt-2 leading-relaxed">For the Chrome-installed app, also check Chrome → Settings → Site settings → Notifications → circlo.chat. The separately installed Android APK has different settings. Your saved Android preferences are preserved; Circlo cannot turn these switches on for you.</p>
+          <p className="mt-2 leading-relaxed">Alerts name the sender and show a preview only while “Show sender and message preview” is on, and only in an app build that supports it. End-to-end encrypted chats keep their text private: those alerts show the sender and “New encrypted message.”</p>
         </details>
       </div>
       {hasAndroidSettings ? (

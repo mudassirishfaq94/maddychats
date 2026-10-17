@@ -263,6 +263,8 @@ export async function POST(req: NextRequest) {
         messageId: created.id,
         actorId: me.id,
         actorName: me.displayName,
+        // Attachment notices are fixed labels; only a readable caption is text.
+        encrypted: false,
         preview: isEncrypted
           ? caption
             ? "New attachment"

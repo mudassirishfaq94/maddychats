@@ -183,6 +183,7 @@ export async function processScheduledMessages(): Promise<{
         messageId: message.id,
         actorId: scheduled.senderId,
         actorName: sender?.displayName ?? "Scheduled message",
+        encrypted: scheduled.encrypted,
         preview: scheduled.encrypted
           ? "\u{1F512} Encrypted message"
           : scheduled.text.slice(0, 140),
