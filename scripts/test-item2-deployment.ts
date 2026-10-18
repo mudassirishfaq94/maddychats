@@ -162,7 +162,7 @@ async function main() {
     const restoreUrl = new URL(url); restoreUrl.pathname = "/item2_restore_test";
     await run("scripts/database-backup.mjs", { RESTORE_DATABASE_URL: restoreUrl.toString(), BACKUP_ACTION: "restore", BACKUP_FILE: backupFile });
     await verifySchema(restored);
-    assert.equal((await restored.query("select count(*)::int as count from messages where text='Independent delivery'")).rows[0].count, 1);
+    assert.equal((await restored.query("select count(*)::int as count from messages where text=$1", [scheduledCipher])).rows[0].count, 1);
     assert.equal((await restored.query("select count(*)::int as count from drizzle.__drizzle_migrations")).rows[0].count, journal.entries.length);
     await run("scripts/database-backup.mjs", { RESTORE_DATABASE_URL: restoreUrl.toString(), BACKUP_ACTION: "restore", BACKUP_FILE: backupFile }, [], 1);
     console.log("Custom-format backup restoration preserved schema, message data, and migration history");
