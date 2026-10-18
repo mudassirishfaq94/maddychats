@@ -217,10 +217,12 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
   useEffect(() => { if (connected) syncRef.current?.(); }, [connected]);
   useEffect(() => {
     const ended = (event: Event) => { if (nativeSession.current?.callId === (event as CustomEvent<{ callId: string }>).detail?.callId) end(); };
+    const unprotected = (event: Event) => { if (nativeSession.current?.callId === (event as CustomEvent<{ callId: string }>).detail?.callId) nativeSession.current = null; };
     const open = () => { setMinimized(false); syncRef.current?.(); };
     window.addEventListener("circlo:native-call-ended", ended);
     window.addEventListener("circlo:native-call-open", open);
-    return () => { window.removeEventListener("circlo:native-call-ended", ended); window.removeEventListener("circlo:native-call-open", open); };
+    window.addEventListener("circlo:native-call-unprotected", unprotected);
+    return () => { window.removeEventListener("circlo:native-call-ended", ended); window.removeEventListener("circlo:native-call-open", open); window.removeEventListener("circlo:native-call-unprotected", unprotected); };
   }, [end]);
 
   const busy = phase !== "idle";

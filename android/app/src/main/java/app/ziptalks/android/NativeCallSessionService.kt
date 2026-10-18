@@ -31,6 +31,7 @@ class NativeCallSessionService : Service() {
     private val worker = Executors.newSingleThreadScheduledExecutor()
     private val http = OkHttpClient.Builder().followRedirects(false).followSslRedirects(false).callTimeout(3, TimeUnit.SECONDS).build()
     private var wake: PowerManager.WakeLock? = null
+    private var endMediaOnStop = true
     override fun onBind(intent: Intent?): IBinder? = null
     override fun onCreate() {
         super.onCreate()
@@ -55,7 +56,7 @@ class NativeCallSessionService : Service() {
             if (Build.VERSION.SDK_INT >= 29) startForeground(NOTICE_ID, notice, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
             else startForeground(NOTICE_ID, notice)
             if (wake == null) wake = getSystemService(PowerManager::class.java).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "circlo:active-call").apply { setReferenceCounted(false) }
-        } catch (_: Exception) { stopSelf() }
+        } catch (_: Exception) { endMediaOnStop = false; stopSelf() }
         return START_NOT_STICKY
     }
     private fun maintain() {
@@ -86,7 +87,8 @@ class NativeCallSessionService : Service() {
         NativePushState.previewWebView?.get()?.let { view -> view.post {
             if (WebOriginPolicy.isAllowed(view.url.orEmpty(), BuildConfig.API_BASE_URL)) {
                 val detail = JSONObject().put("callId", ended)
-                view.evaluateJavascript("window.dispatchEvent(new CustomEvent('circlo:native-call-ended', {detail: $detail}))", null)
+                val event = if (endMediaOnStop) "circlo:native-call-ended" else "circlo:native-call-unprotected"
+                view.evaluateJavascript("window.dispatchEvent(new CustomEvent('$event', {detail: $detail}))", null)
             }
         } }
         super.onDestroy()
