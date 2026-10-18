@@ -293,13 +293,15 @@ export function ConversationDetails({
                     const next = !showInviteLinks;
                     setShowInviteLinks(next);
                     if (next && inviteLinks.length === 0) {
+                      setGroupBusy("invite-load");
                       fetch(`/api/groups/${conversationId}/invites`)
                         .then((r) => {
                           if (!r.ok) throw new Error("Failed to load invite links");
                           return r.json();
                         })
                         .then((data) => setInviteLinks(data.links ?? []))
-                        .catch((err) => setError(err.message || "Could not load invite links. Make sure the database migration has been applied."));
+                        .catch((err) => setError(err.message || "Could not load invite links."))
+                        .finally(() => setGroupBusy(null));
                     }
                   }}
                   className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium text-[var(--accent-fg)] hover:bg-[var(--accent-soft)]"

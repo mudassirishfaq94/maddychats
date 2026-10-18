@@ -71,7 +71,7 @@ export default function CommunityDetailPage() {
   useEffect(() => {
     const controller = new AbortController();
     fetch(`/api/communities/${communityId}`, { signal: controller.signal })
-      .then(async r => { if (!r.ok) throw new Error(r.status === 404 ? "Community not found or access unavailable." : "Could not load this community. Please try again."); return r.json(); })
+      .then(async r => { if (!r.ok) {if(r.status===404||r.status===403)setCommunity(null);throw new Error(r.status === 404 ? "Community not found or access unavailable." : "Could not load this community. Please try again.");} return r.json(); })
       .then((data) => {
         setCommunity(data.community);
         setMembers(data.members ?? []);
@@ -139,7 +139,7 @@ export default function CommunityDetailPage() {
         <div className="min-w-0 flex-1">
           <h1 className="font-display text-xl font-bold truncate">{community.name}</h1>
           <p className="text-xs text-[var(--muted)]">
-            {community.memberCount} members · {channels.length} channels
+            {community.memberCount} members · {channels.length} {channels.length===1?"group":"groups"}
           </p>
         </div>
       </div>
@@ -150,6 +150,7 @@ export default function CommunityDetailPage() {
       )}
 
       {community.myRole==="owner"||community.myRole==="admin"?<div className="mt-4"><button className="btn btn-secondary min-h-11" onClick={()=>{setDescription(community.description??"");setEditInfo(!editInfo);}}><Settings className="h-4 w-4"/>Community settings</button>{editInfo?<div className="mt-3 rounded-2xl border border-[var(--border)] p-4"><label className="block text-sm">Description and community rules<textarea className="field-input mt-2 min-h-24" maxLength={500} value={description} onChange={event=>setDescription(event.target.value)}/></label><label className="mt-3 flex min-h-11 items-center gap-3 text-sm"><input type="checkbox" checked={community.isPublic} disabled={busy} onChange={event=>void manage({action:"edit",isPublic:event.target.checked})}/>Public community</label><button className="btn btn-primary mt-3 min-h-11" disabled={busy} onClick={()=>void manage({action:"edit",description})}>Save rules</button></div>:null}</div>:null}
+      {!community.myRole&&community.isPublic?<button className="btn btn-primary mt-3 min-h-11" disabled={busy} onClick={()=>void manage({action:"join"})}>Join community</button>:null}
       {community.myRole&&community.myRole!=="owner"?<button className="btn btn-secondary mt-3 min-h-11" disabled={busy} onClick={()=>void manage({action:"leave"})}>Leave community</button>:null}
       {/* Channels */}
       <div className="mt-6">
@@ -168,7 +169,7 @@ export default function CommunityDetailPage() {
         {channels.length === 0 ? (
           <div className="py-8 text-center">
             <Hash className="mx-auto h-8 w-8 text-[var(--muted)] opacity-40" />
-            <p className="mt-2 text-xs text-[var(--muted)]">No channels yet. Create one!</p>
+            <p className="mt-2 text-xs text-[var(--muted)]">No groups yet. Create one!</p>
           </div>
         ) : (
           <div className="mt-3 space-y-2">
@@ -225,7 +226,7 @@ export default function CommunityDetailPage() {
               <input
                 value={newChannelName}
                 onChange={(e) => setNewChannelName(e.target.value)}
-                placeholder="channel-name"
+                placeholder="Group name"
                 className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2.5 text-sm text-[var(--text)] placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:outline-none"
                 autoFocus
                 onKeyDown={(e) => e.key === "Enter" && handleCreateChannel()}
