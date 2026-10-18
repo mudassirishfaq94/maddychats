@@ -92,7 +92,7 @@ export function NotificationPreferences() {
         if (configuration.publicKey && subscriptionMatchesKey(subscription, applicationServerKey(configuration.publicKey))) {
           const rebound = await fetch("/api/notifications/push", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(subscription.toJSON()), signal: AbortSignal.timeout(10000) });
           if (rebound.ok) setPushSubscribed(true);
-        }
+        } else if (configuration.publicKey) setPushSubscribed(false);
       })
       .catch(() => {});
   }, []);
@@ -168,11 +168,11 @@ export function NotificationPreferences() {
   async function toggle(key: keyof Preferences) {
     if (!preferences || saving || subscribing) return;
     const next = !preferences[key];
-    if (key === "pushNotifications" && next && !(await subscribeForPush())) {
-      return;
-    }
     setSaving(key);
     setMessage(null);
+    // Save account intent independently from this device's permission/provider
+    // status. Start permission work in the click gesture, even if the save waits.
+    const enrollment = key === "pushNotifications" && next ? subscribeForPush() : null;
     const response = await fetch("/api/notifications/preferences", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -184,8 +184,11 @@ export function NotificationPreferences() {
       const data = await response.json() as { preferences: Preferences };
       setPreferences(data.preferences);
       window.dispatchEvent(new CustomEvent("maddy:notification-preferences", { detail: data.preferences }));
-      setMessage("Notification settings saved.");
+      if (!enrollment) setMessage("Notification settings saved.");
     }
+    const enrolled = enrollment ? await enrollment : true;
+    if (!response?.ok) setMessage("That setting could not be saved. Please try again.");
+    else if (enrollment && enrolled) setMessage("Notification settings saved.");
     setSaving(null);
   }
 

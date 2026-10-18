@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 export async function testNativeNotificationState(context, base, userId) {
   const preferences = { messageNotifications: true, groupNotifications: true, pushNotifications: true, notificationSound: true, showNotificationDetails: true };
   const page = await context.newPage(); page.setDefaultTimeout(30000);
-  let failedRead = false, failedReads = 0, registrations = 0, registered = false;
+  let failedRead = false, failedEnrollment = false, failedReads = 0, registrations = 0, registered = false;
   await page.addInitScript(({ userId }) => {
     Object.defineProperty(navigator, "userAgent", { configurable: true, get: () => "Android ZipTalkAndroid/0.8" });
     const state = window.nativeNotificationTest = { bound: userId, clears: 0, permission: localStorage.getItem("qa:notification-permission") === "granted" };
@@ -25,6 +25,7 @@ export async function testNativeNotificationState(context, base, userId) {
     return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ preferences }) });
   });
   await page.route("**/api/push/register", route => {
+    if (route.request().method() === "POST" && failedEnrollment) return route.fulfill({ status: 503, contentType: "application/json", body: "{}" });
     if (route.request().method() === "POST") { registered = true; registrations++; }
     return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(route.request().method() === "POST" ? { ok: true, deliveryConfigured: true } : { registered }) });
   });
@@ -56,8 +57,12 @@ export async function testNativeNotificationState(context, base, userId) {
     await page.reload();
     await page.getByRole("switch", { name: "Desktop and mobile push", exact: true }).waitFor();
     assert.equal(await page.getByRole("switch", { name: "Desktop and mobile push", exact: true }).getAttribute("aria-checked"), "false");
+    failedEnrollment = true;
     await page.getByRole("switch", { name: "Desktop and mobile push", exact: true }).click();
+    await page.getByText("Push device registration was rejected.", { exact: true }).waitFor();
+    assert.equal(preferences.pushNotifications,true,"A device enrollment failure must not undo account opt-in");
     await page.waitForFunction(id => window.nativeNotificationTest.bound === id, userId);
+    failedEnrollment = false;
     await page.reload();
     await page.getByRole("switch", { name: "Desktop and mobile push", exact: true }).waitFor();
     assert.equal(await page.getByRole("switch", { name: "Desktop and mobile push", exact: true }).getAttribute("aria-checked"), "true");
