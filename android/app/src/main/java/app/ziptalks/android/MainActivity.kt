@@ -187,6 +187,7 @@ class MainActivity : ComponentActivity() {
         callTransition = null
     }
     private var pendingFileChooser: ValueCallback<Array<Uri>>? = null
+    private var pendingCameraPermission: PermissionRequest? = null
     private var pendingWebPermission: PermissionRequest? = null
     private var keyboardVisible = false
     private val api by lazy { ZipTalkApi(this) }
@@ -229,6 +230,12 @@ class MainActivity : ComponentActivity() {
         pendingWebPermission = null
         if (granted && WebOriginPolicy.isAllowed(request.origin.toString(), BuildConfig.API_BASE_URL) && WebOriginPolicy.isAllowed(webView?.url.orEmpty(), BuildConfig.API_BASE_URL)) request.grant(arrayOf(PermissionRequest.RESOURCE_AUDIO_CAPTURE))
         else request.deny()
+    }
+
+    private val cameraPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        val request = pendingCameraPermission ?: return@registerForActivityResult
+        pendingCameraPermission = null
+        if (granted && WebOriginPolicy.isAllowed(request.origin.toString(), BuildConfig.API_BASE_URL) && WebOriginPolicy.isAllowed(webView?.url.orEmpty(), BuildConfig.API_BASE_URL) && android.net.Uri.parse(webView?.url).path == "/app/people") request.grant(arrayOf(PermissionRequest.RESOURCE_VIDEO_CAPTURE)) else request.deny()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -297,6 +304,7 @@ class MainActivity : ComponentActivity() {
     private fun notificationDestination(source: Intent?): String? {
         val raw = source?.getStringExtra("notification_url")
             ?: source?.getStringExtra("url") ?: source?.dataString ?: return null
+        PublicAppLink.destination(raw, BuildConfig.API_BASE_URL)?.let { return it }
         val uri = runCatching { Uri.parse(raw) }.getOrNull() ?: return null
         val base = Uri.parse(BuildConfig.API_BASE_URL)
         val id = when {
@@ -339,14 +347,20 @@ class MainActivity : ComponentActivity() {
 
     fun hostedWebChromeClient() = object : WebChromeClient() {
         override fun onPermissionRequestCanceled(request: PermissionRequest) {
-            runOnUiThread { if (pendingWebPermission === request) pendingWebPermission = null }
+            runOnUiThread { if (pendingWebPermission === request) pendingWebPermission = null; if (pendingCameraPermission === request) pendingCameraPermission = null }
         }
         override fun onPermissionRequest(request: PermissionRequest) {
             // getUserMedia() needs both Android's runtime approval and a
-            // WebView resource grant. Approve audio only, never camera or
-            // unrelated browser permissions.
+            // WebView resource grant. Camera is limited to contact scanning;
+            // audio keeps its separate runtime approval. Unknown resources fail closed.
             runOnUiThread {
-                if (!WebOriginPolicy.isAllowed(request.origin.toString(), BuildConfig.API_BASE_URL) || !WebOriginPolicy.isAllowed(webView?.url.orEmpty(), BuildConfig.API_BASE_URL) || !request.resources.contains(PermissionRequest.RESOURCE_AUDIO_CAPTURE)) {
+                if (request.resources.size == 1 && request.resources[0] == PermissionRequest.RESOURCE_VIDEO_CAPTURE) {
+                    if (!WebOriginPolicy.isAllowed(request.origin.toString(), BuildConfig.API_BASE_URL) || !WebOriginPolicy.isAllowed(webView?.url.orEmpty(), BuildConfig.API_BASE_URL) || android.net.Uri.parse(webView?.url).path != "/app/people") { request.deny(); return@runOnUiThread }
+                    if (ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) request.grant(arrayOf(PermissionRequest.RESOURCE_VIDEO_CAPTURE))
+                    else { pendingCameraPermission?.deny(); pendingCameraPermission = request; cameraPermissionLauncher.launch(Manifest.permission.CAMERA) }
+                    return@runOnUiThread
+                }
+                if (!WebOriginPolicy.isAllowed(request.origin.toString(), BuildConfig.API_BASE_URL) || !WebOriginPolicy.isAllowed(webView?.url.orEmpty(), BuildConfig.API_BASE_URL) || (request.resources.size != 1 || !request.resources.contains(PermissionRequest.RESOURCE_AUDIO_CAPTURE))) {
                     request.deny()
                     return@runOnUiThread
                 }
