@@ -6,7 +6,7 @@ import sharp from "sharp";
 import {Pool} from "pg";
 import {openDeviceTools} from "./device-ui-tools.mjs";
 import {testCommunityUx} from "./test-community-ux.mjs";
-import {testUxFeatures} from "./test-ux-features.mjs";
+import {testUxFeatures,testDeliveryApi} from "./test-ux-features.mjs";
 import {testNativeNotificationState} from "./test-native-notification-state.mjs";
 import {signSessionToken} from "../src/server/jwt.ts";
 import {generateKeyPair,exportPublicKey,exportPrivateKey,encryptPrivateKeyForStorage,generateConversationKey,encryptKeyForUser,conversationFingerprint,encryptMessage} from "../src/lib/crypto.ts";
@@ -208,6 +208,7 @@ try {
  await testNativeNotificationState(contexts[0],base,owner.id);
  await testUxFeatures(contexts[0],base,owner,member);
  await testCommunityUx(contexts[0],base,owner,member,pool);
+ await testDeliveryApi(base,owner,member,accounts[2],pool,await encryptMessage("Background receipt fixture",key));
  assert.deepEqual(errors,[]);console.log("Browser reliability suite passed.");
 } catch(error) { console.error("Workflow failed:",error);for(const [i,account] of accounts.entries()){if(account.page)await account.page.screenshot({path:`${process.env.TEMP??"."}/circlo-audit-failure-${i}.png`}).catch(()=>{});} throw error; } finally {
  if(browser)await browser.close();

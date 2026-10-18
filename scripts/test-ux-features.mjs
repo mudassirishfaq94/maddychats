@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import {request} from "playwright";
+import {randomUUID} from "node:crypto";
 import {mkdir} from "node:fs/promises";
 
 export async function testUxFeatures(context,base,owner,member) {
@@ -35,4 +37,29 @@ export async function testUxFeatures(context,base,owner,member) {
   await page.screenshot({path:"test-artifacts/ux-status-mobile.png"});
   console.log("PASS: mobile People search/layout, actual QR generation/manual contact addition, swipe filters, Calls navigation/history, selected-contact privacy persistence and status loading");
  }finally{await page.close();}
+}
+
+
+export async function testDeliveryApi(base,owner,member,recipient,pool,ciphertext) {
+ const api=await request.newContext({baseURL:base,extraHTTPHeaders:{Cookie:`maddy_session=${recipient.token}`,Origin:base}});
+ const conversation=randomUUID(),message=randomUUID(),notification=randomUUID();
+ try{
+  await pool.query("insert into conversations(id,type,created_by_id) values($1,'dm',$2)",[conversation,owner.id]);
+  for(const id of [owner.id,recipient.id])await pool.query("insert into conversation_members(conversation_id,user_id,accepted_at) values($1,$2,now())",[conversation,id]);
+  await pool.query("insert into messages(id,conversation_id,sender_id,text,encrypted) values($1,$2,$3,$4,true)",[message,conversation,owner.id,ciphertext]);
+  await pool.query("insert into notifications(id,user_id,actor_id,type,data) values($1,$2,$3,'message',$4::jsonb)",[notification,recipient.id,owner.id,JSON.stringify({messageId:message,conversationId:conversation})]);
+  const response=await api.get(`/api/messages/delivery?notificationId=${notification}`);assert.equal(response.status(),200);assert.match(response.headers()["cache-control"],/no-store/);
+  const received=await response.json();assert.equal(received.recipientId,recipient.id);assert.equal(received.envelopes[0].id,message);assert.equal(received.envelopes[0].text,ciphertext);assert.equal(received.envelopes[0].encrypted,true);
+  assert.equal((await pool.query("select delivered_at from messages where id=$1",[message])).rows[0].delivered_at,null,"Fetching or presence alone must not stamp delivered");
+  assert.equal((await owner.page.request.get(`${base}/api/messages/delivery?notificationId=${notification}`)).status(),404);
+  const outsider=await member.page.request.post(base+"/api/messages/delivery",{headers:{Origin:base},data:{messageIds:[message]}});assert.equal(outsider.status(),200);assert.deepEqual((await outsider.json()).acknowledged,[]);
+  assert.equal((await api.post("/api/messages/delivery",{data:{recipientId:owner.id,messageIds:[message]}})).status(),403);
+  const posted=await api.post("/api/messages/delivery",{data:{recipientId:recipient.id,messageIds:[message]}});assert.equal(posted.status(),200);assert.deepEqual((await posted.json()).acknowledged,[message]);
+  assert((await pool.query("select delivered_at from messages where id=$1",[message])).rows[0].delivered_at);
+  assert.deepEqual((await (await api.post("/api/messages/delivery",{data:{recipientId:recipient.id,messageIds:[message]}})).json()).acknowledged,[]);
+  await pool.query("update messages set delivered_at=null where id=$1",[message]);await pool.query("update conversation_members set cleared_at=now() where conversation_id=$1 and user_id=$2",[conversation,recipient.id]);
+  assert.deepEqual((await (await api.get(`/api/messages/delivery?messageId=${message}`)).json()).envelopes,[]);
+  assert.equal((await api.get("/api/messages/delivery?messageId=invalid")).status(),422);
+  console.log("PASS: real background receipt API returns authorized ciphertext, requires explicit recipient acknowledgment, isolates account/notification ownership and hides cleared history");
+ }finally{await api.dispose();await pool.query("delete from conversations where id=$1",[conversation]);await pool.query("delete from notifications where id=$1",[notification]);}
 }

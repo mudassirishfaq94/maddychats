@@ -31,7 +31,7 @@ interface Community {
 }
 
 export default function CommunitiesPage() {
-  const {subscribe}=useRealtime();
+  const {subscribe,connected}=useRealtime();
   const [myCommunities, setMyCommunities] = useState<Community[]>([]);
   const [publicCommunities, setPublicCommunities] = useState<Community[]>([]);
   const [loading, setLoading] = useState(true);
@@ -56,7 +56,7 @@ export default function CommunitiesPage() {
       .catch((cause: Error) => { if (!controller.signal.aborted) setError(cause.message); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [retry]);
+  }, [retry,connected]);
 
   async function handleCreate() {
     if (!newName.trim() || creating) return;

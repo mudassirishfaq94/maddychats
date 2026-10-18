@@ -48,7 +48,7 @@ interface Channel {
 }
 
 export default function CommunityDetailPage() {
-  const {subscribe}=useRealtime();
+  const {subscribe,connected}=useRealtime();
   const params = useParams();
   const communityId = params.id as string;
 
@@ -80,7 +80,7 @@ export default function CommunityDetailPage() {
       .catch((cause: Error) => { if (!controller.signal.aborted) setError(cause.message); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [communityId, retry]);
+  }, [communityId, retry,connected]);
 
   async function handleCreateChannel() {
     if (!newChannelName.trim() || creating) return;
@@ -208,9 +208,9 @@ export default function CommunityDetailPage() {
                   @{member.username} · {member.role}
                 </span>
               </span>
-              {community.myRole==="owner"&&member.role!=="owner"?<button type="button" className="min-h-11 rounded-lg px-2 text-xs text-[var(--accent)]" disabled={busy} onClick={()=>void manage({action:"role",userId:member.id,role:member.role==="admin"?"member":"admin"})}>{member.role==="admin"?"Remove admin":"Make admin"}</button>:null}
+              <div className="flex w-full flex-wrap gap-1 pl-11 sm:w-auto sm:pl-0">{community.myRole==="owner"&&member.role!=="owner"?<button type="button" className="min-h-11 rounded-lg px-2 text-xs text-[var(--accent)]" disabled={busy} onClick={()=>void manage({action:"role",userId:member.id,role:member.role==="admin"?"member":"admin"})}>{member.role==="admin"?"Remove admin":"Make admin"}</button>:null}
               {community.myRole==="owner"&&member.role!=="owner"?<button type="button" className="min-h-11 rounded-lg px-2 text-xs text-[var(--accent)]" disabled={busy} onClick={()=>{if(window.confirm(`Transfer community ownership to ${member.displayName}? You will become an admin.`))void manage({action:"transfer",userId:member.id});}}>Make owner</button>:null}
-              {(community.myRole==="owner"&&member.role!=="owner")||(community.myRole==="admin"&&member.role==="member")?<button type="button" className="min-h-11 rounded-lg px-2 text-xs text-[var(--danger)]" disabled={busy} onClick={()=>void manage({action:"remove",userId:member.id})}>Remove</button>:null}
+              {(community.myRole==="owner"&&member.role!=="owner")||(community.myRole==="admin"&&member.role==="member")?<button type="button" className="min-h-11 rounded-lg px-2 text-xs text-[var(--danger)]" disabled={busy} onClick={()=>void manage({action:"remove",userId:member.id})}>Remove</button>:null}</div>
             </div>
           ))}
         </div>

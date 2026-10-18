@@ -8,7 +8,9 @@ export async function testCommunityUx(context,base,owner,member,pool){
   await page.goto(`${base}/app/communities/${communityId}`);await page.getByRole("heading",{name:"Browser community",exact:true}).waitFor();await page.getByText(/2 members.*1.*group/).waitFor();
   await page.getByRole("button",{name:"Community settings",exact:true}).click();await page.getByLabel("Description and community rules").fill("Updated rules from the owner");await page.getByRole("button",{name:"Save rules",exact:true}).click();await page.getByText("Updated rules from the owner",{exact:true}).waitFor();
   if(await member.page.getByRole("button",{name:"Dismiss call notice",exact:true}).count())await member.page.getByRole("button",{name:"Dismiss call notice",exact:true}).click();
-  await member.page.goto(`${base}/app/communities/${communityId}`);await member.page.getByRole("heading",{name:"Browser community",exact:true}).waitFor();assert.equal(await member.page.getByRole("button",{name:"Create group",exact:true}).count(),0);
+  const streamReady=member.page.waitForResponse(response=>response.url().endsWith("/api/realtime/stream")&&response.status()===200);
+  await member.page.context().unroute("**/api/realtime/stream");
+  await member.page.goto(`${base}/app/communities/${communityId}`);await streamReady;await member.page.getByRole("heading",{name:"Browser community",exact:true}).waitFor();assert.equal(await member.page.getByRole("button",{name:"Create group",exact:true}).count(),0);
   await page.getByRole("button",{name:"Make admin",exact:true}).click();await member.page.getByRole("button",{name:"Create group",exact:true}).waitFor();
   await page.screenshot({path:"test-artifacts/ux-community-mobile.png"});
   await page.goto(`${base}/app/chats/${conversationId}`);await page.getByRole("button",{name:"Open group settings",exact:true}).click();
