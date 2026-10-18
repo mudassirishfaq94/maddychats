@@ -243,6 +243,7 @@ async function main() {
     assert.equal((await api("/api/calls", aliceCookie, "POST", { action: "invite", conversationId: conversation.id, clientId: randomUUID(), sdp: "v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\n" })).status, 403);
     assert.equal((await api(`/api/users/${alice.id}/block`, bobCookie, "DELETE")).status, 200);
     assert.equal((await api(`/api/conversations/${group.id}/messages`, bobCookie, "POST", { text: "ciphertext", encrypted: true })).status, 403);
+    assert.equal((await api(`/api/groups/${group.id}/settings`, aliceCookie, "PATCH", { adminOnlyAddingMembers: true })).status, 200, "Owner can explicitly restrict participant additions");
     assert.equal((await api(`/api/groups/${group.id}/members`, bobCookie, "POST", { userId: outsider.id })).status, 403);
     const settingsPath = `/api/groups/${group.id}/settings`;
     assert.equal((await api(settingsPath, bobCookie, "PATCH", { name: "Forbidden" })).status, 403);
