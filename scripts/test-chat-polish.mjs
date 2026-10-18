@@ -14,6 +14,11 @@ export async function testChatPolish(page, recipient) {
     }), "Every visible menu item must be inside the viewport and above messages");
   };
   try {
+    const recoveryNotice=page.getByRole('status').filter({hasText:"recovery needs attention"});
+    if(await recoveryNotice.isVisible()) {
+      await recoveryNotice.getByRole('button',{name:'Later',exact:true}).click();
+      await recoveryNotice.waitFor({state:'detached'});
+    }
     await page.setViewportSize({ width: 1280, height: 740 });
     const rows = page.locator('.message-history-row').filter({ has: page.getByRole("button", { name: "More actions", exact: true }) });
     const count = await rows.count(); assert(count > 1);

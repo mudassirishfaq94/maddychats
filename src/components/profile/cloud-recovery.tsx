@@ -1,5 +1,7 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
+import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/components/providers/auth-provider";
 import { useSharedE2EE } from "@/components/providers/e2ee-provider";
@@ -67,6 +69,13 @@ export function CloudRecoverySettings() {
 
 /** Refresh only after explicit recovery-code setup; no crypto on the send/typing path. */
 export function CloudRecoverySync() {
+  const pathname=usePathname();
+  const [statusSlot,setStatusSlot]=useState<HTMLElement|null>(null);
+  useEffect(()=>{
+    // The route's shell commits its slot before the next paint.
+    const frame=requestAnimationFrame(()=>setStatusSlot(document.getElementById("recovery-status")));
+    return()=>cancelAnimationFrame(frame);
+  },[pathname]);
   const {user}=useAuth(); const userId=user?.id; const {initialized,deviceId,waitForDeviceRegistration}=useSharedE2EE();
   const [warning,setWarning]=useState(false),[dismissed,setDismissed]=useState(false);
   useEffect(()=>{
@@ -89,6 +98,6 @@ export function CloudRecoverySync() {
     queue();window.addEventListener("maddy:recovery-keys-changed",queue);window.addEventListener("online",queue);
     return()=>{active=false;if(timer)clearTimeout(timer);window.removeEventListener("maddy:recovery-keys-changed",queue);window.removeEventListener("online",queue);};
   },[userId,initialized,deviceId,waitForDeviceRegistration]);
-  if(!warning||dismissed) return null;
-  return <aside role="status" className="fixed bottom-24 right-3 z-[90] max-w-xs rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3 text-xs shadow-lg"><p>This device&apos;s chat recovery needs attention.</p><Link className="mt-2 inline-block underline" href="/app/profile#cloud-recovery">Protect chat history</Link><button type="button" className="ml-4 min-h-9 underline" onClick={()=>setDismissed(true)}>Later</button></aside>;
+  if(!warning||dismissed||!statusSlot) return null;
+  return createPortal(<aside role="status" className="flex min-h-11 items-center gap-3 border-b border-[var(--border)] bg-[var(--surface)] px-3 text-xs"><Link className="min-w-0 flex-1 py-2 underline" href="/app/profile#cloud-recovery">Protect chat history: this device&apos;s recovery needs attention.</Link><button type="button" className="min-h-11 shrink-0 px-2 underline" onClick={()=>setDismissed(true)}>Later</button></aside>,statusSlot);
 }

@@ -125,6 +125,8 @@ export function AppShell({
         </div>
       </header>
 
+      <div id="recovery-status" className="shrink-0" />
+
       <main id="main-content" className="min-h-0 flex-1 overflow-hidden">
         {children}
       </main>
