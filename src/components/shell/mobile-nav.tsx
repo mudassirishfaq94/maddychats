@@ -40,6 +40,7 @@ export function MobileNav() {
             <Link
               key={item.href}
               href={item.href}
+              aria-label={item.label}
               aria-current={active ? "page" : undefined}
               className={cn(
                 "flex min-h-[44px] min-w-[44px] flex-col items-center justify-center gap-0.5 min-w-0 flex-1 rounded-lg px-0.5 py-1 text-center transition-colors",
@@ -55,7 +56,7 @@ export function MobileNav() {
                 )}
               />
               <span className="max-w-full truncate text-[0.58rem] font-medium leading-none">
-                {item.label}
+                {item.label === "Communities" ? "Community" : item.label}
               </span>
             </Link>
           );

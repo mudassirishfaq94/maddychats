@@ -8,7 +8,7 @@ export async function testUxFeatures(context,base,owner,member) {
   await page.goto(base+"/app/people");await page.getByRole("searchbox",{name:"Search people"}).waitFor();assert.equal(await page.getByRole("searchbox").count(),1,"People must have one search box on mobile");
   await page.getByText(member.name,{exact:true}).first().waitFor();
   assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),"People must not overflow the phone viewport");
-  await mkdir("test-artifacts",{recursive:true});await page.screenshot({path:"test-artifacts/ux-people-mobile.png"});
+  await mkdir("test-artifacts",{recursive:true});await page.evaluate(async()=>{await Promise.all(document.getAnimations().filter(animation=>Number.isFinite(animation.effect?.getComputedTiming().endTime)).map(animation=>animation.finished.catch(()=>{})));});await page.screenshot({path:"test-artifacts/ux-people-mobile.png"});
   const qr=await page.request.get(base+"/api/contacts/qr");assert.equal(qr.status(),200);assert.match(qr.headers()["content-type"],/image\/svg\+xml/);assert.match(await qr.text(),/<svg/);
   await page.getByRole("button",{name:"Contact QR",exact:true}).click();
   await page.getByLabel("Contact link or ID").fill("https://evil.example/contact/"+member.id);await page.getByRole("button",{name:"Open contact",exact:true}).click();await page.getByText("Use a valid Circlo contact link or contact ID.").waitFor();
@@ -19,6 +19,7 @@ export async function testUxFeatures(context,base,owner,member) {
   const bounds=await filters.boundingBox();assert(bounds);await filters.evaluate(element=>{element.scrollLeft=0;});await page.mouse.move(bounds.x+bounds.width-12,bounds.y+bounds.height/2);await page.mouse.down();await page.mouse.move(bounds.x+12,bounds.y+bounds.height/2,{steps:12});await page.mouse.up();
   assert(await filters.evaluate(element=>element.scrollWidth<=element.clientWidth||element.scrollLeft>0),"Filters must support mouse dragging");
   assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
+  await page.screenshot({path:"test-artifacts/ux-inbox-mobile.png"});
   const calls=page.getByRole("navigation",{name:"Mobile navigation"}).getByRole("link",{name:"Calls",exact:true});await calls.click();await page.getByRole("heading",{name:"Calls",exact:true}).waitFor();
   const history=await page.request.get(base+"/api/calls/history");assert.equal(history.status(),200);assert(Array.isArray((await history.json()).calls));
   await page.goto(base+"/app/settings");await page.getByText("Privacy preferences",{exact:true}).click();
