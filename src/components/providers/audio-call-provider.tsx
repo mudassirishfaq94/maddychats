@@ -196,7 +196,9 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
     }, 15000);
     const leaving = () => {
       const current = callRef.current;
-      if (current) navigator.sendBeacon("/api/calls", new Blob([JSON.stringify({ action: "end", id: current.id, clientId: client.current })], { type: "application/json" }));
+      // Leaving an unanswered recipient page is not Decline. A notification
+      // may be reopening that page to Answer the same persisted call.
+      if (current && pc.current) navigator.sendBeacon("/api/calls", new Blob([JSON.stringify({ action: "end", id: current.id, clientId: client.current })], { type: "application/json" }));
     };
     window.addEventListener("pagehide", leaving);
     window.addEventListener("online", sync);
