@@ -1,3 +1,4 @@
+import { encryptMessage, generateConversationKey } from "../src/lib/crypto";
 import { SignJWT } from "jose";
 import { createHash, randomUUID } from "node:crypto";
 import { hashPassword } from "../src/server/password";
@@ -125,7 +126,8 @@ async function main() {
     const sender = (await fresh.query("insert into users(username,display_name,email,password_hash) values('worker_sender','Sender','worker@example.invalid','test-hash') returning id")).rows[0];
     const conversation = (await fresh.query("insert into conversations(type,created_by_id) values('dm',$1) returning id", [sender.id])).rows[0];
     await fresh.query("insert into conversation_members(conversation_id,user_id) values($1,$2)", [conversation.id, sender.id]);
-    await fresh.query("insert into scheduled_messages(conversation_id,sender_id,text,scheduled_for) values($1,$2,'Independent delivery',now()-interval '1 minute')", [conversation.id, sender.id]);
+    const scheduledCipher = await encryptMessage("Independent delivery", await generateConversationKey());
+    await fresh.query("insert into scheduled_messages(conversation_id,sender_id,text,encrypted,scheduled_for) values($1,$2,$3,true,now()-interval '1 minute')", [conversation.id, sender.id, scheduledCipher]);
     const recipient = (await fresh.query("insert into users(username,display_name,email,password_hash) values('worker_recipient','Recipient','worker_recipient@example.invalid','test-hash') returning id")).rows[0];
     const pendingConversation = (await fresh.query("insert into conversations(type,created_by_id) values('dm',$1) returning id", [sender.id])).rows[0];
     await fresh.query("insert into conversation_members(conversation_id,user_id,accepted_at) values($1,$2,now()),($1,$3,null)", [pendingConversation.id,sender.id,recipient.id]);
@@ -140,7 +142,7 @@ async function main() {
     }
     assert(sent, "Worker must deliver without a logged-in client");
     await sleep(2200);
-    assert.equal((await fresh.query("select count(*)::int as count from messages where text='Independent delivery'")).rows[0].count, 1);
+    assert.equal((await fresh.query("select count(*)::int as count from messages where text=$1", [scheduledCipher])).rows[0].count, 1);
     assert.equal((await fresh.query("select sent from scheduled_messages where conversation_id=$1", [pendingConversation.id])).rows[0].sent, false, "Worker must retain a pending request without sending it");
     assert.equal((await fresh.query("select count(*)::int as n from messages where conversation_id=$1", [pendingConversation.id])).rows[0].n, 0);
     await fresh.query("update conversation_members set accepted_at=now() where conversation_id=$1 and user_id=$2", [pendingConversation.id,recipient.id]);
