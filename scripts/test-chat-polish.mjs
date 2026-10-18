@@ -68,6 +68,7 @@ export async function testChatPolish(page, recipient) {
       const menu = page.getByRole("dialog", { name: "Message options", exact: true });
       const hold = async () => {
         await bubble.scrollIntoViewIfNeeded(); await bubble.click({trial:true});
+        await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
         const point = await bubble.evaluate(element => {
           const box=element.getBoundingClientRect();let left=Math.max(0,box.left),right=Math.min(innerWidth,box.right),top=Math.max(0,box.top),bottom=Math.min(innerHeight,box.bottom);
           for(let parent=element.parentElement;parent;parent=parent.parentElement){const css=getComputedStyle(parent),rect=parent.getBoundingClientRect();if(css.overflowY!=="visible"){top=Math.max(top,rect.top);bottom=Math.min(bottom,rect.bottom);}if(css.overflowX!=="visible"){left=Math.max(left,rect.left);right=Math.min(right,rect.right);}}
@@ -76,7 +77,13 @@ export async function testChatPolish(page, recipient) {
         });
         assert(point,"Long press targets the visible message, including clipped landscape images");
         await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [point] });
-        await menu.waitFor(); await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+        try { await menu.waitFor({timeout:5000}); }
+        catch(error) {
+          const geometry=await bubble.evaluate(element=>({viewport:{width:innerWidth,height:innerHeight},bubble:element.getBoundingClientRect().toJSON(),history:element.closest('.message-history-row')?.getBoundingClientRect().toJSON(),composer:document.querySelector('.composer-row')?.getBoundingClientRect().toJSON()}));
+          await mkdir('.freebuff/performance',{recursive:true});
+          const {writeFile}=await import('node:fs/promises');await writeFile('.freebuff/performance/long-press-failure.json',JSON.stringify(geometry,null,2));
+          throw error;
+        } finally { await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] }); }
       };
       await hold();
       for (const action of ["Edit", "Star", "Pin", "Reply", "Forward", "React"]) assert.equal(await menu.getByRole("button",{name:action,exact:true}).count(),1,"Compact touch menus retain " + action);

@@ -27,6 +27,7 @@ export function LongPressTouchable({
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const startPos = useRef<{ x: number; y: number } | null>(null);
   const fired = useRef(false);
+  const lastTouch = useRef(0);
 
   const clear = useCallback(() => {
     if (timerRef.current) {
@@ -52,6 +53,7 @@ export function LongPressTouchable({
     <div
       className={className}
       onTouchStart={(e) => {
+        lastTouch.current = Date.now();
         clear();
         fired.current = false;
         const touch = e.touches[0];
@@ -62,6 +64,15 @@ export function LongPressTouchable({
           navigator.vibrate?.(30);
           onLongPress();
         }, 500);
+      }}
+      onContextMenu={(event) => {
+        // Android/Chromium may cancel touch before its native image/text
+        // callout fires. Route that touch hold to the same message menu.
+        // Mouse right-clicks retain their existing behavior.
+        if (Date.now() - lastTouch.current > 1500) return;
+        event.preventDefault();
+        cancelLongPress();
+        if (!fired.current) { fired.current = true; onLongPress(); }
       }}
       onTouchMove={(e) => {
         if (!startPos.current) return;
