@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import {randomUUID,randomBytes,createHash} from "node:crypto";
 import {readFile} from "node:fs/promises";
 import {chromium} from "playwright";
+import sharp from "sharp";
 import {Pool} from "pg";
 import {openDeviceTools} from "./device-ui-tools.mjs";
 import {signSessionToken} from "../src/server/jwt.ts";
@@ -76,9 +77,9 @@ try {
  await owner.page.getByRole("textbox",{name:"Message text"}).fill(normal);await owner.page.getByRole("button",{name:"Send message",exact:true}).click();
  await member.page.getByRole("region",{name:"Messages",exact:true}).getByText(normal,{exact:true}).waitFor();console.log("PASS: normal E2EE message decrypted across browser sessions");
  const note=`Ephemeral private note ${randomUUID()}`;
- await owner.page.locator('summary').filter({hasText:/^Message options$/}).click();
+ await owner.page.getByRole("textbox",{name:"Message text"}).fill(note);
  await owner.page.getByLabel("Self-destruct message · 5 seconds after first reveal",{exact:true}).check();
- await owner.page.locator('summary').filter({hasText:/^Self-destruct: on$/}).click();
+
  await owner.page.getByRole("textbox",{name:"Message text"}).fill(note);await owner.page.getByRole("button",{name:"Send message",exact:true}).click();
  const reveal=member.page.getByRole("button",{name:"Reveal · disappears in 5 seconds",exact:true});await reveal.waitFor();assert.equal(await member.page.getByRole("region",{name:"Messages",exact:true}).getByText(note,{exact:true}).count(),0);
  await reveal.click();await member.page.getByRole("region",{name:"Messages",exact:true}).getByText(note,{exact:true}).waitFor();
@@ -92,11 +93,31 @@ try {
  const exported=await api(member,`/api/conversations/${group}/export`,null,"GET");assert.equal(exported.status(),200);assert.equal((await exported.text()).includes(lifetime.id),false);
  console.log("PASS: explicit reveal, fixed countdown, reload persistence and export exclusion");
  const scheduled=await api(owner,`/api/conversations/${group}/scheduled`,{text:await encryptMessage("Scheduled editable note",key),encrypted:true,scheduledFor:new Date(Date.now()+120000).toISOString()});assert.equal(scheduled.status(),201);
+ await owner.page.getByRole("button",{name:"Open group settings",exact:true}).click();
+ await owner.page.getByRole("button",{name:"Group settings",exact:true}).click();
  await owner.page.getByRole("button",{name:"Scheduled messages",exact:true}).click();await owner.page.getByRole("button",{name:"Edit message and time",exact:true}).click();
  const messageField=owner.page.getByRole("dialog",{name:"Manage scheduled messages"}).getByRole("textbox",{name:"Message",exact:true});await messageField.waitFor({timeout:90000});assert.equal(await messageField.inputValue(),"Scheduled editable note");
  await messageField.fill("Updated encrypted schedule");await owner.page.getByRole("button",{name:"Save scheduled message",exact:true}).click();
  await owner.page.getByRole("button",{name:"Cancel sending",exact:true}).click();await owner.page.getByText("No messages waiting to send.",{exact:true}).waitFor();await owner.page.getByRole("button",{name:"Close",exact:true}).click();
  console.log("PASS: scheduled-message decrypt/edit/cancel UI");
+ await owner.page.getByRole("button",{name:"Close details",exact:true}).click();
+ // Exercise actual browser encryption, four bounded transfers and recipient decryption.
+ const png=await readFile(new URL("../public/icons/circlo-192.png",import.meta.url));
+ const largeImage=Buffer.alloc(12*1024*1024);png.copy(largeImage);
+ const jpeg=await sharp(png).jpeg().toBuffer();const smallJpeg=Buffer.alloc(128*1024);jpeg.copy(smallJpeg);
+ await owner.page.locator('input[type="file"]').first().setInputFiles({name:"android-mime-photo.jpg",mimeType:"image/jpg",buffer:smallJpeg});
+ const jpegResponse=owner.page.waitForResponse(response=>new URL(response.url()).pathname==="/api/upload/message"&&response.request().method()==="POST");
+ await owner.page.getByRole("button",{name:"Send attachments",exact:true}).click();const sentJpeg=await jpegResponse;assert.equal(sentJpeg.status(),201,await sentJpeg.text());assert.equal((await sentJpeg.json()).message.attachments[0].mimeType,"image/jpeg");
+ console.log("PASS: actual 128 KB JPEG with Android MIME alias uploads encrypted");
+ await owner.page.locator('input[type="file"]').first().setInputFiles({name:"large-encrypted-preview.png",mimeType:"image/png",buffer:largeImage});
+ const uploadResponse=owner.page.waitForResponse(response=>new URL(response.url()).pathname==="/api/upload/message"&&response.request().method()==="POST");
+ await owner.page.getByRole("button",{name:"Send attachments",exact:true}).click();const uploaded=await uploadResponse;assert.equal(uploaded.status(),201,await uploaded.text());
+ const media=(await uploaded.json()).message.attachments[0];assert.equal(media.encrypted,true);assert.equal(media.size,largeImage.length+28);
+ await member.page.getByRole("region",{name:"Messages",exact:true}).getByAltText("large-encrypted-preview.png",{exact:true}).waitFor({timeout:60000});
+ const image=member.page.getByRole("region",{name:"Messages",exact:true}).getByAltText("large-encrypted-preview.png",{exact:true});
+ await image.evaluate(element=>new Promise((resolve,reject)=>{if(element.complete&&element.naturalWidth>0)return resolve();element.addEventListener('load',()=>resolve(),{once:true});element.addEventListener('error',()=>reject(new Error('Recipient could not decode encrypted image')),{once:true});}));
+ console.log("PASS: large encrypted chunk upload and real recipient image decryption");
+
  await owner.page.goto(base+"/app/profile#encryption-devices");await openDeviceTools(owner.page);
  await owner.page.getByRole("button",{name:"Set up recovery code",exact:true}).click();const code=await owner.page.locator('[aria-label="New recovery code"]').textContent();assert(code);
  await owner.page.getByLabel("Re-enter the saved code",{exact:true}).fill(code);await owner.page.getByRole("button",{name:"Confirm code and save encrypted backup",exact:true}).click();await owner.page.getByText(/Encrypted recovery is configured/).waitFor();

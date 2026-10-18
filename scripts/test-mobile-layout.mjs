@@ -198,6 +198,20 @@ export async function testMobileLayout(base, pool, { recordOnly = false, navigat
           await user.getByRole("dialog", { name: "Create community", exact: true }).getByRole("button",{name:"Cancel",exact:true}).click();
         }
         if (path === `/app/chats/${group.id}`) {
+          // Model the viewport delivered by the native IME inset handler;
+          // this is geometry coverage, not proof of a physical Android keyboard.
+          await user.evaluate(()=>{document.documentElement.dataset.keyboardOpen="true";});
+          await user.setViewportSize({width,height:Math.min(height,420)});
+          const geometry=await user.evaluate(()=>{
+            const header=document.querySelector('a[aria-label="Back to chats"]')?.closest('header')?.getBoundingClientRect();
+            const composer=document.querySelector('.composer-row')?.getBoundingClientRect();
+            const messages=document.querySelector('[aria-label="Messages"]')?.getBoundingClientRect();
+            return {header:header?.toJSON(),composer:composer?.toJSON(),messages:messages?.toJSON(),height:innerHeight};
+          });
+          assert(geometry.header&&geometry.header.top>=0&&geometry.header.bottom<=geometry.height,"Chat header stays visible when keyboard reduces viewport");
+          assert(geometry.composer&&geometry.composer.bottom<=geometry.height+1,"Composer stays above keyboard viewport");
+          assert(geometry.messages&&geometry.messages.height>0,"History retains a scrollable viewport");
+          await user.evaluate(()=>{delete document.documentElement.dataset.keyboardOpen;});await user.setViewportSize({width,height});
           await user.getByRole("button", { name: "Open group settings", exact: true }).click();
           await user.getByRole("button", { name: "Group settings", exact: true }).click();
           await expandDetails(user, user.getByRole("complementary",{name:"Conversation details",exact:true})); await check(user, "group-details-" + size);

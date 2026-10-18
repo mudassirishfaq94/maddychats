@@ -211,6 +211,21 @@ async function main() {
     largeMedia.set("files", new File([new Uint8Array(10 * 1024 * 1024 + 29)], "large.mp4", { type: "application/octet-stream" }));
     assert.equal((await fetch(`${base}/api/upload/message`, { method: "POST", headers: { cookie: aliceCookie, origin: base }, body: largeMedia })).status, 413);
 
+    // Large encrypted uploads use bounded chunks rather than relaxing multipart limits.
+    const stagedSize=12*1024*1024+28;
+    const stageResponse=await fetch(`${base}/api/upload/staged`,{method:"POST",headers:{cookie:aliceCookie,origin:base,"Content-Type":"application/json"},body:JSON.stringify({conversationId:conversation.id,name:"staged-large.mp4",mime:"video/mp4",size:stagedSize,encrypted:true})});
+    assert.equal(stageResponse.status,200,await stageResponse.clone().text());const {token:stageToken}=await stageResponse.json();
+    assert.equal((await fetch(`${base}/api/upload/staged`,{headers:{cookie:bobCookie,origin:base,"X-Upload-Token":stageToken}})).status,404,"Staging token cannot cross accounts");
+    for(let offset=0;offset<stagedSize;offset+=4*1024*1024){
+      const chunk=new Uint8Array(Math.min(4*1024*1024,stagedSize-offset)).fill(79);
+      const sent=await fetch(`${base}/api/upload/staged`,{method:"PUT",headers:{cookie:aliceCookie,origin:base,"X-Upload-Token":stageToken,"X-Upload-Offset":String(offset)},body:chunk});assert.equal(sent.status,200,await sent.clone().text());
+    }
+    const stagedForm=new FormData();stagedForm.set("conversationId",conversation.id);stagedForm.set("encrypted","true");stagedForm.set("staged",JSON.stringify([stageToken]));stagedForm.set("keys","isolated-opaque-media-key");
+    const finalized=await fetch(`${base}/api/upload/message`,{method:"POST",headers:{cookie:aliceCookie,origin:base},body:stagedForm});assert.equal(finalized.status,201,await finalized.clone().text());
+    const stagedMessage=(await finalized.json()).message;assert.equal(stagedMessage.attachments[0].size,stagedSize);
+    testFiles.push((await sql.query("select path from message_attachments where message_id=$1",[stagedMessage.id])).rows[0].path);
+    assert.equal((await fetch(`${base}/api/upload/message`,{method:"POST",headers:{cookie:aliceCookie,origin:base},body:stagedForm})).status,409,"A finalized staged upload cannot create a duplicate message");
+
     const fixture = async (name: string, age = "2 days", directory = false) => {
       const relative = `files/item456-${randomUUID()}-${name}.bin`; const absolute = join(uploadDir, relative);
       await mkdir(resolve(uploadDir, "files"), { recursive: true });

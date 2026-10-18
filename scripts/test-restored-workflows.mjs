@@ -388,6 +388,7 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     console.log("PASS voice recording, upload, playback, and contrast");
     // No cron HTTP request is injected: the existing processor must deliver the persisted job.
     await composer.fill("Actual scheduled encrypted delivery");
+    await source.page.getByRole("button", { name: "Emoji", exact: true }).click();
     await source.page.getByRole("button", { name: "Schedule message", exact: true }).click();
     const due = new Date(Date.now() + 15000);
     const localDate = new Date(due.getTime() - due.getTimezoneOffset() * 60000).toISOString().slice(0, 19).replace(/:00$/, ""); // Match datetime-local normalization of zero seconds.

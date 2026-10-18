@@ -26,6 +26,7 @@ jobs:
       JWT_SECRET: isolated-audit-tests-only-no-production-credentials
       CLIENT_URL: http://127.0.0.1:3137
       STARTER_MODE: '1'
+      CHAT_MEDIA_ENABLED: '1'
       SCHEDULED_MESSAGES_ENABLED: '1'
       HOSTNAME: 127.0.0.1
       PORT: '3137'
