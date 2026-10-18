@@ -82,6 +82,8 @@ export function ConversationDetails({
   const [memberResults, setMemberResults] = useState<PublicUser[]>([]);
   const [muted, setMuted] = useState(conversation.muted);
   const [blocked, setBlocked] = useState(conversation.blocked);
+  const [inviteExpiry, setInviteExpiry] = useState("7");
+  const [inviteUses, setInviteUses] = useState("");
   const [inviteLinks, setInviteLinks] = useState<Array<{ id: string; code: string; url?: string; useCount: number; maxUses: number | null; expiresAt: Date | null }>>([]);
   const [showInviteLinks, setShowInviteLinks] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
@@ -316,7 +318,7 @@ export function ConversationDetails({
                           const res = await fetch(`/api/groups/${conversationId}/invites`, {
                             method: "POST",
                             headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({}),
+                            body: JSON.stringify({ expiresInDays: Number(inviteExpiry), ...(inviteUses ? {maxUses:Number(inviteUses)} : {}) }),
                           });
                           if (!res.ok) {
                             const data = await res.json().catch(() => null);
@@ -335,26 +337,28 @@ export function ConversationDetails({
                     >
                       + Create invite link
                     </button>
+                    <div className="grid grid-cols-2 gap-2"><label className="text-xs">Expires in<select aria-label="Invite expiry" className="field-input mt-1" value={inviteExpiry} onChange={event=>setInviteExpiry(event.target.value)}><option value="1">1 day</option><option value="7">7 days</option><option value="30">30 days</option></select></label><label className="text-xs">Maximum joins<input aria-label="Invite use limit" type="number" min={1} max={10000} placeholder="Unlimited" className="field-input mt-1" value={inviteUses} onChange={event=>setInviteUses(event.target.value)}/></label></div>
                     {inviteLinks.map((link) => (
                       <div key={link.id} className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] p-2.5">
                         <div className="flex items-center justify-between">
-                          <span className="truncate text-[0.65rem] font-mono text-[var(--muted)]">
+                          <a href={`/invite/${link.code}`} className="min-w-0 truncate text-xs font-medium text-[var(--accent)] underline underline-offset-4">
                             {`${typeof window !== 'undefined' ? window.location.origin : ''}/invite/${link.code}`}
-                          </span>
+                          </a>
                           <button
                             type="button"
-                            onClick={() => {
+                            onClick={async () => {
                               const url = `${typeof window !== 'undefined' ? window.location.origin : ''}/invite/${link.code}`;
-                              navigator.clipboard?.writeText(url);
+                              try { if (navigator.share) await navigator.share({title:"Join my Circlo group",url}); else await navigator.clipboard.writeText(url); } catch { setError("Could not share the invite. Open the link and copy its address."); return; }
                               setCopiedLink(true);
                               setTimeout(() => setCopiedLink(false), 1500);
                             }}
                             className="shrink-0 rounded px-2 py-0.5 text-[0.6rem] font-medium text-[var(--accent)]"
                           >
-                            {copiedLink ? "✓" : "Copy"}
+                            {copiedLink ? "✓" : "Share"}
                           </button>
                         </div>
                         <div className="mt-1 flex items-center gap-2 text-[0.6rem] text-[var(--muted)]">
+                          <button type="button" className="min-h-11 text-[var(--danger)]" disabled={groupBusy!==null} onClick={async()=>{setGroupBusy("revoke");try{const response=await fetch(`/api/groups/${conversationId}/invites`,{method:"DELETE",headers:{"Content-Type":"application/json"},body:JSON.stringify({linkId:link.id})});if(!response.ok)throw new Error("Could not revoke invite.");setInviteLinks(links=>links.filter(item=>item.id!==link.id));}catch(cause){setError(cause instanceof Error?cause.message:"Could not revoke invite.");}finally{setGroupBusy(null);}}}>Revoke</button>
                           <span>Used {link.useCount}{link.maxUses ? `/${link.maxUses}` : ''} times</span>
                           {link.expiresAt ? <span>· Expires {new Date(link.expiresAt).toLocaleDateString()}</span> : null}
                         </div>

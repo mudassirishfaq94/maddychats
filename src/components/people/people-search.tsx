@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { QrContacts } from "./qr-contacts";
 import { PhoneContactFinder } from "./phone-contact-finder";
 import Link from "next/link";
 import {
@@ -104,6 +105,7 @@ export function PeopleSearch() {
         />
       </div>
 
+      <QrContacts />
       <PhoneContactFinder key={query} onResults={setContactMatches} />
       {contactError ? <p role="alert" className="mt-3 text-sm">{contactError}</p> : null}
       <h2 className="mt-5 text-sm font-semibold">{contactMatches !== null ? "Phone contact matches" : q.length < 2 ? "Saved contacts" : "Search results"}</h2>
@@ -171,7 +173,7 @@ export function PeopleSearch() {
                 className="animate-fade-up"
                 style={{ "--d": `${i * 50}ms` } as React.CSSProperties}
               >
-                <div className="card-glass group flex items-center gap-4 rounded-2xl p-4 transition-transform duration-200 hover:-translate-y-0.5">
+                <div className="card-glass group flex flex-col items-stretch gap-3 rounded-2xl p-3 sm:flex-row sm:items-center sm:p-4 transition-transform duration-200 hover:-translate-y-0.5">
                   <Link
                     href={`/app/users/${person.id}`}
                     className="flex min-w-0 flex-1 items-center gap-4"
@@ -203,12 +205,12 @@ export function PeopleSearch() {
                       <span className="text-[var(--muted)]">
                         {person.lastSeenAt
                           ? `Active ${timeAgo(person.lastSeenAt)}`
-                          : "New here"}
+                          : ""}
                       </span>
                     )}
                   </span>
-                  <div className="flex shrink-0 flex-col items-end gap-2">
-                  <button type="button" className="btn btn-secondary min-h-11 px-3! text-xs!" disabled={contactBusy !== null} onClick={async () => {
+                  <div className="flex min-w-0 flex-row items-center gap-2 sm:shrink-0">
+                  <button type="button" className="btn btn-secondary min-h-11 min-w-0 flex-1 px-3! text-xs!" disabled={contactBusy !== null} onClick={async () => {
                     setContactBusy(person.id); setContactError("");
                     const remove = saved.includes(person.id);
                     try {
@@ -220,7 +222,7 @@ export function PeopleSearch() {
                   }}>{contactBusy === person.id ? "Saving…" : saved.includes(person.id) ? "Remove contact" : "Add contact"}</button>
                   <StartConversationButton
                     userId={person.id}
-                    className="btn-secondary min-h-11 shrink-0 px-3.5! py-2! text-xs!"
+                    className="btn-secondary min-h-11 min-w-0 flex-1 px-3! py-2! text-xs!"
                   />
                   </div>
                 </div>

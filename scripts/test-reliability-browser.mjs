@@ -5,6 +5,7 @@ import {chromium} from "playwright";
 import sharp from "sharp";
 import {Pool} from "pg";
 import {openDeviceTools} from "./device-ui-tools.mjs";
+import {testUxFeatures} from "./test-ux-features.mjs";
 import {testNativeNotificationState} from "./test-native-notification-state.mjs";
 import {signSessionToken} from "../src/server/jwt.ts";
 import {generateKeyPair,exportPublicKey,exportPrivateKey,encryptPrivateKeyForStorage,generateConversationKey,encryptKeyForUser,conversationFingerprint,encryptMessage} from "../src/lib/crypto.ts";
@@ -204,6 +205,7 @@ try {
  assert.equal((await pool.query("select count(*)::int as n from audio_calls where conversation_id=$1",[callChat])).rows[0].n,0);
  console.log("PASS: cold Answer launch establishes real WebRTC; decline works without SSE; ended signaling removed");
  await testNativeNotificationState(contexts[0],base,owner.id);
+ await testUxFeatures(contexts[0],base,owner,member);
  assert.deepEqual(errors,[]);console.log("Browser reliability suite passed.");
 } catch(error) { console.error("Workflow failed:",error);for(const [i,account] of accounts.entries()){if(account.page)await account.page.screenshot({path:`${process.env.TEMP??"."}/circlo-audit-failure-${i}.png`}).catch(()=>{});} throw error; } finally {
  if(browser)await browser.close();

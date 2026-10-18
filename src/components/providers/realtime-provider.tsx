@@ -316,9 +316,44 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
 
     let disposed = false;
     const es = new EventSource("/api/realtime/stream");
+    const acknowledgments = new Set<string>();
+    let ackTimer: ReturnType<typeof setTimeout> | undefined;
+    let syncingDelivery = false;
+    let acknowledging = false;
+    const flushAcks = async () => {
+      if (disposed || acknowledging || !acknowledgments.size) return;
+      acknowledging = true;
+      const messageIds = [...acknowledgments].slice(0, 100);
+      messageIds.forEach(id => acknowledgments.delete(id));
+      try {
+        const response = await fetch("/api/messages/delivery", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messageIds }) });
+        if (!response.ok) throw new Error("Acknowledgment unavailable");
+      } catch { messageIds.forEach(id => acknowledgments.add(id)); }
+      acknowledging = false;
+      if (!disposed && acknowledgments.size) ackTimer = setTimeout(() => void flushAcks(), 2500);
+    };
+    const acknowledge = (id: string) => { acknowledgments.add(id); clearTimeout(ackTimer); if (acknowledgments.size >= 100) void flushAcks(); else ackTimer = setTimeout(() => void flushAcks(), 150); };
+    const syncDelivery = async () => {
+      if (disposed || syncingDelivery) return;
+      syncingDelivery = true;
+      try {
+        for (let page = 0; page < 20 && !disposed; page++) {
+          const response = await fetch("/api/messages/delivery", { cache: "no-store" });
+          if (!response.ok) break;
+          const { envelopes } = await response.json();
+          if (!Array.isArray(envelopes) || !envelopes.length) break;
+          for (const envelope of envelopes) if (typeof envelope.id === "string") acknowledgments.add(envelope.id);
+          await flushAcks();
+          if (acknowledgments.size || envelopes.length < 100) break;
+        }
+      } catch { /* Reconnect/periodic sync retries actual unacknowledged envelopes. */ }
+      finally { syncingDelivery = false; }
+    };
+    const deliveryTimer = setInterval(() => { if (es.readyState === EventSource.OPEN) void syncDelivery(); }, 30000);
     let hadConnection = false;
     es.onopen = () => {
       setConnected(true);
+      void syncDelivery();
       window.dispatchEvent(new Event("maddy:message-request-keys"));
       if (hadConnection) router.refresh();
       hadConnection = true;
@@ -341,6 +376,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
       } catch {
         return;
       }
+      if (event.type === "message:new" && event.message.senderId !== user?.id) acknowledge(event.message.id);
       // Presence is centrally tracked so any component can read it.
       if (event.type === "presence:update") {
         setPresence((prev) => ({
@@ -413,7 +449,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
 
     return () => {
       disposed = true;
-      es.close();
+      clearInterval(deliveryTimer); clearTimeout(ackTimer); es.close();
       setConnected(false);
       setPresence({});
     };

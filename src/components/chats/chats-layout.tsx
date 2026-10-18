@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { SwipeFilters } from "./swipe-filters";
 import { useHydrated } from "@/hooks/use-hydrated";
 
 import { memo, useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -57,15 +58,15 @@ const ConversationRow = memo(function ConversationRow({ conv, active, online, pr
 }) {
   const name = conv.name ?? conv.otherMember?.displayName ?? "Unknown";
   return (
-    <li key={conv.id} className="group/row relative">
+    <li key={conv.id} className="group/row relative mb-1.5 flex items-center">
       <Link
         href={`/app/chats/${conv.id}`}
         aria-current={active ? "page" : undefined}
         className={cn(
-          "chat-list-row flex items-center gap-3.5 rounded-2xl px-3 py-3 transition-[background-color,transform,box-shadow] duration-150",
+          "chat-list-row flex min-w-0 flex-1 min-h-20 items-center gap-3.5 rounded-[1.4rem] border border-transparent px-3.5 py-3.5 transition-[background-color,transform,box-shadow] duration-150",
           active
             ? "bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] shadow-[inset_3px_0_0_var(--accent)]"
-            : "hover:bg-[color-mix(in_srgb,var(--muted)_7%,transparent)] hover:translate-x-0.5",
+            : "hover:border-[var(--border)] hover:bg-[var(--surface-2)]",
         )}
       >
         {conv.type === "group" && conv.avatarUrl ? (
@@ -140,7 +141,7 @@ const ConversationRow = memo(function ConversationRow({ conv, active, online, pr
           </span>
         </span>
       </Link>
-      <span className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 transition-opacity focus-within:opacity-100 group-hover/row:opacity-100">
+      <span className="mr-1 shrink-0 transition-opacity sm:opacity-0 focus-within:opacity-100 group-hover/row:opacity-100">
         <ConversationMenu conversation={conv} />
       </span>
     </li>
@@ -324,10 +325,10 @@ export function ChatsLayout({
         )}
         aria-label="Conversations"
       >
-        <div className="flex flex-wrap items-center justify-between gap-3 px-4 pb-3 pt-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-b-3xl bg-[linear-gradient(135deg,var(--surface),var(--surface-2))] px-5 pb-5 pt-5">
           <div>
             <p className="text-[0.66rem] font-bold uppercase tracking-[0.16em] text-[var(--accent-fg)]">Circlo</p>
-            <h1 className="font-display mt-0.5 text-[1.3rem] font-bold tracking-tight">Your circle</h1>
+            <h1 className="font-display mt-1 text-3xl font-bold tracking-tight">Your circle</h1><p className="mt-1 text-xs text-[var(--muted)]">A little closer, every conversation.</p>
           </div>
           <div className="flex w-full items-center gap-2 sm:w-auto">
             <NewChatDialog start="group-people" />
@@ -346,7 +347,7 @@ export function ChatsLayout({
               className="field-input field-input--icon rounded-full! py-2! text-sm!"
             />
           </div>
-          <div className="mt-2 flex gap-1.5 overflow-x-auto pb-1">
+          <SwipeFilters>
             {filterChips.map((chip) => (
               <button
                 key={chip.key}
@@ -365,7 +366,7 @@ export function ChatsLayout({
                 ) : null}
               </button>
             ))}
-          </div>
+          </SwipeFilters>
           {archivedCount > 0 || showArchived ? (
             <button
               type="button"

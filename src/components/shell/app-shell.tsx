@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { CircleDashed, Globe, MessagesSquare, Shield, Users } from "lucide-react";
+import { CircleDashed, Phone, Globe, MessagesSquare, Shield, Users } from "lucide-react";
 import type { SafeUser } from "@/lib/types";
 import { LogoMark, LogoWordmark } from "@/components/brand/logo";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -61,6 +61,7 @@ export function AppShell({
             <MessagesSquare className="h-4 w-4" />
             <span className="hidden sm:inline">Chats</span>
           </Link>
+          <Link href="/app/calls" aria-current={pathname.startsWith("/app/calls")?"page":undefined} className="flex min-h-11 items-center gap-1.5 rounded-full px-3 text-sm font-medium hover:bg-[var(--surface-2)]"><Phone className="h-4 w-4"/><span className="hidden sm:inline">Calls</span></Link>
           <Link
             href="/app/people"
             aria-current={onPeople ? "page" : undefined}
@@ -101,12 +102,12 @@ export function AppShell({
         </nav>
 
         <div className="ml-auto flex min-w-0 shrink-0 items-center gap-0.5 sm:gap-1">
-          <span className="hidden md:inline-flex"><MessageSearch /></span>
+          {!onPeople ? <span className="hidden md:inline-flex"><MessageSearch /></span> : null}
           {/* Hide extra icons on mobile when inside a chat (chat header has its own controls) */}
           <span className={cn("hidden sm:inline-flex", inChat && "md:inline-flex")}>
             <NotificationBell />
           </span>
-          {user.email === "mudassarmalak090@gmail.com" ? (
+          {user.role === "admin" || user.role === "moderator" ? (
             <Link
               href="/app/admin"
               aria-label="Admin Panel"

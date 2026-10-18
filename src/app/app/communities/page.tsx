@@ -1,5 +1,6 @@
 "use client";
 
+import { useRealtime } from "@/components/providers/realtime-provider";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
@@ -30,6 +31,7 @@ interface Community {
 }
 
 export default function CommunitiesPage() {
+  const {subscribe}=useRealtime();
   const [myCommunities, setMyCommunities] = useState<Community[]>([]);
   const [publicCommunities, setPublicCommunities] = useState<Community[]>([]);
   const [loading, setLoading] = useState(true);
@@ -42,6 +44,7 @@ export default function CommunitiesPage() {
   const [retry, setRetry] = useState(0);
   const [joining, setJoining] = useState<string | null>(null);
 
+  useEffect(()=>subscribe(event=>{if(event.type==="community:updated")setRetry(value=>value+1);}),[subscribe]);
   useEffect(() => {
     const controller = new AbortController();
     fetch("/api/communities", { signal: controller.signal })

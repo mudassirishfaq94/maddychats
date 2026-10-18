@@ -2174,6 +2174,7 @@ export function ChatView({
             {grouped.map(({ msg, showDate, sameSenderPrev }) => {
               const own = msg.senderId === me.id;
               const deleted = msg.deletedAt !== null;
+              if (msg.type === "system") return <div key={msg.id} data-message-id={msg.id} className="my-4 flex justify-center"><p className="max-w-[90%] rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-2 text-center text-xs text-[var(--muted)]">{msg.text}</p></div>;
               return (
                 <div
                   key={msg.id}

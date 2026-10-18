@@ -22,8 +22,11 @@ interface Stats {
     groups: number;
     directMessages: number;
     bannedUsers: number;
+    communities:number;pendingReports:number;
   };
+  observedAt:string;health:{database:string;databaseLatencyMs:number;processUptimeSeconds:number};
   activity: {
+    recentlyActive:number;
     activeLast24h: number;
     activeLast7d: number;
     activeLast30d: number;
@@ -43,9 +46,9 @@ interface Stats {
 }
 
 export default function AdminOverviewPage() {
-  const { data, error, loading, retry } = useAdminData<Stats>("/api/admin/stats");
+  const { data, error, loading, retry } = useAdminData<Stats>("/api/admin/stats",15000);
   const stats = data;
-  if (error) return <AdminLoadError message={error} retry={retry} />;
+  if (error && !data) return <AdminLoadError message={error} retry={retry} />;
 
   if (loading) {
     return (
@@ -66,6 +69,10 @@ export default function AdminOverviewPage() {
   const statCards = [
     { label: "Total Users", value: stats.totals.users, icon: Users, color: "text-blue-500" },
     { label: "Total Messages", value: stats.totals.messages, icon: MessageSquare, color: "text-green-500" },
+    { label: "Groups", value: stats.totals.groups, icon: MessagesSquare, color:"text-[var(--accent)]" },
+    { label: "Communities", value: stats.totals.communities, icon: Users, color:"text-[var(--accent)]" },
+    { label: "Pending reports", value: stats.totals.pendingReports, icon: Activity, color:"text-orange-500" },
+    { label: "Recently active (90s)", value: stats.activity.recentlyActive, icon: UserCheck, color:"text-green-500" },
     { label: "Conversations", value: stats.totals.conversations, icon: MessagesSquare, color: "text-purple-500" },
     { label: "Active (24h)", value: stats.activity.activeLast24h, icon: Activity, color: "text-amber-500" },
     { label: "Messages Today", value: stats.activity.messagesToday, icon: TrendingUp, color: "text-teal-500" },
@@ -77,11 +84,13 @@ export default function AdminOverviewPage() {
       <div>
         <h1 className="text-xl font-bold">Dashboard Overview</h1>
         <p className="mt-1 text-sm text-[var(--muted)]">
-          System-wide statistics and user activity.
+          Live operational overview · Refreshes every 15 seconds while visible.
         </p>
       </div>
 
       {/* Stat Cards */}
+      {error?<p role="alert" className="rounded-xl border border-[var(--border)] p-3 text-sm">Refresh failed. Showing data from {new Date(stats.observedAt).toLocaleTimeString()}.</p>:null}
+      <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 text-sm"><b>Database: {stats.health.database}</b><span className="ml-3 text-[var(--muted)]">Probe {stats.health.databaseLatencyMs} ms · Web process uptime {Math.floor(stats.health.processUptimeSeconds/60)} min</span><p className="mt-2 text-xs text-[var(--muted)]">Observed {new Date(stats.observedAt).toLocaleString()} · Counts and trends only; no private message content.</p></div>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         {statCards.map((card) => (
           <div
