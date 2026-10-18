@@ -235,10 +235,14 @@ async function main() {
     const orphan = await fixture("orphan"), recent = await fixture("recent", "1 minute"), live = await fixture("live"), expired = await fixture("expired"), failure = await fixture("retry", "2 days", true);
     const message = (await sql.query("select id from messages order by created_at desc limit 1")).rows[0];
     await sql.query("insert into message_attachments(message_id,original_name,stored_name,mime_type,size,path) values($1,'live.bin',$2,'application/octet-stream',17,$3)", [message.id, live.split("/")[1], live]);
+    const manifest=live+".parts",part=manifest+".0";
+    for(const name of [manifest,part]) {await writeFile(join(uploadDir,name),"opaque private part");testFiles.push(name);await sql.query("insert into stored_uploads(path,created_at) values($1,now()-interval '2 days')",[name]);}
+    await sql.query("insert into message_attachments(message_id,original_name,stored_name,mime_type,size,path) values($1,'segmented.bin',$2,'application/octet-stream',19,$3)",[message.id,manifest.split('/')[1],manifest]);
     await sql.query("insert into statuses(user_id,type,media_path,media_mime_type,expires_at) values($1,'image',$2,'image/webp',now()-interval '2 days')", [alice.id, expired]);
     const cron = () => api("/api/cron/process-scheduled", "", "GET", undefined, { authorization: "Bearer item456-cron" });
     const firstCleanup = await (await cron()).json(); assert.equal(firstCleanup.retention.removed, 2); assert.equal(firstCleanup.retention.failed, 1);
     for (const path of [recent, live, failure]) assert.equal((await sql.query("select count(*)::int as n from stored_uploads where path=$1", [path])).rows[0].n, 1);
+    for(const path of [manifest,part])assert.equal((await sql.query("select count(*)::int as n from stored_uploads where path=$1",[path])).rows[0].n,1,"Retention preserves every private part while its parent message is live");
     for (const path of [orphan, expired]) assert.equal((await sql.query("select count(*)::int as n from stored_uploads where path=$1", [path])).rows[0].n, 0);
     await rmdir(join(uploadDir, failure));
     assert.equal((await (await cron()).json()).retention.removed, 1, "Failed deletion is retried");

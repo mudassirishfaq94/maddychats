@@ -17,6 +17,12 @@ Circlo creates per-user credentials with a one-hour lifetime, caches them briefl
 
 ## Other remaining platform limits
 
-Swiping a task away differs from Android force-stop; force-stopped delivery is not claimed. PWA background execution cannot match a native Android call service. Large media uses bounded encrypted upload chunks, but the configured private storage bucket's own object limit and storage quota must also accommodate the intended file sizes. Temporary chunks use encrypted local storage with expiry and a global staging quota; a server restart can require retrying an unfinished upload. No production encryption identity or historical ciphertext migration is required by these changes.
+Swiping a task away differs from Android force-stop; force-stopped delivery is not claimed. PWA background execution cannot match a native Android call service. Large media uses bounded encrypted upload chunks and private storage objects of at most 8 MB, preserving the existing encrypted bytes. The storage quota must still accommodate the total data. Temporary chunks use encrypted local storage with expiry and a global staging quota; a server restart can require retrying an unfinished upload. No production encryption identity or historical ciphertext migration is required by these changes.
+
+## Large-media release and rollback
+
+Images are limited to 50 MB and videos to 250 MB, with a 250 MB combined attachment batch limit. Supported formats that the device cannot decode can be downloaded as originals. Active content formats remain blocked. Existing small attachments retain their current storage format. Larger private attachments use an authenticated manifest and numbered opaque ciphertext objects; no plaintext or file keys are stored in that manifest. Attachment retention preserves live parts and deletes them with their parent attachment.
+
+To pause new large uploads, set `LARGE_MEDIA_UPLOADS_ENABLED=0` while retaining this release's reader and cleanup logic. Once segmented attachments have been created, do not roll back below the release that understands `.parts` objects. Existing identities and historical ciphertext are never rewritten. No database migration is needed. Before production release, CI must cover upload finalization, owner checks, retry/replay handling and retention. Physical Android large-file and keyboard checks remain separate release evidence.
 
 Sources: [Cloudflare credential generation](https://developers.cloudflare.com/realtime/turn/generate-credentials/), [Cloudflare pricing](https://developers.cloudflare.com/realtime/turn/faq/).

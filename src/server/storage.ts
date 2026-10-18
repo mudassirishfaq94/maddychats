@@ -1,3 +1,4 @@
+import { PRIVATE_PART_BYTES, writePrivateParts, readPrivateParts, privatePartPaths } from "./private-media-parts";
 import { MEDIA_TYPES, normalizeMediaType } from "@/lib/media-types";
 import { IMAGE_MAX_BYTES, MEDIA_MAX_BYTES } from "@/lib/media-limits";
 import { randomUUID } from "crypto";
@@ -294,7 +295,15 @@ export async function saveBuffer(
 /** Streams opaque ciphertext without allocating the complete large file in Node. */
 export async function saveFile(bucket:Bucket,storedName:string,file:Blob):Promise<string> {
   if(!/^[a-zA-Z0-9.-]+$/.test(storedName)||storedName.includes(".."))throw new Error("invalid_path");
-  const relative=path.posix.join(BUCKETS[bucket],storedName);await trackUpload(relative);
+  const relative=path.posix.join(BUCKETS[bucket],storedName);
+  if(supabaseStorage && file.size>PRIVATE_PART_BYTES && process.env.LARGE_MEDIA_UPLOADS_ENABLED!=="0") {
+    return writePrivateParts(relative,file,async(objectPath,body)=>{
+      await trackUpload(objectPath);
+      const {error}=await supabaseStorage!.storage.from(SUPABASE_MEDIA_BUCKET).upload(objectPath,body.stream(),{contentType:"application/octet-stream",upsert:false,duplex:"half"});
+      if(error)throw new Error("Encrypted media storage failed.");
+    },async(paths)=>{const {error}=await supabaseStorage!.storage.from(SUPABASE_MEDIA_BUCKET).remove(paths);if(error)throw new Error("Storage cleanup failed.");});
+  }
+  await trackUpload(relative);
   if(supabaseStorage) {
     const {error}=await supabaseStorage.storage.from(SUPABASE_MEDIA_BUCKET).upload(relative,file.stream(),{contentType:"application/octet-stream",upsert:false,duplex:"half"});
     if(error)throw new Error("Encrypted media storage failed.");
@@ -315,7 +324,7 @@ async function trackUpload(relative: string) {
 export async function deleteStoredStrict(relativePath: string): Promise<void> {
   if (!/^(avatars|images|files|statuses)\/[a-zA-Z0-9.-]+$/.test(relativePath) || relativePath.includes("..")) throw new Error("invalid_path");
   if (supabaseStorage) {
-    const { error } = await supabaseStorage.storage.from(SUPABASE_MEDIA_BUCKET).remove([relativePath]);
+    const { error } = await supabaseStorage.storage.from(SUPABASE_MEDIA_BUCKET).remove(relativePath.endsWith(".parts")?privatePartPaths(relativePath):[relativePath]);
     if (error) throw new Error("storage_delete_failed");
     return;
   }
@@ -326,16 +335,7 @@ export async function deleteStoredStrict(relativePath: string): Promise<void> {
 }
 
 export async function deleteStored(relativePath: string): Promise<void> {
-  if (supabaseStorage) {
-    await supabaseStorage.storage
-      .from(SUPABASE_MEDIA_BUCKET)
-      .remove([relativePath])
-      .catch(() => undefined);
-    return;
-  }
-  const absolute = resolveWithinUploads(relativePath);
-  if (!absolute) return;
-  await unlink(absolute).catch(() => undefined);
+  await deleteStoredStrict(relativePath).catch(()=>{});
 }
 
 export async function statStored(relativePath: string) {
@@ -360,18 +360,21 @@ export async function readStored(relativePath: string): Promise<{
   body: ReadableStream<Uint8Array> | NodeJS.ReadableStream;
   size: number | null;
 } | null> {
-  if (supabaseStorage) {
-    if(!/^(avatars|images|files|statuses)\/[a-zA-Z0-9.-]+$/.test(relativePath)||relativePath.includes(".."))return null;
-    const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),15000);
-    try {
-      const url=new URL(`/storage/v1/object/authenticated/${encodeURIComponent(SUPABASE_MEDIA_BUCKET)}/${relativePath.split('/').map(encodeURIComponent).join('/')}`,process.env.SUPABASE_URL!);
-      const response=await fetch(url,{headers:{Authorization:`Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY!}`,apikey:process.env.SUPABASE_SERVICE_ROLE_KEY!},signal:controller.signal,redirect:"error",cache:"no-store"});
-      if(!response.ok||!response.body)return null;
-      const length=response.headers.get("content-length");return {body:response.body,size:length&&Number.isFinite(Number(length))?Number(length):null};
-    }finally{clearTimeout(timer);}
-  }
+  if (supabaseStorage) return relativePath.endsWith(".parts")?readPrivateParts(relativePath,readPrivateObject):readPrivateObject(relativePath);
   const info = await statStored(relativePath);
   if (!info?.isFile()) return null;
   const body = streamStored(relativePath);
   return body ? { body, size: info.size } : null;
+}
+
+/** Header timeout is cleared once streaming begins; cancellation still propagates. */
+async function readPrivateObject(relativePath:string,externalSignal?:AbortSignal):Promise<{body:ReadableStream<Uint8Array>;size:number|null}|null> {
+    if(!/^(avatars|images|files|statuses)\/[a-zA-Z0-9.-]+$/.test(relativePath)||relativePath.includes(".."))return null;
+    const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),15000);
+    try {
+      const url=new URL(`/storage/v1/object/authenticated/${encodeURIComponent(SUPABASE_MEDIA_BUCKET)}/${relativePath.split('/').map(encodeURIComponent).join('/')}`,process.env.SUPABASE_URL!);
+      const response=await fetch(url,{headers:{Authorization:`Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY!}`,apikey:process.env.SUPABASE_SERVICE_ROLE_KEY!},signal:externalSignal?AbortSignal.any([externalSignal,controller.signal]):controller.signal,redirect:"error",cache:"no-store"});
+      if(!response.ok||!response.body)return null;
+      const length=response.headers.get("content-length");return {body:response.body,size:length&&Number.isFinite(Number(length))?Number(length):null};
+    }finally{clearTimeout(timer);}
 }

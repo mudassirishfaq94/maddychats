@@ -11,7 +11,7 @@ export async function cleanupUploads() {
         AND NOT EXISTS (
           SELECT 1 FROM message_attachments a JOIN messages m ON m.id=a.message_id
           JOIN conversations c ON c.id=m.conversation_id
-          WHERE a.path=u.path AND m.deleted_at IS NULL AND c.deleted_at IS NULL
+          WHERE (a.path=u.path OR (right(a.path,6)='.parts' AND u.path LIKE a.path || '.%')) AND m.deleted_at IS NULL AND c.deleted_at IS NULL
           AND (m.expires_at IS NULL OR m.expires_at > now())
         )
         AND NOT EXISTS (SELECT 1 FROM statuses s WHERE s.media_path=u.path AND s.expires_at > now())

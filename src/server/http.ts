@@ -31,7 +31,7 @@ export function adminChallengeRequired(reason?: string): NextResponse {
 const MAX_JSON_BODY_BYTES = 64 * 1024;
 
 /** Enforce real streamed bytes, including chunked requests with no length. */
-export async function readBoundedBody(req: Request, limit: number, timeoutMs = 30_000): Promise<Uint8Array> {
+export async function readBoundedBody(req: {body:ReadableStream<Uint8Array>|null}, limit: number, timeoutMs = 30_000): Promise<Uint8Array> {
   const reader = req.body?.getReader();
   if (!reader) return new Uint8Array();
   const chunks: Uint8Array[] = []; let size = 0;

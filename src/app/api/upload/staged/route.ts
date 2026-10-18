@@ -17,6 +17,7 @@ export async function GET(req:NextRequest) {
 export async function POST(req:NextRequest) {
   const blocked=guardSameOrigin(req)??guardUploadSize(req,true);if(blocked)return blocked;
   const user=await getSessionUser();if(!user)return jsonError(401,"Not authenticated.");
+  if(process.env.LARGE_MEDIA_UPLOADS_ENABLED==="0")return jsonError(503,"Large uploads are temporarily paused. Your selection is preserved.");
   if(!(await rateLimit(`media-stage:${user.id}`,10,60000)).allowed)return jsonError(429,"Too many uploads. Try again shortly.");
   const body=await readJson(req);
   if(!body||body.encrypted!==true||typeof body.conversationId!=="string"||typeof body.name!=="string"||typeof body.mime!=="string"||typeof body.size!=="number"||!Number.isSafeInteger(body.size)||body.name.length>255)return jsonError(422,"Encrypted upload metadata required.");
@@ -37,6 +38,7 @@ export async function PUT(req:NextRequest) {
   try {
     const offset=Number(req.headers.get("X-Upload-Offset"));
     if(!req.headers.has("X-Upload-Offset"))return jsonError(422,"Upload offset required.");
+    await stageOffset(req.headers.get("X-Upload-Token")??"",user.id);
     const bytes=await readBoundedBody(req,MEDIA_CHUNK_BYTES,60000);
     const next=await appendStage(req.headers.get("X-Upload-Token")??"",user.id,offset,bytes);
     return NextResponse.json({offset:next},{headers:{"Cache-Control":"private, no-store"}});

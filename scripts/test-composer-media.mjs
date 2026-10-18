@@ -10,13 +10,13 @@ export async function testComposerMedia(base, source, recipient, pool, conversat
     for (const width of [320, 360, 390, 412, 1280]) {
       await page.setViewportSize({ width, height: 740 }); await input.fill("Short draft");
       await page.waitForTimeout(180);
-      const sizes = await page.locator(".composer-row .composer-icon").evaluateAll(controls => controls.map(node => ({ label: node.getAttribute("aria-label"), width: node.getBoundingClientRect().width, height: node.getBoundingClientRect().height })));
+      const sizes = await page.locator(".composer-row .composer-icon").evaluateAll(controls => controls.map(node => ({ label: node.getAttribute("aria-label"), role: node.getAttribute("role") || "button", width: node.getBoundingClientRect().width, height: node.getBoundingClientRect().height })));
       const before = await input.boundingBox();
       const long = "A long message should only grow the text field. ".repeat(25);
       await input.fill(long); await page.waitForTimeout(180);
       assert.equal(await input.inputValue(), long);
       const after = await input.boundingBox(); assert(after.height > before.height && after.height <= 96.1);
-      for (const size of sizes) { const control = page.getByRole("button", { name: size.label, exact: true }); const box = await control.boundingBox(); assert.equal(box.width, 44); assert.equal(box.height, 44); }
+      for (const size of sizes) { const control = page.getByRole(size.role, { name: size.label, exact: true }); const box = await control.boundingBox(); assert.equal(box.width, 44); assert.equal(box.height, 44); }
       assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
       await page.getByRole("button", { name: "Emoji", exact: true }).click();
       const tray = page.getByRole("dialog", { name: "Emoji, stickers and GIFs", exact: true }); await tray.waitFor(); await page.waitForTimeout(60);
