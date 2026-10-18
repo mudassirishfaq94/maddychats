@@ -21,7 +21,7 @@ export async function testCommunityUx(context,base,owner,member,pool){
   await page.getByRole("button",{name:"Revoke",exact:true}).click();await link.waitFor({state:"detached"});assert.equal((await page.request.get(base+href)).status(),404);
   await page.getByRole("button",{name:"Scheduled messages",exact:true}).click();await page.getByRole("dialog",{name:"Manage scheduled messages",exact:true}).waitFor();
   const changed=await page.request.post(`${base}/api/conversations/${conversationId}/controls`,{headers:{Origin:base},data:{action:"setDisappearing",disappearingSeconds:86400}});assert.equal(changed.status(),200);
-  for(const target of [page,member.page]){await target.goto(`${base}/app/chats/${conversationId}`);await target.getByText("New messages disappear after 24 hours.",{exact:true}).waitFor();}
+  for(const target of [page,member.page]){await target.goto(`${base}/app/chats/${conversationId}`);await target.locator("[data-message-id]").getByText("New messages disappear after 24 hours.",{exact:true}).waitFor();}
   console.log("PASS: actual community counts/rules, live admin controls, clickable expiring invite/revocation, accessible scheduling and policy notice on both browsers");
  }finally{await page.close();if(communityId)await pool.query("delete from communities where id=$1",[communityId]);if(conversationId)await pool.query("delete from conversations where id=$1",[conversationId]);}
 }
