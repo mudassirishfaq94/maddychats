@@ -10,7 +10,7 @@ import { Avatar } from "@/components/avatar";
 
 type Mode = "choose" | "direct" | "group-people" | "group-info";
 
-export function NewChatDialog({ start = "choose", openExternally, onExternalClose }: { start?: "choose" | "direct" | "group-people"; openExternally?: boolean; onExternalClose?: () => void }) {
+export function NewChatDialog({ start = "choose", compact = false, openExternally, onExternalClose }: { start?: "choose" | "direct" | "group-people"; compact?: boolean; openExternally?: boolean; onExternalClose?: () => void }) {
   const router = useRouter();
   const [internalOpen, setInternalOpen] = useState(false);
   const open = openExternally ?? internalOpen;
@@ -96,7 +96,7 @@ export function NewChatDialog({ start = "choose", openExternally, onExternalClos
 
   const title = mode === "choose" ? "New chat" : mode === "direct" ? "New message" : mode === "group-people" ? "Select people" : "Group info";
   return <>
-    <button type="button" onClick={() => setInternalOpen(true)} aria-label={start === "group-people" ? "New group" : "New chat"} title={start === "group-people" ? "New group" : "New chat"} className={start === "group-people" ? "btn min-h-[44px] min-w-[44px] gap-1.5 rounded-xl! px-2.5! text-xs!" : "btn btn-primary min-h-[44px] min-w-[44px] gap-1.5 rounded-xl! px-2.5! text-xs!"}>{start === "group-people" ? <Users className="h-4 w-4" /> : <SquarePen className="h-4 w-4" />}<span>{start === "group-people" ? "New group" : "New chat"}</span></button>
+    <button type="button" onClick={() => setInternalOpen(true)} aria-label={start === "group-people" ? "New group" : "New chat"} title={start === "group-people" ? "New group" : "New chat"} className={compact ? "flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[var(--accent-fg)] transition-colors hover:bg-[var(--surface-2)] focus-visible:outline-2 focus-visible:outline-[var(--accent)]" : start === "group-people" ? "btn min-h-[44px] min-w-[44px] gap-1.5 rounded-xl! px-2.5! text-xs!" : "btn btn-primary min-h-[44px] min-w-[44px] gap-1.5 rounded-xl! px-2.5! text-xs!"}>{start === "group-people" ? <Users className="h-5 w-5" /> : <SquarePen className="h-5 w-5" />}{!compact ? <span>{start === "group-people" ? "New group" : "New chat"}</span> : null}</button>
     {open ? <div role="dialog" aria-modal="true" aria-label={title} className="dialog-backdrop pt-[6vh] animate-fade-up" onMouseDown={(e) => { if (e.target === e.currentTarget) close(); }}>
       <div className="card-glass dialog-card max-w-md rounded-3xl p-5">
         <div className="flex items-center justify-between">

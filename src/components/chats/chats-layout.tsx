@@ -58,22 +58,22 @@ const ConversationRow = memo(function ConversationRow({ conv, active, online, pr
 }) {
   const name = conv.name ?? conv.otherMember?.displayName ?? "Unknown";
   return (
-    <li key={conv.id} className="group/row relative mb-1.5 flex items-center">
+    <li key={conv.id} className="group/row relative flex min-w-0 items-center border-b border-[var(--border)] last:border-b-0">
       <Link
         href={`/app/chats/${conv.id}`}
         aria-current={active ? "page" : undefined}
         className={cn(
-          "chat-list-row flex min-w-0 flex-1 min-h-20 items-center gap-3.5 rounded-[1.4rem] border border-transparent px-3.5 py-3.5 transition-[background-color,transform,box-shadow] duration-150",
+          "chat-list-row flex min-h-[76px] min-w-0 flex-1 items-center gap-3 border-0 px-4 py-3 transition-colors duration-150",
           active
             ? "bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] shadow-[inset_3px_0_0_var(--accent)]"
-            : "hover:border-[var(--border)] hover:bg-[var(--surface-2)]",
+            : "hover:bg-[var(--surface-2)]",
         )}
       >
         {conv.type === "group" && conv.avatarUrl ? (
-          <Image unoptimized width={1200} height={1200} src={conv.avatarUrl} alt="Group photo" loading="lazy" decoding="async" className="h-12 w-12 shrink-0 rounded-full object-cover ring-1 ring-black/5" />
+          <Image unoptimized width={1200} height={1200} src={conv.avatarUrl} alt="Group photo" loading="lazy" decoding="async" className="h-11 w-11 shrink-0 rounded-full object-cover" />
         ) : conv.otherMember ? (
           <span className="relative shrink-0">
-            <Avatar user={conv.otherMember} size={48} />
+            <Avatar user={conv.otherMember} size={44} />
             <span
               aria-hidden="true"
               className={cn(
@@ -85,7 +85,7 @@ const ConversationRow = memo(function ConversationRow({ conv, active, online, pr
             />
           </span>
         ) : (
-          <span className="flex h-12 w-12 items-center justify-center rounded-full bg-[var(--surface-2)] text-[var(--muted)]">
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[var(--surface-2)] text-[var(--muted)]">
             <LogoMark size={24} />
           </span>
         )}
@@ -320,23 +320,20 @@ export function ChatsLayout({
       {/* ------------------------ conversation sidebar ------------------------ */}
       <aside
         className={cn(
-          "w-full shrink-0 flex-col border-r border-[var(--border)] bg-[var(--surface)] lg:flex lg:w-[380px] xl:w-[400px]",
+          "min-w-0 w-full shrink-0 flex-col border-r border-[var(--border)] bg-[var(--surface)] lg:flex lg:w-[360px] xl:w-[380px]",
           activeId ? "hidden" : "flex",
         )}
         aria-label="Conversations"
       >
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-b-3xl bg-[linear-gradient(135deg,var(--surface),var(--surface-2))] px-5 pb-5 pt-5">
-          <div>
-            <p className="text-[0.66rem] font-bold uppercase tracking-[0.16em] text-[var(--accent-fg)]">Circlo</p>
-            <h1 className="font-display mt-1 text-3xl font-bold tracking-tight">Your circle</h1><p className="mt-1 text-xs text-[var(--muted)]">A little closer, every conversation.</p>
-          </div>
-          <div className="flex w-full items-center gap-2 sm:w-auto">
-            <NewChatDialog start="group-people" />
-            <NewChatDialog start="direct" />
+        <div className="flex h-14 shrink-0 items-center justify-between gap-3 px-4">
+          <h1 className="text-xl font-semibold tracking-tight">Chats</h1>
+          <div className="flex shrink-0 items-center gap-1">
+            <NewChatDialog start="group-people" compact />
+            <NewChatDialog start="direct" compact />
           </div>
         </div>
 
-        <div className="px-4 pb-3">
+        <div className="shrink-0 px-4 pb-2">
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--muted)]" />
             <input
@@ -344,7 +341,7 @@ export function ChatsLayout({
               onChange={(e) => setFilter(e.target.value)}
               placeholder="Search conversations…"
               aria-label="Search conversations"
-              className="field-input field-input--icon rounded-full! py-2! text-sm!"
+              className="field-input field-input--icon min-h-11 rounded-xl! py-2! text-sm!"
             />
           </div>
           <SwipeFilters>
@@ -354,10 +351,10 @@ export function ChatsLayout({
                 type="button"
                 onClick={() => setChatFilter(chip.key)}
                 className={cn(
-                  "shrink-0 rounded-full px-3 py-1 text-[0.7rem] font-semibold transition-all",
+                  "flex min-h-11 shrink-0 items-center rounded-full px-3 text-xs font-medium transition-colors",
                   chatFilter === chip.key
-                    ? "bg-[var(--accent)] text-white shadow-sm"
-                    : "bg-[color-mix(in_srgb,var(--muted)_8%,transparent)] text-[var(--muted)] hover:bg-[color-mix(in_srgb,var(--muted)_14%,transparent)]",
+                    ? "bg-[var(--accent-soft)] text-[var(--accent-fg)]"
+                    : "text-[var(--muted)] hover:bg-[var(--surface-2)]",
                 )}
               >
                 {chip.label}
@@ -381,7 +378,7 @@ export function ChatsLayout({
           ) : null}
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain pb-2">
           {conversations.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center px-6 text-center">
               <LogoMark size={30} className="text-[var(--muted)]" />

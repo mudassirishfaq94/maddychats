@@ -22,6 +22,19 @@ export async function testUxFeatures(context,base,owner,member) {
   assert(await filters.evaluate(element=>element.scrollWidth<=element.clientWidth||element.scrollLeft>0),"Filters must support mouse dragging");
   assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
   await page.screenshot({path:"test-artifacts/ux-inbox-mobile.png"});
+  for (const width of [320,390,1280]) {
+   await page.setViewportSize({width,height:width===1280?900:844});
+   await page.evaluate(()=>{document.documentElement.classList.add("light");document.querySelector(".chat-filters").scrollLeft=0;});
+   assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),`Inbox must fit ${width}px`);
+   const heading=await page.getByRole("heading",{name:"Chats",exact:true}).boundingBox();
+   const firstRow=await page.locator(".chat-list-row").first().boundingBox();
+   assert(heading&&firstRow&&firstRow.y-heading.y<200,"Compact controls must leave room for conversations");
+   await page.screenshot({path:`test-artifacts/inbox-minimal-${width}-light.png`});
+  }
+  await page.setViewportSize({width:390,height:844});
+  await page.evaluate(()=>document.documentElement.classList.remove("light"));
+  await page.screenshot({path:"test-artifacts/inbox-minimal-390-dark.png"});
+  await page.setViewportSize({width:360,height:800});
   const calls=page.getByRole("navigation",{name:"Mobile navigation"}).getByRole("link",{name:"Calls",exact:true});await calls.click();await page.getByRole("heading",{name:"Calls",exact:true}).waitFor();
   const history=await page.request.get(base+"/api/calls/history");assert.equal(history.status(),200);assert(Array.isArray((await history.json()).calls));
   await page.goto(base+"/app/settings");await page.getByText("Privacy preferences",{exact:true}).click();
