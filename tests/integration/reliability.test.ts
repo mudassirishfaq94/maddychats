@@ -211,7 +211,9 @@ test("delivery requires a recipient device acknowledgment, is owner-isolated and
 });
 
 test("presence privacy enforces all audiences, contact direction, selected contacts and blocks",async()=>{
- const {canSeePresence}=await import("../../src/server/presence-privacy");
+ const {canSeePresence,visiblePresenceIds}=await import("../../src/server/presence-privacy");
+ assert.deepEqual(await visiblePresenceIds(member,[undefined as unknown as string,"invalid"]),[]);
+ assert.deepEqual(await visiblePresenceIds("invalid",[another]),[]);
  try{
   await pool.query("insert into user_contacts(owner_id,contact_id) values($1,$2) on conflict do nothing",[another,member]);
   for(const [mode,selected,expected] of [["everyone",[],true],["contacts",[],true],["specific",[],false],["specific",[member],true],["nobody",[],false]] as const){

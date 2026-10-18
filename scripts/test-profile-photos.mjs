@@ -231,8 +231,8 @@ export async function testProfilePhotos(base, pool, owner, peer, source, unrelat
     }
     assert.equal((await pool.query("select count(*)::int as n from channels where community_id=$1", [community.id])).rows[0].n, 0);
     await source.page.goto(base + `/app/communities/${community.id}`);
-    await source.page.getByRole("button", { name: "Create channel", exact: true }).click();
-    await source.page.getByPlaceholder("channel-name", { exact: true }).fill("fixture-channel");
+    await source.page.getByRole("button", { name: "Create group", exact: true }).click();
+    await source.page.getByPlaceholder("Group name", { exact: true }).fill("fixture-channel");
     const created = source.page.waitForResponse(r => r.url().endsWith(`/api/communities/${community.id}`) && r.request().method() === "POST");
     await source.page.getByRole("button", { name: "Create", exact: true }).click(); const createdResponse = await created; assert.equal(createdResponse.status(), 201); channel = (await createdResponse.json()).channel;
     await source.page.getByText("fixture-channel", { exact: true }).waitFor();
