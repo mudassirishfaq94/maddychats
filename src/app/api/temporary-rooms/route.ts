@@ -2,7 +2,7 @@ import { NextRequest,NextResponse } from "next/server";
 import { z } from "zod";
 import { createHash } from "node:crypto";
 import { createTemporaryRoom,joinTemporaryRoom,roomCookie,TemporaryRoomError } from "@/server/temporary-rooms";
-import { guardSameOrigin,jsonError,readJson } from "@/server/http";
+import { guardSameOrigin,jsonError,readJson,requestIsSecure } from "@/server/http";
 import { resolveClientIp } from "@/server/client-ip";
 import { rateLimit } from "@/server/rate-limit";
 import { startStarterMaintenance } from "@/server/starter-maintenance";
@@ -15,6 +15,6 @@ export async function POST(req:NextRequest){const blocked=guardSameOrigin(req);i
  const limit=await rateLimit(`temporary-entry:${createHash("sha256").update(ip).digest("hex")}`,20,600000);if(!limit.allowed)return jsonError(429,"Too many attempts. Please wait before trying again.");
  const parsed=z.discriminatedUnion("action",[create,join]).safeParse(await readJson(req));if(!parsed.success)return jsonError(422,"Check the room code and try again.");
  try{startStarterMaintenance();const input=parsed.data;const room=input.action==="create"?await createTemporaryRoom(input):await joinTemporaryRoom(input);
-  const res=NextResponse.json(room,{headers:{"Cache-Control":"private, no-store"}});res.cookies.set(roomCookie(room.id),input.credential,{httpOnly:true,secure:process.env.NODE_ENV==="production",sameSite:"strict",path:`/api/temporary-rooms/${room.id}`,maxAge:86400});return res;
+  const res=NextResponse.json(room,{headers:{"Cache-Control":"private, no-store"}});res.cookies.set(roomCookie(room.id,room.role),input.credential,{httpOnly:true,secure:requestIsSecure(req),sameSite:"strict",path:`/api/temporary-rooms/${room.id}`,maxAge:86400});return res;
  }catch(error){if(error instanceof TemporaryRoomError)return jsonError(error.status,error.message);return jsonError(503,"Temporary rooms are unavailable. Please retry.");}
 }

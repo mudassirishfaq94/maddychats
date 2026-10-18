@@ -5,7 +5,7 @@ export type RoomRole="host"|"guest";
 export class TemporaryRoomError extends Error {constructor(public status:number,message:string){super(message);}}
 type Room={id:string;invite_hash:string;host_credential_hash:string;guest_credential_hash:string|null;host_public_key:string;guest_public_key:string|null;created_at:Date;expires_at:Date;extension_id:string|null;extension_by:RoomRole|null;extension_minutes:number|null;extension_at:Date|null};
 export const credentialHash=(value:string)=>createHash("sha256").update(value).digest("hex");
-export const roomCookie=(id:string)=>`circlo-room-${id}`;
+export const roomCookie=(id:string,role:RoomRole)=>`circlo-room-${id}-${role}`;
 const equal=(a:string,b:string)=>a.length===b.length&&timingSafeEqual(Buffer.from(a),Buffer.from(b));
 function publicKey(value:string){try{if(value.length>200)throw Error();const key=createPublicKey({key:Buffer.from(value,"base64"),format:"der",type:"spki"});if(key.asymmetricKeyType!=="ec"||key.asymmetricKeyDetails?.namedCurve!=="prime256v1")throw Error();}catch{throw new TemporaryRoomError(422,"Invalid room encryption identity.");}}
 function roleFor(room:Room,credential:string):RoomRole {const hash=credentialHash(credential);if(equal(room.host_credential_hash,hash))return "host";if(room.guest_credential_hash&&equal(room.guest_credential_hash,hash))return "guest";throw new TemporaryRoomError(404,"Room unavailable or expired.");}

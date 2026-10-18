@@ -1,10 +1,11 @@
 "use client";
 import { useCallback,useEffect,useRef,useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Check,Copy,FileUp,Loader2,Lock,Send,Timer,X } from "lucide-react";
 import { fromBase64,newRoomCode,newRoomIdentity,normalizeRoomCode,openRoomMessage,roomCodeHash,roomSharedKey,sealRoomMessage,TEMPORARY_FILE_LIMIT,toBase64,type TemporaryContent } from "@/lib/temporary-room-crypto";
-type Session={id:string;code:string;privateKey:string;publicKey:string;credential?:string};
+type Session={id:string;code:string;privateKey:string;publicKey:string;credential?:string;role?:"host"|"guest"};
 type Room={id:string;role:"host"|"guest";hostPublicKey:string;guestPublicKey:string|null;expiresAt:string;serverNow:string;extension:{id:string;by:"host"|"guest";minutes:number}|null};
 type Envelope={id:string;sender:"host"|"guest";ciphertext:string;createdAt:string};
 type ViewMessage={id:string;sender:string;content:TemporaryContent;unreadable?:boolean};
@@ -23,20 +24,21 @@ export function TemporaryRoom({id}:{id?:string}) {
  useEffect(()=>{disposed.current=false;if(id){try{const saved=sessionStorage.getItem(storageKey(id));if(saved){const parsed=JSON.parse(saved) as Session;if(parsed.id!==id||!normalizeRoomCode(parsed.code)||typeof parsed.privateKey!=="string")throw Error();setSession(parsed);}else{setError("This browser has no key for this room. Join with the one-time code, or create a new room.");setConnecting(false);}}catch{setError("This browser cannot restore the temporary room. Create a new room.");setConnecting(false);}}
   return()=>{invalidate();disposed.current=true;key.current=null;pending.current=null;};},[id,invalidate]);
  const refresh=useCallback(async()=>{if(!id||!session||disposed.current)return;if(running.current){refreshAgain.current=true;return;}running.current=true;const currentGeneration=generation.current;const active=()=>!disposed.current&&currentGeneration===generation.current;
-  try{let more=true;let pages=0;while(more&&pages++<5&&!disposed.current){const suffix=cursor.current?`?after=${encodeURIComponent(cursor.current.at)}&cursor=${cursor.current.id}`:"";
+  try{let more=true;let pages=0;while(more&&pages++<5&&!disposed.current){const suffix=`?role=${session.role??"host"}`+(cursor.current?`&after=${encodeURIComponent(cursor.current.at)}&cursor=${cursor.current.id}`:"");
    const data=await request(`/api/temporary-rooms/${id}${suffix}`) as Room&{messages:Envelope[];hasMore:boolean};
    if(!active())return;deadline.current=performance.now()+Math.max(0,Date.parse(data.expiresAt)-Date.parse(data.serverNow));expiryChecking.current=false;setRoom(data);setConnecting(false);
    if(deadline.current<=performance.now()){retire();return;}
    const peer=data.role==="host"?data.guestPublicKey:data.hostPublicKey;
-   if(peer&&!key.current){const derived=await roomSharedKey(session.privateKey,peer,session.code,id);if(!active())return;key.current=derived;}
+   if(peer&&!key.current){setChecking(true);const derived=await roomSharedKey(session.privateKey,peer,session.code,id);if(!active())return;key.current=derived;}
    const decoded:ViewMessage[]=[];
    for(const envelope of data.messages){if(!active())return;if(!seen.current.has(envelope.id)&&key.current){let content:TemporaryContent;let unreadable=false;try{content=await openRoomMessage(key.current,id,envelope.id,envelope.sender,envelope.ciphertext);}catch{content={text:"This message could not be authenticated. Compare the code with the other person."};unreadable=true;}if(!active())return;decoded.push({id:envelope.id,sender:envelope.sender,content,unreadable});seen.current.add(envelope.id);}cursor.current={at:envelope.createdAt,id:envelope.id};}
-   if(active())setMessages(previous=>[...previous,...decoded]);more=data.hasMore;
-  }if(active()){setError("");setChecking(false);}
+   if(active()&&performance.now()>=deadline.current){suspend();refreshAgain.current=true;return;}
+   if(active())setMessages(previous=>active()&&performance.now()<deadline.current?[...previous,...decoded]:[]);more=data.hasMore;
+  }if(active()){if(more)refreshAgain.current=true;setError("");setChecking(false);}
   }catch(err){if(!active())return;const failure=err as Error&{status?:number};if(failure.status===404||failure.status===410){retire();setError(failure.message);}else setError(failure.message);setConnecting(false);}finally{running.current=false;if(refreshAgain.current&&!disposed.current){refreshAgain.current=false;queueMicrotask(()=>void refreshHandler.current?.());}}
- },[id,session,retire]);
+ },[id,session,retire,suspend]);
  useEffect(()=>{refreshHandler.current=refresh;if(!session||!id)return;let stream:EventSource|null=null,connected=false;
-  const connect=()=>{if(stream||document.visibilityState!=="visible")return;stream=new EventSource(`/api/temporary-rooms/${id}/events`);stream.onopen=()=>{connected=true;};stream.onmessage=()=>void refresh();stream.onerror=()=>{connected=false;};};
+  const connect=()=>{if(stream||document.visibilityState!=="visible")return;stream=new EventSource(`/api/temporary-rooms/${id}/events?role=${session.role??"host"}`);stream.onopen=()=>{connected=true;};stream.onmessage=()=>void refresh();stream.onerror=()=>{connected=false;};};
   void refresh();connect();const fallback=setInterval(()=>{if(!connected&&document.visibilityState==="visible")void refresh();},15000);
   const hide=()=>{suspend();stream?.close();stream=null;connected=false;};
   const resume=()=>{if(document.visibilityState==="visible"){void refresh();connect();}else hide();};
@@ -48,14 +50,14 @@ export function TemporaryRoom({id}:{id?:string}) {
   const pendingKey=`circlo:temporary-pending:${await roomCodeHash(invite)}`;storedPendingKey=pendingKey;let identity:Session;
   const saved=sessionStorage.getItem(pendingKey);if(saved)identity=JSON.parse(saved) as Session;else{identity={id:crypto.randomUUID(),code:invite,...await newRoomIdentity(),credential:newRoomCode()+newRoomCode()+newRoomCode().slice(0,16)};sessionStorage.setItem(pendingKey,JSON.stringify(identity));}
   const data=await request("/api/temporary-rooms",{action:join?"join":"create",id:identity.id,inviteHash:await roomCodeHash(invite),publicKey:identity.publicKey,credential:identity.credential,minutes});
-  const current={...identity,id:data.id};delete current.credential;save(current);sessionStorage.removeItem(pendingKey);if(!join)sessionStorage.removeItem("circlo:temporary-create-pending");router.push(`/temporary/${data.id}`);
+  const current={...identity,id:data.id,role:data.role as Room["role"]};delete current.credential;save(current);sessionStorage.removeItem(pendingKey);if(!join)sessionStorage.removeItem("circlo:temporary-create-pending");router.push(`/temporary/${data.id}`);
  }catch(err){const failure=err as Error&{status?:number};if(failure.status===404||failure.status===409||failure.status===410){if(storedPendingKey)sessionStorage.removeItem(storedPendingKey);if(!join)sessionStorage.removeItem("circlo:temporary-create-pending");}setError(failure.message);}finally{setBusy(false);}}
  async function send(){if(!room||!session||!id||!key.current||checking||busy||(!draft.trim()&&!file))return;setBusy(true);setError("");try{
   const revision=`${draft}:${file?.name??""}:${file?.size??""}:${file?.lastModified??""}`;
   if(!pending.current||pending.current.revision!==revision){const content:TemporaryContent={text:draft.trim()};if(file){if(file.size>TEMPORARY_FILE_LIMIT)throw Error("Temporary attachments can be up to 5 MB.");content.file={name:file.name,type:file.type||"application/octet-stream",data:toBase64(new Uint8Array(await file.arrayBuffer()))};}const messageId=crypto.randomUUID();pending.current={id:messageId,revision,ciphertext:await sealRoomMessage(key.current,id,messageId,room.role,content)};}
-  await request(`/api/temporary-rooms/${id}`,{action:"message",messageId:pending.current.id,ciphertext:pending.current.ciphertext});pending.current=null;setDraft("");setFile(null);if(fileInput.current)fileInput.current.value="";await refresh();
+  await request(`/api/temporary-rooms/${id}?role=${room.role}`,{action:"message",messageId:pending.current.id,ciphertext:pending.current.ciphertext});pending.current=null;setDraft("");setFile(null);if(fileInput.current)fileInput.current.value="";await refresh();
  }catch(err){const failure=err as Error&{status?:number};if(failure.status===410)retire();setError(failure.message);}finally{setBusy(false);}}
- async function action(action:string,extra:Record<string,unknown>={}){if(!id||busy)return;if(action==="end"&&!confirm("End this temporary room for both people and remove its messages from Circlo?"))return;setBusy(true);setError("");try{await request(`/api/temporary-rooms/${id}`,{action,...extra});if(action==="end")retire();else await refresh();}catch(err){const failure=err as Error&{status?:number};if(failure.status===410)retire();setError(failure.message);}finally{setBusy(false);}}
+ async function action(action:string,extra:Record<string,unknown>={}){if(!id||!room||busy)return;if(action==="end"&&!confirm("End this temporary room for both people and remove its messages from Circlo?"))return;setBusy(true);setError("");try{await request(`/api/temporary-rooms/${id}?role=${room.role}`,{action,...extra});if(action==="end")retire();else await refresh();}catch(err){const failure=err as Error&{status?:number};if(failure.status===410)retire();setError(failure.message);}finally{setBusy(false);}}
  const control="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[var(--border)] px-3 text-sm disabled:opacity-50";
  return <div className="mx-auto flex h-[100dvh] max-w-3xl flex-col overflow-hidden bg-[var(--surface)] text-[var(--text)]">
   <header className="flex min-h-16 shrink-0 items-center gap-3 border-b border-[var(--border)] px-4"><Lock className="h-5 w-5 text-[var(--accent-fg)]"/><div className="min-w-0 flex-1"><h1 className="font-semibold">Temporary chat</h1><p className="text-xs text-[var(--muted)]">No account or profile details needed</p></div><Link href="/help" className={control}>Help</Link></header>
@@ -70,8 +72,9 @@ export function TemporaryRoom({id}:{id?:string}) {
  </div>;
 }
 function TemporaryAttachment({file}:{file:NonNullable<TemporaryContent["file"]>}) {
+ const [previewFailed,setPreviewFailed]=useState(false);
  const [url]=useState<string|null>(()=>{try{return URL.createObjectURL(new Blob([fromBase64(file.data)],{type:file.type}));}catch{return null;}});
  useEffect(()=>()=>{if(url)URL.revokeObjectURL(url);},[url]);
  if(!url)return <p>Attachment unavailable.</p>;
- return <a download={file.name} href={url} className="mt-2 flex min-h-11 items-center break-all text-sm underline">{file.name} · Download</a>;
+ return <div className="mt-2 min-w-0">{!previewFailed&&/^image\/(jpeg|jpg|pjpeg|png|webp|gif|avif)$/i.test(file.type)?<Image unoptimized src={url} alt={file.name} width={640} height={480} className="max-h-64 w-full rounded-lg object-contain" onError={()=>setPreviewFailed(true)}/>:null}{!previewFailed&&/^video\/(mp4|webm|ogg)$/i.test(file.type)?<video controls preload="metadata" src={url} className="max-h-64 w-full rounded-lg" onError={()=>setPreviewFailed(true)}/>:null}{!previewFailed&&/^audio\//i.test(file.type)?<audio controls preload="metadata" src={url} className="max-w-full" onError={()=>setPreviewFailed(true)}/>:null}<a download={file.name} href={url} className="flex min-h-11 items-center break-all text-sm underline">{file.name} · Download</a></div>;
 }
