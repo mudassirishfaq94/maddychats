@@ -21,7 +21,7 @@ class NativeCallEndReceiver : BroadcastReceiver() {
             try {
                 val cookie = CookieManager.getInstance().getCookie(BuildConfig.API_BASE_URL) ?: return@Thread
                 val body = JSONObject().put("action", "end").put("id", current.id).put("clientId", current.client).toString()
-                val client = OkHttpClient.Builder().followRedirects(false).followSslRedirects(false).callTimeout(3, TimeUnit.SECONDS).build()
+                val client = OkHttpClient.Builder().addInterceptor(NativeSessionCookies).followRedirects(false).followSslRedirects(false).callTimeout(3, TimeUnit.SECONDS).build()
                 client.newCall(Request.Builder().url("${BuildConfig.API_BASE_URL}/api/calls").header("Cookie", cookie).header("Origin", BuildConfig.API_BASE_URL).post(body.toRequestBody("application/json".toMediaType())).build()).execute().close()
             } catch (_: Exception) { /* Server deadlines cover an offline hang-up. */ }
             finally { pending.finish() }

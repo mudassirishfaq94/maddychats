@@ -11,7 +11,7 @@ import java.util.concurrent.TimeUnit
 
 /** Bounded token-refresh request, no polling, new credentials or persisted cookie copies. */
 object NativeTokenSync {
-    private val client = OkHttpClient.Builder().followRedirects(false).followSslRedirects(false)
+    private val client = OkHttpClient.Builder().addInterceptor(NativeSessionCookies).followRedirects(false).followSslRedirects(false)
         .callTimeout(8, TimeUnit.SECONDS).build()
     fun refresh(context: Context, token: String) {
         // Do not enroll a signed-out/restricted account in a background callback.

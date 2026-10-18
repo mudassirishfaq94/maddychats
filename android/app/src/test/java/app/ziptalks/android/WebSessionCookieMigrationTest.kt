@@ -16,4 +16,9 @@ class WebSessionCookieMigrationTest {
         assertEquals(legacy, WebSessionCookieMigration.cookiesToImport("theme=dark", legacy))
         assertEquals(legacy, WebSessionCookieMigration.cookiesToImport(null, legacy))
     }
+    @Test
+    fun preservesRefreshSessionAfterShortLivedAccessCookieExpires() {
+        val legacy = listOf("maddy_session=stale; Path=/; Secure", "maddy_refresh=stale-refresh; Path=/; Secure")
+        assertEquals(emptyList<String>(), WebSessionCookieMigration.cookiesToImport("maddy_refresh=current; theme=dark", legacy))
+    }
 }

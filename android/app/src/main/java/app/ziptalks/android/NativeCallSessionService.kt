@@ -29,7 +29,7 @@ import java.util.concurrent.TimeUnit
 class NativeCallSessionService : Service() {
     data class Session(val id: String, val user: String, val client: String, val conversation: String)
     private val worker = Executors.newSingleThreadScheduledExecutor()
-    private val http = OkHttpClient.Builder().followRedirects(false).followSslRedirects(false).callTimeout(3, TimeUnit.SECONDS).build()
+    private val http = OkHttpClient.Builder().addInterceptor(NativeSessionCookies).followRedirects(false).followSslRedirects(false).callTimeout(3, TimeUnit.SECONDS).build()
     private var wake: PowerManager.WakeLock? = null
     private var endMediaOnStop = true
     override fun onBind(intent: Intent?): IBinder? = null

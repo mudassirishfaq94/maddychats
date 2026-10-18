@@ -71,7 +71,7 @@ class HostedPushBridge(private val activity: MainActivity, private val requestPe
                 "clear" -> { NativePushState.clear(activity); respond() }
                 "bind" -> {
                     val user = data.optString("userId")
-                    if (Regex("[a-fA-F0-9-]{36}").matches(user)) { NativePushState.bind(activity, user); respond() }
+                    if (Regex("[a-fA-F0-9-]{36}").matches(user)) { NativePushState.bind(activity, user); NativeSessionCookies.persist(); respond() }
                     else respond(error = "Invalid account.")
                 }
                 else -> respond(error = "Unsupported notification command.")

@@ -199,6 +199,7 @@ class MainActivity : ComponentActivity() {
     }
     override fun onResume() { super.onResume(); NativePushState.foreground = true }
     override fun onPause() { NativePushState.foreground = false; super.onPause() }
+    override fun onStop() { NativeSessionCookies.persist(); super.onStop() }
 
     private val microphonePermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission(),
@@ -381,6 +382,10 @@ class MainActivity : ComponentActivity() {
     }
 
     fun hostedWebClient() = object : WebViewClient() {
+            override fun onPageFinished(view: WebView, url: String) {
+                super.onPageFinished(view, url)
+                if (WebOriginPolicy.isAllowed(url, BuildConfig.API_BASE_URL)) NativeSessionCookies.persist()
+            }
             override fun shouldOverrideUrlLoading(view: WebView, url: String): Boolean {
                 if (WebOriginPolicy.isAllowed(url, BuildConfig.API_BASE_URL) && Uri.parse(url).path == "/api/auth/google") {
                     val entry = Uri.parse(url)

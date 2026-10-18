@@ -23,7 +23,7 @@ class NativeCallDeclineReceiver : BroadcastReceiver() {
         Thread {
             try {
                 val cookie = CookieManager.getInstance().getCookie(BuildConfig.API_BASE_URL) ?: return@Thread
-                val client = OkHttpClient.Builder().followRedirects(false).followSslRedirects(false).callTimeout(3,TimeUnit.SECONDS).build()
+                val client = OkHttpClient.Builder().addInterceptor(NativeSessionCookies).followRedirects(false).followSslRedirects(false).callTimeout(3,TimeUnit.SECONDS).build()
                 val request = Request.Builder().url("${BuildConfig.API_BASE_URL}/api/calls").header("Cookie",cookie).build()
                 val live = client.newCall(request).execute().use { if (!it.isSuccessful) return@Thread else JSONObject(it.body?.string().orEmpty()).optJSONObject("call") } ?: return@Thread
                 if (live.optString("id") != call || live.optString("callee_id") != recipient || live.optString("state") != "ringing") return@Thread
