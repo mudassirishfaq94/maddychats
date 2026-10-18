@@ -12,6 +12,8 @@
 
     <!-- Microphone (voice messages, voice transcription) -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- WebView/WebRTC must select a communication audio device as well as capture. -->
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
 
     <!-- Attachments use ACTION_OPEN_DOCUMENT and its user-selected URI grants. -->
 
