@@ -99,5 +99,5 @@ export function CloudRecoverySync() {
     return()=>{active=false;if(timer)clearTimeout(timer);window.removeEventListener("maddy:recovery-keys-changed",queue);window.removeEventListener("online",queue);};
   },[userId,initialized,deviceId,waitForDeviceRegistration]);
   if(!warning||dismissed||!statusSlot) return null;
-  return createPortal(<aside role="status" className="flex min-h-11 items-center gap-3 border-b border-[var(--border)] bg-[var(--surface)] px-3 text-xs"><Link className="min-w-0 flex-1 py-2 underline" href="/app/profile#cloud-recovery">Protect chat history: this device&apos;s recovery needs attention.</Link><button type="button" className="min-h-11 shrink-0 px-2 underline" onClick={()=>setDismissed(true)}>Later</button></aside>,statusSlot);
+  return createPortal(<aside role="status" className="flex min-h-11 items-center gap-3 border-b border-[var(--border)] bg-[var(--surface)] px-3 text-xs"><Link className="min-w-0 flex-1 py-2 underline" href="/app/profile#cloud-recovery">Protect chat history: this device&apos;s recovery needs attention.</Link><button type="button" className="min-h-11 min-w-11 shrink-0 px-2 underline" onClick={()=>setDismissed(true)}>Later</button></aside>,statusSlot);
 }

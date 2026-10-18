@@ -2717,7 +2717,7 @@ export function ChatView({
         <div className="relative flex min-h-9 flex-wrap items-center gap-x-4 text-xs">
           {!schedulePaused ? <ScheduledMessageManager conversationId={conversationId} /> : null}
           <details>
-            <summary className="flex min-h-9 cursor-pointer items-center underline">{selfDestruct ? "Self-destruct: on" : "Message options"}</summary>
+            <summary className="flex min-h-11 cursor-pointer items-center underline">{selfDestruct ? "Self-destruct: on" : "Message options"}</summary>
             <div className="absolute bottom-full left-0 z-40 mb-2 w-64 max-w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3 shadow-lg">
               <label className="flex min-h-11 items-center gap-2"><input type="checkbox" checked={selfDestruct} disabled={sendPending || attachments.pending.length > 0 || awaitingApproval} onChange={event => { const enabled=event.target.checked;selfDestructDraft.current=enabled;setSelfDestruct(enabled);if(enabled)void saveChatDraft(me.id,conversationId,"").catch(()=>{});else queueDraftPersistence(); }} />Self-destruct message · 5 seconds after first reveal</label>
               <p className="mt-2 text-[var(--muted)]">Text only. The first reveal starts the countdown for everyone. Unsent self-destruct drafts stay in this session; keep the chat open if sending is waiting.</p>

@@ -54,13 +54,13 @@ export async function inspectMobileLayout(page, label) {
   }, label);
 }
 
-async function expandDetails(page) {
+async function expandDetails(page, scope = page) {
   for (let depth = 0; depth < 5; depth++) {
-    const closed = page.locator('details:not([open]) > summary:visible');
+    const closed = scope.locator('details:not([open]) > summary:visible');
     const count = await closed.count();
     if (!count) break;
     for (let index = 0; index < count; index++) {
-      const next = page.locator('details:not([open]) > summary:visible').first();
+      const next = scope.locator('details:not([open]) > summary:visible').first();
       if (await next.count()) await next.click();
     }
     await page.waitForTimeout(100);
@@ -200,7 +200,7 @@ export async function testMobileLayout(base, pool, { recordOnly = false, navigat
         if (path === `/app/chats/${group.id}`) {
           await user.getByRole("button", { name: "Open group settings", exact: true }).click();
           await user.getByRole("button", { name: "Group settings", exact: true }).click();
-          await expandDetails(user); await check(user, "group-details-" + size);
+          await expandDetails(user, user.getByRole("complementary",{name:"Conversation details",exact:true})); await check(user, "group-details-" + size);
           await user.getByRole("button", {name:"Close details",exact:true}).click();
           await user.getByRole("button", {name:"Emoji",exact:true}).click();
           const picker = user.getByRole("dialog",{name:"Emoji, stickers and GIFs",exact:true});
