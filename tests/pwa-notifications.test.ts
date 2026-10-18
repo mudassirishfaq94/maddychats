@@ -13,6 +13,8 @@ function harness() {
   let windows: any[] = [];
   let detail: any = { recipientId: user, conversationId: chat, messageId: message, title: "Alex · Circlo", body: "New encrypted message", silent: false };
   let status = 200, offline = false;
+  let receipt: any = {recipientId:user,envelopes:[]};
+  const receiptOrder:string[]=[];
   const self = {
     location: { origin: "https://circlo.chat" }, navigator: {}, skipWaiting() {},
     addEventListener(name: string, handler: (event: any) => void) { handlers[name] = handler; },
@@ -20,6 +22,7 @@ function harness() {
     registration: {
       getNotifications: async (options?: { tag?: string }) => cards.filter(card => !options?.tag || card.tag === options.tag),
       showNotification: async (title: string, options: any) => {
+        receiptOrder.push("notification");
         const previous = cards.findIndex(card => card.tag === options.tag);
         if (previous >= 0) cards.splice(previous, 1);
         const card = { title, ...options, close() { const i = cards.indexOf(card); if (i >= 0) cards.splice(i, 1); } }; cards.push(card);
@@ -51,10 +54,10 @@ function harness() {
   } };
   vm.runInNewContext(readFileSync("public/sw.js", "utf8"), { self, clients: self.clients, URL, AbortSignal, Date, MessageChannel: TestMessageChannel, indexedDB, setTimeout, clearTimeout,
     crypto: { randomUUID: () => message },
-    fetch: async (url: string, options?: { body?: string }) => { fetches.push({ url, body: options?.body }); if (offline) throw new Error("offline"); return { status, ok: status === 200, json: async () => detail }; },
+    fetch: async (url: string, options?: { body?: string }) => { fetches.push({ url, body: options?.body }); if (url.startsWith("/api/messages/delivery")) receiptOrder.push(options?.body?"receipt-post":"receipt-get"); if (offline) throw new Error("offline"); return { status, ok: status === 200, json: async () => url.startsWith("/api/messages/delivery") ? receipt : detail }; },
   });
   const dispatch = async (name: string, extra: any) => { let done: Promise<unknown> = Promise.resolve(); handlers[name]({ ...extra, waitUntil(p: Promise<unknown>) { done = p; } }); await done; };
-  return { cards, opened, fetches, grants: locks, setWindows: (value: any[]) => { windows = value; }, setDetail: (value: any) => { detail = { ...detail, ...value }; }, setStatus: (value: number) => { status = value; }, setOffline: (value = true) => { offline = value; },
+  return { cards, opened, fetches, receiptOrder, setReceipt:(value:any)=>{receipt=value;}, grants: locks, setWindows: (value: any[]) => { windows = value; }, setDetail: (value: any) => { detail = { ...detail, ...value }; }, setStatus: (value: number) => { status = value; }, setOffline: (value = true) => { offline = value; },
     push: (extra: Record<string, unknown> = {}) => dispatch("push", { data: { json: () => ({ notificationId: notice, recipientId: user, ...extra }) } }),
     click: (notification: any, action = "open") => dispatch("notificationclick", { notification, action }),
     privacy: (lockedChats: string[] | null = [chat]) => dispatch("message", { source: { url: "https://circlo.chat/app/profile" }, data: { type: "CIRCLO_PRIVACY_CHANGED", recipientId: user, lockedChats } }),
@@ -206,4 +209,16 @@ test("Answer creates local expiring proof only for a live authorized notificatio
   const stale=harness();stale.setDetail({callId:message,expiresAt:new Date(Date.now()+30000).toISOString()});
   await stale.push({callId:message});const notice=stale.cards[0];stale.setStatus(404);await stale.click(notice,"answer");
   assert.equal(stale.grants.has(`call-action:${message}`),false);assert(!stale.opened[0].includes("callAction=answer"));
+});
+
+
+test("closed PWA acknowledges received ciphertext only after notification presentation",async()=>{
+ const h=harness();h.setReceipt({recipientId:user,envelopes:[{id:message,text:"opaque-encrypted-envelope",encrypted:true,attachments:[]}]});
+ await h.push();assert.equal(h.cards.length,1);
+ const posted=h.fetches.find(entry=>entry.url==="/api/messages/delivery"&&entry.body);assert(posted);
+ assert.deepEqual(JSON.parse(posted.body!),{recipientId:user,messageIds:[message]});
+ assert(h.receiptOrder.indexOf("notification")<h.receiptOrder.indexOf("receipt-get"));
+ assert(h.receiptOrder.indexOf("receipt-get")<h.receiptOrder.indexOf("receipt-post"));
+ const switched=harness();switched.setReceipt({recipientId:chat,envelopes:[{id:message}]});await switched.push();assert(!switched.fetches.some(entry=>entry.url==="/api/messages/delivery"&&entry.body));
+ const failed=harness();failed.setOffline();await failed.push();assert(!failed.fetches.some(entry=>entry.url==="/api/messages/delivery"&&entry.body));
 });

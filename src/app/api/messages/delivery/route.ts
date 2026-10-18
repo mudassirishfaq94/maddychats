@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { and, eq, isNull, ne, or, gt, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { conversationMembers, messages, users, conversations } from "@/db/schema";
+import { conversationMembers, messages, users, conversations, notifications } from "@/db/schema";
 import { getSessionUser } from "@/server/session";
 import { guardSameOrigin, jsonError, readJson } from "@/server/http";
 import { hydrateMessages } from "@/server/chat";
@@ -14,19 +14,24 @@ const headers = { "Cache-Control": "private, no-store" };
 export async function GET(req: NextRequest) {
   const blocked = guardSameOrigin(req); if (blocked) return blocked;
   const user = await getSessionUser(); if (!user) return jsonError(401, "Not authenticated.");
+  let messageId=req.nextUrl.searchParams.get("messageId");
+  const notificationId=req.nextUrl.searchParams.get("notificationId");
+  if ((messageId&&!isUuid(messageId))||(notificationId&&!isUuid(notificationId))) return jsonError(422,"Invalid receipt lookup.");
+  if(notificationId){const [notice]=await db.select({data:notifications.data,type:notifications.type}).from(notifications).where(and(eq(notifications.id,notificationId),eq(notifications.userId,user.id))).limit(1);if(notice?.type!=="message"||typeof notice.data?.messageId!=="string"||!isUuid(notice.data.messageId))return jsonError(404,"Message unavailable.");messageId=notice.data.messageId;}
   const rows = await db.select({ message: messages, sender: users })
     .from(messages).innerJoin(conversationMembers, and(eq(conversationMembers.conversationId, messages.conversationId), eq(conversationMembers.userId, user.id)))
     .innerJoin(users,eq(users.id,messages.senderId)).innerJoin(conversations,eq(conversations.id,messages.conversationId))
-    .where(and(isNull(conversations.deletedAt),or(isNull(conversationMembers.clearedAt),gt(messages.createdAt,conversationMembers.clearedAt)),sql`not exists(select 1 from message_deletions d where d.message_id=${messages.id} and d.user_id=${user.id})`,ne(messages.senderId, user.id), isNull(messages.deliveredAt), isNull(messages.deletedAt), or(isNull(messages.expiresAt), gt(messages.expiresAt, new Date()))))
+    .where(and(messageId?eq(messages.id,messageId):undefined,isNull(conversations.deletedAt),or(isNull(conversationMembers.clearedAt),gt(messages.createdAt,conversationMembers.clearedAt)),sql`not exists(select 1 from message_deletions d where d.message_id=${messages.id} and d.user_id=${user.id})`,ne(messages.senderId, user.id), isNull(messages.deliveredAt), isNull(messages.deletedAt), or(isNull(messages.expiresAt), gt(messages.expiresAt, new Date()))))
     .orderBy(messages.createdAt, messages.id).limit(100);
   const envelopes=await hydrateMessages(rows,user.id);
-  return NextResponse.json({ envelopes }, { headers });
+  return NextResponse.json({ recipientId:user.id, envelopes }, { headers });
 }
 export async function POST(req: NextRequest) {
   const blocked = guardSameOrigin(req); if (blocked) return blocked;
   const user = await getSessionUser(); if (!user) return jsonError(401, "Not authenticated.");
   const body = await readJson(req);
   if (!body || !Array.isArray(body.messageIds) || !body.messageIds.length || body.messageIds.length > 100 || !body.messageIds.every(id => typeof id === "string" && isUuid(id))) return jsonError(422, "Invalid acknowledgments.");
+  if (body.recipientId !== undefined && body.recipientId !== user.id) return jsonError(403,"Account changed. Retry on the receiving account.");
   const acknowledged=await acknowledgeDelivery(user.id,body.messageIds);
   return NextResponse.json({ acknowledged }, { headers });
 }

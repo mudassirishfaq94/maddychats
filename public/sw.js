@@ -1,4 +1,4 @@
-const CACHE_NAME = "circlo-offline-notifications-v9";
+const CACHE_NAME = "circlo-offline-notifications-v10";
 const OFFLINE_URL = "/offline.html";
 
 self.addEventListener("install", (event) => {
@@ -90,6 +90,18 @@ self.addEventListener("message", event => {
 
 // Serialize same-chat replacements so simultaneous pushes cannot lose counts
 // or create duplicate cards. Private responses never enter the offline cache.
+async function acknowledgeReceivedPush(data) {
+  if(uuid.test(data.callId))return;
+  try {
+    const response=await fetch(`/api/messages/delivery?notificationId=${encodeURIComponent(data.notificationId)}`,{credentials:"same-origin",cache:"no-store",signal:AbortSignal.timeout(3000)});
+    if(!response.ok)return;
+    const received=await response.json();
+    if(received.recipientId!==data.recipientId||!Array.isArray(received.envelopes))return;
+    const messageIds=received.envelopes.map(message=>message.id).filter(id=>uuid.test(id)).slice(0,100);
+    if(!messageIds.length)return;
+    await fetch("/api/messages/delivery",{method:"POST",credentials:"same-origin",cache:"no-store",headers:{"Content-Type":"application/json"},body:JSON.stringify({recipientId:data.recipientId,messageIds}),signal:AbortSignal.timeout(3000)});
+  }catch{/* No receipt on fetch failure. Reconnection/backlog sync retries later. */}
+}
 let pushWork = Promise.resolve();
 self.addEventListener("push", event => {
   let data;
@@ -179,7 +191,8 @@ self.addEventListener("push", event => {
 
   };
   pushWork = pushWork.catch(() => {}).then(deliver);
-  event.waitUntil(pushWork);
+  // Notifications finish before receipt I/O; subsequent cards are not blocked by it.
+  event.waitUntil(pushWork.then(()=>acknowledgeReceivedPush(data)));
 });
 
 async function openChatFromNotification(data) {

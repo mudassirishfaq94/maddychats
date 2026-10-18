@@ -26,6 +26,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             NativeIncomingCall.show(this, remoteMessage.data)
             return
         }
+        try {
         // Drop other accounts, expired events and duplicates before displaying the approved preview.
         if (!NativePushState.accept(this, remoteMessage.data["recipientId"], remoteMessage.data["eventId"], remoteMessage.data["expiresAt"])) return
         if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return
@@ -73,6 +74,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             builder.build()
         )
         if (!isCall) NativePushState.requestPreview(remoteMessage.data["recipientId"], remoteMessage.data["eventId"])
+        } finally { NativeMessageReceipt.receive(this, remoteMessage.data["recipientId"], remoteMessage.data["url"]) }
     }
 
     override fun onNewToken(token: String) {
