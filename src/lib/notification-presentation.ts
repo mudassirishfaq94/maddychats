@@ -31,12 +31,12 @@ export function messageNotificationPresentation(input: {
   if (input.locked) return { title: "Circlo", body: "New message received." };
   if (input.messageRequest) return { title: "New Message Request", body: "You have received a new message request." };
   if (!input.showDetails) {
-    return { title: "Circlo", body: "New message. Open Circlo to read it." };
+    return { title: "Circlo", body: "New message received." };
   }
 
   const actor = cleanText(input.actorName, "Someone", MAX_LABEL_LENGTH);
   const message = input.encrypted
-    ? "New encrypted message. Open Circlo to read it."
+    ? "New message received."
     : cleanText(input.preview, "New message. Open Circlo to read it.", MAX_BODY_LENGTH);
 
   return input.isGroup

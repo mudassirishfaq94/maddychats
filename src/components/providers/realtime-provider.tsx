@@ -198,11 +198,17 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
           if (status !== "loading" && bridge.hasHostedPushBridge()) await bridge.hostedPush("clear");
           return;
         }
-        if (bridge.hasHostedPushBridge()) await bridge.hostedPush("clear");
+        // Preserve the same account during a failed retry, but detach a previous
+        // account before network work. Older APKs retain their legacy clear path.
+        if (bridge.hasHostedPushBridge()) await bridge.hostedPush("reconcile", user.id).catch(() => bridge.hostedPush("clear"));
         const preferenceResponse = await fetch("/api/notifications/preferences", { cache: "no-store", signal: AbortSignal.timeout(10000) });
         if (!preferenceResponse.ok || stopped) return;
         const settings = await preferenceResponse.json() as { preferences?: NotificationPreferences };
-        if (!settings.preferences?.pushNotifications) return;
+        if (settings.preferences?.pushNotifications !== true) {
+          if (settings.preferences?.pushNotifications === false && bridge.hasHostedPushBridge()) await bridge.hostedPush("clear");
+          return;
+        }
+        if (bridge.hasHostedPushBridge()) await bridge.hostedPush("bind", user.id);
         const token = await native.registerCapacitorPush(false);
         if (token && !stopped && epoch === preferenceEpoch) {
           await native.sendTokenToServer(token);
@@ -224,7 +230,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     const preferenceChanged = (event: Event) => {
       const enabled = (event as CustomEvent<NotificationPreferences>).detail?.pushNotifications;
       preferenceEpoch++;
-      if (!enabled) void import("@/lib/native-push-bridge").then(bridge => bridge.hasHostedPushBridge() ? bridge.hostedPush("clear") : null).catch(() => {});
+      if (enabled === false) void import("@/lib/native-push-bridge").then(bridge => bridge.hasHostedPushBridge() ? bridge.hostedPush("clear") : null).catch(() => {});
       else void sync();
     };
     void sync();

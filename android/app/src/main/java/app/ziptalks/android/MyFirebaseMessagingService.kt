@@ -22,6 +22,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         super.onMessageReceived(remoteMessage)
 
         if (remoteMessage.data["callId"] != null) {
+            android.util.Log.i("CircloCall", "Call push received; cancelled=${remoteMessage.data["callCancelled"] == "true"}")
             NativeIncomingCall.show(this, remoteMessage.data)
             return
         }
@@ -38,6 +39,10 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         val body = if (isCall) NativeNotificationText.body(remoteMessage.data) else NativeMessagePrivacy.body(request, locked)
         val url = remoteMessage.data["url"]
         val tag = remoteMessage.data["tag"]
+        val message = android.net.Uri.parse(url.orEmpty()).getQueryParameter("message")
+        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+        val previous = notificationManager?.activeNotifications?.firstOrNull { it.tag == tag }
+        if (message != null && previous?.notification?.extras?.getString("circlo.message") == message && previous.notification.extras.getBoolean("circlo.preview")) return
 
         val intent = Intent(this, MainActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
@@ -52,18 +57,17 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
 
         val silent = remoteMessage.data["silent"] == "true"
         val builder = NotificationChannels.builder(this, silent)
+            .addExtras(android.os.Bundle().apply { putString("circlo.message", message) })
             .setSmallIcon(R.drawable.ic_stat_ic_notification)
             .setContentTitle(title)
             .setContentText(body)
             .setStyle(androidx.core.app.NotificationCompat.BigTextStyle().bigText(body))
             .setVisibility(androidx.core.app.NotificationCompat.VISIBILITY_PRIVATE)
-            .setOnlyAlertOnce(true)
+            .setOnlyAlertOnce(false)
             .setAutoCancel(true)
             .setContentIntent(pendingIntent)
 
 
-        val notificationManager =
-            getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
         notificationManager?.notify(
             tag ?: "circlo-messages", 0,
             builder.build()

@@ -166,6 +166,26 @@ private class ZipTalkApi(context: Context) {
 
 class MainActivity : ComponentActivity() {
     private var webView: WebView? = null
+    private var hostedContent: FrameLayout? = null
+    private var callTransition: android.view.View? = null
+    private fun showCallTransition() {
+        val content = hostedContent ?: return
+        if (callTransition != null) return
+        val cover = android.widget.TextView(this).apply {
+            text = "circlo\n\nConnecting your call…"
+            textSize = 22f
+            gravity = android.view.Gravity.CENTER
+            setTextColor(AndroidColor.rgb(218, 192, 146))
+            setBackgroundColor(AndroidColor.rgb(18, 22, 29))
+            isClickable = true
+        }
+        callTransition = cover
+        content.addView(cover, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+    }
+    private fun hideCallTransition() {
+        callTransition?.let { hostedContent?.removeView(it) }
+        callTransition = null
+    }
     private var pendingFileChooser: ValueCallback<Array<Uri>>? = null
     private var pendingWebPermission: PermissionRequest? = null
     private var keyboardVisible = false
@@ -252,6 +272,8 @@ class MainActivity : ComponentActivity() {
                 ViewGroup.LayoutParams.MATCH_PARENT,
             ))
         }
+        hostedContent = content
+        if (Uri.parse(notificationDestination(intent).orEmpty()).path == "/app/call") showCallTransition()
         ViewCompat.setOnApplyWindowInsetsListener(content) { view, insets ->
             val bars = insets.getInsets(
                 WindowInsetsCompat.Type.statusBars() or WindowInsetsCompat.Type.navigationBars(),
@@ -289,7 +311,11 @@ class MainActivity : ComponentActivity() {
         val message = uri.getQueryParameter("message")?.takeIf { uuid.matches(it) }
         val actionToken = source?.getStringExtra("callActionToken")
         val action = if (call != null && uri.getQueryParameter("callAction") == "answer" && NativeCallActions.valid(this, call, actionToken)) "&callAction=answer&callActionToken=$actionToken" else ""
-        return "${BuildConfig.API_BASE_URL}/app/chats/$id?" + (call?.let { "call=$it$action" } ?: message?.let { "message=$it" } ?: "latest=1")
+        if (call != null) {
+            if (uri.getQueryParameter("callAction") == "answer") android.util.Log.i("CircloCall", "Answer handoff proof valid=${action.isNotEmpty()}")
+            return "${BuildConfig.API_BASE_URL}/app/call?call=$call$action"
+        }
+        return "${BuildConfig.API_BASE_URL}/app/chats/$id?" + (message?.let { "message=$it" } ?: "latest=1")
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -300,7 +326,10 @@ class MainActivity : ComponentActivity() {
             if (active != null && Uri.parse(destination).getQueryParameter("call") == active.id && WebOriginPolicy.isAllowed(webView?.url.orEmpty(), BuildConfig.API_BASE_URL)) {
                 // Returning from the ongoing-call notification must preserve WebRTC.
                 webView?.evaluateJavascript("window.dispatchEvent(new Event('circlo:native-call-open'))", null)
-            } else webView?.loadUrl(destination)
+            } else {
+                if (Uri.parse(destination).path == "/app/call") showCallTransition()
+                webView?.loadUrl(destination)
+            }
         }
     }
 
@@ -392,6 +421,14 @@ class MainActivity : ComponentActivity() {
     }
 
     fun hostedWebClient() = object : WebViewClient() {
+            override fun onReceivedError(view: WebView, request: android.webkit.WebResourceRequest, error: android.webkit.WebResourceError) {
+                super.onReceivedError(view, request, error)
+                if (request.isForMainFrame) hideCallTransition()
+            }
+            override fun onPageCommitVisible(view: WebView, url: String) {
+                super.onPageCommitVisible(view, url)
+                if (WebOriginPolicy.isAllowed(url, BuildConfig.API_BASE_URL)) hideCallTransition()
+            }
             override fun onPageFinished(view: WebView, url: String) {
                 super.onPageFinished(view, url)
                 if (WebOriginPolicy.isAllowed(url, BuildConfig.API_BASE_URL)) {

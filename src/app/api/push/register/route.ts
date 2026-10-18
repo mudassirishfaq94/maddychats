@@ -6,6 +6,16 @@ import { getSessionUser, getSessionDeviceId } from "@/server/session";
 import { jsonError, readJson, guardSameOrigin } from "@/server/http";
 import { rateLimit } from "@/server/rate-limit";
 
+/** Read only this authenticated session's registration; never expose FCM tokens. */
+export async function GET() {
+  const user = await getSessionUser();
+  if (!user) return jsonError(401, "Not authenticated.");
+  const sessionId = await getSessionDeviceId();
+  const rows = sessionId ? await db.select({ id: fcmTokens.id }).from(fcmTokens)
+    .where(and(eq(fcmTokens.userId, user.id), eq(fcmTokens.sessionId, sessionId))).limit(1) : [];
+  return Response.json({ registered: rows.length > 0 }, { headers: { "Cache-Control": "private, no-store" } });
+}
+
 /**
  * POST /api/push/register — Store an FCM device token.
  *

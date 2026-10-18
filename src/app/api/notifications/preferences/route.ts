@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   const me = await getSessionUser();
   if (!me) return jsonError(401, "Not authenticated.");
-  return NextResponse.json({ preferences: await getNotificationPreferences(me.id) });
+  return NextResponse.json({ preferences: await getNotificationPreferences(me.id) }, { headers: { "Cache-Control": "private, no-store" } });
 }
 
 export async function PATCH(req: NextRequest) {
@@ -23,5 +23,5 @@ export async function PATCH(req: NextRequest) {
   const parsed = notificationPreferencesSchema.safeParse(body);
   if (!parsed.success) return jsonError(400, parsed.error.issues[0]?.message ?? "Invalid preferences.");
 
-  return NextResponse.json({ preferences: await updateNotificationPreferences(me.id, parsed.data) });
+  return NextResponse.json({ preferences: await updateNotificationPreferences(me.id, parsed.data) }, { headers: { "Cache-Control": "private, no-store" } });
 }

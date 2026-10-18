@@ -40,7 +40,11 @@ class HostedPushBridge(private val activity: MainActivity, private val requestPe
                 }.onFailure { respond(error = "Notifications are not configured for this Android build.") }
             }
             when (data.optString("command")) {
-                "call-answer" -> respond(token = if (NativeCallActions.valid(activity, data.optString("callId"), data.optString("actionToken"), true)) "active" else "unavailable")
+                "call-answer" -> {
+                    val accepted = NativeCallActions.valid(activity, data.optString("callId"), data.optString("actionToken"), true)
+                    android.util.Log.i("CircloCall", "Answer proof consumed=$accepted")
+                    respond(token = if (accepted) "active" else "unavailable")
+                }
                 "call-start" -> respond(token = if (NativeCallSessionService.begin(activity, data)) "active" else "unavailable")
                 "call-renew" -> respond(token = if (NativeCallSessionService.renew(data)) "active" else "unavailable")
                 "call-stop" -> {
@@ -57,8 +61,11 @@ class HostedPushBridge(private val activity: MainActivity, private val requestPe
                     val user = data.optString("userId")
                     val prefs = activity.getSharedPreferences("circlo_push", android.content.Context.MODE_PRIVATE)
                     if (prefs.getString("user", null) == user) {
-                        prefs.edit().putString("locks_$user", data.optJSONArray("lockedChats")?.toString() ?: "null").apply()
+                        val locks = data.optJSONArray("lockedChats")?.toString() ?: "null"
+                        val changed = prefs.getString("locks_$user", "null") != locks
+                        prefs.edit().putString("locks_$user", locks).apply()
                         NativePushState.dismiss(activity)
+                        if (changed) NativePushState.hideLockedCalls(activity)
                     }
                     respond()
                 }
@@ -69,6 +76,11 @@ class HostedPushBridge(private val activity: MainActivity, private val requestPe
                     respond()
                 }
                 "clear" -> { NativePushState.clear(activity); respond() }
+                "reconcile" -> {
+                    val user = data.optString("userId")
+                    if (NativeCallPolicy.uuid(user)) { NativePushState.prepareUser(activity, user); respond() }
+                    else respond(error = "Invalid account.")
+                }
                 "bind" -> {
                     val user = data.optString("userId")
                     if (Regex("[a-fA-F0-9-]{36}").matches(user)) { NativePushState.bind(activity, user); NativeSessionCookies.persist(); respond() }

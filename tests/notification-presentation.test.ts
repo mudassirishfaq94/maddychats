@@ -21,7 +21,7 @@ test("encrypted notification previews never reveal message text", () => {
     actorName: "Ayesha",
     preview: "ciphertext that must remain secret",
     encrypted: true,
-  }), { title: "Ayesha · Circlo", body: "New encrypted message. Open Circlo to read it." });
+  }), { title: "Ayesha · Circlo", body: "New message received." });
 });
 
 test("private notifications suppress both sender and preview", () => {
@@ -32,7 +32,7 @@ test("private notifications suppress both sender and preview", () => {
     actorName: "Ayesha",
     preview: "Private text",
     encrypted: false,
-  }), { title: "Circlo", body: "New message. Open Circlo to read it." });
+  }), { title: "Circlo", body: "New message received." });
 });
 
 test("group alerts name the group and keep the sender with the message", () => {

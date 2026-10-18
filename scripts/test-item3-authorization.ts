@@ -175,7 +175,11 @@ async function main() {
     assert.equal((await api("/api/auth/google/native", "", "POST", { acceptTerms: true, acceptPrivacy: true, ticket, verifier })).status, 409, "Google mobile handoff can establish authentication only once");
     const pushToken = "disposable-native-push-device-token-no-real-delivery";
     assert.equal((await api("/api/push/register", aliceCookie, "POST", { token: pushToken })).status, 200);
+    assert.deepEqual(await (await api("/api/push/register", aliceCookie)).json(), { registered: true });
+    assert.deepEqual(await (await api("/api/push/register", bobCookie)).json(), { registered: false });
     assert.equal((await api("/api/push/register", bobCookie, "POST", { token: pushToken })).status, 200);
+    assert.deepEqual(await (await api("/api/push/register", aliceCookie)).json(), { registered: false });
+    assert.deepEqual(await (await api("/api/push/register", bobCookie)).json(), { registered: true });
     assert.equal((await sql.query("select user_id from fcm_tokens where token=$1", [pushToken])).rows[0].user_id, bob.id, "A shared device switching accounts must not retain the previous user's notification routing");
     assert.equal((await api("/api/push/register", bobCookie, "DELETE", undefined, { origin: "https://attacker.example.invalid" })).status, 403);
     assert.equal((await api("/api/push/register", aliceCookie, "DELETE")).status, 200);

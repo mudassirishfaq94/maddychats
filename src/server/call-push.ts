@@ -15,10 +15,10 @@ export async function callPushDetail(id: string, userId: string) {
     AND (u.suspended_at IS NULL OR u.suspended_until<=now())`, [id, userId]);
   const call = result.rows[0]; if (!call) return null;
   const preferences = await getNotificationPreferences(userId);
-  if (!preferences.pushNotifications || !preferences.messageNotifications) return null;
+  if (!preferences.pushNotifications) return null;
   return { recipientId: userId, callId: call.id as string, conversationId: call.conversation_id as string,
-    expiresAt: new Date(call.expires_at).toISOString(), title: `${String(call.display_name).slice(0,80)} · Circlo`,
-    body: "Incoming audio call. Open Circlo to answer.", silent: !preferences.notificationSound };
+    expiresAt: new Date(call.expires_at).toISOString(), title: preferences.showNotificationDetails ? `${String(call.display_name).slice(0,80)} · Circlo` : "Circlo",
+    body: "Incoming audio call", silent: !preferences.notificationSound };
 }
 
 /** Opaque push only; resolve caller and live call status in the authenticated worker. */

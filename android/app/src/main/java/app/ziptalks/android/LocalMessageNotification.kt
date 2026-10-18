@@ -5,6 +5,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import androidx.core.app.NotificationCompat
+import androidx.core.app.Person
 import org.json.JSONObject
 
 /** Device-only decrypted text. Never persisted or forwarded to FCM. */
@@ -25,13 +26,27 @@ object LocalMessageNotification {
             data = android.net.Uri.parse("ziptalks://chat/$chat")
         }
         val tap = PendingIntent.getActivity(context, chat.hashCode(), intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val manager = context.getSystemService(NotificationManager::class.java)
+        val tag = "circlo-chat-$chat"
+        val previous = manager?.activeNotifications?.firstOrNull { it.tag == tag }
+        val sameMessage = previous?.notification?.extras?.getString("circlo.message") == message
+        val preview = !locked && notice.optBoolean("messagePreview")
+        val style: NotificationCompat.Style = if (preview) NotificationCompat.MessagingStyle(Person.Builder().setName("You").build()).also { conversation ->
+            val group = notice.optBoolean("isGroup")
+            conversation.setGroupConversation(group)
+            if (group) conversation.setConversationTitle(NativeNotificationText.title(text).removeSuffix(" · Circlo"))
+            val sender = NativeNotificationText.title(mapOf("title" to notice.optString("senderName")))
+            val body = NativeNotificationText.body(mapOf("body" to notice.optString("messageText", notice.optString("body"))))
+            conversation.addMessage(body, System.currentTimeMillis(), Person.Builder().setName(sender).build())
+        } else NotificationCompat.BigTextStyle().bigText(NativeNotificationText.body(text))
         val builder = NotificationChannels.builder(context, notice.optBoolean("silent"))
+            .addExtras(android.os.Bundle().apply { putString("circlo.message", message); putBoolean("circlo.preview", preview) })
             .setSmallIcon(R.drawable.ic_stat_ic_notification)
             .setContentTitle(NativeNotificationText.title(text))
             .setContentText(NativeNotificationText.body(text))
-            .setStyle(NotificationCompat.BigTextStyle().bigText(NativeNotificationText.body(text)))
+            .setStyle(style)
             .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
-            .setOnlyAlertOnce(true).setAutoCancel(true).setContentIntent(tap)
-        runCatching { context.getSystemService(NotificationManager::class.java)?.notify("circlo-chat-$chat", 0, builder.build()) }
+            .setOnlyAlertOnce(sameMessage).setAutoCancel(true).setContentIntent(tap)
+        runCatching { manager?.notify(tag, 0, builder.build()) }
     }
 }

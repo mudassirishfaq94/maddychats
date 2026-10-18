@@ -5,6 +5,7 @@ import {chromium} from "playwright";
 import sharp from "sharp";
 import {Pool} from "pg";
 import {openDeviceTools} from "./device-ui-tools.mjs";
+import {testNativeNotificationState} from "./test-native-notification-state.mjs";
 import {signSessionToken} from "../src/server/jwt.ts";
 import {generateKeyPair,exportPublicKey,exportPrivateKey,encryptPrivateKeyForStorage,generateConversationKey,encryptKeyForUser,conversationFingerprint,encryptMessage} from "../src/lib/crypto.ts";
 const url=new URL(process.env.DATABASE_URL??"");
@@ -105,7 +106,7 @@ try {
  const png=await readFile(new URL("../public/icons/circlo-192.png",import.meta.url));
  const largeImage=Buffer.alloc(12*1024*1024);png.copy(largeImage);
  const jpeg=await sharp(png).jpeg().toBuffer();const smallJpeg=Buffer.alloc(128*1024);jpeg.copy(smallJpeg);
- await owner.page.locator('input[type="file"]').first().setInputFiles({name:"android-mime-photo.jpg",mimeType:"image/jpg",buffer:smallJpeg});
+ await owner.page.locator('input[type="file"]').first().setInputFiles({name:"Screenshot2_123.circlo.app.jpg",mimeType:"image/jpg",buffer:smallJpeg});
  const jpegResponse=owner.page.waitForResponse(response=>new URL(response.url()).pathname==="/api/upload/message"&&response.request().method()==="POST");
  await owner.page.getByRole("button",{name:"Send attachments",exact:true}).click();const sentJpeg=await jpegResponse;assert.equal(sentJpeg.status(),201,await sentJpeg.text());assert.equal((await sentJpeg.json()).message.attachments[0].mimeType,"image/jpeg");
  console.log("PASS: actual 128 KB JPEG with Android MIME alias uploads encrypted");
@@ -142,16 +143,22 @@ try {
  const ringing=(await pool.query("select id from audio_calls where conversation_id=$1 and state='ringing'",[callChat])).rows[0];assert(ringing,"Offline recipient must still receive persisted signaling");
  member.page=await contexts[1].newPage();member.page.setDefaultTimeout(30000);member.page.on("pageerror",error=>errors.push(error.message));
  await contexts[1].route("**/api/realtime/stream",route=>route.abort());
- await member.page.goto(`${base}/app/chats/${callChat}?call=${ringing.id}&callAction=answer&callActionToken=${randomUUID()}`);
+ await member.page.goto(`${base}/app/call?call=${ringing.id}&callAction=answer&callActionToken=${randomUUID()}`);
  await member.page.getByRole("button",{name:"Answer",exact:true}).waitFor();
  assert.equal((await pool.query("select state from audio_calls where id=$1",[ringing.id])).rows[0].state,"ringing","An arbitrary URL must never auto-answer");
+ await member.page.evaluate(chat=>{localStorage.setItem("maddy:locked-chats",JSON.stringify([chat]));window.dispatchEvent(new Event("maddy:locked-chats"));},callChat);
+ await member.page.getByRole("region",{name:"Audio call",exact:true}).getByText("Circlo",{exact:true}).waitFor();
+ assert.equal(await member.page.getByRole("region",{name:"Audio call",exact:true}).getByText(owner.name,{exact:true}).count(),0);
+ await member.page.evaluate(()=>{localStorage.setItem("maddy:locked-chats","[]");window.dispatchEvent(new Event("maddy:locked-chats"));});
+ await member.page.getByRole("region",{name:"Audio call",exact:true}).getByText(owner.name,{exact:true}).waitFor();
  const actionToken=randomUUID();
  await member.page.evaluate(async({user,call,token})=>{
   const database=await new Promise((resolve,reject)=>{const request=indexedDB.open("circlo-notification-privacy",1);request.onupgradeneeded=()=>request.result.createObjectStore("locks");request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error);});
   const tx=database.transaction("locks","readwrite");tx.objectStore("locks").put({recipientId:user,token,expiresAt:Date.now()+15000},`call-action:${call}`);
   await new Promise((resolve,reject)=>{tx.oncomplete=resolve;tx.onerror=reject;});database.close();
  },{user:member.id,call:ringing.id,token:actionToken});
- await member.page.goto(`${base}/app/chats/${callChat}?call=${ringing.id}&callAction=answer&callActionToken=${actionToken}`);
+ await member.page.goto(`${base}/app/call?call=${ringing.id}&callAction=answer&callActionToken=${actionToken}`);
+ assert.equal(await member.page.getByRole("region",{name:"Conversation",exact:true}).count(),0,"Notification Answer must not mount chat history");
  for(const account of [owner,member])await account.page.getByText("Audio connected",{exact:true}).waitFor({timeout:45000});
  await member.page.getByRole("button",{name:"End call",exact:true}).click();
  await owner.page.getByRole("button",{name:"Dismiss call notice",exact:true}).click();
@@ -174,6 +181,7 @@ try {
  await owner.page.getByRole("button",{name:"Dismiss call notice",exact:true}).waitFor();
  assert.equal((await pool.query("select count(*)::int as n from audio_calls where conversation_id=$1",[callChat])).rows[0].n,0);
  console.log("PASS: cold Answer launch establishes real WebRTC; decline works without SSE; ended signaling removed");
+ await testNativeNotificationState(contexts[0],base,owner.id);
  assert.deepEqual(errors,[]);console.log("Browser reliability suite passed.");
 } catch(error) { console.error("Workflow failed:",error);for(const [i,account] of accounts.entries()){if(account.page)await account.page.screenshot({path:`${process.env.TEMP??"."}/circlo-audit-failure-${i}.png`}).catch(()=>{});} throw error; } finally {
  if(browser)await browser.close();

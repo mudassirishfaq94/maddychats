@@ -137,7 +137,7 @@ test("closed-app call alerts require a live authorized call, preserve the call l
   h.setDetail({ callId: message, messageId: undefined, expiresAt: new Date(Date.now()+30000).toISOString(), body: "Incoming audio call" });
   await h.push({ callId: message }); assert.equal(h.cards.length,1);
   assert.equal(h.cards[0].actions[0].title,"Accept");
-  await h.click(h.cards[0]); assert.equal(h.opened[0],`https://circlo.chat/app/chats/${chat}?call=${message}`);
+  await h.click(h.cards[0]); assert.equal(h.opened[0],`https://circlo.chat/app/call?call=${message}`);
   await h.push({ callId: message }); h.setStatus(404); await h.push({ callId: message }); assert.equal(h.cards.length,0);
   h.setStatus(200); h.setDetail({ expiresAt: new Date(Date.now()-1000).toISOString() }); await h.push({ callId: message }); assert.equal(h.cards.length,0);
   h.setDetail({ expiresAt: "not-a-date" }); await h.push({ callId: message }); assert.equal(h.cards.length,0);
@@ -202,6 +202,7 @@ test("Answer creates local expiring proof only for a live authorized notificatio
   const grant=h.grants.get(`call-action:${message}`) as {recipientId:string;token:string;expiresAt:number};
   assert.equal(grant.recipientId,user);assert.equal(grant.token,message);assert(grant.expiresAt>Date.now());
   assert(h.opened[0].endsWith(`&callAction=answer&callActionToken=${message}`));
+  assert.equal(new URL(h.opened[0]).pathname,"/app/call","Answer opens call controls without mounting a chat");
   const stale=harness();stale.setDetail({callId:message,expiresAt:new Date(Date.now()+30000).toISOString()});
   await stale.push({callId:message});const notice=stale.cards[0];stale.setStatus(404);await stale.click(notice,"answer");
   assert.equal(stale.grants.has(`call-action:${message}`),false);assert(!stale.opened[0].includes("callAction=answer"));

@@ -17,7 +17,18 @@ object NativePushState {
         }
     }
     fun dismiss(context: Context) {
-        context.getSystemService(NotificationManager::class.java)?.cancelAll()
+        val manager = context.getSystemService(NotificationManager::class.java) ?: return
+        // Reading messages or refreshing decryption/privacy state must not
+        // remove an incoming call or its ongoing microphone notification.
+        manager.activeNotifications.filter { PushPolicy.isMessageTag(it.tag) }
+            .forEach { manager.cancel(it.tag, it.id) }
+    }
+    fun hideLockedCalls(context: Context) {
+        val manager = context.getSystemService(NotificationManager::class.java) ?: return
+        manager.activeNotifications.filter { it.tag?.startsWith("circlo-call-") == true }.forEach {
+            val chat = it.notification.extras.getString("circlo.conversation")
+            if (chat != null && locked(context, chat)) manager.cancel(it.tag, it.id)
+        }
     }
     fun clear(context: Context) {
         NativeCallSessionService.stop(context)
@@ -26,8 +37,15 @@ object NativePushState {
     }
     fun bind(context: Context, user: String) {
         val previous = context.getSharedPreferences("circlo_push", Context.MODE_PRIVATE).getString("user", null)
-        if (previous != user) NativeCallSessionService.stop(context)
+        if (previous != user) {
+            NativeCallSessionService.stop(context)
+            context.getSystemService(NotificationManager::class.java)?.cancelAll()
+        }
         context.getSharedPreferences("circlo_push", Context.MODE_PRIVATE).edit().putString("user", user).apply()
+    }
+    fun prepareUser(context: Context, user: String) {
+        val previous = context.getSharedPreferences("circlo_push", Context.MODE_PRIVATE).getString("user", null)
+        if (PushPolicy.switchesAccount(previous, user)) clear(context)
     }
     fun callClosed(context: Context, call: String): Boolean {
         val prefs=context.getSharedPreferences("circlo_push",Context.MODE_PRIVATE)

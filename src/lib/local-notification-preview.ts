@@ -20,7 +20,7 @@ export async function resolveLocalNotification(
   notificationId: string, recipientId: string,
   decrypt: (ciphertext: string, conversationId: string) => Promise<string>,
   active: () => boolean,
-): Promise<(NotificationPresentation & { conversationId: string; messageId: string; silent: boolean }) | null> {
+): Promise<(NotificationPresentation & { conversationId: string; messageId: string; silent: boolean; messagePreview?: boolean; senderName?: string; messageText?: string; isGroup?: boolean }) | null> {
   if (!/^[0-9a-f-]{36}$/i.test(notificationId)) return null;
   const response = await fetch(`/api/notifications/push/delivery?id=${encodeURIComponent(notificationId)}`, {
     cache: "no-store", signal: AbortSignal.timeout(3000),
@@ -41,5 +41,8 @@ export async function resolveLocalNotification(
     encrypted: false, preview, actorName: detail.actorName ?? "Someone",
     isGroup: detail.isGroup === true, groupName: detail.groupName ?? null,
   });
-  return { ...presentation, conversationId: id, messageId: detail.messageId, silent: Boolean(detail.silent) };
+  const messagePreview = !notificationChatLocked(id) && !detail.messageRequest && detail.previewAllowed === true && Boolean(preview);
+  return { ...presentation, conversationId: id, messageId: detail.messageId, silent: Boolean(detail.silent),
+    ...(messagePreview ? { messagePreview: true, senderName: String(detail.actorName ?? "Someone").slice(0,80),
+      messageText: Array.from(preview).slice(0,140).join(""), isGroup: detail.isGroup === true } : {}) };
 }

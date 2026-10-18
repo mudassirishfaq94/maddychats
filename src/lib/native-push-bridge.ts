@@ -6,7 +6,7 @@ declare global { interface Window { CircloPush?: Port } }
 const pending = new Map<string, (reply: Reply) => void>();
 export function hasHostedPushBridge(): boolean { return typeof window !== "undefined" && Boolean(window.CircloPush); }
 type CallSession = { callId: string; userId: string; clientId?: string; conversationId?: string; actionToken?: string };
-async function request(command: "token" | "request" | "bind" | "clear" | "settings" | "status" | "dismiss" | "preview" | "privacy" | "call-start" | "call-renew" | "call-stop" | "call-settings" | "call-answer", userId?: string, notification?: LocalNotification, lockedChats?: string[] | null, call?: CallSession): Promise<Reply | null> {
+async function request(command: "token" | "request" | "bind" | "reconcile" | "clear" | "settings" | "status" | "dismiss" | "preview" | "privacy" | "call-start" | "call-renew" | "call-stop" | "call-settings" | "call-answer", userId?: string, notification?: LocalNotification, lockedChats?: string[] | null, call?: CallSession): Promise<Reply | null> {
   const port = window.CircloPush;
   if (!port) return null;
   port.onmessage = event => {
@@ -31,7 +31,7 @@ export async function hostedCall(command: "call-start" | "call-renew" | "call-st
   catch { return false; }
 }
 
-export async function hostedPush(command: "token" | "request" | "bind" | "clear" | "settings" | "dismiss", userId?: string): Promise<string | null> {
+export async function hostedPush(command: "token" | "request" | "bind" | "reconcile" | "clear" | "settings" | "dismiss", userId?: string): Promise<string | null> {
   return (await request(command, userId))?.token ?? null;
 }
 export async function androidNotificationStatus(): Promise<AndroidNotificationStatus | null> {
@@ -41,7 +41,7 @@ export async function androidNotificationStatus(): Promise<AndroidNotificationSt
 }
 export async function androidCallSettings(): Promise<void> { await request("call-settings"); }
 
-interface LocalNotification { recipientId: string; notificationId: string; conversationId: string; messageId: string; title: string; body: string; silent: boolean }
+interface LocalNotification { recipientId: string; notificationId: string; conversationId: string; messageId: string; title: string; body: string; silent: boolean; messagePreview?: boolean; senderName?: string; messageText?: string; isGroup?: boolean }
 /** Plaintext crosses only the exact-origin on-device WebView bridge. */
 export async function showLocalNotification(notification: LocalNotification): Promise<void> {
   if (hasHostedPushBridge()) await request("preview", undefined, notification);

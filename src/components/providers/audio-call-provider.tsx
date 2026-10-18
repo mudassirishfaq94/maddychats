@@ -6,6 +6,8 @@ import { useAuth } from "./auth-provider";
 import { useRealtime } from "./realtime-provider";
 import { hostedCall } from "@/lib/native-push-bridge";
 import { consumeCallAnswer } from "@/lib/call-answer-grant";
+import { usePathname, useRouter } from "next/navigation";
+import { notificationChatLocked } from "@/lib/local-notification-preview";
 
 type Call = { id: string; conversation_id: string; caller_id: string; callee_id: string; owned: boolean; offer: string; answer: string | null; state: "ringing" | "active" | "ended"; expires_at: string; peer_name?: string };
 type Phase = "idle" | "preparing" | "outgoing" | "incoming" | "connecting" | "connected";
@@ -29,12 +31,15 @@ async function description(pc: RTCPeerConnection) {
 }
 
 export function AudioCallProvider({ children }: { children: ReactNode }) {
+  const dedicated = usePathname() === "/app/call";
+  const router = useRouter();
   const { user } = useAuth();
   const userId = user?.id;
   const { subscribe, connected } = useRealtime();
   const streamConnected = useRef(connected);
   useEffect(() => { streamConnected.current = connected; }, [connected]);
   const [phase, setPhase] = useState<Phase>("idle");
+  const [answerPending, setAnswerPending] = useState(false);
   const phaseRef = useRef<Phase>("idle");
   const [call, setCall] = useState<Call | null>(null);
   const callRef = useRef<Call | null>(null);
@@ -66,7 +71,7 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
   }, [setStatus, storeCall]);
   const end = useCallback((message = "") => {
     const current = callRef.current;
-    cleanup(); setError(message);
+    cleanup(); setError(message || (window.location.pathname === "/app/call" ? "Call ended." : ""));
     if (current) void request({ action: "end", id: current.id, clientId: client.current }).catch(() => {});
   }, [cleanup]);
 
@@ -164,7 +169,8 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
         if (!current && !callRef.current && phaseRef.current === "idle" && new URLSearchParams(window.location.search).has("call")) { setName("Audio call"); setError("This call has ended or was answered on another device."); }
         if (!current) { if (callRef.current) { cleanup(); setError("Call ended or was not answered."); } return; }
         if (current.callee_id === userId && current.state === "ringing" && phaseRef.current === "idle") {
-          storeCall(current); setName(current.peer_name ?? "Circlo contact"); setStatus("incoming");
+          setError("");
+          storeCall(current); setName(notificationChatLocked(current.conversation_id) ? "Circlo" : current.peer_name ?? "Circlo contact"); setStatus("incoming");
         }
         // A warm recipient may already be ringing when the notification's
         // Answer intent arrives. Consume its one-time proof in either state.
@@ -172,9 +178,11 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
           const query = new URLSearchParams(window.location.search);
           const action = query.get("callAction");
           if (query.get("call") === current.id && action === "answer") {
+            setAnswerPending(true);
             const proof = query.get("callActionToken");
             query.delete("callAction"); query.delete("callActionToken"); window.history.replaceState(null,"",`${window.location.pathname}?${query}`);
             if (await consumeCallAnswer(userId, current.id, proof) && !disposed && callRef.current?.id === current.id) void answer();
+            setAnswerPending(false);
           }
         } else if (callRef.current?.id === current.id) {
           if (current.callee_id === userId && current.state === "active" && !current.owned) { cleanup(); setError("Call answered on another browser."); return; }
@@ -184,7 +192,11 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
             setStatus("connecting"); await connection.setRemoteDescription({ type: "answer", sdp: current.answer });
           }
         }
-      } catch { /* Bounded call deadlines handle temporary transport failures. */ } finally { reading = false; if (repeat && !disposed) { repeat = false; void sync(); } }
+      } catch {
+        if (!disposed && token === generation.current && phaseRef.current === "idle" && window.location.pathname === "/app/call") {
+          setName("Audio call"); setError("Could not open this call. Check your connection and try again.");
+        }
+      } finally { reading = false; if (repeat && !disposed) { repeat = false; void sync(); } }
     };
     syncRef.current = () => { void sync(); };
     void sync();
@@ -221,31 +233,48 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => { if (connected) syncRef.current?.(); }, [connected]);
   useEffect(() => {
+    const privacy = () => {
+      const current = callRef.current;
+      if (current && current.callee_id === userId) setName(notificationChatLocked(current.conversation_id) ? "Circlo" : current.peer_name ?? "Circlo contact");
+    };
+    window.addEventListener("maddy:locked-chats", privacy);
+    window.addEventListener("storage", privacy);
+    return () => { window.removeEventListener("maddy:locked-chats", privacy); window.removeEventListener("storage", privacy); };
+  }, [userId]);
+  useEffect(() => {
     const ended = (event: Event) => { if (nativeSession.current?.callId === (event as CustomEvent<{ callId: string }>).detail?.callId) end(); };
     const unprotected = (event: Event) => { if (nativeSession.current?.callId === (event as CustomEvent<{ callId: string }>).detail?.callId) nativeSession.current = null; };
-    const open = () => { setMinimized(false); syncRef.current?.(); };
+    const open = () => { setMinimized(false); if (callRef.current) router.push(`/app/call?call=${callRef.current.id}`); syncRef.current?.(); };
     window.addEventListener("circlo:native-call-ended", ended);
     window.addEventListener("circlo:native-call-open", open);
     window.addEventListener("circlo:native-call-unprotected", unprotected);
     return () => { window.removeEventListener("circlo:native-call-ended", ended); window.removeEventListener("circlo:native-call-open", open); window.removeEventListener("circlo:native-call-unprotected", unprotected); };
-  }, [end]);
+  }, [end, router]);
 
   const busy = phase !== "idle";
   const contextValue = useMemo(() => ({ start: (id: string, peer: string) => { void start(id, peer); }, busy }), [start, busy]);
   return <Context.Provider value={contextValue}>
     {children}
     <audio ref={audio} autoPlay className="hidden" />
-    {minimized && phase === "connected" && !error && !needsPlay ? <section role="region" aria-label="Audio call" className="fixed left-3 top-[max(0.375rem,env(safe-area-inset-top))] z-[200] flex w-[calc(100%_-_8rem)] max-w-sm sm:left-auto sm:right-4 sm:top-16 sm:w-72 items-center gap-1 rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-2 shadow-xl">
+    {!dedicated && minimized && phase === "connected" && !error && !needsPlay ? <section role="region" aria-label="Audio call" className="fixed left-3 top-[max(0.375rem,env(safe-area-inset-top))] z-[200] flex w-[calc(100%_-_8rem)] max-w-sm sm:left-auto sm:right-4 sm:top-16 sm:w-72 items-center gap-1 rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-2 shadow-xl">
       <button type="button" aria-label="Open call controls" className="min-h-11 min-w-0 flex-1 text-left" onClick={() => setMinimized(false)}><span className="block truncate text-xs font-semibold">{name}</span><span className="block text-[10px] text-[var(--muted)]">Audio connected</span></button>
       <button type="button" aria-label={muted ? "Unmute" : "Mute"} aria-pressed={muted} className="flex h-11 w-11 shrink-0 items-center justify-center" onClick={toggleMute}>{muted ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}</button>
       <button type="button" aria-label="End call" className="flex h-11 w-11 shrink-0 items-center justify-center text-[var(--danger)]" onClick={() => end()}><PhoneOff className="h-4 w-4" /></button>
-    </section> : phase !== "idle" || error ? <section role="region" aria-label="Audio call" className="fixed inset-x-3 bottom-[max(1rem,env(safe-area-inset-bottom))] z-[200] mx-auto max-h-[85dvh] max-w-sm overflow-y-auto rounded-3xl border border-[var(--border)] bg-[var(--surface)] p-5 shadow-2xl">
-      <div className="flex items-start gap-3"><Phone className="mt-1 h-5 w-5 shrink-0 text-[var(--accent)]" /><div className="min-w-0 flex-1"><p className="truncate font-semibold">{name || "Audio call"}</p><p role="status" className="mt-1 text-sm text-[var(--muted)]">{error || ({ idle: "", preparing: "Preparing microphone…", incoming: "Incoming audio call", outgoing: "Calling…", connecting: "Connecting audio…", connected: "Audio connected" }[phase])}</p></div>{phase === "connected" ? <button type="button" aria-label="Minimize call controls" className="min-h-11 min-w-11" onClick={() => setMinimized(true)}><Minus className="mx-auto h-5 w-5" /></button> : null}{phase === "idle" ? <button aria-label="Dismiss call notice" className="min-h-11 min-w-11" onClick={() => setError("")}><X className="mx-auto h-5 w-5" /></button> : null}</div>
+    </section> : phase !== "idle" || error ? <section role="region" aria-label="Audio call" className={dedicated ? "fixed inset-0 z-[250] flex flex-col justify-center overflow-y-auto bg-[var(--bg)] px-6 py-[max(2rem,env(safe-area-inset-top))] sm:px-[max(1.5rem,calc((100vw-28rem)/2))]" : "fixed inset-x-3 bottom-[max(1rem,env(safe-area-inset-bottom))] z-[200] mx-auto max-h-[85dvh] max-w-sm overflow-y-auto rounded-3xl border border-[var(--border)] bg-[var(--surface)] p-5 shadow-2xl"}>
+      {dedicated ? <p className="mb-12 text-center text-xl font-semibold text-[var(--accent)]">circlo</p> : null}
+      <div className={dedicated ? "flex flex-col items-center gap-6 text-center" : "flex items-start gap-3"}>
+        <Phone className={dedicated ? "h-20 w-20 rounded-full border border-[var(--border)] p-5 text-[var(--accent)]" : "mt-1 h-5 w-5 shrink-0 text-[var(--accent)]"} />
+        <div className="min-w-0 flex-1"><p className={dedicated ? "text-3xl font-semibold break-words" : "truncate font-semibold"}>{name || "Audio call"}</p>
+          <p role="status" className="mt-3 text-sm text-[var(--muted)]">{error || (answerPending ? "Connecting audio…" : { idle: "", preparing: "Preparing microphone…", incoming: "Incoming audio call", outgoing: "Calling…", connecting: "Connecting audio…", connected: "Audio connected" }[phase])}</p>
+        </div>
+        {phase === "connected" ? <button type="button" aria-label="Minimize call controls" className={dedicated ? "absolute top-4 right-4 min-h-11 min-w-11" : "min-h-11 min-w-11"} onClick={() => { setMinimized(true); if (dedicated) router.push(call ? `/app/chats/${call.conversation_id}` : "/app/chats"); }}><Minus className="mx-auto h-5 w-5" /></button> : null}
+        {phase === "idle" ? <button aria-label="Dismiss call notice" className={dedicated ? "absolute top-4 right-4 min-h-11 min-w-11" : "min-h-11 min-w-11"} onClick={() => { setError(""); if (dedicated) router.replace("/app/chats"); }}><X className="mx-auto h-5 w-5" /></button> : null}
+      </div>
       {phase === "incoming" ? <p className="mt-3 text-xs text-[var(--muted)]">Answer to share your microphone and establish a direct encrypted audio connection. Direct calls can reveal your network address to the other person.</p> : null}
       {phase !== "idle" ? <div className="mt-4 flex flex-wrap gap-3">
-        {phase === "incoming" ? <button className="btn btn-primary min-h-11 flex-1" onClick={() => void answer()}>Answer</button> : null}
+        {phase === "incoming" && !answerPending ? <button className={dedicated ? "btn min-h-14 flex-1 rounded-full bg-emerald-600 text-white" : "btn btn-primary min-h-11 flex-1"} onClick={() => void answer()}>Answer</button> : null}
         {phase === "connected" ? <button className="btn btn-secondary min-h-11 flex-1" aria-pressed={muted} onClick={toggleMute}>{muted ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}{muted ? "Unmute" : "Mute"}</button> : null}
-        <button className="btn btn-secondary min-h-11 flex-1" onClick={() => end()}><PhoneOff className="h-4 w-4" />{phase === "incoming" ? "Decline" : "End call"}</button>
+        <button className={dedicated ? "btn min-h-14 flex-1 rounded-full bg-red-700 text-white" : "btn btn-secondary min-h-11 flex-1"} onClick={() => end()}><PhoneOff className="h-4 w-4" />{phase === "incoming" ? "Decline" : "End call"}</button>
       </div> : null}
       {needsPlay ? <button className="btn btn-secondary mt-3 w-full" onClick={() => { void audio.current?.play().then(() => { setNeedsPlay(false); setError(""); }).catch(() => setError("Tap again to allow audio playback in your browser.")); }}><Volume2 className="h-4 w-4" />Play call audio</button> : null}
       {call ? <p className="mt-3 text-xs text-[var(--muted)]">Audio only · No recording · Keep Circlo open during the call</p> : null}

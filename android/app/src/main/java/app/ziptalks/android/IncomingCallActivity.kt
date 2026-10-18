@@ -30,6 +30,12 @@ class IncomingCallActivity : Activity() {
     private var launching = false
     private lateinit var answerButton: Button
     private lateinit var instructions: TextView
+    private lateinit var callerLabel: TextView
+    private fun updateCaller() {
+        if (!::callerLabel.isInitialized) return
+        val chat = android.net.Uri.parse(url).pathSegments.firstOrNull().orEmpty()
+        callerLabel.text = NativeCallIdentity.name(intent.getStringExtra("callerName"), NativePushState.locked(this, chat))
+    }
     private fun locked() = getSystemService(KeyguardManager::class.java)?.isKeyguardLocked == true
     private fun openAnsweredCall() {
         if (isFinishing || isDestroyed || launching || !answerRequested || locked() || !live()) return
@@ -69,6 +75,7 @@ class IncomingCallActivity : Activity() {
     private val check = object : Runnable {
         override fun run() {
             if (!live()) { finish(); return }
+            updateCaller()
             if (answerRequested && !locked()) openAnsweredCall()
             handler.postDelayed(this, 500)
         }
@@ -93,8 +100,10 @@ class IncomingCallActivity : Activity() {
         }
         layout.addView(ImageView(this).apply { setImageResource(R.mipmap.ic_launcher); contentDescription = "Circlo" }, LinearLayout.LayoutParams(dp(88), dp(88)).apply { bottomMargin = dp(20) })
         layout.addView(TextView(this).apply { text = "circlo"; textSize = 22f; typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL); setTextColor(gold); gravity = Gravity.CENTER })
-        layout.addView(TextView(this).apply { text = "Incoming audio call"; textSize = 28f; typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL); setTextColor(Color.WHITE); gravity = Gravity.CENTER; setPadding(0, dp(36), 0, dp(12)) })
-        instructions = TextView(this).apply { text = "A private conversation is calling.\nAnswer to connect securely."; textSize = 15f; setTextColor(Color.rgb(179,181,193)); gravity = Gravity.CENTER; setPadding(0, 0, 0, dp(36)) }
+        callerLabel = TextView(this).apply { textSize = 28f; typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL); setTextColor(Color.WHITE); gravity = Gravity.CENTER; setPadding(0, dp(36), 0, dp(12)) }
+        updateCaller()
+        layout.addView(callerLabel)
+        instructions = TextView(this).apply { text = "Incoming audio call"; textSize = 15f; setTextColor(Color.rgb(179,181,193)); gravity = Gravity.CENTER; setPadding(0, 0, 0, dp(36)) }
         layout.addView(instructions)
         val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
         fun styleAction(button: Button, color: Int) { button.isAllCaps = false; button.textSize = 16f; button.setTextColor(Color.WHITE); button.background = GradientDrawable().apply { setColor(color); cornerRadius = dp(28).toFloat() }; button.minimumHeight = dp(64) }

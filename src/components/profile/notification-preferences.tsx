@@ -40,12 +40,17 @@ function subscriptionMatchesKey(subscription: PushSubscription, expected: Uint8A
 export function NotificationPreferences() {
   const [androidStatus, setAndroidStatus] = useState<AndroidNotificationStatus | null>(null);
   const [hasAndroidSettings, setHasAndroidSettings] = useState(false);
+  const [pushSubscribed, setPushSubscribed] = useState<boolean | null>(null);
   useEffect(() => {
     let stopped = false;
     const refresh = () => {
-      if (!hasHostedPushBridge()) return;
-      setHasAndroidSettings(true);
-      void androidNotificationStatus().then(status => { if (!stopped) setAndroidStatus(status); }).catch(() => {});
+      if (!isNativeApp()) return;
+      void fetch("/api/push/register", { cache: "no-store", signal: AbortSignal.timeout(10000) })
+        .then(async response => { if (response.ok) { const data = await response.json(); if (!stopped) setPushSubscribed(data.registered === true); } }).catch(() => {});
+      if (hasHostedPushBridge()) {
+        setHasAndroidSettings(true);
+        void androidNotificationStatus().then(status => { if (!stopped) setAndroidStatus(status); }).catch(() => {});
+      }
     };
     refresh();
     const visible = () => { if (document.visibilityState === "visible") refresh(); };
@@ -59,7 +64,6 @@ export function NotificationPreferences() {
   const [browserPermission, setBrowserPermission] = useState<NotificationPermission | "unsupported">(() =>
     typeof window !== "undefined" && "Notification" in window ? Notification.permission : "unsupported",
   );
-  const [pushSubscribed, setPushSubscribed] = useState(false);
   const [subscribing, setSubscribing] = useState(false);
 
   useEffect(() => {
@@ -81,7 +85,7 @@ export function NotificationPreferences() {
     void navigator.serviceWorker.getRegistration("/")
       .then((registration) => registration?.pushManager.getSubscription())
       .then(async subscription => {
-        if (!subscription) return;
+        if (!subscription) { setPushSubscribed(false); return; }
         const response = await fetch("/api/notifications/push", { cache: "no-store", signal: AbortSignal.timeout(10000) });
         if (!response.ok) return;
         const configuration = await response.json() as { publicKey: string | null };
@@ -228,7 +232,7 @@ export function NotificationPreferences() {
         <div className="flex justify-center py-10">{message ? <p className="text-sm text-[var(--danger)]">{message}</p> : <Loader2 className="h-5 w-5 animate-spin text-[var(--muted)]" />}</div>
       ) : (
         <>
-        {preferences.pushNotifications && !pushSubscribed && (isNativeApp() || browserPermission !== "unsupported") ? (
+        {preferences.pushNotifications && pushSubscribed === false && (isNativeApp() || browserPermission !== "unsupported") ? (
           <div className="mt-5 flex items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--card-2)] p-4">
             <BellRing className="h-5 w-5 shrink-0 text-[var(--accent-fg)]" />
             <div className="min-w-0 flex-1">

@@ -146,6 +146,29 @@ test("missed call cleanup finalizes persisted signaling without an online browse
  assert.equal(notice.data.callOutcome,"missed");
 });
 
+test("call alerts are independent of message toggles and respect sender privacy and master push",async()=>{
+ const {callPushDetail}=await import("../../src/server/call-push");
+ const {getNotificationPreferences,updateNotificationPreferences}=await import("../../src/server/notification-preferences");
+ const previous=await getNotificationPreferences(member);
+ assert.equal(previous.pushNotifications,true,"New account push preference starts enabled");
+ const conversation=randomUUID(),callId=randomUUID(),notice=randomUUID();
+ await pool.query("insert into conversations(id,type,created_by_id) values($1,'dm',$2)",[conversation,owner]);
+ for(const user of [owner,member])await pool.query("insert into conversation_members(conversation_id,user_id,accepted_at) values($1,$2,now())",[conversation,user]);
+ await pool.query("insert into audio_calls(id,conversation_id,caller_id,callee_id,caller_client,offer,expires_at) values($1,$2,$3,$4,$5,'ephemeral',now()+interval '30 seconds')",[callId,conversation,owner,member,randomUUID()]);
+ await pool.query("insert into notifications(id,user_id,actor_id,type,data) values($1,$2,$3,'call',$4::jsonb)",[notice,member,owner,JSON.stringify({callId,conversationId:conversation})]);
+ try {
+  await updateNotificationPreferences(member,{messageNotifications:false,showNotificationDetails:false});
+  assert.equal((await getNotificationPreferences(member)).pushNotifications,true,"Changing other options preserves the push choice");
+  assert.equal((await callPushDetail(notice,member))?.title,"Circlo");
+  await updateNotificationPreferences(member,{showNotificationDetails:true});
+  const caller=(await pool.query("select display_name from users where id=$1",[owner])).rows[0].display_name;
+  assert.equal((await callPushDetail(notice,member))?.title,`${caller} · Circlo`);
+  assert.equal(await callPushDetail(notice,outsider),null);
+  await updateNotificationPreferences(member,{pushNotifications:false});
+  assert.equal(await callPushDetail(notice,member),null);
+ } finally {await updateNotificationPreferences(member,previous);}
+});
+
 
 test("group information policy, invitations and ownership transfer enforce role changes transactionally",async()=>{
  const invites=await import("../../src/server/group-invites");

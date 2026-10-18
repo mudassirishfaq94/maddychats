@@ -1,4 +1,4 @@
-const CACHE_NAME = "circlo-offline-notifications-v8";
+const CACHE_NAME = "circlo-offline-notifications-v9";
 const OFFLINE_URL = "/offline.html";
 
 self.addEventListener("install", (event) => {
@@ -35,12 +35,16 @@ const appPath = value => {
     const url = new URL(value, self.location.origin);
     if (url.origin !== self.location.origin || url.username || url.password) return null;
     if (url.pathname === "/app/chats") return "/app/chats";
+    if (url.pathname === "/app/call" && uuid.test(url.searchParams.get("call"))) {
+      const token = url.searchParams.get("callActionToken");
+      return `/app/call?call=${url.searchParams.get("call")}${url.searchParams.get("callAction") === "answer" && uuid.test(token) ? `&callAction=answer&callActionToken=${token}` : ""}`;
+    }
     const id = url.pathname.match(/^\/app\/chats\/([^/]+)$/)?.[1];
     if (!id || !uuid.test(id)) return null;
     const call = url.searchParams.get("call");
     if (call && uuid.test(call)) {
       const token = url.searchParams.get("callActionToken");
-      return `/app/chats/${id}?call=${call}${url.searchParams.get("callAction") === "answer" && uuid.test(token) ? `&callAction=answer&callActionToken=${token}` : ""}`;
+      return `/app/call?call=${call}${url.searchParams.get("callAction") === "answer" && uuid.test(token) ? `&callAction=answer&callActionToken=${token}` : ""}`;
     }
     const message = url.searchParams.get("message");
     return `/app/chats/${id}?${message && uuid.test(message) ? `message=${message}` : "latest=1"}`;
@@ -120,7 +124,7 @@ self.addEventListener("push", event => {
       // Offline: preserve a generic alert without disclosing account or sender.
       // Permission to deliver does not establish permission to interrupt: a
       // failed lookup cannot tell us whether this conversation is muted.
-      detail = { title: "Circlo", body: "New activity. Open Circlo to check your messages.", silent: true };
+      detail = { title: "Circlo", body: "New message received.", silent: true };
     }
     // The user can foreground the app while the authenticated lookup runs.
     if ((await appWindows()).some(client => client.visibilityState === "visible")) { await clearAlerts(); return; }

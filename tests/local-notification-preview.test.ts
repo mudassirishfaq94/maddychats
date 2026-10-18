@@ -16,6 +16,8 @@ test("recipient-only previews enforce request, lock, preference and decryption g
   const resolve = (fn = decrypt, active = () => true) => resolveLocalNotification(notice, "viewer", fn, active);
   try {
     assert.equal((await resolve())?.body, "Are we meeting tonight?");
+    assert.equal((await resolve())?.messageText, "Are we meeting tonight?");
+    assert.equal((await resolve())?.senderName, "Alex");
     detail.isGroup = true; detail.groupName = "Weekend";
     assert.equal((await resolve())?.body, "Alex: Are we meeting tonight?");
     locks = JSON.stringify([chat]); decryptions = 0;
