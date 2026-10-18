@@ -84,12 +84,13 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
     // Fetch short-lived relay credentials while the microphone prompt is open.
     // Older servers/APKs retain direct calling if the new capability is absent.
     const configuration = fetch("/api/calls/ice", { cache: "no-store", signal: AbortSignal.timeout(3000) })
-      .then(async response => response.ok ? await response.json() as { iceServers: RTCIceServer[]; relayConfigured: boolean } : null).catch(() => null);
+      .then(async response => response.ok ? await response.json() as { iceServers: RTCIceServer[]; relayConfigured: boolean } : response.status===404 ? null : {error:"Call connection service is temporarily unavailable. Please try again shortly."}).catch(() => ({error:"Call connection service could not be reached. Check your connection and retry."}));
     let media: MediaStream;
     try { media = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }, video: false }); }
     catch (cause) { throw new Error(cause instanceof DOMException && cause.name === "NotAllowedError" ? "Microphone permission is needed. Allow it in your browser’s site settings, then try again." : "Microphone unavailable. Check that it is connected and not in use by another app."); }
     if (generation.current !== token) { media.getTracks().forEach(track => track.stop()); throw new Error("Call cancelled."); }
     const ice = await configuration;
+    if(ice&&"error" in ice){media.getTracks().forEach(track=>track.stop());throw new Error(ice.error);}
     if (generation.current !== token) { media.getTracks().forEach(track => track.stop()); throw new Error("Call cancelled."); }
     stream.current = media;
     relayConfigured.current = ice?.relayConfigured === true;
@@ -104,14 +105,14 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
     connection.onconnectionstatechange = () => {
       if (pc.current !== connection) return;
       if (connection.connectionState === "connected") { if (deadline.current) clearTimeout(deadline.current); setStatus("connected"); setMinimized(true); }
-      if (connection.connectionState === "failed") end(relayConfigured.current ? "The call could not connect through this network. Check your connection and try again." : "This network could not connect a direct call. Try another Wi-Fi or mobile network. Relay calling is not configured yet.");
+      if (connection.connectionState === "failed") end(relayConfigured.current ? "The call could not connect through this network. Check your connection and try again." : "The call could not connect. Please try again shortly.");
       if (connection.connectionState === "disconnected") {
         setStatus("connecting");
         if (deadline.current) clearTimeout(deadline.current);
         deadline.current = setTimeout(() => end("Connection lost. Check your network and call again."), 15000);
       }
     };
-    deadline.current = setTimeout(() => end("No connection. The other person may be offline, or this network needs a relay. Try another network."), 45000);
+    deadline.current = setTimeout(() => end("The call did not connect in time. Please try again."), 45000);
     return connection;
   }, [end, setStatus]);
 
