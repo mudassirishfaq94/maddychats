@@ -92,4 +92,13 @@ jobs:
         working-directory: android
         run: |
           chmod +x gradlew
-          ./gradlew --no-daemon testDebugUnitTest
+          ./gradlew --no-daemon testDebugUnitTest assembleDebug
+      - name: Verify packaged calling permissions
+        shell: bash
+        run: |
+          set -euo pipefail
+          permissions="$("$ANDROID_HOME/build-tools/36.0.0/aapt" dump permissions android/app/build/outputs/apk/debug/app-debug.apk)"
+          for permission in RECORD_AUDIO MODIFY_AUDIO_SETTINGS FOREGROUND_SERVICE_MICROPHONE USE_FULL_SCREEN_INTENT; do
+            printf '%s\n' "$permissions" | grep -F "name='android.permission.$permission'" >/dev/null
+          done
+          echo 'Packaged APK includes capture, audio routing and background-call permissions.'
