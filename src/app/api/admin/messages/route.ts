@@ -1,5 +1,6 @@
+import { isUuid } from "@/server/users";
 import { NextRequest, NextResponse } from "next/server";
-import { sql, like, desc } from "drizzle-orm";
+import { sql, ilike, eq, desc } from "drizzle-orm";
 import { db } from "@/db";
 import { messages, users, conversations } from "@/db/schema";
 import { requireAdmin } from "@/server/admin";
@@ -18,22 +19,24 @@ export async function GET(req: NextRequest) {
   }
 
   const url = new URL(req.url);
-  const search = url.searchParams.get("q")?.trim() ?? "";
-  const page = Math.max(1, parseInt(url.searchParams.get("page") ?? "1", 10));
-  const limit = Math.min(100, Math.max(1, parseInt(url.searchParams.get("limit") ?? "30", 10)));
+  const search = (url.searchParams.get("q")?.trim() ?? "").slice(0,100);
+  const page = Math.max(1, Math.min(10000,parseInt(url.searchParams.get("page") ?? "1", 10)||1));
+  const limit = Math.min(100, Math.max(1, (parseInt(url.searchParams.get("limit") ?? "30", 10)||30)));
   const offset = (page - 1) * limit;
 
-  const searchCondition = search ? like(messages.text, `%${search}%`) : undefined;
+  const searchCondition = search ? isUuid(search) ? eq(messages.id,search) : ilike(users.username,`${search.replace(/[\\%_]/g,"\\$&")}%`) : undefined;
 
   const [{ count }] = await db
     .select({ count: sql<number>`count(*)::int` })
-    .from(messages)
+    .from(messages).innerJoin(users,sql`${messages.senderId}=${users.id}`)
     .where(searchCondition);
 
   const messageList = await db
     .select({
       id: messages.id,
-      text: messages.text,
+      type: messages.type,
+      encrypted: messages.encrypted,
+      deletedAt: messages.deletedAt,
       createdAt: messages.createdAt,
       senderId: messages.senderId,
       senderName: users.displayName,
@@ -60,5 +63,5 @@ export async function GET(req: NextRequest) {
       total: count,
       totalPages: Math.ceil(count / limit),
     },
-  });
+  },{headers:{"Cache-Control":"private, no-store"}});
 }

@@ -18,7 +18,9 @@ import { cn, timeAgo } from "@/lib/utils";
 
 interface AdminMessage {
   id: string;
-  text: string;
+  type: string;
+  encrypted: boolean;
+  deletedAt: string|null;
   createdAt: string;
   senderId: string;
   senderName: string;
@@ -82,7 +84,7 @@ export default function AdminMessagesPage() {
       <div>
         <h1 className="text-xl font-bold">Messages</h1>
         <p className="mt-0.5 text-sm text-[var(--muted)]">
-          Browse and manage all messages across conversations.
+          Review message metadata and act on reports. Private message content stays private.
         </p>
       </div>
 
@@ -97,7 +99,7 @@ export default function AdminMessagesPage() {
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-            placeholder="Search message content…"
+            placeholder="Search sender username or message ID…"
             className="field-input field-input--icon w-full py-2! text-sm!"
           />
         </div>
@@ -123,7 +125,7 @@ export default function AdminMessagesPage() {
                   <span className="text-[0.65rem] text-[var(--muted)]">@{msg.senderUsername}</span>
                   <span className="text-[0.6rem] text-[var(--muted)]">in {msg.conversationName}</span>
                 </div>
-                <p className="mt-0.5 line-clamp-2 text-sm">{msg.text || "Attachment"}</p>
+                <p className="mt-0.5 line-clamp-2 text-sm">{msg.deletedAt ? "Deleted message" : `${msg.type} · Private content`}</p>
                 <p className="mt-1 text-[0.6rem] text-[var(--muted)]">{timeAgo(msg.createdAt)}</p>
               </div>
               <button

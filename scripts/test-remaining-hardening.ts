@@ -103,6 +103,11 @@ async function main() {
     assert((await sql.query("select details from admin_audit_log where action='user_deleted' and details->>'deletedUserId'=$1", [target.id])).rows.length);
     assert.equal((await api("/api/admin/reports", ownerCookie, "PUT", { reportId: report.id, status: "not-a-status" })).status, 422);
     assert.equal((await api("/api/admin/reports", ownerCookie, "PUT", { reportId: report.id, status: "resolved" })).status, 200);
+    const metadataOnly=await api(`/api/admin/messages?q=${message.id}`,ownerCookie);
+    assert.equal(metadataOnly.status,200);
+    const metadataBody=await metadataOnly.json();
+    assert.equal(metadataBody.messages.length,1);
+    assert(!("text" in metadataBody.messages[0]),"Admin moderation must never return private message content");
     assert.equal((await api(`/api/admin/messages/${message.id}`, ownerCookie, "DELETE", {})).status, 200);
     assert((await sql.query("select deleted_at from messages where id=$1", [message.id])).rows[0].deleted_at);
     assert.equal((await sql.query("select count(*)::int n from realtime_events where payload->>'type'='message:deleted' and payload->'message'->>'id'=$1", [message.id])).rows[0].n, 2, "Moderation and recipient notifications commit together");
