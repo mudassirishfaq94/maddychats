@@ -157,6 +157,19 @@ try {
  await owner.page.getByRole("button",{name:"Dismiss call notice",exact:true}).click();
  await owner.page.getByRole("button",{name:"Start audio call",exact:true}).click();
  await member.page.getByRole("button",{name:"Decline",exact:true}).waitFor();
+ const warmCall=(await pool.query("select id from audio_calls where conversation_id=$1 and state='ringing'",[callChat])).rows[0];
+ const warmToken=randomUUID();
+ await member.page.evaluate(async({user,call,token})=>{
+  const database=await new Promise((resolve,reject)=>{const request=indexedDB.open("circlo-notification-privacy",1);request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error);});
+  const tx=database.transaction("locks","readwrite");tx.objectStore("locks").put({recipientId:user,token,expiresAt:Date.now()+30000},`call-action:${call}`);
+  await new Promise((resolve,reject)=>{tx.oncomplete=resolve;tx.onerror=reject;});database.close();
+  history.replaceState(null,"",`${location.pathname}?call=${call}&callAction=answer&callActionToken=${token}`);
+ },{user:member.id,call:warmCall.id,token:warmToken});
+ for(const account of [owner,member])await account.page.getByText("Audio connected",{exact:true}).waitFor({timeout:45000});
+ await member.page.getByRole("button",{name:"End call",exact:true}).click();
+ await owner.page.getByRole("button",{name:"Dismiss call notice",exact:true}).click();
+ await owner.page.getByRole("button",{name:"Start audio call",exact:true}).click();
+ await member.page.getByRole("button",{name:"Decline",exact:true}).waitFor();
  await member.page.getByRole("button",{name:"Decline",exact:true}).click();
  await owner.page.getByRole("button",{name:"Dismiss call notice",exact:true}).waitFor();
  assert.equal((await pool.query("select count(*)::int as n from audio_calls where conversation_id=$1",[callChat])).rows[0].n,0);

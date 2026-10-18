@@ -165,6 +165,10 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
         if (!current) { if (callRef.current) { cleanup(); setError("Call ended or was not answered."); } return; }
         if (current.callee_id === userId && current.state === "ringing" && phaseRef.current === "idle") {
           storeCall(current); setName(current.peer_name ?? "Circlo contact"); setStatus("incoming");
+        }
+        // A warm recipient may already be ringing when the notification's
+        // Answer intent arrives. Consume its one-time proof in either state.
+        if (current.callee_id === userId && current.state === "ringing" && phaseRef.current === "incoming" && callRef.current?.id === current.id) {
           const query = new URLSearchParams(window.location.search);
           const action = query.get("callAction");
           if (query.get("call") === current.id && action === "answer") {
