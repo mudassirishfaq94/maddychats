@@ -20,6 +20,7 @@ import { cn, timeAgo } from "@/lib/utils";
 function previewText(conv: ConversationSummary, previews: Map<string, string>): string {
   const last = conv.lastMessage;
   if (!last) return "No messages yet";
+  if (last.expiresAt && Date.parse(last.expiresAt)<=Date.now()) return "Message expired";
   if (last.deletedAt) return "Message deleted";
   if (last.encrypted) {
     // Ciphertext must never be shown as a preview.
@@ -165,6 +166,17 @@ export function ChatsLayout({
     ? liveList.items : initialConversations;
   const { initialized, decrypt } = useSharedE2EE();
   const [previews, setPreviews] = useState<Map<string, string>>(new Map());
+  useEffect(()=>{
+    const pending=conversations.flatMap(conversation=>conversation.lastMessage?.expiresAt && !conversation.lastMessage.deletedAt ? [Date.parse(conversation.lastMessage.expiresAt)] : []);
+    if(!pending.length)return;
+    const expire=()=>{
+      const now=Date.now();
+      setLiveList({source:initialConversations,items:conversations.map(conversation=>conversation.lastMessage?.expiresAt && Date.parse(conversation.lastMessage.expiresAt)<=now ? {...conversation,lastMessage:{...conversation.lastMessage,text:"",deletedAt:conversation.lastMessage.expiresAt}} : conversation)});
+      setPreviews(current=>new Map([...current].filter(([key])=>!conversations.some(conversation=>conversation.lastMessage?.expiresAt && Date.parse(conversation.lastMessage.expiresAt)<=now && key.startsWith(`${conversation.lastMessage.id}:`)))));
+    };
+    const timer=setTimeout(expire,Math.min(2147483647,Math.max(0,Math.min(...pending)-Date.now()+1)));
+    return()=>clearTimeout(timer);
+  },[conversations,initialConversations]);
   useEffect(() => {
     if (!initialized) return;
     let cancelled = false;
@@ -210,6 +222,7 @@ export function ChatsLayout({
         event.type !== "message:new" &&
         event.type !== "message:update" &&
         event.type !== "message:deleted" &&
+        event.type !== "message:lifetime" &&
         event.type !== "message:read" &&
         event.type !== "conversation:new" &&
         event.type !== "group:updated" &&

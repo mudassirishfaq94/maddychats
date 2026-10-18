@@ -88,7 +88,7 @@ export async function GET(
     if (membership.length === 0) return jsonError(404, "Not found.");
 
     // Deleted messages stop serving their attachments.
-    if (found.message.deletedAt) return jsonError(404, "Not found.");
+    if (found.message.deletedAt || (found.message.expiresAt && found.message.expiresAt <= new Date()) || (found.message.selfDestruct && !found.message.revealedAt && found.message.senderId !== me.id)) return jsonError(404, "Not found.");
 
     // A per-user deletion also revokes that user's direct attachment URL.
     const hidden = await db

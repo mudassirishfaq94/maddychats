@@ -38,7 +38,7 @@ const appPath = value => {
     const id = url.pathname.match(/^\/app\/chats\/([^/]+)$/)?.[1];
     if (!id || !uuid.test(id)) return null;
     const call = url.searchParams.get("call");
-    if (call && uuid.test(call)) return `/app/chats/${id}?call=${call}`;
+    if (call && uuid.test(call)) return `/app/chats/${id}?call=${call}${url.searchParams.get("callAction") === "answer" ? "&callAction=answer" : ""}`;
     const message = url.searchParams.get("message");
     return `/app/chats/${id}?${message && uuid.test(message) ? `message=${message}` : "latest=1"}`;
   } catch { return null; }
@@ -106,7 +106,7 @@ self.addEventListener("push", event => {
           body: detail.body, icon: "/icons/circlo-192.png?v=linked-c-2", badge: "/icons/circlo-badge-96.png",
           tag: `circlo-call-${data.recipientId}-${data.callId}`, silent: Boolean(detail.silent),
           ...(!detail.silent ? { vibrate: [200,100,200] } : {}),
-          actions: [{ action: "open", title: "Open call" }, { action: "decline", title: "Decline" }],
+          actions: [{ action: "answer", title: "Accept" }, { action: "decline", title: "Decline" }],
           data: { url: `/app/chats/${detail.conversationId}?call=${data.callId}`, callId: data.callId, notificationId: data.notificationId, recipientId: data.recipientId },
         });
         return;
@@ -220,5 +220,6 @@ self.addEventListener("notificationclick", event => {
     })());
     return;
   }
-  event.waitUntil(openChatFromNotification(event.notification.data));
+  const data = event.action === "answer" && uuid.test(event.notification.data?.callId) ? { ...event.notification.data, url: `${event.notification.data.url}&callAction=answer` } : event.notification.data;
+  event.waitUntil(openChatFromNotification(data));
 });

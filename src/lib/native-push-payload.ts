@@ -12,7 +12,7 @@ function safeNotificationText(value: string | undefined, fallback: string, limit
  * Message pushes carry a private fallback only. A running recipient WebView
  * may replace it locally after decryption. Call presentation remains separate.
  */
-export function nativePushPayload(input: { messageRequest?: boolean; recipientId: string; notificationId: string; conversationId: string; messageId: string; actorName?: string; preview?: string; showDetails?: boolean; isGroup?: boolean; groupName?: string | null; encrypted?: boolean; title?: string; body?: string; callId?: string; silent?: boolean; callTtl?: number }, now = Date.now()) {
+export function nativePushPayload(input: { callCancelled?: boolean; messageRequest?: boolean; recipientId: string; notificationId: string; conversationId: string; messageId: string; actorName?: string; preview?: string; showDetails?: boolean; isGroup?: boolean; groupName?: string | null; encrypted?: boolean; title?: string; body?: string; callId?: string; silent?: boolean; callTtl?: number }, now = Date.now()) {
   const ttl = input.callId ? Math.min(45, Math.max(1, input.callTtl ?? 45)) : 3600;
   const showDetails = input.showDetails !== false;
   // Encrypted is the safe default: an unknown message must never leak text.
@@ -32,6 +32,7 @@ export function nativePushPayload(input: { messageRequest?: boolean; recipientId
     data: {
       url: `ziptalks://chat/${input.conversationId}?${input.callId ? `call=${input.callId}` : `message=${input.messageId}`}`,
       tag: input.callId ? `circlo-call-${input.callId}` : `circlo-chat-${input.conversationId}`,
+      ...(input.callId ? { callId: input.callId, callCancelled: String(input.callCancelled === true) } : {}),
       messageRequest: String(input.messageRequest === true),
       recipientId: input.recipientId, eventId: input.notificationId,
       title: safePresentation.title, body: safePresentation.body,

@@ -276,7 +276,7 @@ class MainActivity : ComponentActivity() {
         if (!uuid.matches(id)) return null
         val call = uri.getQueryParameter("call")?.takeIf { uuid.matches(it) }
         val message = uri.getQueryParameter("message")?.takeIf { uuid.matches(it) }
-        return "${BuildConfig.API_BASE_URL}/app/chats/$id?" + (call?.let { "call=$it" } ?: message?.let { "message=$it" } ?: "latest=1")
+        return "${BuildConfig.API_BASE_URL}/app/chats/$id?" + (call?.let { "call=$it" + (uri.getQueryParameter("callAction")?.takeIf { action -> action == "answer" || action == "decline" }?.let { action -> "&callAction=$action" } ?: "") } ?: message?.let { "message=$it" } ?: "latest=1")
     }
 
     override fun onNewIntent(intent: Intent) {

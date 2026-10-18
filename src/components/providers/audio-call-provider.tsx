@@ -30,6 +30,8 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const userId = user?.id;
   const { subscribe, connected } = useRealtime();
+  const streamConnected = useRef(connected);
+  useEffect(() => { streamConnected.current = connected; }, [connected]);
   const [phase, setPhase] = useState<Phase>("idle");
   const phaseRef = useRef<Phase>("idle");
   const [call, setCall] = useState<Call | null>(null);
@@ -113,7 +115,7 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
     stream.current?.getAudioTracks().forEach(track => { track.enabled = !next; });
     setMuted(next);
   };
-  const answer = async () => {
+  const answer = useCallback(async () => {
     const current = callRef.current; if (!current || phaseRef.current !== "incoming") return;
     setStatus("connecting"); const token = ++generation.current;
     try {
@@ -125,7 +127,7 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
       const accepted = await request({ action: "answer", id: current.id, clientId: client.current, sdp });
       if (token === generation.current) storeCall(accepted);
     } catch (cause) { if (token === generation.current) end(cause instanceof Error ? cause.message : "Could not answer the call."); }
-  };
+  }, [prepare, setStatus, storeCall, end]);
 
   useEffect(() => {
     if (!userId) return;
@@ -140,6 +142,12 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
         if (!current) { if (callRef.current) { cleanup(); setError("Call ended or was not answered."); } return; }
         if (current.callee_id === userId && current.state === "ringing" && phaseRef.current === "idle") {
           storeCall(current); setName(current.peer_name ?? "Circlo contact"); setStatus("incoming");
+          const query = new URLSearchParams(window.location.search);
+          const action = query.get("callAction");
+          if (query.get("call") === current.id && (action === "answer" || action === "decline")) {
+            query.delete("callAction"); window.history.replaceState(null,"",`${window.location.pathname}?${query}`);
+            if(action === "decline") end(); else void answer();
+          }
         } else if (callRef.current?.id === current.id) {
           if (current.callee_id === userId && current.state === "active" && !current.owned) { cleanup(); setError("Call answered on another browser."); return; }
           storeCall(current);
@@ -154,7 +162,7 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
     void sync();
     const unsubscribe = subscribe(event => { if (event.type === "call:changed") void sync(); });
     // Poll only while a call is open; incoming calls use the existing SSE channel.
-    const timer = setInterval(() => { if (callRef.current) void sync(); }, 2000);
+    const timer = setInterval(() => { if (callRef.current || (!streamConnected.current && document.visibilityState === "visible")) void sync(); }, 2000);
     const heartbeat = setInterval(() => {
       const current = callRef.current;
       if (current?.state === "active" && pc.current) void request({ action: "heartbeat", id: current.id, clientId: client.current }).catch(() => {});
@@ -168,7 +176,7 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
     const visible = () => { if (document.visibilityState === "visible") void sync(); };
     document.addEventListener("visibilitychange", visible);
     return () => { disposed = true; syncRef.current = null; unsubscribe(); clearInterval(timer); clearInterval(heartbeat); window.removeEventListener("pagehide", leaving); window.removeEventListener("online", sync); document.removeEventListener("visibilitychange", visible); cleanup(); };
-  }, [userId, subscribe, cleanup, storeCall, setStatus]);
+  }, [userId, subscribe, cleanup, storeCall, setStatus, answer, end]);
 
   useEffect(() => {
     if (phase !== "incoming") return;

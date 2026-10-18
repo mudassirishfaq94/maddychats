@@ -136,7 +136,7 @@ test("closed-app call alerts require a live authorized call, preserve the call l
   const h = harness();
   h.setDetail({ callId: message, messageId: undefined, expiresAt: new Date(Date.now()+30000).toISOString(), body: "Incoming audio call" });
   await h.push({ callId: message }); assert.equal(h.cards.length,1);
-  assert.equal(h.cards[0].actions[0].title,"Open call");
+  assert.equal(h.cards[0].actions[0].title,"Accept");
   await h.click(h.cards[0]); assert.equal(h.opened[0],`https://circlo.chat/app/chats/${chat}?call=${message}`);
   await h.push({ callId: message }); h.setStatus(404); await h.push({ callId: message }); assert.equal(h.cards.length,0);
   h.setStatus(200); h.setDetail({ expiresAt: new Date(Date.now()-1000).toISOString() }); await h.push({ callId: message }); assert.equal(h.cards.length,0);

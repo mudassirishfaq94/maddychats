@@ -1,0 +1,93 @@
+name: Messaging reliability
+on:
+  pull_request:
+  push:
+    branches: ['codex/reliability-security-audit']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  browser-and-database:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: circlo_test
+          POSTGRES_PASSWORD: disposable-fixture-only
+          POSTGRES_DB: circlo_audit
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd 'pg_isready -U circlo_test -d circlo_audit'
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://circlo_test:disposable-fixture-only@127.0.0.1:5432/circlo_audit
+      JWT_SECRET: isolated-audit-tests-only-no-production-credentials
+      CLIENT_URL: http://127.0.0.1:3137
+      STARTER_MODE: '1'
+      SCHEDULED_MESSAGES_ENABLED: '1'
+      HOSTNAME: 127.0.0.1
+      PORT: '3137'
+      NODE_OPTIONS: --max-old-space-size=4096
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run db:migrate
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run test:unit
+      - run: npm run test:reliability:integration
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build
+      - name: Run real browser workflows against the production bundle
+        run: |
+          cp -r public .next/standalone/public
+          mkdir -p .next/standalone/.next
+          cp -r .next/static .next/standalone/.next/static
+          node .next/standalone/server.js > browser-server.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" || true' EXIT
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent http://127.0.0.1:3137/api/health >/dev/null; then break; fi
+            sleep 1
+          done
+          npm run test:reliability:browser
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: reliability-browser-server-log
+          path: browser-server.log
+          if-no-files-found: ignore
+  android-compile-and-unit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - uses: android-actions/setup-android@v3
+      - run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
+      - name: Create compilation-only Firebase fixture
+        run: |
+          node - <<'JS'
+          const fs = require('node:fs');
+          // No production client credentials; this fixture cannot validate FCM delivery.
+          fs.writeFileSync('android/app/google-services.json', JSON.stringify({project_info:{project_number:'123456789012',project_id:'circlo-compilation-fixture'},client:[{client_info:{mobilesdk_app_id:'1:123456789012:android:0123456789abcdef',android_client_info:{package_name:'chat.circlo.app'}},api_key:[{current_key:'compilation-fixture-only-not-a-provider-key'}]}],configuration_version:'1'}));
+          JS
+      - name: Compile Android and run JVM tests
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon testDebugUnitTest

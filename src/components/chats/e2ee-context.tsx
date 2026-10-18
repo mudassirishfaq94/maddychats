@@ -19,7 +19,8 @@ import {
   type ReactNode,
 } from "react";
 import type { AttachmentDTO } from "@/lib/types";
-import { registerLocalAudio } from "@/lib/audio-analysis";
+import {useExpiredAt} from "@/hooks/use-expired-at";
+import { registerLocalAudio, forgetLocalAudio } from "@/lib/audio-analysis";
 
 type DecryptFn = (
   encryptedBytesB64: string,
@@ -66,6 +67,14 @@ function useE2EEMediaContext(): E2EEMediaContextValue | null {
 
 /* Module-level cache of decrypted object URLs (one per attachment). */
 const objectUrlCache = new Map<string, string>();
+const expiredAttachmentIds = new Set<string>();
+export function forgetDecryptedAttachments(ids: string[]) {
+  for(const id of ids) {
+    expiredAttachmentIds.add(id);
+    const url=objectUrlCache.get(id); if(url) {URL.revokeObjectURL(url);forgetLocalAudio(url);}
+    objectUrlCache.delete(id);
+  }
+}
 
 function bufferToBase64(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer);
@@ -84,19 +93,21 @@ export function useEncryptedAttachmentUrl(
   attachment?: AttachmentDTO | null,
 ): { url: string | null; failed: boolean } {
   const ctx = useE2EEMediaContext();
-  const { id, url, encrypted, encKey, mimeType } = attachment ?? {};
+  const { id, url, encrypted, encKey, mimeType, expiresAt } = attachment ?? {};
+  const expired=useExpiredAt(expiresAt);
+  useEffect(()=>{if(expired && id)forgetDecryptedAttachments([id]);},[expired,id]);
   const request = useMemo(
-    () => ({ id, url, encrypted, encKey, mimeType, ctx }),
-    [id, url, encrypted, encKey, mimeType, ctx],
+    () => ({ id, url, encrypted, encKey, mimeType, ctx, expired }),
+    [id, url, encrypted, encKey, mimeType, ctx, expired],
   );
   const [state, setState] = useState<{
     request: typeof request | null; url: string | null; failed: boolean;
   }>({ request: null, url: null, failed: false });
 
   useEffect(() => {
-    const { id, url, encrypted, encKey, mimeType, ctx } = request;
+    const { id, url, encrypted, encKey, mimeType, ctx, expired } = request;
 
-    if (!id || !url || !encrypted || !encKey) {
+    if (!id || !url || !encrypted || !encKey || expired) {
       return;
     }
 
@@ -154,6 +165,7 @@ export function useEncryptedAttachmentUrl(
           return;
         }
 
+        if (expiredAttachmentIds.has(attachment.id)) return;
         const blob = new Blob([plain], { type: attachment.mimeType || "application/octet-stream" });
         const objectUrl = URL.createObjectURL(blob);
         if (attachment.mimeType?.startsWith("audio/")) registerLocalAudio(objectUrl, blob);
@@ -175,6 +187,7 @@ export function useEncryptedAttachmentUrl(
   }, [request]);
 
   if (!id) return { url: null, failed: false };
+  if (expired || expiredAttachmentIds.has(id)) return { url: null, failed: true };
   if (!encrypted) return { url: url ?? null, failed: false };
   if (!ctx || !encKey || ctx.initializationError) return { url: null, failed: true };
   if (!ctx.initialized) return { url: null, failed: false };

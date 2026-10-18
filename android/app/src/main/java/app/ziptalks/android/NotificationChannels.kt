@@ -16,12 +16,19 @@ import org.json.JSONObject
 
 /** Existing Messages ID is permanent. Never delete/recreate channels to reset user choices. */
 object NotificationChannels {
+    const val CALLS = "circlo-incoming-calls"
     const val MESSAGES = "maddychats-messages"
     // A genuinely separate, non-interrupting purpose; never used to bypass Messages settings.
     const val QUIET = "circlo-quiet-activity"
     fun ensure(context: Context) {
         if (Build.VERSION.SDK_INT < 26) return
         val manager = context.getSystemService(NotificationManager::class.java) ?: return
+        if (manager.getNotificationChannel(CALLS) == null) manager.createNotificationChannel(NotificationChannel(CALLS, "Incoming calls", NotificationManager.IMPORTANCE_HIGH).apply {
+            description = "Incoming Circlo audio calls"
+            lockscreenVisibility = Notification.VISIBILITY_PRIVATE
+            enableVibration(true)
+            setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE), AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE).build())
+        })
         if (manager.getNotificationChannel(MESSAGES) == null) {
             manager.createNotificationChannel(NotificationChannel(MESSAGES, "Messages", NotificationManager.IMPORTANCE_HIGH).apply {
                 description = "New messages when Circlo is in the background"

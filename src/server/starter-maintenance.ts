@@ -1,3 +1,5 @@
+import { cleanupExpiredCalls } from "./call-push";
+import { cleanupExpiredMessages } from "./message-lifetime";
 import { cleanupRealtimeEvents } from "./realtime";
 import { cleanupUploads } from "./upload-retention";
 import { cleanupRateLimits } from "./rate-limit";
@@ -9,12 +11,21 @@ import { deviceLinkRequests } from "@/db/schema";
 import { lt } from "drizzle-orm";
 
 const state = globalThis as typeof globalThis & {
+  __messageExpiryMaintenance?: ReturnType<typeof setInterval>;
   __scheduledMaintenance?: ReturnType<typeof setInterval>;
   __starterMaintenance?: ReturnType<typeof setInterval>;
 };
 
 /** Existing processors share their database lock; the free host catches up after waking. */
 export function startStarterMaintenance() {
+  if (!state.__messageExpiryMaintenance) {
+    let expiring = false;
+    const expire = async () => { if (expiring) return; expiring = true;
+      try { await cleanupExpiredMessages(); await cleanupExpiredCalls(); } catch { console.error("[expiry] Cleanup unavailable; retrying."); } finally { expiring = false; }
+    };
+    state.__messageExpiryMaintenance = setInterval(() => { void expire(); }, 5000);
+    state.__messageExpiryMaintenance.unref(); void expire();
+  }
   if ((process.env.STARTER_MODE !== "1" || process.env.SCHEDULED_MESSAGES_ENABLED === "1") && !state.__scheduledMaintenance) {
     let processing = false;
     const deliver = async () => {
@@ -34,7 +45,7 @@ export function startStarterMaintenance() {
     running = true;
     try {
       await cleanupExpiredAuthentication();
-      if (process.env.STARTER_MODE !== "1") return;
+
       await cleanupRealtimeEvents();
       await cleanupRateLimits();
       await cleanupUploads();

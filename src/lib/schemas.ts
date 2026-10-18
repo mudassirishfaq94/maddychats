@@ -107,6 +107,7 @@ export const groupRoleSchema = z.object({
 export const transferOwnershipSchema = z.object({ userId: z.uuid("Invalid user id") });
 
 export const sendMessageSchema = z.object({
+  selfDestruct: z.boolean().optional().default(false),
   clientMessageId: z.uuid("Invalid client message id").optional(),
   // When E2EE is active the client sends ciphertext (base64), which is longer
   // than the plaintext limit — so allow up to 4x while the client still caps

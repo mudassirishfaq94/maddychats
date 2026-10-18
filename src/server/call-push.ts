@@ -29,5 +29,17 @@ export async function sendCallAlert(notificationId: string, userId: string, call
     actorName: "Circlo", preview: "Incoming audio call. Open Circlo to answer.",
     title: detail?.title, body: detail?.body,
     callTtl: detail ? Math.max(1, Math.min(45, Math.ceil((Date.parse(detail.expiresAt)-Date.now())/1000))) : 30,
-    silent: detail?.silent, webOnly: cancelled });
+    silent: detail?.silent, callCancelled: cancelled });
+}
+
+/** Missed calls are finalized without requiring either browser to stay online. */
+export async function cleanupExpiredCalls() {
+  const result = await pool.query(`WITH expired AS (
+    DELETE FROM audio_calls WHERE expires_at<=now() RETURNING id,conversation_id,caller_id,callee_id,state
+  ), notices AS (
+    UPDATE notifications n SET data=n.data || jsonb_build_object('callOutcome',CASE WHEN e.state='ringing' THEN 'missed' ELSE 'ended' END,'preview',CASE WHEN e.state='ringing' THEN 'Missed audio call' ELSE 'Audio call ended' END)
+    FROM expired e WHERE n.type='call' AND n.data->>'callId'=e.id::text RETURNING n.id
+  ) INSERT INTO realtime_events(user_id,payload)
+    SELECT member,jsonb_build_object('type','call:changed','conversationId',conversation_id) FROM expired CROSS JOIN LATERAL unnest(ARRAY[caller_id,callee_id]) member RETURNING id`);
+  return result.rowCount ?? 0;
 }

@@ -1,6 +1,7 @@
 import { relations, sql } from "drizzle-orm";
 import {
   index,
+  check,
   primaryKey,
   boolean,
   bigint,
@@ -228,6 +229,8 @@ export const conversations = pgTable(
     /** Group deletion tombstone; preserves message history for retention/audit. */
     deletedAt: timestamp("deleted_at", { withTimezone: true, mode: "date" }),
     /** Group settings: admin-only messaging */
+    adminOnlyAddingMembers: boolean("admin_only_adding_members").default(false).notNull(),
+    adminOnlyEditingInfo: boolean("admin_only_editing_info").default(true).notNull(),
     adminOnlyMessaging: boolean("admin_only_messaging").default(false).notNull(),
     /** Group rules displayed to members */
     rules: text("rules"),
@@ -340,6 +343,8 @@ export const messages = pgTable(
       .notNull(),
     editedAt: timestamp("edited_at", { withTimezone: true, mode: "date" }),
     deletedAt: timestamp("deleted_at", { withTimezone: true, mode: "date" }),
+    selfDestruct: boolean("self_destruct").default(false).notNull(),
+    revealedAt: timestamp("revealed_at", { withTimezone: true, mode: "date" }),
     /** Automatic expiry for conversations with disappearing messages enabled. */
     expiresAt: timestamp("expires_at", { withTimezone: true, mode: "date" }),
   },
@@ -355,7 +360,9 @@ export const messages = pgTable(
       table.senderId,
       table.clientMessageId,
     ),
+    check("self_destruct_fixed_lifetime",sql`not ${table.selfDestruct} or ((${table.revealedAt} is null and ${table.expiresAt} is null) or (${table.revealedAt} is not null and ${table.expiresAt}=${table.revealedAt}+interval '5 seconds'))`),
     index("messages_expires_idx").on(table.expiresAt),
+    index("messages_expiry_cleanup_idx").on(table.expiresAt,table.id).where(sql`${table.expiresAt} is not null and (${table.deletedAt} is null or ${table.text}<>'')`),
     // Online migration 0041: only realtime deliveries still awaiting a recipient.
     index("messages_undelivered_conversation_idx").on(table.conversationId, table.senderId)
       .where(sql`${table.deliveredAt} IS NULL`),
@@ -1447,3 +1454,15 @@ export const audioCalls = pgTable("audio_calls", {
   index("audio_calls_callee_live_idx").on(table.calleeId, table.expiresAt).where(sql`${table.state} <> 'ended'`),
   index("audio_calls_expiry_idx").on(table.expiresAt),
 ]);
+
+/** Separate client-encrypted snapshots. No recovery secret or raw key belongs here. */
+export const recoveryBackups = pgTable("recovery_backups", {
+  id: uuid("id").primaryKey(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  deviceId: text("device_id").notNull(),
+  envelope: jsonb("envelope").$type<import("@/lib/cloud-key-recovery").RecoveryEnvelope>().notNull(),
+  revision: integer("revision").default(1).notNull(),
+  confirmed: boolean("confirmed").default(false).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+}, table => [check("recovery_backups_revision_positive",sql`${table.revision}>0`),check("recovery_backups_envelope_size",sql`octet_length(${table.envelope}::text)<=12582912`),index("recovery_backups_user_updated_idx").on(table.userId, table.updatedAt)]).enableRLS();

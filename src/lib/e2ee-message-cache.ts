@@ -162,3 +162,14 @@ export async function clearVerifiedMessageCache(userId: string): Promise<void> {
     database.close();
   }
 }
+
+/** Remove expired records by exact account/conversation/message key. */
+export async function purgeVerifiedMessages(userId:string,conversationId:string,ids:string[]) {
+  if(typeof indexedDB==="undefined" || !ids.length)return;
+  const database=await openDatabase();
+  try {
+    const tx=database.transaction(MESSAGES,"readwrite");
+    for(const id of ids)tx.objectStore(MESSAGES).delete(messageId(userId,conversationId,id));
+    await new Promise<void>((resolve,reject)=>{tx.oncomplete=()=>resolve();tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error);});
+  } finally {database.close();}
+}

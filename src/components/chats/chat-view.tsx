@@ -1,4 +1,6 @@
 "use client";
+import { forgetDecryptedAttachments } from "./e2ee-context";
+import { ScheduledMessageManager } from "./scheduled-message-manager";
 
 import { useAudioCall } from "@/components/providers/audio-call-provider";
 import Image from "next/image";
@@ -207,19 +209,49 @@ export function ChatView({
   const audioCall = useAudioCall();
   const { subscribe, presence, connected } = useRealtime();
   const e2ee = useSharedE2EE();
+  const {forgetDecryptedMessages}=e2ee;
   const encryptionRef = useRef<typeof e2ee | null>(null);
   useEffect(() => { encryptionRef.current = e2ee; }, [e2ee]);
 
+  const [selfDestruct, setSelfDestruct] = useState(false);
+  const selfDestructDraft = useRef(false);
+  const serverClockOffset = useRef(initial.serverNow ? Date.parse(initial.serverNow)-Date.now() : 0);
   const [items, setItems] = useState<MessageDTO[]>(initial.messages);
-  // Remove expired messages promptly in an open chat as well as on the next
-  // server refresh. The server remains the source of truth and soft-deletes
-  // the same records on every history request.
+  // One timer for the nearest server deadline; foreground/resume also rechecks.
   useEffect(() => {
-    const prune = () => setItems((current) => current.filter((message) => !message.expiresAt || new Date(message.expiresAt).getTime() > Date.now()));
-    prune();
-    const timer = window.setInterval(prune, 15_000);
-    return () => window.clearInterval(timer);
-  }, []);
+    const now = () => Date.now() + serverClockOffset.current;
+    const due = items.filter(message => message.expiresAt && Date.parse(message.expiresAt) <= now() && (!message.selfDestruct || !message.deletedAt));
+    const expiredReplies = new Set(items.flatMap(message=>message.replyTo?.expiresAt && !message.replyTo.deleted && Date.parse(message.replyTo.expiresAt)<=now() ? [message.replyTo.id] : []));
+    const expire = () => {
+      if (!due.length && !expiredReplies.size) return;
+      const ids = new Set(due.map(message => message.id));
+      forgetDecryptedMessages(conversationId,[...ids,...expiredReplies]);
+      forgetDecryptedAttachments(due.flatMap(message=>message.attachments.map(attachment=>attachment.id)));
+      setItems(current => current.map(message=>message.replyTo && expiredReplies.has(message.replyTo.id)?{...message,replyTo:{...message.replyTo,text:"",deleted:true}}:message).flatMap(message => !ids.has(message.id) ? [message] : message.selfDestruct ? [{ ...message, text: "", attachments: [], deletedAt: message.expiresAt }] : []));
+      setDecryptedTexts(current => new Map([...current].filter(([id]) => !ids.has(id))));
+      setDecryptedReplies(current => new Map([...current].filter(([id]) => !ids.has(id) && !expiredReplies.has(id))));
+      setReplyTo(current => current && ids.has(current.id) ? null : current);
+      setForwardMsg(current => current && ids.has(current.id) ? null : current);
+      setMobileMenuMsg(current => current && ids.has(current.id) ? null : current);
+      setEditingId(current => current && ids.has(current) ? null : current);
+    };
+    expire();
+    const deadlines = [...items.filter(message => message.expiresAt && !message.deletedAt).map(message => Date.parse(message.expiresAt!)),...items.flatMap(message=>message.replyTo?.expiresAt && !message.replyTo.deleted ? [Date.parse(message.replyTo.expiresAt)] : [])];
+    const delay = deadlines.length ? Math.max(0, Math.min(...deadlines) - now()) : null;
+    const refresh = () => setItems(current => [...current]);
+    const timer = delay !== null ? window.setTimeout(refresh, Math.min(delay + 1, 2147483647)) : null;
+    document.addEventListener("visibilitychange", refresh);
+    return () => { if (timer !== null) clearTimeout(timer); document.removeEventListener("visibilitychange", refresh); };
+  }, [items,conversationId,forgetDecryptedMessages]);
+  async function revealMessage(message: MessageDTO) {
+    try {
+      const response = await fetch(`/api/messages/${message.id}/reveal`, { method: "POST", signal: AbortSignal.timeout(10000) });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? "Message unavailable.");
+      serverClockOffset.current = Date.parse(result.serverNow) - Date.now();
+      setItems(current => current.map(item => item.id === message.id ? result.message : item));
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not reveal message."); }
+  }
   const [nextCursor, setNextCursor] = useState<string | null>(initial.nextCursor);
   const [hasMore, setHasMore] = useState(initial.hasMore);
   const [loadingOlder, setLoadingOlder] = useState(false);
@@ -387,6 +419,11 @@ export function ChatView({
   const decryptingRepliesRef = useRef<Set<string>>(new Set());
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [decryptRetry, setDecryptRetry] = useState(0);
+  const decryptConversationRef = useRef<string | null>(null);
+  useEffect(() => {
+    decryptConversationRef.current = conversationId;
+    return () => { decryptConversationRef.current = null; };
+  }, [conversationId]);
   useEffect(() => { decryptedTextsRef.current = decryptedTexts; }, [decryptedTexts]);
   useEffect(() => { decryptedRepliesRef.current = decryptedReplies; }, [decryptedReplies]);
   // Read only locally authenticated, device-bound cached text before starting
@@ -395,7 +432,7 @@ export function ChatView({
   useEffect(() => {
     if (!e2ee.initialized) return;
     let alive = true;
-    void loadCachedDecryptedMessages(conversationId, items).then((cached) => {
+    void loadCachedDecryptedMessages(conversationId, items.filter(message => !message.selfDestruct && !message.expiresAt)).then((cached) => {
       if (alive && cached.size > 0) {
         setDecryptedTexts((current) => new Map([...current, ...cached]));
       }
@@ -430,7 +467,10 @@ export function ChatView({
       const flushText = () => {
         if (!alive || textBatch.size === 0) return;
         const ready = new Map(textBatch); textBatch.clear();
-        startTransition(() => setDecryptedTexts(current => new Map([...current, ...ready])));
+        startTransition(() => setDecryptedTexts(current => new Map([...current, ...[...ready].filter(([id])=>{
+          const message=items.find(item=>item.id===id);
+          return message && (!message.expiresAt || Date.parse(message.expiresAt)>Date.now()+serverClockOffset.current);
+        })])));
       };
       pending.forEach((m) => decryptingRef.current.add(m.id));
       pendingReplies.forEach((m) => decryptingRepliesRef.current.add(m.replyTo!.id));
@@ -450,7 +490,8 @@ export function ChatView({
             chatPerf("recipient-event-to-decrypted", arrivedAt);
             arrivalTimesRef.current.delete(m.id);
           }
-          cacheDecryptedMessage(conversationId, m.id, m.text, plain);
+          if (m.expiresAt && Date.parse(m.expiresAt) <= Date.now() + serverClockOffset.current) return;
+          if (!m.selfDestruct && !m.expiresAt) cacheDecryptedMessage(conversationId, m.id, m.text, plain);
           textBatch.set(m.id, plain);
           if (textBatch.size >= 12) flushText();
         } catch (cause) {
@@ -472,7 +513,7 @@ export function ChatView({
         try {
           const plain = await decrypt(reply.text, conversationId);
           failedDecryptionRef.current.delete(`reply:${reply.id}`);
-          replyBatch.set(reply.id, plain);
+          if (!reply.expiresAt || Date.parse(reply.expiresAt)>Date.now()+serverClockOffset.current) replyBatch.set(reply.id, plain);
         } catch {
           const key = `reply:${reply.id}`;
           const attempts = (failedDecryptionRef.current.get(key) ?? 0) + 1;
@@ -483,7 +524,13 @@ export function ChatView({
           decryptingRepliesRef.current.delete(reply.id);
         }
       });
-      if (!alive) return;
+      if (!alive) {
+        // A read receipt/history refresh can replace items during WebCrypto.
+        // The replacement effect skips those in-flight IDs; wake it when this
+        // batch releases them instead of leaving a permanent loading bubble.
+        if (decryptConversationRef.current === conversationId) setDecryptRetry(value => value + 1);
+        return;
+      }
       if (replyBatch.size) startTransition(() => setDecryptedReplies(current => new Map([...current, ...replyBatch])));
       // Retry once for a key that may still be in flight, then surface a
       // concise per-message fallback without blocking the rest of the chat.
@@ -593,7 +640,6 @@ export function ChatView({
   const [reportMsg, setReportMsg] = useState<MessageDTO | null>(null);
   const [showSchedule, setShowSchedule] = useState(false);
   const [scheduledTime, setScheduledTime] = useState("");
-  const [scheduledMessages, setScheduledMessages] = useState<Array<{ id: string; text: string; scheduledFor: string }>>([]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const messageContentRef = useRef<HTMLDivElement>(null);
@@ -623,7 +669,7 @@ export function ChatView({
   /* --------------------------- persistent drafts -------------------------- */
 
   const persistDraft = useCallback(() => {
-    if (!draftStorageReady.current) return;
+    if (!draftStorageReady.current || selfDestructDraft.current) return;
     void saveChatDraft(me.id, conversationId, draftRef.current).catch(() => {});
   }, [me.id, conversationId]);
   const queueDraftPersistence = useCallback(() => {
@@ -641,7 +687,7 @@ export function ChatView({
         if (saved === null && legacy) saved = legacy;
         if (!disposed && saved && !draftRef.current && draftRevision.current === initialRevision) setDraft(saved);
         // Remove the old plaintext entry only after durable encryption succeeds.
-        if (legacy && !disposed) {
+        if (legacy && !disposed && !selfDestructDraft.current) {
           await saveChatDraft(me.id, conversationId, draftRef.current);
           window.localStorage.removeItem(draftStorageKey);
         }
@@ -785,6 +831,11 @@ export function ChatView({
 
   useEffect(() => {
     return subscribe((event) => {
+      if (event.type === "message:lifetime" && event.conversationId === conversationId) {
+        if(event.serverNow) serverClockOffset.current=Date.parse(event.serverNow)-Date.now();
+        setItems(current => current.map(message => message.id === event.messageId ? { ...message, expiresAt: event.expiresAt, revealedAt: event.revealedAt ?? message.revealedAt } : message));
+        return;
+      }
       if (event.type === "typing:update" && event.conversationId === conversationId && event.userId !== me.id) {
         // The stream rejects expired events with its server clock. Use a
         // relative local timer so clock skew on a phone cannot hide typing.
@@ -1072,6 +1123,7 @@ export function ChatView({
     if (typingStopTimerRef.current) clearTimeout(typingStopTimerRef.current);
     signalTyping(false);
 
+    if (selfDestruct && attachments.pending.length > 0) { setError("Self-destruct is a text-message option. Remove attachments or turn it off."); return; }
     if (attachments.pending.length > 0) {
       if (sendPendingRef.current) return;
       setSendPending(true);
@@ -1116,6 +1168,7 @@ export function ChatView({
     const optimisticId = `client:${clientMessageId}`;
     const now = new Date().toISOString();
     const optimistic: MessageDTO = {
+      selfDestruct, revealedAt: null,
       id: optimisticId,
       clientMessageId,
       conversationId,
@@ -1172,6 +1225,7 @@ export function ChatView({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           clientMessageId,
+          selfDestruct,
           text: payload,
           replyToMessageId: replyId,
           encrypted: true,
@@ -1385,6 +1439,7 @@ export function ChatView({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           clientMessageId: message.clientMessageId,
+          selfDestruct: message.selfDestruct === true,
           text: payload,
           replyToMessageId: message.replyToMessageId,
           encrypted: true,
@@ -2211,10 +2266,10 @@ export function ChatView({
                         <>
                           <LongPressTouchable
                             onLongPress={() => {
-                              if (!deleted) setMobileMenuMsg(msg);
+                              if (!deleted && !msg.selfDestruct) setMobileMenuMsg(msg);
                             }}
-                            onSwipeRight={() => { if (!deleted) { setReplyTo(msg); composerRef.current?.focus(); } }}
-                            onSwipeLeft={() => { if (!deleted) setForwardMsg(msg); }}
+                            onSwipeRight={() => { if (!deleted && !msg.selfDestruct) { setReplyTo(msg); composerRef.current?.focus(); } }}
+                            onSwipeLeft={() => { if (!deleted && !msg.selfDestruct) setForwardMsg(msg); }}
                           >
                           <div
                             className={cn(
@@ -2309,7 +2364,7 @@ export function ChatView({
                                         {msg.replyTo.deleted ? (
                                           <span className="flex items-center gap-1">
                                             <Ban className="inline h-3 w-3" />
-                                            Message deleted
+                                            Message unavailable
                                           </span>
                                         ) : msg.replyTo.encrypted && decryptedReplies.get(msg.replyTo.id) === undefined ? (
                                           <span className="flex items-center gap-1 opacity-70">
@@ -2334,10 +2389,13 @@ export function ChatView({
                             {deleted ? (
                               <span className="flex items-center gap-1.5 text-sm italic opacity-80">
                                 <Ban className="h-3.5 w-3.5" />
-                                Message deleted
+                                {msg.selfDestruct ? "Message expired" : "Message deleted"}
                               </span>
+                            ) : msg.selfDestruct && !own && !msg.text ? (
+                              <button type="button" className="btn min-h-11 text-sm" disabled={!e2ee.initialized} onClick={() => void revealMessage(msg)}>Reveal · disappears in 5 seconds</button>
                             ) : (
                               <>
+                                {msg.selfDestruct ? <SelfDestructCountdown deadline={msg.expiresAt} offset={serverClockOffset.current} /> : null}
                                 {msg.type === "audio" && msg.attachments.length > 0 ? (
                                   <div className="mb-1.5 min-w-0 max-w-full">
                                     <AudioMessage
@@ -2544,7 +2602,7 @@ export function ChatView({
                           ) : (
                             <MessageActions
                               own={own}
-                              deleted={deleted}
+                              deleted={deleted || Boolean(msg.selfDestruct)}
                               align={own ? "right" : "left"}
                               starred={msg.starred}
                               pinned={msg.pinned}
@@ -2656,6 +2714,9 @@ export function ChatView({
           </div>
         ) : null}
 
+        {!schedulePaused ? <ScheduledMessageManager conversationId={conversationId} /> : null}
+        <label className="mb-2 flex min-h-9 items-center gap-2 text-xs"><input type="checkbox" checked={selfDestruct} disabled={sendPending || attachments.pending.length > 0 || awaitingApproval} onChange={event => { const enabled=event.target.checked;selfDestructDraft.current=enabled;setSelfDestruct(enabled);if(enabled)void saveChatDraft(me.id,conversationId,"").catch(()=>{});else queueDraftPersistence(); }} />Self-destruct message · 5 seconds after first reveal</label>
+        {selfDestruct ? <p className="mb-2 text-xs text-[var(--muted)]">Text only. The first reveal starts the countdown for everyone. Unsent drafts stay in this session; keep the chat open if sending is waiting.</p> : null}
         {mediaPaused || schedulePaused ? <p className="mb-2 text-xs text-[var(--muted)]">{mediaPaused ? "Uploads and voice messages are unavailable. " : ""}{schedulePaused ? "Scheduled sending is unavailable." : ""}</p> : null}
         <AttachmentPreviews
           pending={attachments.pending}
@@ -2759,7 +2820,7 @@ export function ChatView({
                 <button
                   type="button"
                   onClick={() => { setDraftState(draftRef.current); setShowSchedule(true); }}
-                  disabled={schedulePaused || sendPending || !canCompose || awaitingApproval}
+                  disabled={selfDestruct || schedulePaused || sendPending || !canCompose || awaitingApproval}
                   aria-label="Schedule message"
                   className="composer-icon flex h-11 w-11 flex-none items-center justify-center rounded-full text-[var(--muted)] hover:text-[var(--text)]"
                   title={schedulePaused ? "Scheduled sending is paused" : "Schedule message"}
@@ -3152,4 +3213,10 @@ function EncryptionInfoDialog({
       </div>
     </div>
   );
+}
+
+function SelfDestructCountdown({ deadline, offset }: { deadline: string | null; offset: number }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => { if (!deadline) return; const timer = setInterval(() => setNow(Date.now()), 250); return () => clearInterval(timer); }, [deadline]);
+  return <span className="mb-1 block text-[0.65rem] opacity-75" role="timer">{deadline ? `${Math.max(0, Math.ceil((Date.parse(deadline) - now - offset) / 1000))}s remaining` : "5 seconds after first reveal"}</span>;
 }

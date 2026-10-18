@@ -85,7 +85,7 @@ export async function POST(req: NextRequest) {
       noticeId = (await connection.query("UPDATE notifications SET read_at=now() WHERE user_id=$1 AND type='call' AND data->>'callId'=$2 RETURNING id", [call.callee_id, call.id])).rows[0]?.id;
     }
     // Keep signaling ephemeral. No SDP/IP history is retained after calls finish.
-    await connection.query("DELETE FROM audio_calls WHERE expires_at < now() OR state='ended'");
+    await connection.query("DELETE FROM audio_calls WHERE state='ended'");
     if (body.action !== "heartbeat") await connection.query("INSERT INTO realtime_events(user_id,payload) SELECT unnest($1::uuid[]),$2::jsonb", [[me.id, peer.id], JSON.stringify({ type: "call:changed", conversationId })]);
     await connection.query("COMMIT");
     if (noticeId) { const pushId = noticeId; const callee = call.callee_id; const callId = call.id; after(async () => { try { await sendCallAlert(pushId, callee, callId, conversationId, body.action !== "invite"); } catch { console.error("[calls] Push delivery unavailable."); } }); }

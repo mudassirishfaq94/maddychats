@@ -372,6 +372,27 @@
       "when": 1792281600009,
       "tag": "0051_notification_details_preference",
       "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1792281600010,
+      "tag": "0052_group_permissions",
+      "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1792281600011,
+      "tag": "0053_message_lifetime",
+      "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "7",
+      "when": 1792281600012,
+      "tag": "0054_encrypted_recovery_backups",
+      "breakpoints": true
     }
   ]
 }

@@ -1,3 +1,5 @@
+import { messageExpired } from "@/lib/message-expiration";
+import { groupAllows } from "@/lib/group-permissions";
 import { and, desc, eq, inArray, isNull, lt, lte, ne, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
@@ -99,19 +101,22 @@ export async function memberIdsOf(conversationId: string): Promise<string[]> {
 
 /* ------------------------------ DTO hydration ----------------------------- */
 
-export function baseDTO(row: MessageRow, sender: UserRow): MessageDTO {
-  const deleted = row.deletedAt !== null;
+export function baseDTO(row: MessageRow, sender: UserRow, viewerId = row.senderId): MessageDTO {
+  const expired = messageExpired(row);
+  const deleted = row.deletedAt !== null || expired;
+  const hidden = row.selfDestruct && !row.revealedAt && viewerId !== row.senderId;
   return {
     id: row.id,
     clientMessageId: row.clientMessageId,
     conversationId: row.conversationId,
-    text: deleted ? "" : row.text,
+    text: deleted || hidden ? "" : row.text,
     type: row.type,
     senderId: row.senderId,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     editedAt: row.editedAt ? row.editedAt.toISOString() : null,
-    deletedAt: row.deletedAt ? row.deletedAt.toISOString() : null,
+    deletedAt: row.deletedAt ? row.deletedAt.toISOString() : expired ? row.expiresAt!.toISOString() : null,
+    selfDestruct: row.selfDestruct, revealedAt: row.revealedAt?.toISOString() ?? null,
     expiresAt: row.expiresAt ? row.expiresAt.toISOString() : null,
     deliveredAt: row.deliveredAt ? row.deliveredAt.toISOString() : null,
     replyToMessageId: row.replyToMessageId,
@@ -201,7 +206,7 @@ export async function hydrateMessages(
   rows: { message: MessageRow; sender: UserRow }[],
   viewerId: string,
 ): Promise<MessageDTO[]> {
-  const dtos = rows.map((r) => baseDTO(r.message, r.sender));
+  const dtos = rows.map((r) => baseDTO(r.message, r.sender, viewerId));
   if (dtos.length === 0) return dtos;
 
   const ids = dtos.map((d) => d.id);
@@ -222,10 +227,11 @@ export async function hydrateMessages(
   for (const p of parents) {
     replyMap.set(p.message.id, {
       id: p.message.id,
-      text: p.message.deletedAt ? "" : p.message.text,
+      expiresAt: p.message.expiresAt?.toISOString() ?? null,
+      text: p.message.deletedAt || messageExpired(p.message) || p.message.selfDestruct ? "" : p.message.text,
       senderId: p.message.senderId,
       senderName: p.sender.displayName,
-      deleted: p.message.deletedAt !== null,
+      deleted: p.message.deletedAt !== null || messageExpired(p.message) || p.message.selfDestruct,
       encrypted: Boolean(p.message.encrypted),
     });
   }
@@ -273,9 +279,9 @@ export async function hydrateMessages(
       ? replyMap.get(dto.replyToMessageId) ?? null
       : null;
     // Deleted messages never expose their attachments.
-    dto.attachments = dto.deletedAt
+    dto.attachments = dto.deletedAt || (dto.selfDestruct && !dto.revealedAt && dto.senderId !== viewerId)
       ? []
-      : attachmentsByMessage.get(dto.id) ?? [];
+      : (attachmentsByMessage.get(dto.id) ?? []).map(attachment=>({...attachment,expiresAt:dto.expiresAt}));
     // Per-viewer per-message state.
     dto.starred = Boolean(flags.get(dto.id)?.star);
     dto.deletedForMe = Boolean(flags.get(dto.id)?.deletion);
@@ -330,16 +336,16 @@ export async function listConversationsFor(
   const [convs, allMembers, latest, unread, pinnedConvs, blockRows] = await Promise.all([
     conversationListQuery.execute({ ids: convIds }),
     conversationMembersQuery.execute({ ids: convIds }),
-    db.execute<{ id: string; conversation_id: string; sender_id: string; text: string; type: string; created_at: string; deleted_at: string | null; encrypted: boolean }>(sql`
-      SELECT DISTINCT ON (conversation_id) id, conversation_id, sender_id, text, type, created_at, deleted_at, encrypted
-      FROM messages WHERE conversation_id = any(${sql.param(convIds)}::uuid[])
+    db.execute<{ id: string; conversation_id: string; sender_id: string; text: string; type: string; created_at: string; deleted_at: string | null; expires_at: string | null; encrypted: boolean }>(sql`
+      SELECT DISTINCT ON (conversation_id) id, conversation_id, sender_id, CASE WHEN self_destruct THEN '' ELSE text END as text, type, created_at, deleted_at, expires_at, encrypted
+      FROM messages WHERE conversation_id = any(${sql.param(convIds)}::uuid[]) AND (expires_at IS NULL OR expires_at>now())
       ORDER BY conversation_id, created_at DESC
     `),
     db.execute<{ conversation_id: string; count: string }>(sql`
       SELECT m.conversation_id, count(*)::text AS count FROM messages m
       LEFT JOIN message_reads r ON r.message_id = m.id AND r.user_id = ${userId}
       WHERE m.conversation_id = any(${sql.param(convIds)}::uuid[])
-        AND m.sender_id <> ${userId} AND m.deleted_at IS NULL AND r.id IS NULL
+        AND (m.expires_at IS NULL OR m.expires_at>now()) AND m.sender_id <> ${userId} AND m.deleted_at IS NULL AND r.id IS NULL
       GROUP BY m.conversation_id
     `),
     pinnedConversationsQuery.execute({ ids: convIds }),
@@ -399,6 +405,7 @@ export async function listConversationsFor(
         lastMessage: last
           ? {
               id: last.id,
+              expiresAt: last.expires_at ? new Date(last.expires_at).toISOString() : null,
               text: last.deleted_at ? "" : last.text,
               type: last.type,
               senderId: last.sender_id,
@@ -458,6 +465,8 @@ export async function getConversationForUser(
     backgroundOpacity: conv.backgroundOpacity ?? 100,
     backgroundPositionX: conv.backgroundPositionX ?? 50,
     backgroundPositionY: conv.backgroundPositionY ?? 50,
+    adminOnlyAddingMembers: conv.adminOnlyAddingMembers,
+    adminOnlyEditingInfo: conv.adminOnlyEditingInfo,
     adminOnlyMessaging: Boolean(conv.adminOnlyMessaging),
     rules: conv.rules ?? null,
     announcements: conv.announcements ?? null,
@@ -511,73 +520,81 @@ export async function getGroupWithActor(conversationId: string, actorId: string)
   return { conversation, membership };
 }
 
-export async function addGroupMember(conversationId: string, actorId: string, userId: string) {
-  const ctx = await getGroupWithActor(conversationId, actorId);
-  if (!ctx) return "not_found" as const;
-  if (ctx.membership.role !== "owner" && ctx.membership.role !== "admin") return "forbidden" as const;
-  const [user] = await db.select({ id: users.id }).from(users).where(eq(users.id, userId)).limit(1);
-  if (!user) return "user_not_found" as const;
-  try {
-    await db.insert(conversationMembers).values({ conversationId, userId, role: "member" });
-    return "ok" as const;
-  } catch (error) {
-    if ((error as { code?: string }).code === "23505") return "already_member" as const;
-    throw error;
-  }
+type GroupTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+export async function lockGroupActor(tx: GroupTransaction, conversationId: string, actorId: string) {
+  const [conversation]=await tx.select().from(conversations).where(eq(conversations.id,conversationId)).for("update");
+  if(!conversation || conversation.type!=="group" || conversation.deletedAt)return null;
+  const [membership]=await tx.select().from(conversationMembers).where(and(eq(conversationMembers.conversationId,conversationId),eq(conversationMembers.userId,actorId))).for("update");
+  return membership?{conversation,membership}:null;
 }
-
-export async function removeGroupMember(conversationId: string, actorId: string, userId: string) {
-  const ctx = await getGroupWithActor(conversationId, actorId);
-  if (!ctx) return "not_found" as const;
-  if (actorId === userId) return "use_leave" as const;
-  if (ctx.membership.role !== "owner" && ctx.membership.role !== "admin") return "forbidden" as const;
-  const target = await getMembership(conversationId, userId);
-  if (!target) return "member_not_found" as const;
-  if (target.role === "owner") return "forbidden" as const;
-  if (ctx.membership.role === "admin" && target.role !== "member") return "forbidden" as const;
-  await db.delete(conversationMembers).where(and(eq(conversationMembers.conversationId, conversationId), eq(conversationMembers.userId, userId)));
-  return "ok" as const;
-}
-
-export async function changeGroupRole(conversationId: string, actorId: string, userId: string, role: "admin" | "member") {
-  const ctx = await getGroupWithActor(conversationId, actorId);
-  if (!ctx) return "not_found" as const;
-  if (ctx.membership.role !== "owner") return "forbidden" as const;
-  const target = await getMembership(conversationId, userId);
-  if (!target) return "member_not_found" as const;
-  if (target.role === "owner") return "forbidden" as const;
-  await db.update(conversationMembers).set({ role }).where(eq(conversationMembers.id, target.id));
-  return "ok" as const;
-}
-
-export async function transferGroupOwnership(conversationId: string, actorId: string, userId: string) {
-  const ctx = await getGroupWithActor(conversationId, actorId);
-  if (!ctx) return "not_found" as const;
-  if (ctx.membership.role !== "owner") return "forbidden" as const;
-  const target = await getMembership(conversationId, userId);
-  if (!target || userId === actorId) return "member_not_found" as const;
-  await db.transaction(async (tx) => {
-    await tx.update(conversationMembers).set({ role: "admin" }).where(eq(conversationMembers.id, ctx.membership.id));
-    await tx.update(conversationMembers).set({ role: "owner" }).where(eq(conversationMembers.id, target.id));
-    await tx.update(conversations).set({ createdById: userId, updatedAt: new Date() }).where(eq(conversations.id, conversationId));
+export type GroupSettingsPatch = Partial<Pick<ConversationRow,"name"|"description"|"avatarUrl"|"rules"|"announcements"|"adminOnlyAddingMembers"|"adminOnlyEditingInfo"|"adminOnlyMessaging"|"slowModeSeconds">>;
+export async function saveGroupSettings(conversationId:string,actorId:string,patch:GroupSettingsPatch) {
+  return db.transaction(async tx=>{
+    const context=await lockGroupActor(tx,conversationId,actorId);if(!context)return null;
+    const policy=["rules","announcements","adminOnlyAddingMembers","adminOnlyEditingInfo","adminOnlyMessaging","slowModeSeconds"].some(key=>key in patch);
+    if(!groupAllows(context.membership.role,context.conversation,policy?"managePermissions":"editInfo"))return null;
+    return (await tx.update(conversations).set({...patch,updatedAt:new Date()}).where(eq(conversations.id,conversationId)).returning({updatedAt:conversations.updatedAt}))[0];
   });
-  return "ok" as const;
 }
 
-export async function leaveGroup(conversationId: string, userId: string) {
-  const ctx = await getGroupWithActor(conversationId, userId);
-  if (!ctx) return "not_found" as const;
-  if (ctx.membership.role === "owner") return "owner_must_transfer" as const;
-  await db.delete(conversationMembers).where(eq(conversationMembers.id, ctx.membership.id));
-  return "ok" as const;
+export async function addGroupMember(conversationId: string, actorId: string, userId: string) {
+  return db.transaction(async tx => {
+    const [conversation] = await tx.select().from(conversations).where(eq(conversations.id, conversationId)).for("update");
+    if (!conversation || conversation.type !== "group" || conversation.deletedAt) return "not_found" as const;
+    const [actor] = await tx.select().from(conversationMembers).where(and(eq(conversationMembers.conversationId, conversationId), eq(conversationMembers.userId, actorId))).for("share");
+    if (!actor) return "not_found" as const;
+    if (!groupAllows(actor.role, conversation, "addMembers")) return "forbidden" as const;
+    const [user] = await tx.select({ id: users.id }).from(users).where(eq(users.id, userId));
+    if (!user) return "user_not_found" as const;
+    const added = await tx.insert(conversationMembers).values({ conversationId, userId, role: "member", acceptedAt: new Date() }).onConflictDoNothing().returning({ id: conversationMembers.id });
+    return added.length ? "ok" as const : "already_member" as const;
+  });
 }
 
-export async function deleteGroup(conversationId: string, userId: string) {
-  const ctx = await getGroupWithActor(conversationId, userId);
-  if (!ctx) return "not_found" as const;
-  if (ctx.membership.role !== "owner") return "forbidden" as const;
-  await db.update(conversations).set({ deletedAt: new Date(), updatedAt: new Date() }).where(eq(conversations.id, conversationId));
-  return "ok" as const;
+export async function removeGroupMember(conversationId:string,actorId:string,userId:string) {
+  return db.transaction(async tx=>{
+    const ctx=await lockGroupActor(tx,conversationId,actorId);if(!ctx)return "not_found" as const;
+    if(actorId===userId)return "use_leave" as const;
+    if(!groupAllows(ctx.membership.role,ctx.conversation,"managePermissions"))return "forbidden" as const;
+    const [target]=await tx.select().from(conversationMembers).where(and(eq(conversationMembers.conversationId,conversationId),eq(conversationMembers.userId,userId))).for("update");
+    if(!target)return "member_not_found" as const;
+    if(target.role==="owner" || (ctx.membership.role==="admin" && target.role!=="member"))return "forbidden" as const;
+    await tx.delete(conversationMembers).where(eq(conversationMembers.id,target.id));return "ok" as const;
+  });
+}
+export async function changeGroupRole(conversationId:string,actorId:string,userId:string,role:"admin"|"member") {
+  return db.transaction(async tx=>{
+    const ctx=await lockGroupActor(tx,conversationId,actorId);if(!ctx)return "not_found" as const;
+    if(ctx.membership.role!=="owner")return "forbidden" as const;
+    const [target]=await tx.select().from(conversationMembers).where(and(eq(conversationMembers.conversationId,conversationId),eq(conversationMembers.userId,userId))).for("update");
+    if(!target)return "member_not_found" as const;if(target.role==="owner")return "forbidden" as const;
+    await tx.update(conversationMembers).set({role}).where(eq(conversationMembers.id,target.id));return "ok" as const;
+  });
+}
+export async function transferGroupOwnership(conversationId:string,actorId:string,userId:string) {
+  return db.transaction(async tx=>{
+    const ctx=await lockGroupActor(tx,conversationId,actorId);if(!ctx)return "not_found" as const;
+    if(ctx.membership.role!=="owner")return "forbidden" as const;
+    const [target]=await tx.select().from(conversationMembers).where(and(eq(conversationMembers.conversationId,conversationId),eq(conversationMembers.userId,userId))).for("update");
+    if(!target || userId===actorId)return "member_not_found" as const;
+    await tx.update(conversationMembers).set({role:"admin"}).where(eq(conversationMembers.id,ctx.membership.id));
+    await tx.update(conversationMembers).set({role:"owner"}).where(eq(conversationMembers.id,target.id));
+    await tx.update(conversations).set({createdById:userId,updatedAt:new Date()}).where(eq(conversations.id,conversationId));return "ok" as const;
+  });
+}
+export async function leaveGroup(conversationId:string,userId:string) {
+  return db.transaction(async tx=>{
+    const ctx=await lockGroupActor(tx,conversationId,userId);if(!ctx)return "not_found" as const;
+    if(ctx.membership.role==="owner")return "owner_must_transfer" as const;
+    await tx.delete(conversationMembers).where(eq(conversationMembers.id,ctx.membership.id));return "ok" as const;
+  });
+}
+export async function deleteGroup(conversationId:string,userId:string) {
+  return db.transaction(async tx=>{
+    const ctx=await lockGroupActor(tx,conversationId,userId);if(!ctx)return "not_found" as const;
+    if(ctx.membership.role!=="owner")return "forbidden" as const;
+    await tx.update(conversations).set({deletedAt:new Date(),updatedAt:new Date()}).where(eq(conversations.id,conversationId));return "ok" as const;
+  });
 }
 
 export async function storeMessageMentions(messageId: string, conversationId: string, text: string, actorId: string) {
@@ -686,6 +703,7 @@ export async function listMessages(
 
   return {
     messages: await hydrateMessages(chronological, viewerId),
+    serverNow: new Date().toISOString(),
     nextCursor:
       hasMore && oldest
         ? encodeCursor({
@@ -708,6 +726,7 @@ export async function createMessage(
   options?: {
     clientMessageId?: string;
     disappearingSeconds?: number;
+    selfDestruct?: boolean;
     deliveredAt?: Date | null;
     sender?: import("@/lib/types").SafeUser;
     enforceMessageRequest?: boolean;
@@ -765,7 +784,7 @@ export async function createMessage(
         text: messages.text,
         senderId: messages.senderId,
         senderName: users.displayName,
-        deletedAt: messages.deletedAt,
+        deletedAt: messages.deletedAt, expiresAt: messages.expiresAt, selfDestruct: messages.selfDestruct,
         encrypted: messages.encrypted,
       })
       .from(messages)
@@ -781,17 +800,18 @@ export async function createMessage(
     if (parent[0]) {
       replyPreview = {
         id: parent[0].id,
-        text: parent[0].deletedAt ? "" : parent[0].text,
+        expiresAt: parent[0].expiresAt?.toISOString() ?? null,
+        text: parent[0].deletedAt || messageExpired(parent[0]) || parent[0].selfDestruct ? "" : parent[0].text,
         senderId: parent[0].senderId,
         senderName: parent[0].senderName,
-        deleted: Boolean(parent[0].deletedAt),
+        deleted: Boolean(parent[0].deletedAt) || messageExpired(parent[0]) || parent[0].selfDestruct,
         encrypted: Boolean(parent[0].encrypted),
       };
     }
   }
 
   const now = new Date();
-  const seconds = options?.disappearingSeconds ?? 0;
+  const seconds = options?.selfDestruct ? 0 : options?.disappearingSeconds ?? 0;
   const expiresAt = seconds > 0 ? new Date(now.getTime() + seconds * 1000) : null;
   const eventDefaults = options?.sender ? {
     sender: {id:options.sender.id,username:options.sender.username,displayName:options.sender.displayName,avatarUrl:options.sender.avatarUrl,bio:options.sender.bio,createdAt:options.sender.createdAt,lastSeenAt:options.sender.lastSeenAt},
@@ -806,18 +826,19 @@ export async function createMessage(
     with inserted as (
       insert into messages (
         conversation_id, sender_id, client_message_id, text, type,
-        reply_to_message_id, forwarded, encrypted, delivered_at, expires_at
-      ) values (
+        reply_to_message_id, forwarded, encrypted, delivered_at, expires_at, self_destruct
+      ) select
         ${conversationId}, ${senderId}, ${options?.clientMessageId ?? null}, ${text}, 'text',
-        ${replyId}, ${forwarded}, ${encrypted}, ${options?.deliveredAt ?? null}, ${expiresAt}
-      )
+        ${replyId}, ${forwarded}, ${encrypted}, ${options?.deliveredAt ?? null}, ${expiresAt}, ${options?.selfDestruct ?? false}
+      from conversations c join conversation_members actor on actor.conversation_id=c.id and actor.user_id=${senderId}
+      where c.id=${conversationId} and c.deleted_at is null and (c.type<>'group' or not c.admin_only_messaging or actor.role in ('owner','admin'))
       on conflict (sender_id, client_message_id) do nothing
       returning id, conversation_id as "conversationId", sender_id as "senderId",
         client_message_id as "clientMessageId", text, type,
         reply_to_message_id as "replyToMessageId", forwarded, encrypted,
         delivered_at as "deliveredAt", created_at as "createdAt",
         updated_at as "updatedAt", edited_at as "editedAt",
-        deleted_at as "deletedAt", expires_at as "expiresAt"
+        deleted_at as "deletedAt", expires_at as "expiresAt", self_destruct as "selfDestruct", revealed_at as "revealedAt"
     ), bumped as (
       update conversations set last_message_at = ${now}, updated_at = ${now}
       where id = ${conversationId} and exists (select 1 from inserted)
@@ -826,7 +847,7 @@ export async function createMessage(
       insert into realtime_events(user_id,payload)
       select recipient::uuid, jsonb_build_object(
         'type','message:new','conversationId',${conversationId}::text,
-        'message',to_jsonb(inserted) || ${JSON.stringify(eventDefaults)}::jsonb
+        'message',to_jsonb(inserted) || ${JSON.stringify(eventDefaults)}::jsonb || case when inserted."selfDestruct" and recipient::uuid<>${senderId} then jsonb_build_object('text','') else '{}'::jsonb end
       )
       from inserted cross join jsonb_array_elements_text(${JSON.stringify([...new Set(options?.realtimeRecipients ?? [])])}::jsonb) as recipients(recipient)
       returning id
@@ -836,7 +857,7 @@ export async function createMessage(
     select m.id, m.conversation_id, m.sender_id, m.client_message_id,
       m.text, m.type, m.reply_to_message_id, m.forwarded, m.encrypted,
       m.delivered_at, m.created_at, m.updated_at, m.edited_at,
-      m.deleted_at, m.expires_at, false as "wasCreated"
+      m.deleted_at, m.expires_at, m.self_destruct, m.revealed_at, false as "wasCreated"
     from messages m
     where m.sender_id = ${senderId}
       and m.client_message_id = ${options?.clientMessageId ?? null}
@@ -858,7 +879,7 @@ export async function createMessage(
 
   // New plain text messages have no reactions, reads, attachments, stars,
   // deletions or pins. Avoid the seven-query generic hydration path.
-  if (options?.sender) {
+  if (options?.sender && !row.deletedAt && !messageExpired(row)) {
     const sender = options.sender;
     return { created: row.wasCreated, message: {
       id: row.id,
@@ -872,6 +893,7 @@ export async function createMessage(
       editedAt: null,
       deletedAt: null,
       expiresAt: row.expiresAt ? new Date(row.expiresAt).toISOString() : null,
+      selfDestruct: row.selfDestruct, revealedAt: row.revealedAt ? new Date(row.revealedAt).toISOString() : null,
       deliveredAt: row.deliveredAt ? new Date(row.deliveredAt).toISOString() : null,
       replyToMessageId: row.replyToMessageId,
       replyTo: replyPreview,
@@ -911,6 +933,7 @@ export async function editMessage(
     const msg = found.message;
     if (msg.senderId !== userId) return "forbidden";
     if (msg.deletedAt) return "deleted";
+    if (msg.selfDestruct) return "not_found";
     if ((msg.expiresAt && msg.expiresAt <= new Date()) || (found.membership.clearedAt && msg.createdAt <= found.membership.clearedAt)) return "not_found";
     const now = new Date();
     const [updated] = await tx.update(messages).set({ text, editedAt: now, updatedAt: now, encrypted })
@@ -1286,7 +1309,7 @@ export async function searchMessages(
     .innerJoin(conversations, eq(conversations.id, messages.conversationId))
     .where(
       and(
-        isNull(messages.deletedAt),
+        isNull(messages.deletedAt), eq(messages.selfDestruct, false), sql`(${messages.expiresAt} is null or ${messages.expiresAt}>now())`,
         sql`${messages.text} ILIKE ${`%${q}%`}`,
       ),
     )
@@ -1406,7 +1429,7 @@ export async function listStarredMessages(
   return rows.map((r) => ({
     id: r.star.id,
     messageId: r.message.id,
-    text: r.message.deletedAt ? "" : r.message.text,
+    text: r.message.deletedAt || messageExpired(r.message) || r.message.selfDestruct ? "" : r.message.text,
     type: r.message.type,
     createdAt: r.star.createdAt.toISOString(),
     starredAt: r.star.createdAt.toISOString(),
@@ -1418,7 +1441,7 @@ export async function listStarredMessages(
       id: r.conversation.id,
       name: r.conversation.name,
     },
-    attachments: r.message.deletedAt
+    attachments: r.message.deletedAt || messageExpired(r.message) || r.message.selfDestruct
       ? []
       : attachmentsByMsg.get(r.message.id) ?? [],
   }));
@@ -1556,7 +1579,7 @@ export async function listPinnedMessages(
     id: r.pin.id,
     messageId: r.message.id,
     conversationId,
-    text: r.message.deletedAt ? "" : r.message.text,
+    text: r.message.deletedAt || messageExpired(r.message) || r.message.selfDestruct ? "" : r.message.text,
     type: r.message.type,
     pinnedAt: r.pin.createdAt.toISOString(),
     pinnedBy: r.pin.pinnedBy,
@@ -1749,7 +1772,7 @@ export async function listConversationMedia(
     .where(
       and(
         eq(messages.conversationId, conversationId),
-        isNull(messages.deletedAt),
+        isNull(messages.deletedAt), eq(messages.selfDestruct, false), sql`(${messages.expiresAt} is null or ${messages.expiresAt}>now())`,
         inArray(messageAttachments.kind, ["image", "video"]),
       ),
     )
@@ -1757,7 +1780,7 @@ export async function listConversationMedia(
 
   return rows
     .filter((r) => !myDeletedIds.has(r.message.id))
-    .map((r) => toAttachmentDTO(r.attachment));
+    .map((r) => ({...toAttachmentDTO(r.attachment),expiresAt:r.message.expiresAt?.toISOString() ?? null}));
 }
 
 /**
@@ -1790,7 +1813,7 @@ export async function listConversationFiles(
     .where(
       and(
         eq(messages.conversationId, conversationId),
-        isNull(messages.deletedAt),
+        isNull(messages.deletedAt), eq(messages.selfDestruct, false), sql`(${messages.expiresAt} is null or ${messages.expiresAt}>now())`,
         eq(messageAttachments.kind, "file"),
       ),
     )
@@ -1800,6 +1823,7 @@ export async function listConversationFiles(
     .filter((r) => !myDeletedIds.has(r.message.id))
     .map((r) => ({
       ...toAttachmentDTO(r.attachment),
+      expiresAt:r.message.expiresAt?.toISOString() ?? null,
       createdAt: r.message.createdAt.toISOString(),
     }));
 }
@@ -1831,7 +1855,7 @@ export async function listConversationLinks(
     .where(
       and(
         eq(messages.conversationId, conversationId),
-        isNull(messages.deletedAt),
+        isNull(messages.deletedAt), eq(messages.selfDestruct, false), sql`(${messages.expiresAt} is null or ${messages.expiresAt}>now())`,
         sql`${messages.text} ~* ${'https?://[^\s]+'}`,
       ),
     )

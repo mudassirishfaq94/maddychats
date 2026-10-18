@@ -78,3 +78,9 @@ test("native delivery waits for sends and retires only invalid/unregistered toke
   assert.deepEqual(retired.sort(), ["invalid", "unregistered"]);
   assert.deepEqual(failed, ["messaging/server-unavailable"]);
 });
+
+test("native call cancellation is explicit and stays on the data-only short-lived channel",()=>{
+ const payload=nativePushPayload({recipientId:"recipient",notificationId:"event",conversationId:"chat",messageId:"",callId:"call",callCancelled:true,callTtl:30},1000);
+ assert.equal(payload.data.callId,"call");assert.equal(payload.data.callCancelled,"true");assert.equal(payload.android.ttl,30000);
+ assert.equal("notification" in payload,false);
+});

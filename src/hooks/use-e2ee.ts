@@ -30,6 +30,7 @@ import {
   getMessageCacheKey,
   readVerifiedMessage,
   writeVerifiedMessage,
+  purgeVerifiedMessages,
 } from "@/lib/e2ee-message-cache";
 
 interface PeerDevice {
@@ -86,6 +87,9 @@ export function useE2EE(userId: string | undefined) {
   useEffect(() => {
     if (!userId) return;
     const activeUserId = userId;
+    let active = true;
+    const controller = new AbortController();
+    const sendingKeys=conversationKeysRef.current,decryptionKeys=decryptionKeysRef.current,plaintextCache=decryptedMessageCacheRef.current;
     messageCacheKeyRef.current = null;
 
     async function init() {
@@ -106,7 +110,7 @@ export function useE2EE(userId: string | undefined) {
       // messages encrypted for it.
       const backupResponse = !stored ? await e2eeRequest("/api/e2ee/keys", {
         cache: "no-store",
-        signal: AbortSignal.timeout(15000),
+        signal: AbortSignal.any([controller.signal,AbortSignal.timeout(15000)]),
       }) : null;
       if (backupResponse && !backupResponse.ok) throw new Error("Device key lookup failed");
       const backupData = backupResponse ? await backupResponse.json() as {
@@ -178,12 +182,14 @@ export function useE2EE(userId: string | undefined) {
       // Keep the backup decryptable on this device without giving the server
       // its passphrase. The previous protocol stored deviceId beside the
       // backup, which did not provide meaningful protection from the server.
+      controller.signal.throwIfAborted();
       if (!recoverySecret) {
         const secretBytes = crypto.getRandomValues(new Uint8Array(32));
         recoverySecret = Array.from(secretBytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
         localStorage.setItem(recoveryStorageKey, recoverySecret);
       }
       const encryptedPrivateKey = `v2:${await encryptPrivateKeyForStorage(privateKeyStr, recoverySecret)}`;
+      controller.signal.throwIfAborted();
       // Never persist the raw, exportable JWK. This also migrates legacy
       // browser records after their next successful initialization.
       localStorage.setItem(
@@ -203,13 +209,14 @@ export function useE2EE(userId: string | undefined) {
         error: null,
       });
 
-      const registrationSignal = AbortSignal.timeout(15000);
+      const registrationSignal = AbortSignal.any([controller.signal,AbortSignal.timeout(15000)]);
       const registration = e2eeRequest("/api/e2ee/keys", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ deviceId, publicKey: publicKeyStr, encryptedPrivateKey }),
         signal: registrationSignal,
       }).then(async (response) => {
+        if (!active) return false;
         if (!response.ok) {
           setState(previous => ({ ...previous, error: "Device registration failed. Reload to retry; your keys were preserved." }));
           return false;
@@ -236,7 +243,10 @@ export function useE2EE(userId: string | undefined) {
           return false;
         }
         return true;
-      }).catch(() => false);
+      }).catch(() => {
+        if(active) setState(previous => ({ ...previous, error: "Encryption device registration needs attention. Your existing keys were preserved; reload when online to retry." }));
+        return false;
+      });
       deviceRegistrationRef.current = registration;
 
       // Register the Signal device directory independently of the legacy
@@ -245,9 +255,11 @@ export function useE2EE(userId: string | undefined) {
       // only after its session ratchet is available.
       if (process.env.NEXT_PUBLIC_STARTER_MODE !== "1") void registration
         .then(async (ready) => {
-          if (!ready) return;
+          if (!ready || !active) return;
           const bridge = await loadSignalBridge();
+          if(!active)return;
           await ensureSignalDeviceRegistered(activeUserId, deviceId, bridge);
+          if(!active)return;
           await maintainSignalPrekeyReserve(activeUserId, deviceId, bridge);
         })
         .catch(() => {
@@ -257,12 +269,16 @@ export function useE2EE(userId: string | undefined) {
 
     }
 
-    init().catch((cause: unknown) => setState((prev) => ({
+    init().catch((cause: unknown) => { if(!active)return; setState((prev) => ({
       ...prev, initialized: false, loading: false,
       error: cause instanceof Error && cause.message === "Device recovery secret is unavailable"
         ? "Browser storage no longer contains this device's recovery secret. Use a trusted device that can still read your messages to approve and restore a new device."
         : "Encryption could not be initialized on this device. Reload to try again; existing keys were preserved.",
-    })));
+    })); });
+    return () => {
+      active=false;controller.abort();keyPairRef.current=null;
+      sendingKeys.clear();decryptionKeys.clear();plaintextCache.clear();
+    };
   }, [userId]);
 
   const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -313,6 +329,7 @@ export function useE2EE(userId: string | undefined) {
     if (saved.some(entry => entry.fingerprint === fingerprint)) return;
     const wrapped = await encryptKeyForUser(key, keyPairRef.current.publicKey);
     localStorage.setItem(storageKey, JSON.stringify([...saved, { fingerprint, wrapped }]));
+    window.dispatchEvent(new Event("maddy:recovery-keys-changed"));
   }, [userId]);
 
   /** Restore keys previously wrapped for *this* device before using the
@@ -989,6 +1006,11 @@ export function useE2EE(userId: string | undefined) {
     }
   }, [state.deviceId, userId]);
 
+  const forgetDecryptedMessages=useCallback((conversationId:string,ids:string[])=>{
+    for(const id of ids)decryptedMessageCacheRef.current.delete(`${conversationId}:${id}`);
+    if(userId)void purgeVerifiedMessages(userId,conversationId,ids).catch(()=>{});
+  },[userId]);
+
   return {
     ...state,
     encrypt,
@@ -1006,6 +1028,7 @@ export function useE2EE(userId: string | undefined) {
     getCachedDecryptedMessage,
     cacheDecryptedMessage,
     loadCachedDecryptedMessages,
+    forgetDecryptedMessages,
     // Key rotation
     checkRotationNeeded,
     rotateConversationKey,

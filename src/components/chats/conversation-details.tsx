@@ -1,5 +1,6 @@
 "use client";
 
+import { groupAllows } from "@/lib/group-permissions";
 import Image from "next/image";
 
 import { useEffect, useRef, useState } from "react";
@@ -183,6 +184,7 @@ export function ConversationDetails({
         (event.type === "message:new" ||
           event.type === "message:update" ||
           event.type === "message:deleted" ||
+          event.type === "message:lifetime" ||
           event.type === "message:deleted_for_me")
       ) {
         setLoading(true);
@@ -257,14 +259,14 @@ export function ConversationDetails({
               <span className="max-w-full break-words text-center text-base font-semibold [overflow-wrap:anywhere]">{group.name}</span>
               <span className="text-xs text-[var(--muted)]">{group.members.length} members · {group.members.filter((m) => m.role === "owner" || m.role === "admin").length} admins</span>
               {group.description ? <p className="text-center text-xs text-[var(--muted)]">{group.description}</p> : null}
-            {(group.myRole === "owner" || group.myRole === "admin") ? (
+            {(
               <GroupSettingsPanel
                 conversationId={conversationId}
                 group={group}
                 busy={groupBusy !== null}
                 onUpdate={(patch) => { setGroup((prev) => ({ ...prev, ...patch })); onMetadataUpdate?.(patch); router.refresh(); }}
               />
-            ) : null}
+            )}
             </div>
             <div className="mt-4 max-h-52 space-y-1 overflow-y-auto">
               {group.members.map((member) => <div key={member.id} className="flex items-center gap-2 rounded-xl px-2 py-1.5 hover:bg-[var(--surface-2)]">
@@ -276,7 +278,7 @@ export function ConversationDetails({
                 {(group.myRole === "owner" || group.myRole === "admin") && member.role === "member" ? <button type="button" disabled={groupBusy !== null} title="Remove member" onClick={() => void groupAction(`/api/groups/${conversationId}/members/${member.id}`, "DELETE")} className="p-1.5 text-[var(--danger)]"><Trash2 className="h-3.5 w-3.5" /></button> : null}
               </div>)}
             </div>
-            {group.myRole === "owner" || group.myRole === "admin" ? <div className="mt-3">
+            {groupAllows(group.myRole, group, "addMembers") ? <div className="mt-3">
               <div className="relative"><Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--muted)]" /><input value={memberQuery} onChange={(e) => { setMemberQuery(e.target.value); if (e.target.value.trim().length < 2) setMemberResults([]); }} className="field-input field-input--icon py-2! text-xs!" placeholder="Add members…" /></div>
               {memberResults.length ? <div className="mt-1 max-h-28 overflow-y-auto rounded-xl border border-[var(--border)] bg-[var(--card)] p-1">{memberResults.map((member) => <button type="button" key={member.id} onClick={() => void groupAction(`/api/groups/${conversationId}/members`, "POST", { userId: member.id }).then(() => { setMemberQuery(""); setMemberResults([]); })} className="flex w-full items-center gap-2 rounded-lg p-2 text-left text-xs hover:bg-[var(--surface-2)]"><Avatar user={member} size={26} /><span className="min-w-0 flex-1 truncate">{member.displayName}</span><UserPlus className="h-3.5 w-3.5" /></button>)}</div> : null}
             </div> : null}
@@ -501,7 +503,7 @@ function MediaGrid({ items }: { items: AttachmentDTO[] }) {
         ))}
       </div>
 
-      {lightboxIdx !== null ? (
+      {lightboxIdx !== null && items[lightboxIdx] ? (
         <Lightbox
           src={items[lightboxIdx].url}
           alt={items[lightboxIdx].originalName}
@@ -1383,18 +1385,20 @@ function GroupSettingsPanel({ conversationId, group, busy, onUpdate }: {
   onUpdate: (patch: Partial<ConversationDetail>) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [draft, setDraft] = useState({ name: group.name ?? "", description: group.description ?? "", rules: group.rules ?? "", announcements: group.announcements ?? "", adminOnlyMessaging: group.adminOnlyMessaging, slowModeSeconds: group.slowModeSeconds });
+  const [draft, setDraft] = useState({ name: group.name ?? "", description: group.description ?? "", rules: group.rules ?? "", announcements: group.announcements ?? "", adminOnlyAddingMembers: group.adminOnlyAddingMembers, adminOnlyEditingInfo: group.adminOnlyEditingInfo, adminOnlyMessaging: group.adminOnlyMessaging, slowModeSeconds: group.slowModeSeconds });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const locked = busy || saving;
+  const admin = groupAllows(group.myRole, group, "managePermissions");
+  const infoLocked = locked || !groupAllows(group.myRole, group, "editInfo");
   function edit() {
-    setDraft({ name: group.name ?? "", description: group.description ?? "", rules: group.rules ?? "", announcements: group.announcements ?? "", adminOnlyMessaging: group.adminOnlyMessaging, slowModeSeconds: group.slowModeSeconds });
+    setDraft({ name: group.name ?? "", description: group.description ?? "", rules: group.rules ?? "", announcements: group.announcements ?? "", adminOnlyAddingMembers: group.adminOnlyAddingMembers, adminOnlyEditingInfo: group.adminOnlyEditingInfo, adminOnlyMessaging: group.adminOnlyMessaging, slowModeSeconds: group.slowModeSeconds });
     setError(null); setNotice(null); setOpen(true);
   }
   async function submit(file?: File) {
-    if (locked) return;
+    if (infoLocked) return;
     if (!file && !draft.name.trim()) { setError("Enter a group name before saving."); return; }
     setSaving(true); setError(null); setNotice(null);
     try {
@@ -1402,7 +1406,7 @@ function GroupSettingsPanel({ conversationId, group, busy, onUpdate }: {
       if (form && file) form.append("file", file);
       const response = await fetch(`/api/groups/${conversationId}/${file ? "avatar" : "settings"}`, {
         method: file ? "POST" : "PATCH", headers: file ? undefined : { "Content-Type": "application/json" },
-        body: form ?? JSON.stringify({ ...draft, name: draft.name.trim() }), signal: AbortSignal.timeout(30000),
+        body: form ?? JSON.stringify(admin ? { ...draft, name: draft.name.trim() } : { name: draft.name.trim(), description: draft.description }), signal: AbortSignal.timeout(30000),
       });
       const result = await response.json().catch(() => null);
       if (!response.ok) throw new Error(result?.error ?? "Changes could not be saved. Please retry.");
@@ -1414,24 +1418,25 @@ function GroupSettingsPanel({ conversationId, group, busy, onUpdate }: {
   return <section className="mt-3 w-full min-w-0" aria-label="Group settings">
     <button type="button" aria-expanded={open} onClick={() => open ? setOpen(false) : edit()} className="btn min-h-11 w-full text-xs">{open ? "Hide settings" : "Group settings"}</button>
     {open ? <div className="mt-2 space-y-4 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
-      <p className="text-xs text-[var(--muted)]">Admins can edit these details. Group names, descriptions and photos are visible to the service; chat messages stay encrypted.</p>
+      <p className="text-xs text-[var(--muted)]">Group permissions determine who can edit these details. Group names, descriptions and photos are visible to the service; chat messages stay encrypted.</p>
       <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4"><p className="mb-3 text-xs font-semibold uppercase tracking-wider text-[var(--muted)]">Your group’s identity</p><div className="flex flex-wrap items-center gap-3">
         {group.avatarUrl ? <Image unoptimized src={group.avatarUrl} alt="Group photo" width={64} height={64} className="h-16 w-16 rounded-full object-cover" /> : null}
-        <button type="button" disabled={locked} onClick={() => fileRef.current?.click()} className="btn min-h-11 text-xs">Change group photo</button>
+        <button type="button" disabled={infoLocked} onClick={() => fileRef.current?.click()} className="btn min-h-11 text-xs">Change group photo</button>
         <input ref={fileRef} type="file" aria-label="Group photo" accept="image/jpeg,image/png,image/webp,image/gif,image/avif" hidden onChange={event => { const file = event.target.files?.[0]; event.target.value = ""; if (file) void submit(file); }} />
       </div></div>
       {([['name', 'Group name', 200], ['description', 'Group description', 5000]] as const).map(([key, label, max]) => <div key={key} className="text-xs font-medium"><label htmlFor={`group-${conversationId}-${key}`}>{label}</label>
-        {key === 'name' ? <input id={`group-${conversationId}-${key}`} className="field-input mt-1" value={draft[key]} maxLength={max} disabled={locked} onChange={event => setDraft(previous => ({ ...previous, [key]: event.target.value }))} /> : <textarea id={`group-${conversationId}-${key}`} className="field-input mt-1 resize-y" rows={3} value={draft[key]} maxLength={max} disabled={locked} onChange={event => setDraft(previous => ({ ...previous, [key]: event.target.value }))} />}
+        {key === 'name' ? <input id={`group-${conversationId}-${key}`} className="field-input mt-1" value={draft[key]} maxLength={max} disabled={infoLocked} onChange={event => setDraft(previous => ({ ...previous, [key]: event.target.value }))} /> : <textarea id={`group-${conversationId}-${key}`} className="field-input mt-1 resize-y" rows={3} value={draft[key]} maxLength={max} disabled={infoLocked} onChange={event => setDraft(previous => ({ ...previous, [key]: event.target.value }))} />}
       </div>)}
       <details className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4"><summary className="min-h-11 cursor-pointer text-sm font-semibold">Permissions & group guidelines</summary><p className="mb-4 text-xs text-[var(--muted)]">Set the tone and choose how your group talks.</p>
-      {([['rules', 'Group rules', 2000], ['announcements', 'Announcements', 2000]] as const).map(([key,label,max]) => <label key={key} className="mb-3 block text-xs font-medium">{label}<textarea className="field-input mt-1 resize-y" rows={3} value={draft[key]} maxLength={max} disabled={locked} onChange={event => setDraft(previous => ({ ...previous, [key]: event.target.value }))} /></label>)}
-      <div className="flex min-h-11 items-center justify-between gap-2"><span className="text-xs">Admin-only messaging</span><Toggle checked={draft.adminOnlyMessaging} onChange={value => setDraft(previous => ({ ...previous, adminOnlyMessaging: value }))} disabled={locked} label="Admin-only messaging" size="small" /></div>
-      <label className="block text-xs font-medium">Slow mode<select className="field-input mt-1 min-h-11" value={draft.slowModeSeconds} disabled={locked} onChange={event => setDraft(previous => ({ ...previous, slowModeSeconds: Number(event.target.value) }))}>
+      {([['rules', 'Group rules', 2000], ['announcements', 'Announcements', 2000]] as const).map(([key,label,max]) => <label key={key} className="mb-3 block text-xs font-medium">{label}<textarea className="field-input mt-1 resize-y" rows={3} value={draft[key]} maxLength={max} disabled={locked || !admin} onChange={event => setDraft(previous => ({ ...previous, [key]: event.target.value }))} /></label>)}
+      {([['adminOnlyAddingMembers', 'Only admins can add members'], ['adminOnlyEditingInfo', 'Only admins can edit group info']] as const).map(([key, label]) => <div key={key} className="flex min-h-11 items-center justify-between gap-2"><span className="text-xs">{label}</span><Toggle checked={draft[key]} onChange={value => setDraft(previous => ({ ...previous, [key]: value }))} disabled={locked || !admin} label={label} size="small" /></div>)}
+      <div className="flex min-h-11 items-center justify-between gap-2"><span className="text-xs">Admin-only messaging</span><Toggle checked={draft.adminOnlyMessaging} onChange={value => setDraft(previous => ({ ...previous, adminOnlyMessaging: value }))} disabled={locked || !admin} label="Admin-only messaging" size="small" /></div>
+      <label className="block text-xs font-medium">Slow mode<select className="field-input mt-1 min-h-11" value={draft.slowModeSeconds} disabled={locked || !admin} onChange={event => setDraft(previous => ({ ...previous, slowModeSeconds: Number(event.target.value) }))}>
         {[...new Set([0, 10, 30, 60, 300, group.slowModeSeconds])].sort((a,b) => a-b).map(seconds => <option key={seconds} value={seconds}>{seconds === 0 ? "Off" : `${seconds} seconds`}</option>)}
       </select></label></details>
       {error ? <p role="alert" className="text-sm text-[var(--danger)]">{error}</p> : null}
       {notice ? <p role="status" className="text-sm text-[var(--success)]">{notice}</p> : null}
-      <button type="button" disabled={locked} onClick={() => void submit()} className="btn btn-primary min-h-11 w-full text-xs">{saving ? "Saving…" : "Save group settings"}</button>
+      <button type="button" disabled={infoLocked} onClick={() => void submit()} className="btn btn-primary min-h-11 w-full text-xs">{saving ? "Saving…" : "Save group settings"}</button>
     </div> : null}
   </section>;
 }

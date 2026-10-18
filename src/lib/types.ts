@@ -51,6 +51,7 @@ export interface ReactionGroup {
 }
 
 export interface ReplyPreview {
+  expiresAt?: string | null;
   id: string;
   text: string;
   senderId: string;
@@ -66,6 +67,7 @@ export interface ReadReceipt {
 }
 
 export interface AttachmentDTO {
+  expiresAt?: string | null;
   id: string;
   originalName: string;
   mimeType: string;
@@ -103,6 +105,8 @@ export interface MessageDTO {
   updatedAt: string;
   editedAt: string | null;
   deletedAt: string | null;
+  selfDestruct?: boolean;
+  revealedAt?: string | null;
   /** Server-enforced expiry timestamp for disappearing messages. */
   expiresAt: string | null;
   deliveredAt: string | null;
@@ -154,6 +158,7 @@ export interface ConversationSummary {
   /** Whether any messages are pinned in this conversation. */
   hasPinnedMessages: boolean;
   lastMessage: {
+    expiresAt?: string | null;
     id: string;
     text: string;
     type: string;
@@ -190,6 +195,8 @@ export interface ConversationDetail {
   backgroundPositionX: number;
   backgroundPositionY: number;
   /** Group settings */
+  adminOnlyAddingMembers: boolean;
+  adminOnlyEditingInfo: boolean;
   adminOnlyMessaging: boolean;
   rules: string | null;
   announcements: string | null;
@@ -200,6 +207,7 @@ export interface ConversationDetail {
 }
 
 export interface MessagePage {
+  serverNow?: string;
   /** Chronological order (oldest → newest) for direct rendering. */
   messages: MessageDTO[];
   /** Cursor to fetch the next OLDER page; null when no more history. */
@@ -291,7 +299,10 @@ export interface RealtimeTypingEvent {
   expiresAt: string;
 }
 
-export type RealtimeEvent =
+export interface RealtimeLifetimeEvent { type: "message:lifetime"; conversationId: string; messageId: string; expiresAt: string; revealedAt?: string; serverNow?: string }
+
+export type RealtimeEvent = RealtimeLifetimeEvent
+  | { type: "scheduled:changed"; conversationId: string }
   | { type: "call:changed"; conversationId: string }
   | RealtimeMessageEvent
   | RealtimeConversationEvent

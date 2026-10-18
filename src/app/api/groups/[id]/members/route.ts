@@ -15,7 +15,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const { id } = await params;
   const result = await addGroupMember(id, me.id, parsed.data.userId);
   if (result === "not_found") return jsonError(404, "Group not found.");
-  if (result === "forbidden") return jsonError(403, "Only group admins can add members.");
+  if (result === "forbidden") return jsonError(403, "Group admins have restricted who can add members.");
   if (result === "user_not_found") return jsonError(404, "User not found.");
   if (result === "already_member") return jsonError(409, "User is already a member.");
   await publishToConversation(id, { type: "group:member-added", conversationId: id, userId: parsed.data.userId, role: "member" });

@@ -72,6 +72,7 @@ async function sendFCM(
 export async function sendMessagePush(
   userId: string,
   payload: {
+    callCancelled?: boolean;
     messageRequest?: boolean;
     silent?: boolean;
     callId?: string;

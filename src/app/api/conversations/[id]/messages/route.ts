@@ -163,6 +163,7 @@ export async function POST(
     return jsonError(403, "You cannot send messages in this conversation.");
   }
 
+  if (parsed.data.selfDestruct && detail.type === "dm" && detail.request_pending) return jsonError(403, "Accept the request before sending a self-destruct message.");
   const contextDoneAt = performance.now();
   const createdResult = await createMessage(
     id,
@@ -174,6 +175,7 @@ export async function POST(
     {
       clientMessageId: parsed.data.clientMessageId,
       disappearingSeconds: detail.disappearing_seconds,
+      selfDestruct: parsed.data.selfDestruct,
       deliveredAt: members.some((memberId) => memberId !== me.id && isOnline(memberId))
         ? new Date()
         : null,

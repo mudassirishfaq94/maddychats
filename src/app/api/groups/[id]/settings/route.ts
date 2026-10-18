@@ -1,10 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { eq } from "drizzle-orm";
-import { db } from "@/db";
-import { conversations } from "@/db/schema";
 import { getSessionUser } from "@/server/session";
 import { isUuid } from "@/server/users";
-import { getGroupWithActor } from "@/server/chat";
+import { getGroupWithActor, saveGroupSettings } from "@/server/chat";
 import { z } from "zod";
 import { publishToConversation } from "@/server/realtime";
 import { rateLimit } from "@/server/rate-limit";
@@ -18,6 +15,8 @@ const settingsSchema = z.object({
   description: z.string().trim().max(5000).nullable().optional(),
   rules: z.string().trim().max(2000).nullable().optional(),
   announcements: z.string().trim().max(2000).nullable().optional(),
+  adminOnlyAddingMembers: z.boolean().optional(),
+  adminOnlyEditingInfo: z.boolean().optional(),
   adminOnlyMessaging: z.boolean().optional(),
   slowModeSeconds: z.number().int().min(0).max(3600).optional(),
 }).strict().refine(value => Object.keys(value).length > 0);
@@ -38,7 +37,6 @@ export async function PATCH(
 
   const context = await getGroupWithActor(id, user.id);
   if (!context) return jsonError(404, "Group not found.");
-  if (context.membership.role !== "owner" && context.membership.role !== "admin") return jsonError(403, "Only admins can change group settings.");
   const limit = await rateLimit(`group-settings:${user.id}`, 60, 60000);
   if (!limit.allowed) return jsonError(429, "Please wait before changing group settings again.");
 
@@ -47,7 +45,8 @@ export async function PATCH(
   if (!parsed.success) return jsonError(422, "Use a group name of 1–200 characters, a description up to 5000 characters, and valid group settings.");
   const patch = parsed.data;
 
-  const [saved] = await db.update(conversations).set({ ...patch, updatedAt: new Date() }).where(eq(conversations.id, id)).returning({ updatedAt: conversations.updatedAt });
+  const saved = await saveGroupSettings(id,user.id,patch);
+  if (!saved) return jsonError(403, "Group permissions do not allow these changes.");
 
   // Audit log
   await auditLog({

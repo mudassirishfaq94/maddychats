@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import type { AttachmentDTO } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { useExpiredAt } from "@/hooks/use-expired-at";
 import { useEncryptedAttachmentUrl } from "./e2ee-context";
 
 export function humanSize(bytes: number): string {
@@ -53,6 +54,11 @@ export function Lightbox({
   onNavigate?: (index: number) => void;
 }) {
   const current = images?.[currentIndex ?? 0];
+  useEffect(()=>{
+    if(!current?.expiresAt)return;
+    const timer=setTimeout(onClose,Math.min(2147483647,Math.max(0,Date.parse(current.expiresAt)-Date.now())));
+    return()=>clearTimeout(timer);
+  },[current?.expiresAt,onClose]);
   const resolved = useEncryptedAttachmentUrl(current);
   // The active image may be E2EE — use the decrypted object URL when ready.
   const activeSrc = current?.encrypted ? (resolved.url ?? "") : src;
@@ -299,7 +305,8 @@ export function AttachmentList({
 /** A downloadable file chip that transparently decrypts E2EE files. */
 function FileChip({ file, own }: { file: AttachmentDTO; own: boolean }) {
   const { url, failed } = useEncryptedAttachmentUrl(file);
-  const unavailable = Boolean(file.encrypted && (failed || !url));
+  const expired = useExpiredAt(file.expiresAt);
+  const unavailable = expired || Boolean(file.encrypted && (failed || !url));
   return (
     <span
       className={cn(
@@ -326,7 +333,7 @@ function FileChip({ file, own }: { file: AttachmentDTO; own: boolean }) {
       </span>
       <span className="min-w-0 flex-1">
         <span className="block truncate text-xs font-semibold">
-          {file.originalName}
+          {expired ? "Attachment expired" : file.originalName}
         </span>
         <span
           className={cn(
@@ -349,7 +356,7 @@ function FileChip({ file, own }: { file: AttachmentDTO; own: boolean }) {
       ) : (
         <a
           href={url ?? undefined}
-          download={file.originalName}
+          download={expired ? "Attachment expired" : file.originalName}
           aria-disabled={!url}
           aria-label={`Download ${file.originalName}`}
           className="flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-full focus-visible:outline-2 focus-visible:outline-[var(--accent)]"

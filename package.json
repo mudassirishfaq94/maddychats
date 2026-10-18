@@ -32,7 +32,9 @@
     "test:restored": "tsx scripts/test-restored.ts",
     "test:verification": "tsx scripts/test-verification-codes.ts",
     "test:send": "tsx scripts/test-send-commit.ts",
-    "test:verification-template": "tsx scripts/test-verification-template.ts"
+    "test:verification-template": "tsx scripts/test-verification-template.ts",
+    "test:reliability:integration": "tsx --test --test-concurrency=1 tests/integration/reliability.test.ts",
+    "test:reliability:browser": "node --import tsx scripts/test-reliability-browser.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.1",

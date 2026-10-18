@@ -95,6 +95,7 @@ async function key(db: IDBDatabase): Promise<CryptoKey> {
   }
 }
 export async function saveQueuedMessage(userId: string, entry: Entry): Promise<void> {
+  if (entry.message.selfDestruct) return; // Never retain a recoverable copy after a recipient may have revealed it.
   const db = await open(userId);
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const id = `${entry.message.conversationId}:${entry.message.clientMessageId}`;

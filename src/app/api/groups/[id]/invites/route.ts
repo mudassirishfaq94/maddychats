@@ -27,7 +27,7 @@ export async function GET(
   const context = await getGroupWithActor(id, user.id);
   const membership = context?.membership;
   if (!membership) return jsonError(404, "Group not found.");
-  if (membership.role === "member") return jsonError(403, "Only admins can manage invite links.");
+  if (!["owner","admin"].includes(membership.role)) return jsonError(403, "Only admins can manage invite links.");
 
   const links = await listGroupInviteLinks(id);
   return NextResponse.json({ links });
@@ -50,14 +50,15 @@ export async function POST(
   const context = await getGroupWithActor(id, user.id);
   const membership = context?.membership;
   if (!membership) return jsonError(404, "Group not found.");
-  if (membership.role === "member") return jsonError(403, "Only admins can create invite links.");
+  if (!["owner","admin"].includes(membership.role)) return jsonError(403, "Only admins can create invite links.");
 
   const body = await readJson(req);
   const parsed = z.object({ expiresInDays: z.number().int().min(1).max(365).optional(), maxUses: z.number().int().min(1).max(10000).optional() }).strict().safeParse(body ?? {});
   if (!parsed.success) return jsonError(422, "Use an expiry of 1–365 days and a use limit of 1–10000.");
   const limit = await rateLimit(`group-invite:${user.id}`, 20, 60000);
   if (!limit.allowed) return jsonError(429, "Please wait before creating another invite.");
-  const link = await createGroupInviteLink(id, user.id, parsed.data);
+  const link = await createGroupInviteLink(id, user.id, parsed.data).catch(cause=>{if(cause instanceof Error && cause.message==="Only group admins can create invite links.")return null;throw cause;});
+  if(!link)return jsonError(403,"Group permissions changed. Only admins can create invite links.");
 
   const inviteUrl = `${clientUrl()}/invite/${link.code}`;
 
