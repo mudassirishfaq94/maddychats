@@ -35,13 +35,14 @@ export async function joinTemporaryRoom(input:{inviteHash:string;publicKey:strin
   return presentation(room,"guest",new Date());
  });
 }
-export async function readTemporaryRoom(id:string,credential:string,after?:{at:string;id:string}) {
+export async function readTemporaryRoom(id:string,credential:string,after?:{at:string;id:string},onTransferBytes?:(bytes:number)=>void) {
  return transaction(async client=>{
   const room=(await client.query<Room>("SELECT * FROM temporary_rooms WHERE id=$1 AND expires_at>now() FOR SHARE",[id])).rows[0];
   if(!room)throw new TemporaryRoomError(410,"This room has ended or expired.");
   const role=roleFor(room,credential);
   const candidates=(await client.query<{id:string;bytes:number}>(`SELECT id,octet_length(ciphertext) AS bytes FROM temporary_room_messages WHERE room_id=$1 AND ($2::timestamptz IS NULL OR (created_at,id)>($2::timestamptz,$3::uuid)) ORDER BY created_at,id LIMIT 50`,[id,after?.at??null,after?.id??null])).rows;
   const ids:string[]=[];let bytes=0;for(const row of candidates){if(bytes+row.bytes>12000000)break;ids.push(row.id);bytes+=row.bytes;}
+  onTransferBytes?.(bytes);
   const messages=(await client.query<{id:string;sender:RoomRole;ciphertext:string;createdAt:string}>(`SELECT id,sender,ciphertext,to_char(created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "createdAt" FROM temporary_room_messages WHERE room_id=$1 AND id=ANY($2::uuid[]) ORDER BY created_at,id`,[id,ids])).rows;
   return {...presentation(room,role,new Date()),messages,hasMore:ids.length<candidates.length||candidates.length===50};
  });
