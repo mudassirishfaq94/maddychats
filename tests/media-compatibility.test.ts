@@ -10,6 +10,11 @@ test("Android JPEG aliases and missing picker MIME are accepted without permitti
   assert.equal(validateUpload("photo.jpg","image/png",128000,"message").ok,false);
   assert.equal(validateUpload("payload.svg","image/svg+xml",128000,"message").ok,false);
   assert.equal(validateUpload("payload.exe.jpg","image/jpeg",128000,"message").ok,false);
+  for (const name of ["Screenshot2_123.circlo.app.jpg", "Screenshot_example.com.JPG"]) {
+    assert.equal(validateUpload(name,"image/jpeg",128000,"message").ok,true,name);
+  }
+  assert.equal(validateUpload("payload.app","image/jpeg",128000,"message").ok,false);
+  assert.equal(validateUpload("payload.com","image/jpeg",128000,"message").ok,false);
   assert.equal(validateUpload("clip.mkv","application/octet-stream",1024,"message").ok,true);
 });
 test("larger media budgets preserve bounded image, video and document limits",()=>{

@@ -164,7 +164,9 @@ export function validateUpload(
     // double extensions like "invoice.pdf.exe" — only block when the inner
     // part looks executable
     const inner = path.extname(path.basename(safeName, extension)).toLowerCase();
-    if (BLOCKED_EXTENSIONS.has(inner)) {
+    // Screenshot filenames often contain a website, e.g. circlo.app.jpg.
+    // Domain suffixes inside a name do not change its final file extension.
+    if (BLOCKED_EXTENSIONS.has(inner) && inner !== ".app" && inner !== ".com") {
       return { ok: false, error: "That file type is not allowed." };
     }
   }
