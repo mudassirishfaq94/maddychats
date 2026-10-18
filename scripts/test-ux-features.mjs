@@ -29,11 +29,11 @@ export async function testUxFeatures(context,base,owner,member) {
    const heading=await page.getByRole("heading",{name:"Chats",exact:true}).boundingBox();
    const firstRow=await page.locator(".chat-list-row").first().boundingBox();
    assert(heading&&firstRow&&firstRow.y-heading.y<200,"Compact controls must leave room for conversations");
-   await page.screenshot({path:`test-artifacts/inbox-minimal-${width}-light.png`});
+   await page.screenshot({path:`test-artifacts/inbox-minimal-${width}-light.png`,animations:"disabled"});
   }
   await page.setViewportSize({width:390,height:844});
   await page.evaluate(()=>document.documentElement.classList.remove("light"));
-  await page.screenshot({path:"test-artifacts/inbox-minimal-390-dark.png"});
+  await page.screenshot({path:"test-artifacts/inbox-minimal-390-dark.png",animations:"disabled"});
   await page.setViewportSize({width:360,height:800});
   const calls=page.getByRole("navigation",{name:"Mobile navigation"}).getByRole("link",{name:"Calls",exact:true});await calls.click();await page.getByRole("heading",{name:"Calls",exact:true}).waitFor();
   const history=await page.request.get(base+"/api/calls/history");assert.equal(history.status(),200);assert(Array.isArray((await history.json()).calls));
