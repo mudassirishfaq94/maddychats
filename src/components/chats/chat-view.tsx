@@ -1534,7 +1534,7 @@ export function ChatView({
     const text = draftRef.current.trim();
     if (!text || !scheduledTime || sendPendingRef.current) return;
     const scheduledFor = new Date(scheduledTime);
-    if (scheduledFor <= new Date()) {
+    if (!Number.isFinite(scheduledFor.getTime()) || scheduledFor <= new Date()) {
       setError("Scheduled time must be in the future.");
       return;
     }
@@ -2977,7 +2977,10 @@ export function ChatView({
               </div>
               <button type="button" onClick={() => { setShowSchedule(false); setScheduledTime(""); }} className="flex h-8 w-8 items-center justify-center rounded-full text-[var(--muted)] hover:bg-[var(--surface-2)]"><X className="h-4 w-4" /></button>
             </div>
-            <p className="mt-2 text-xs text-[var(--muted)]">Send this message at a specific time:</p>
+            <p className="mt-2 text-xs text-[var(--muted)]">Write your message and choose when to send it. Times use {Intl.DateTimeFormat().resolvedOptions().timeZone}.</p>
+            <label className="mt-4 block text-sm font-medium">Message
+              <textarea aria-label="Scheduled message text" value={draft} onChange={event=>setDraft(event.target.value)} maxLength={2000} rows={3} placeholder="Write the message to send later…" className="field-input mt-1 w-full resize-y" disabled={sendPending} />
+            </label>
             <div className="mt-4">
               <input
                 type="datetime-local"
@@ -2989,12 +2992,8 @@ export function ChatView({
                 className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2.5 text-sm text-[var(--text)] focus:border-[var(--accent)] focus:outline-none"
               />
             </div>
-            {draft.trim() ? (
-              <div className="mt-3 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-3">
-                <p className="text-[0.65rem] font-semibold uppercase tracking-wider text-[var(--muted)]">Message</p>
-                <p className="mt-1 line-clamp-3 text-sm">{draft.trim()}</p>
-              </div>
-            ) : null}
+            {!draft.trim() ? <p className="mt-2 text-xs text-[var(--muted)]">Enter a message to enable scheduling.</p> : null}
+            {error ? <p role="alert" className="mt-3 text-sm text-[var(--danger)]">{error}</p> : null}
             <div className="mt-5 flex flex-wrap justify-end gap-2">
               <button type="button" onClick={() => { setShowSchedule(false); setScheduledTime(""); }} className="rounded-xl px-4 py-2 text-sm font-medium text-[var(--muted)] hover:bg-[var(--surface-2)]">Cancel</button>
               <button

@@ -10,6 +10,8 @@ const pool = new pg.Pool({ connectionString: process.env.MIGRATION_DATABASE_URL,
 const client = await pool.connect();
 try {
   await client.query("BEGIN");
+  await client.query("SET LOCAL lock_timeout = '5s'");
+  await client.query("SET LOCAL statement_timeout = '30s'");
   await client.query(fs.readFileSync("docs/database/runtime-role.sql", "utf8"));
   await client.query("COMMIT");
 } catch (error) {

@@ -35,11 +35,20 @@ REVOKE UPDATE, DELETE, TRUNCATE ON TABLE public.admin_audit_log FROM circlo_runt
 -- role needs the same rows the previous owner connection could access; the
 -- application enforces each end user's authorization before issuing queries.
 -- Grant only this role an explicit server policy, never anon/authenticated.
-DO $$ DECLARE target record; BEGIN
-  FOR target IN SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+DO $$ DECLARE target record; existing record; runtime_oid oid; BEGIN
+  SELECT oid INTO runtime_oid FROM pg_roles WHERE rolname='circlo_runtime';
+  FOR target IN SELECT c.oid,c.relname FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
     WHERE n.nspname='public' AND c.relkind IN ('r','p') AND c.relrowsecurity
   LOOP
-    EXECUTE format('DROP POLICY IF EXISTS circlo_runtime_server_access ON public.%I',target.relname);
-    EXECUTE format('CREATE POLICY circlo_runtime_server_access ON public.%I FOR ALL TO circlo_runtime USING (true) WITH CHECK (true)',target.relname);
+    SELECT polcmd,polpermissive,polroles,pg_get_expr(polqual,polrelid) AS qualifier,pg_get_expr(polwithcheck,polrelid) AS checker
+      INTO existing FROM pg_policy WHERE polrelid=target.oid AND polname='circlo_runtime_server_access';
+    IF FOUND THEN
+      IF existing.polcmd <> '*' OR NOT existing.polpermissive OR existing.polroles <> ARRAY[runtime_oid]
+        OR existing.qualifier IS DISTINCT FROM 'true' OR existing.checker IS DISTINCT FROM 'true' THEN
+        RAISE EXCEPTION 'Unexpected runtime policy requires explicit review';
+      END IF;
+    ELSE
+      EXECUTE format('CREATE POLICY circlo_runtime_server_access ON public.%I FOR ALL TO circlo_runtime USING (true) WITH CHECK (true)',target.relname);
+    END IF;
   END LOOP;
 END $$;

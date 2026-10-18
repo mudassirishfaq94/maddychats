@@ -35,6 +35,20 @@ async function main() {
     await admin.query("CREATE DATABASE item3_authorization_test");
     await migrate(drizzle(sql), { migrationsFolder: "drizzle" });
     await sql.query(await readFile("docs/database/runtime-role.sql", "utf8"));
+    const reader=await sql.connect();
+    const writer=await sql.connect();
+    try {
+      await reader.query("BEGIN");await reader.query("SELECT id FROM users LIMIT 1");
+      await writer.query("BEGIN");await writer.query("SET LOCAL lock_timeout='300ms'");
+      await writer.query(await readFile("docs/database/runtime-role.sql","utf8"));
+      await writer.query("COMMIT");
+    } finally {await writer.query("ROLLBACK");writer.release();await reader.query("ROLLBACK");reader.release();}
+    const policyClient=await sql.connect();
+    await policyClient.query("BEGIN");
+    try {
+      await policyClient.query("ALTER POLICY circlo_runtime_server_access ON users USING(false)");
+      await assert.rejects(policyClient.query(await readFile("docs/database/runtime-role.sql","utf8")),/Unexpected runtime policy/);
+    } finally {await policyClient.query("ROLLBACK");policyClient.release();}
     assert.equal((await sql.query("select has_table_privilege('circlo_runtime','admin_audit_log','UPDATE') or has_table_privilege('circlo_runtime','admin_audit_log','DELETE') or has_table_privilege('circlo_runtime','admin_audit_log','TRUNCATE') as mutable")).rows[0].mutable, false, "Runtime cannot rewrite audit history");
     runtimeRoleCreated = true;
     await sql.query("ALTER ROLE circlo_runtime LOGIN PASSWORD 'disposable-item3-runtime-only'");
