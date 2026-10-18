@@ -28,7 +28,8 @@ export function AppShell({
   const onPeople = pathname.startsWith("/app/people") || pathname.startsWith("/app/users");
   const onStatus = pathname.startsWith("/app/status");
   const onCommunities = pathname.startsWith("/app/communities");
-  const onChats = !onPeople && !onStatus && !onCommunities && !pathname.startsWith("/app/profile") && !pathname.startsWith("/app/starred");
+  const onChats = pathname === "/app" || pathname.startsWith("/app/chats");
+  const onCalls = pathname.startsWith("/app/calls");
   const inChat = pathname.startsWith("/app/chats/");
 
   return (
@@ -61,7 +62,7 @@ export function AppShell({
             <MessagesSquare className="h-4 w-4" />
             <span className="hidden sm:inline">Chats</span>
           </Link>
-          <Link href="/app/calls" aria-current={pathname.startsWith("/app/calls")?"page":undefined} className="flex min-h-11 items-center gap-1.5 rounded-full px-3 text-sm font-medium hover:bg-[var(--surface-2)]"><Phone className="h-4 w-4"/><span className="hidden sm:inline">Calls</span></Link>
+          <Link href="/app/calls" aria-current={onCalls ? "page" : undefined} className={cn("flex min-h-11 items-center gap-1.5 rounded-full px-3 text-sm font-medium transition-colors", onCalls ? "bg-[var(--surface-2)] text-[var(--text)]" : "text-[var(--muted)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]")}><Phone className="h-4 w-4"/><span className="hidden sm:inline">Calls</span></Link>
           <Link
             href="/app/people"
             aria-current={onPeople ? "page" : undefined}
