@@ -31,10 +31,14 @@ object NativeIncomingCall {
         if (!androidx.core.app.NotificationManagerCompat.from(context).areNotificationsEnabled()) return
         if (Build.VERSION.SDK_INT >= 26 && manager.getNotificationChannel(NotificationChannels.CALLS)?.importance == NotificationManager.IMPORTANCE_NONE) return
         fun open(action: String): PendingIntent {
-            val intent = Intent(context, MainActivity::class.java).apply {
+            val intent = Intent(context, if (action == "answer") IncomingCallActivity::class.java else MainActivity::class.java).apply {
                 addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
                 putExtra("notification_url", url + if (action.isEmpty()) "" else "&callAction=$action")
-                if (action == "answer") putExtra("callActionToken", NativeCallActions.issue(context, call, expires))
+                if (action == "answer") {
+                    putExtra("callId", call); putExtra("recipientId", data["recipientId"])
+                    putExtra("callUrl", url); putExtra("expiresAt", expires)
+                    putExtra("answerRequested", true)
+                }
                 this.data = android.net.Uri.parse("ziptalks://chat/call/$call/$action")
             }
             return PendingIntent.getActivity(context, (call+action).hashCode(), intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
