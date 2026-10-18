@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import { ShieldCheck, ChevronRight, X } from "lucide-react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/components/providers/auth-provider";
@@ -99,5 +100,5 @@ export function CloudRecoverySync() {
     return()=>{active=false;if(timer)clearTimeout(timer);window.removeEventListener("maddy:recovery-keys-changed",queue);window.removeEventListener("online",queue);};
   },[userId,initialized,deviceId,waitForDeviceRegistration]);
   if(!warning||dismissed||!statusSlot) return null;
-  return createPortal(<aside role="status" className="flex min-h-11 items-center gap-3 border-b border-[var(--border)] bg-[var(--surface)] px-3 text-xs"><Link className="min-w-0 flex-1 py-2 underline" href="/app/profile#cloud-recovery">Protect chat history: this device&apos;s recovery needs attention.</Link><button type="button" className="min-h-11 min-w-11 shrink-0 px-2 underline" onClick={()=>setDismissed(true)}>Later</button></aside>,statusSlot);
+  return createPortal(<aside role="status" className="flex items-center gap-1 border-b border-[var(--border)] bg-[var(--accent-soft)] px-2 py-1 text-xs"><Link className="flex min-h-11 min-w-0 flex-1 items-center gap-2.5 rounded-xl px-2 transition-colors hover:bg-[var(--surface-2)]" href="/app/profile#cloud-recovery"><ShieldCheck className="h-5 w-5 shrink-0 text-[var(--accent-fg)]" /><span className="min-w-0 flex-1"><span className="block font-semibold text-[var(--text)]">Protect your chat history</span><span className="block text-[var(--muted)]">Set up secure recovery</span><span className="sr-only">This device&apos;s recovery needs attention.</span></span><ChevronRight className="h-4 w-4 shrink-0 text-[var(--accent-fg)]" /></Link><button type="button" aria-label="Later" title="Remind me later" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[var(--muted)] hover:bg-[var(--surface-2)]" onClick={()=>setDismissed(true)}><X className="h-4 w-4" /></button></aside>,statusSlot);
 }

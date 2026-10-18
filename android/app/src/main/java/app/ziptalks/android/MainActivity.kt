@@ -168,6 +168,7 @@ class MainActivity : ComponentActivity() {
     private var webView: WebView? = null
     private var pendingFileChooser: ValueCallback<Array<Uri>>? = null
     private var pendingWebPermission: PermissionRequest? = null
+    private var keyboardVisible = false
     private val api by lazy { ZipTalkApi(this) }
     private val fileChooserLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
@@ -222,6 +223,9 @@ class MainActivity : ComponentActivity() {
         // some Android 15 devices, which put the status bar over Circlo's
         // hosted header.
         WindowCompat.setDecorFitsSystemWindows(window, false)
+        // Insets below resize the WebView itself. Never pan the whole chat
+        // above the screen when Android opens the keyboard.
+        window.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING)
         window.statusBarColor = AndroidColor.WHITE
         window.navigationBarColor = AndroidColor.WHITE
         WindowCompat.getInsetsController(window, window.decorView).apply {
@@ -254,7 +258,13 @@ class MainActivity : ComponentActivity() {
             )
             // This native inset is reliable across device skins and rotation;
             // the Circlo header therefore cannot appear behind the status bar.
-            view.setPadding(bars.left, bars.top, bars.right, bars.bottom)
+            val keyboard = insets.getInsets(WindowInsetsCompat.Type.ime())
+            view.setPadding(bars.left, bars.top, bars.right, maxOf(bars.bottom, keyboard.bottom))
+            val visible = keyboard.bottom > bars.bottom
+            if (visible != keyboardVisible) {
+                keyboardVisible = visible
+                webView?.let { browser -> if (WebOriginPolicy.isAllowed(browser.url.orEmpty(), BuildConfig.API_BASE_URL)) browser.evaluateJavascript("document.documentElement.dataset.keyboardOpen='$visible'", null) }
+            }
             insets
         }
         setContentView(content)
@@ -384,7 +394,10 @@ class MainActivity : ComponentActivity() {
     fun hostedWebClient() = object : WebViewClient() {
             override fun onPageFinished(view: WebView, url: String) {
                 super.onPageFinished(view, url)
-                if (WebOriginPolicy.isAllowed(url, BuildConfig.API_BASE_URL)) NativeSessionCookies.persist()
+                if (WebOriginPolicy.isAllowed(url, BuildConfig.API_BASE_URL)) {
+                    NativeSessionCookies.persist()
+                    view.evaluateJavascript("document.documentElement.dataset.keyboardOpen='$keyboardVisible'", null)
+                }
             }
             override fun shouldOverrideUrlLoading(view: WebView, url: String): Boolean {
                 if (WebOriginPolicy.isAllowed(url, BuildConfig.API_BASE_URL) && Uri.parse(url).path == "/api/auth/google") {

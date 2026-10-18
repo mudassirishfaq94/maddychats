@@ -370,9 +370,13 @@ input, textarea, select { min-width: 0; max-width: 100%; }
 .circlo-drift { animation: circlo-drift 6s ease-in-out infinite; }
 
 .circlo-shell {
+  position: fixed;
+  inset: 0;
   height: 100dvh;
   background: radial-gradient(circle at 14% 0%, color-mix(in srgb, var(--accent) 9%, transparent), transparent 20rem), var(--bg);
 }
+html[data-keyboard-open="true"] nav[aria-label="Mobile navigation"],
+html[data-keyboard-open="true"] #recovery-status { display: none; }
 
 @keyframes slide-up {
   from {

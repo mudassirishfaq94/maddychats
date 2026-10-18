@@ -1,4 +1,5 @@
 "use client";
+import { ScheduledMessageManager } from "./scheduled-message-manager";
 
 import { groupAllows } from "@/lib/group-permissions";
 import Image from "next/image";
@@ -451,6 +452,7 @@ export function ConversationDetails({
             onPositionChange={(x, y) => changeBackground(undefined, undefined, { x, y })}
           />
           <div className="mt-4 border-t border-[var(--border)] pt-3">
+            <ScheduledMessageManager conversationId={conversationId} />
             <button type="button" disabled={groupBusy !== null} onClick={() => void toggleNotifications()} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm hover:bg-[var(--surface-2)]">
               {muted ? <Bell className="h-4 w-4" /> : <BellOff className="h-4 w-4" />}<span className="flex-1">Notifications</span><small className="text-[var(--muted)]">{muted ? "Muted" : "On"}</small>
             </button>

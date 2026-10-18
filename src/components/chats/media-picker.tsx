@@ -2,16 +2,17 @@
 
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type RefObject } from "react";
 import { createPortal } from "react-dom";
-import { Loader2, X } from "lucide-react";
+import { Loader2, X, Paperclip, Clock } from "lucide-react";
 import { EmojiPicker } from "./emoji-picker";
 import { animatedMediaCatalog, animatedMediaPosterUrl, animatedMediaUrl } from "@/lib/animated-media";
 const reducedQuery = "(prefers-reduced-motion: reduce)";
 const subscribeMotion = (callback: () => void) => { const query = matchMedia(reducedQuery); query.addEventListener("change", callback); return () => query.removeEventListener("change", callback); };
 const reducedMotion = () => matchMedia(reducedQuery).matches;
 
-export function MediaPicker({ anchor, onEmoji, onFile, onClose, mediaDisabled }: {
+export function MediaPicker({ anchor, onEmoji, onFile, onClose, mediaDisabled, onAttach, onSchedule }: {
   anchor: RefObject<HTMLButtonElement | null>; onEmoji: (emoji: string) => void;
   onFile: (file: File) => void; onClose: () => void; mediaDisabled: boolean;
+  onAttach?: () => void; onSchedule?: () => void;
 }) {
   const [tab, setTab] = useState<"Emoji" | "Stickers" | "GIFs">("Emoji");
   const [search, setSearch] = useState("");
@@ -51,6 +52,10 @@ export function MediaPicker({ anchor, onEmoji, onFile, onClose, mediaDisabled }:
   if (typeof document === "undefined") return null;
   const items = animatedMediaCatalog(tab === "GIFs").filter(item => `${item.label} ${item.tags}`.toLowerCase().includes(search.toLowerCase()));
   return createPortal(<div ref={ref} role="dialog" aria-label="Emoji, stickers and GIFs" style={position} className="fixed z-[150] flex w-[min(360px,calc(100vw-16px))] flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-xl">
+    {onAttach || onSchedule ? <div className="flex shrink-0 gap-2 border-b border-[var(--border)] p-2">
+      {onAttach ? <button type="button" disabled={mediaDisabled} onClick={onAttach} className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-[var(--accent-soft)] px-3 text-xs font-medium text-[var(--accent-fg)] disabled:opacity-50"><Paperclip className="h-4 w-4 shrink-0" />Photos, videos & files</button> : null}
+      {onSchedule ? <button type="button" onClick={onSchedule} aria-label="Schedule message" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--surface-2)]" title="Schedule this message"><Clock className="h-4 w-4" /></button> : null}
+    </div> : null}
     <div className="flex shrink-0 items-center gap-1 border-b border-[var(--border)] p-1.5">
       <div className="flex min-w-0 flex-1" role="tablist" aria-label="Express yourself">{(["Emoji", "Stickers", "GIFs"] as const).map(value => <button key={value} role="tab" aria-selected={tab === value} type="button" onClick={() => { setTab(value); setSearch(""); setError(null); }} className={`min-h-11 flex-1 rounded-xl px-2 text-sm ${tab === value ? "bg-[var(--surface-2)] text-[var(--text)]" : "text-[var(--muted)]"}`}>{value}</button>)}</div>
       <button type="button" aria-label="Close media picker" onClick={onClose} className="flex h-11 w-11 shrink-0 items-center justify-center"><X className="h-5 w-5" /></button>

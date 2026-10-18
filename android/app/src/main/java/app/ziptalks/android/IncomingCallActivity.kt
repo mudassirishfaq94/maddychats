@@ -12,6 +12,12 @@ import android.view.WindowManager
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.ImageView
+import android.widget.FrameLayout
+import android.widget.ScrollView
+import android.graphics.Color
+import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 
 /** Lock-screen presentation only. No microphone, keys, or WebView starts before Answer. */
 class IncomingCallActivity : Activity() {
@@ -77,20 +83,35 @@ class IncomingCallActivity : Activity() {
         if (!live()) { finish(); return }
         if (Build.VERSION.SDK_INT >= 27) { setShowWhenLocked(true); setTurnScreenOn(true) }
         else @Suppress("DEPRECATION") window.addFlags(WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON)
+        fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
+        val gold = Color.rgb(218, 192, 146)
+        window.statusBarColor = Color.rgb(18, 22, 29)
+        window.navigationBarColor = Color.rgb(18, 22, 29)
+        val backdrop = FrameLayout(this).apply { background = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(Color.rgb(18,22,29), Color.rgb(39,36,48), Color.rgb(18,22,29))) }
         val layout = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER; setPadding(40, 60, 40, 60)
-            setBackgroundColor(android.graphics.Color.rgb(21, 23, 25))
+            orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER; setPadding(dp(24), dp(36), dp(24), dp(36))
         }
-        layout.addView(TextView(this).apply { text = "Incoming Circlo call"; textSize = 26f; setTextColor(android.graphics.Color.WHITE); gravity = Gravity.CENTER })
-        instructions = TextView(this).apply { text = "Answer to open Circlo and connect securely."; textSize = 16f; setTextColor(android.graphics.Color.LTGRAY); setPadding(0, 30, 0, 45) }
+        layout.addView(ImageView(this).apply { setImageResource(R.mipmap.ic_launcher); contentDescription = "Circlo" }, LinearLayout.LayoutParams(dp(88), dp(88)).apply { bottomMargin = dp(20) })
+        layout.addView(TextView(this).apply { text = "circlo"; textSize = 22f; typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL); setTextColor(gold); gravity = Gravity.CENTER })
+        layout.addView(TextView(this).apply { text = "Incoming audio call"; textSize = 28f; typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL); setTextColor(Color.WHITE); gravity = Gravity.CENTER; setPadding(0, dp(36), 0, dp(12)) })
+        instructions = TextView(this).apply { text = "A private conversation is calling.\nAnswer to connect securely."; textSize = 15f; setTextColor(Color.rgb(179,181,193)); gravity = Gravity.CENTER; setPadding(0, 0, 0, dp(36)) }
         layout.addView(instructions)
-        answerButton = Button(this).apply { text = "Answer"; setOnClickListener { answer() } }
-        layout.addView(answerButton)
-        layout.addView(Button(this).apply { text = "Decline"; setOnClickListener {
+        val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
+        fun styleAction(button: Button, color: Int) { button.isAllCaps = false; button.textSize = 16f; button.setTextColor(Color.WHITE); button.background = GradientDrawable().apply { setColor(color); cornerRadius = dp(28).toFloat() }; button.minimumHeight = dp(64) }
+        val declineButton = Button(this).apply { text = "Decline"; setOnClickListener {
             sendBroadcast(Intent(this@IncomingCallActivity, NativeCallDeclineReceiver::class.java).putExtra("callId", call).putExtra("recipientId", recipient))
             finish()
-        } })
-        setContentView(layout)
+        } }
+        styleAction(declineButton, Color.rgb(143, 48, 61))
+        answerButton = Button(this).apply { text = "Answer"; setOnClickListener { answer() } }
+        styleAction(answerButton, Color.rgb(37, 117, 91))
+        actions.addView(declineButton, LinearLayout.LayoutParams(0, dp(64), 1f).apply { marginEnd = dp(8) })
+        actions.addView(answerButton, LinearLayout.LayoutParams(0, dp(64), 1f).apply { marginStart = dp(8) })
+        layout.addView(actions, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        layout.addView(TextView(this).apply { text = "Your circle. Your secrets. Sealed."; textSize = 12f; setTextColor(gold); gravity = Gravity.CENTER; setPadding(0, dp(36), 0, 0) })
+        val scroller = ScrollView(this).apply { isFillViewport = true; addView(layout) }
+        backdrop.addView(scroller, FrameLayout.LayoutParams(minOf(resources.displayMetrics.widthPixels, dp(420)), FrameLayout.LayoutParams.MATCH_PARENT, Gravity.CENTER))
+        setContentView(backdrop)
         handler.post(check)
     }
     override fun onWindowFocusChanged(hasFocus: Boolean) {

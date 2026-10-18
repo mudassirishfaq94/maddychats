@@ -5,7 +5,9 @@ import { Paperclip } from "lucide-react";
 import type { MessageDTO } from "@/lib/types";
 export { AttachmentReview as AttachmentPreviews } from "./attachment-review";
 import { cn } from "@/lib/utils";
-import { MEDIA_MAX_BYTES } from "@/lib/media-limits";
+import { MEDIA_MAX_BYTES, INLINE_MEDIA_MAX_BYTES } from "@/lib/media-limits";
+import { normalizeMediaType } from "@/lib/media-types";
+import { stageEncryptedFile } from "@/lib/staged-upload";
 
 export interface PendingFile {
   id: string;
@@ -40,7 +42,9 @@ export function useAttachmentUpload() {
   }, []);
 
   function addFiles(files: FileList | File[]) {
-    const list = Array.from(files).slice(0, 5 - pendingRef.current.length).map(file => {
+    const list = Array.from(files).slice(0, 5 - pendingRef.current.length).map(original => {
+      const mime=normalizeMediaType(original.name,original.type);
+      const file=mime===original.type?original:new File([original],original.name,{type:mime,lastModified:original.lastModified});
       const previewUrl = /^(image|video|audio)\//.test(file.type) ? URL.createObjectURL(file) : null;
       if (previewUrl) previewUrls.current.add(previewUrl);
       return { id: `${file.name}-${file.size}-${Math.random().toString(36).slice(2)}`, file, previewUrl };
@@ -104,13 +108,16 @@ export function useAttachmentUpload() {
       }
       if (selected.reduce((total, item) => total + item.file.size, 0) > MEDIA_MAX_BYTES) {
         finish();
-        resolve({ ok: false, error: "Attachments must total 10 MB or less. Send larger batches separately." });
+        resolve({ ok: false, error: "Attachments must total 250 MB or less. Send larger batches separately." });
         return;
       }
       (async () => {
         try {
       signal.throwIfAborted();
       const form = new FormData();
+      const totalBytes=selected.reduce((total,item)=>total+item.file.size,0);
+      const usingStaging=totalBytes>INLINE_MEDIA_MAX_BYTES;
+      const staged:string[]=[];let transferred=0;
       form.append("conversationId", conversationId);
       if (replyToMessageId) form.append("replyToMessageId", replyToMessageId);
 
@@ -121,10 +128,15 @@ export function useAttachmentUpload() {
         for (const p of selected) {
           const out = await encryptFile(p.file);
           signal.throwIfAborted();
-          form.append("files", out.file, p.file.name);
+          if(usingStaging) {
+            setPhase("uploading");
+            staged.push(await stageEncryptedFile(out.file,conversationId,out.originalMime,signal,loaded=>setProgress(Math.min(99,Math.round((transferred+loaded)/Math.max(1,totalBytes)*100)))));
+            transferred+=out.file.size;
+          } else form.append("files", out.file, p.file.name);
           form.append("keys", out.wrappedKey);
           form.append("origTypes", out.originalMime);
         }
+        if(usingStaging)form.append("staged",JSON.stringify(staged));
         if (text) {
           if (!encryptText) throw new Error("Caption encryption is required.");
           const encryptedCaption = await encryptText(text);
@@ -146,6 +158,7 @@ export function useAttachmentUpload() {
       xhr.onloadend = () => signal.removeEventListener("abort", abort);
 
       xhr.upload.onprogress = (e) => {
+        if(usingStaging)return;
         if (e.lengthComputable && e.total > 0) {
           setProgress(Math.max(0, Math.min(100, Math.round((e.loaded / e.total) * 100))));
           if (e.loaded >= e.total) setPhase("finishing");
@@ -179,8 +192,8 @@ export function useAttachmentUpload() {
         resolve({ ok: false, error: "Upload cancelled." });
       };
 
-      setPhase("uploading");
-      setProgress(0);
+      setPhase(usingStaging?"finishing":"uploading");
+      setProgress(usingStaging?100:0);
       xhr.send(form);
         } catch {
           xhrRef.current = null;
@@ -199,27 +212,32 @@ export function AttachButton({
   onFiles,
   disabled,
   compact = false,
+  inputId,
+  hideTrigger = false,
 }: {
   onFiles: (files: FileList) => void;
   disabled?: boolean;
   compact?: boolean;
+  inputId?: string;
+  hideTrigger?: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   return (
     <>
       <input
         ref={inputRef}
+        id={inputId}
         type="file"
         multiple
         // Mobile browsers show camera/photo/file options for these types.
-        accept="image/*,.pdf,.txt,.md,.csv,.json,.zip,.doc,.docx,.xls,.xlsx,.ppt,.pptx,audio/*,video/mp4,video/webm,video/quicktime,video/ogg,video/x-msvideo"
+        accept="image/*,video/*,audio/*,.heic,.heif,.avif,.jpg,.jpeg,.pdf,.txt,.md,.csv,.json,.zip,.doc,.docx,.xls,.xlsx,.ppt,.pptx"
         className="hidden"
         onChange={(e) => {
           if (e.target.files?.length) onFiles(e.target.files);
           e.target.value = "";
         }}
       />
-      <button
+      {!hideTrigger ? <button
         type="button"
         disabled={disabled}
         onClick={() => inputRef.current?.click()}
@@ -233,7 +251,7 @@ export function AttachButton({
       >
         <Paperclip className="h-4.5 w-4.5" />
         <span className="sr-only">Attach</span>
-      </button>
+      </button> : null}
     </>
   );
 }

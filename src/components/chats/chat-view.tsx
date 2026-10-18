@@ -1,6 +1,5 @@
 "use client";
 import { forgetDecryptedAttachments } from "./e2ee-context";
-import { ScheduledMessageManager } from "./scheduled-message-manager";
 
 import { useAudioCall } from "@/components/providers/audio-call-provider";
 import Image from "next/image";
@@ -39,7 +38,8 @@ import {
   Mic,
   Pin,
   Reply as ReplyIcon,
-  SmilePlus,
+  Plus,
+  Timer,
   Star,
   Send,
   Clock,
@@ -615,15 +615,14 @@ export function ChatView({
       const { key: conversationKey } = await e2ee.getConversationKey(conversationId, { waitForPeer: true });
       const mediaKey = await generateConversationKey();
       const mediaKeyB64 = await exportSymmetricKey(mediaKey);
-      const cipherB64 = await encryptBytes(await file.arrayBuffer(), mediaKey);
+      const iv=crypto.getRandomValues(new Uint8Array(12));
+      const ciphertext=await crypto.subtle.encrypt({name:"AES-GCM",iv},mediaKey,await file.arrayBuffer());
       const wrappedKeyB64 = await encryptBytes(
         new TextEncoder().encode(mediaKeyB64),
         conversationKey,
       );
-      const bytes = b64ToBytes(cipherB64);
-      const cipherBuf = bytes.slice().buffer as ArrayBuffer;
       return {
-        file: new File([cipherBuf], file.name, {
+        file: new File([iv,ciphertext], file.name, {
           type: "application/octet-stream",
         }),
         wrappedKey: wrappedKeyB64,
@@ -717,7 +716,7 @@ export function ChatView({
     if (draftUpdateTimer.current) clearTimeout(draftUpdateTimer.current);
     await saveChatDraft(me.id, conversationId, "").catch(() => undefined);
     // Preserve anything the user typed while IndexedDB was finishing.
-    if (draftRevision.current === revision) { setDraft(""); setReplyTo(null); }
+    if (draftRevision.current === revision) { setDraft(""); setReplyTo(null); selfDestructDraft.current=false; setSelfDestruct(false); }
   }
 
   /* ------------------------------ read receipts ----------------------------- */
@@ -1841,9 +1840,9 @@ export function ChatView({
   return (
     <E2EEMediaProvider conversationId={conversationId} decryptMedia={e2ee.decryptMedia} initialized={e2ee.initialized} initializationError={e2ee.error}>
     <div className="flex h-full w-full min-w-0 overflow-hidden overflow-x-hidden">
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       {/* ------------------------------ header ------------------------------ */}
-      <header className="flex h-14 min-w-0 items-center gap-2 border-b border-[var(--border)] bg-[var(--surface)] px-2 sm:gap-3 sm:px-4">
+      <header className="flex h-14 min-w-0 shrink-0 items-center gap-2 border-b border-[var(--border)] bg-[var(--surface)] px-2 sm:gap-3 sm:px-4">
         <Link
           href="/app/chats"
           aria-label="Back to chats"
@@ -2714,16 +2713,7 @@ export function ChatView({
           </div>
         ) : null}
 
-        <div className="relative flex min-h-9 flex-wrap items-center gap-x-4 text-xs">
-          {!schedulePaused ? <ScheduledMessageManager conversationId={conversationId} /> : null}
-          <details>
-            <summary className="flex min-h-11 cursor-pointer items-center underline">{selfDestruct ? "Self-destruct: on" : "Message options"}</summary>
-            <div className="absolute bottom-full left-0 z-40 mb-2 w-64 max-w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3 shadow-lg">
-              <label className="flex min-h-11 items-center gap-2"><input type="checkbox" checked={selfDestruct} disabled={sendPending || attachments.pending.length > 0 || awaitingApproval} onChange={event => { const enabled=event.target.checked;selfDestructDraft.current=enabled;setSelfDestruct(enabled);if(enabled)void saveChatDraft(me.id,conversationId,"").catch(()=>{});else queueDraftPersistence(); }} />Self-destruct message · 5 seconds after first reveal</label>
-              <p className="mt-2 text-[var(--muted)]">Text only. The first reveal starts the countdown for everyone. Unsent self-destruct drafts stay in this session; keep the chat open if sending is waiting.</p>
-            </div>
-          </details>
-        </div>
+        {selfDestruct ? <p role="status" className="mb-2 flex items-center gap-1.5 px-2 text-xs font-medium text-[var(--accent-fg)]"><Timer className="h-3.5 w-3.5" />Disappears 5 seconds after first reveal</p> : null}
         {mediaPaused || schedulePaused ? <p className="mb-2 text-xs text-[var(--muted)]">{mediaPaused ? "Uploads and voice messages are unavailable. " : ""}{schedulePaused ? "Scheduled sending is unavailable." : ""}</p> : null}
         <AttachmentPreviews
           pending={attachments.pending}
@@ -2749,6 +2739,8 @@ export function ChatView({
           <div className="composer-row flex items-end gap-1 rounded-[24px] bg-[var(--input-bg)] p-1.5">
             <AttachButton
               compact
+              hideTrigger
+              inputId={`chat-files-${conversationId}`}
               onFiles={(files) => attachments.addFiles(files)}
               disabled={mediaPaused || sendPending || !canCompose || awaitingApproval}
             />
@@ -2760,18 +2752,20 @@ export function ChatView({
                 type="button"
                 onClick={() => setShowEmoji((v) => !v)}
                 aria-label="Emoji"
-                title="Emoji, stickers and GIFs"
+                title="Add attachments, emoji, stickers or GIFs"
                 aria-expanded={showEmoji}
                 disabled={!canCompose}
                 className="composer-icon flex h-11 w-11 flex-none items-center justify-center rounded-full text-[var(--muted)] hover:text-[var(--text)]"
               >
-                <SmilePlus className="h-4.5 w-4.5" />
+                <Plus className="h-5 w-5" />
                 <span className="sr-only">Emoji</span>
               </button>
               {showEmoji ? (
                 <MediaPicker
                   anchor={mediaPickerAnchor}
                   mediaDisabled={mediaPaused || sendPending || !canCompose || awaitingApproval}
+                  onAttach={() => { (document.getElementById(`chat-files-${conversationId}`) as HTMLInputElement | null)?.click(); setShowEmoji(false); }}
+                  onSchedule={!selfDestruct && !schedulePaused && !sendPending && canCompose && !awaitingApproval ? () => { setShowEmoji(false); setDraftState(draftRef.current); setShowSchedule(true); } : undefined}
                   onFile={file => { setShowEmoji(false); attachments.addFiles([file]); }}
                   onEmoji={(emoji) => {
                     setDraft((prev) => prev + emoji);
@@ -2824,16 +2818,7 @@ export function ChatView({
             </div>
             {draft.trim() || attachments.pending.length > 0 ? (
               <div className="flex shrink-0 items-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => { setDraftState(draftRef.current); setShowSchedule(true); }}
-                  disabled={selfDestruct || schedulePaused || sendPending || !canCompose || awaitingApproval}
-                  aria-label="Schedule message"
-                  className="composer-icon flex h-11 w-11 flex-none items-center justify-center rounded-full text-[var(--muted)] hover:text-[var(--text)]"
-                  title={schedulePaused ? "Scheduled sending is paused" : "Schedule message"}
-                >
-                  <Clock className="h-4 w-4" />
-                </button>
+                <button type="button" role="checkbox" aria-checked={selfDestruct} aria-label="Self-destruct message · 5 seconds after first reveal" title={selfDestruct ? "Turn off self-destruct for this message" : "Self-destruct: disappears 5 seconds after first reveal"} disabled={sendPending || attachments.pending.length > 0 || awaitingApproval} onClick={() => { const enabled=!selfDestruct;selfDestructDraft.current=enabled;setSelfDestruct(enabled);if(enabled)void saveChatDraft(me.id,conversationId,"").catch(()=>{});else queueDraftPersistence(); }} className={cn("composer-icon flex h-11 w-11 flex-none items-center justify-center rounded-full transition-colors",selfDestruct ? "bg-[var(--accent-soft)] text-[var(--accent-fg)]" : "text-[var(--muted)] hover:text-[var(--text)]")}><Timer className="h-4.5 w-4.5" /></button>
                 <button
                   type="submit"
                   disabled={sendPending || !canCompose}
