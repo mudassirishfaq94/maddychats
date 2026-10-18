@@ -73,8 +73,9 @@ export function TemporaryRoom({id}:{id?:string}) {
 }
 function TemporaryAttachment({file}:{file:NonNullable<TemporaryContent["file"]>}) {
  const [previewFailed,setPreviewFailed]=useState(false);
+ const video=useRef<HTMLVideoElement>(null),audio=useRef<HTMLAudioElement>(null);
  const [url]=useState<string|null>(()=>{try{return URL.createObjectURL(new Blob([fromBase64(file.data)],{type:file.type}));}catch{return null;}});
- useEffect(()=>()=>{if(url)URL.revokeObjectURL(url);},[url]);
+ useEffect(()=>{const players=[video.current,audio.current];return()=>{for(const player of players){if(player){player.pause();player.removeAttribute("src");player.load();}}if(url)URL.revokeObjectURL(url);};},[url]);
  if(!url)return <p>Attachment unavailable.</p>;
- return <div className="mt-2 min-w-0">{!previewFailed&&/^image\/(jpeg|jpg|pjpeg|png|webp|gif|avif)$/i.test(file.type)?<Image unoptimized src={url} alt={file.name} width={640} height={480} className="max-h-64 w-full rounded-lg object-contain" onError={()=>setPreviewFailed(true)}/>:null}{!previewFailed&&/^video\/(mp4|webm|ogg)$/i.test(file.type)?<video controls preload="metadata" src={url} className="max-h-64 w-full rounded-lg" onError={()=>setPreviewFailed(true)}/>:null}{!previewFailed&&/^audio\//i.test(file.type)?<audio controls preload="metadata" src={url} className="max-w-full" onError={()=>setPreviewFailed(true)}/>:null}<a download={file.name} href={url} className="flex min-h-11 items-center break-all text-sm underline">{file.name} · Download</a></div>;
+ return <div className="mt-2 min-w-0">{!previewFailed&&/^image\/(jpeg|jpg|pjpeg|png|webp|gif|avif)$/i.test(file.type)?<Image unoptimized src={url} alt={file.name} width={640} height={480} className="max-h-64 w-full rounded-lg object-contain" onError={()=>setPreviewFailed(true)}/>:null}{!previewFailed&&/^video\/(mp4|webm|ogg)$/i.test(file.type)?<video ref={video} controls preload="metadata" src={url} className="max-h-64 w-full rounded-lg" onError={()=>setPreviewFailed(true)}/>:null}{!previewFailed&&/^audio\//i.test(file.type)?<audio ref={audio} controls preload="metadata" src={url} className="max-w-full" onError={()=>setPreviewFailed(true)}/>:null}<a download={file.name} href={url} className="flex min-h-11 items-center break-all text-sm underline">{file.name} · Download</a></div>;
 }
