@@ -72,7 +72,7 @@ export async function testChatPolish(page, recipient) {
       const bubble = page.locator(".message-history-row .inline-block.rounded-2xl").last();
       const menu = page.getByRole("dialog", { name: "Message options", exact: true });
       const hold = async () => {
-        await bubble.scrollIntoViewIfNeeded(); await bubble.click({trial:true});
+        await bubble.scrollIntoViewIfNeeded();
         await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
         const point = await bubble.evaluate(element => {
           const box=element.getBoundingClientRect();let left=Math.max(0,box.left),right=Math.min(innerWidth,box.right),top=Math.max(0,box.top),bottom=Math.min(innerHeight,box.bottom);
