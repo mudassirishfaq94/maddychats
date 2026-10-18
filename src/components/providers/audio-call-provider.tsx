@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { Phone, PhoneOff, Mic, MicOff, Volume2, X, Minus } from "lucide-react";
 import { useAuth } from "./auth-provider";
 import { useRealtime } from "./realtime-provider";
+import { hostedCall } from "@/lib/native-push-bridge";
 
 type Call = { id: string; conversation_id: string; caller_id: string; callee_id: string; owned: boolean; offer: string; answer: string | null; state: "ringing" | "active" | "ended"; expires_at: string; peer_name?: string };
 type Phase = "idle" | "preparing" | "outgoing" | "incoming" | "connecting" | "connected";
@@ -42,6 +43,8 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
   const [minimized, setMinimized] = useState(false);
   const [needsPlay, setNeedsPlay] = useState(false);
   const client = useRef("");
+  const nativeSession = useRef<{ callId: string; userId: string; clientId: string; conversationId: string } | null>(null);
+  const relayConfigured = useRef(false);
   const pc = useRef<RTCPeerConnection | null>(null);
   const stream = useRef<MediaStream | null>(null);
   const audio = useRef<HTMLAudioElement | null>(null);
@@ -52,6 +55,7 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
   const storeCall = useCallback((value: Call | null) => { callRef.current = value; setCall(value); }, []);
   const cleanup = useCallback(() => {
     generation.current++;
+    if (nativeSession.current) { void hostedCall("call-stop", nativeSession.current); nativeSession.current = null; }
     if (deadline.current) clearTimeout(deadline.current);
     const connection = pc.current; pc.current = null;
     if (connection) { connection.onconnectionstatechange = null; connection.ontrack = null; connection.close(); }
@@ -65,14 +69,30 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
     if (current) void request({ action: "end", id: current.id, clientId: client.current }).catch(() => {});
   }, [cleanup]);
 
+  const protectNativeCall = useCallback(async (current: Call | null) => {
+    if (!current || !userId) return;
+    const session = { callId: current.id, userId, clientId: client.current, conversationId: current.conversation_id };
+    if (await hostedCall("call-start", session)) {
+      if (callRef.current?.id === current.id) nativeSession.current = session;
+      else void hostedCall("call-stop", session);
+    }
+  }, [userId]);
+
   const prepare = useCallback(async (token: number) => {
     if (!navigator.mediaDevices?.getUserMedia || !window.RTCPeerConnection) throw new Error("Audio calls need an up-to-date browser and HTTPS.");
+    // Fetch short-lived relay credentials while the microphone prompt is open.
+    // Older servers/APKs retain direct calling if the new capability is absent.
+    const configuration = fetch("/api/calls/ice", { cache: "no-store", signal: AbortSignal.timeout(3000) })
+      .then(async response => response.ok ? await response.json() as { iceServers: RTCIceServer[]; relayConfigured: boolean } : null).catch(() => null);
     let media: MediaStream;
     try { media = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }, video: false }); }
     catch (cause) { throw new Error(cause instanceof DOMException && cause.name === "NotAllowedError" ? "Microphone permission is needed. Allow it in your browser’s site settings, then try again." : "Microphone unavailable. Check that it is connected and not in use by another app."); }
     if (generation.current !== token) { media.getTracks().forEach(track => track.stop()); throw new Error("Call cancelled."); }
+    const ice = await configuration;
+    if (generation.current !== token) { media.getTracks().forEach(track => track.stop()); throw new Error("Call cancelled."); }
     stream.current = media;
-    const connection = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
+    relayConfigured.current = ice?.relayConfigured === true;
+    const connection = new RTCPeerConnection({ iceServers: ice?.iceServers ?? [{ urls: "stun:stun.l.google.com:19302" }] });
     pc.current = connection;
     media.getTracks().forEach(track => connection.addTrack(track, media));
     connection.ontrack = event => {
@@ -83,7 +103,7 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
     connection.onconnectionstatechange = () => {
       if (pc.current !== connection) return;
       if (connection.connectionState === "connected") { if (deadline.current) clearTimeout(deadline.current); setStatus("connected"); setMinimized(true); }
-      if (connection.connectionState === "failed") end("This network could not connect a direct call. Try another Wi-Fi or mobile network. Relay calling is not configured yet.");
+      if (connection.connectionState === "failed") end(relayConfigured.current ? "The call could not connect through this network. Check your connection and try again." : "This network could not connect a direct call. Try another Wi-Fi or mobile network. Relay calling is not configured yet.");
       if (connection.connectionState === "disconnected") {
         setStatus("connecting");
         if (deadline.current) clearTimeout(deadline.current);
@@ -107,8 +127,9 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
       const created = await request({ action: "invite", conversationId, clientId: client.current, sdp });
       if (token !== generation.current) { if (created) void request({ action: "end", id: created.id, clientId: client.current }).catch(() => {}); return; }
       storeCall(created); setStatus("outgoing");
+      await protectNativeCall(created);
     } catch (cause) { if (token === generation.current) end(cause instanceof Error ? cause.message : "Could not start the call."); }
-  }, [end, prepare, setStatus, storeCall]);
+  }, [end, prepare, setStatus, storeCall, protectNativeCall]);
 
   const toggleMute = () => {
     const next = !muted;
@@ -125,9 +146,9 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
       const sdp = await description(connection);
       if (token !== generation.current) return;
       const accepted = await request({ action: "answer", id: current.id, clientId: client.current, sdp });
-      if (token === generation.current) storeCall(accepted);
+      if (token === generation.current) { storeCall(accepted); await protectNativeCall(accepted); }
     } catch (cause) { if (token === generation.current) end(cause instanceof Error ? cause.message : "Could not answer the call."); }
-  }, [prepare, setStatus, storeCall, end]);
+  }, [prepare, setStatus, storeCall, end, protectNativeCall]);
 
   useEffect(() => {
     if (!userId) return;
@@ -165,7 +186,11 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
     const timer = setInterval(() => { if (callRef.current || (!streamConnected.current && document.visibilityState === "visible")) void sync(); }, 2000);
     const heartbeat = setInterval(() => {
       const current = callRef.current;
-      if (current?.state === "active" && pc.current) void request({ action: "heartbeat", id: current.id, clientId: client.current }).catch(() => {});
+      if (current && pc.current && nativeSession.current) {
+        void hostedCall("call-renew", nativeSession.current).then(active => {
+          if (!active) nativeSession.current = null;
+        });
+      } else if (current?.state === "active" && pc.current) void request({ action: "heartbeat", id: current.id, clientId: client.current }).catch(() => {});
     }, 15000);
     const leaving = () => {
       const current = callRef.current;
@@ -186,6 +211,13 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
   }, [phase]);
 
   useEffect(() => { if (connected) syncRef.current?.(); }, [connected]);
+  useEffect(() => {
+    const ended = (event: Event) => { if (nativeSession.current?.callId === (event as CustomEvent<{ callId: string }>).detail?.callId) end(); };
+    const open = () => { setMinimized(false); syncRef.current?.(); };
+    window.addEventListener("circlo:native-call-ended", ended);
+    window.addEventListener("circlo:native-call-open", open);
+    return () => { window.removeEventListener("circlo:native-call-ended", ended); window.removeEventListener("circlo:native-call-open", open); };
+  }, [end]);
 
   const busy = phase !== "idle";
   const contextValue = useMemo(() => ({ start: (id: string, peer: string) => { void start(id, peer); }, busy }), [start, busy]);

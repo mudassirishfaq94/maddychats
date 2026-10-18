@@ -20,10 +20,13 @@ object NativePushState {
         context.getSystemService(NotificationManager::class.java)?.cancelAll()
     }
     fun clear(context: Context) {
+        NativeCallSessionService.stop(context)
         context.getSharedPreferences("circlo_push", Context.MODE_PRIVATE).edit().remove("user").apply()
         context.getSystemService(NotificationManager::class.java)?.cancelAll()
     }
     fun bind(context: Context, user: String) {
+        val previous = context.getSharedPreferences("circlo_push", Context.MODE_PRIVATE).getString("user", null)
+        if (previous != user) NativeCallSessionService.stop(context)
         context.getSharedPreferences("circlo_push", Context.MODE_PRIVATE).edit().putString("user", user).apply()
     }
     fun callClosed(context: Context, call: String): Boolean {

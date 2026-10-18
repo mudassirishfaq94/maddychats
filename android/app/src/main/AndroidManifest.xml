@@ -19,6 +19,9 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
 
 
     <!-- ===== Application ===== -->
@@ -82,6 +85,9 @@
         <meta-data android:name="com.google.firebase.messaging.default_notification_channel_id" android:value="maddychats-messages" />
         <meta-data android:name="com.google.firebase.messaging.default_notification_icon" android:resource="@drawable/ic_stat_ic_notification" />
 
+        <activity android:name=".IncomingCallActivity" android:exported="false" android:excludeFromRecents="true" android:theme="@style/AppTheme" />
+        <service android:name=".NativeCallSessionService" android:exported="false" android:foregroundServiceType="microphone" android:stopWithTask="true" />
+        <receiver android:name=".NativeCallEndReceiver" android:exported="false" />
         <receiver android:name=".NativeCallDeclineReceiver" android:exported="false" />
         <!-- Push notification service -->
         <service

@@ -1,11 +1,12 @@
 /** Exact-origin AndroidX message port. No cookies, keys or arbitrary native commands. */
-export type AndroidNotificationStatus = { enabled: boolean; messagesImportance: number | null };
+export type AndroidNotificationStatus = { enabled: boolean; messagesImportance: number | null; callsImportance?: number | null; fullScreenAllowed?: boolean };
 type Reply = { id: string; token?: string; error?: string; status?: AndroidNotificationStatus };
 type Port = { postMessage: (message: string) => void; onmessage: ((event: MessageEvent<string>) => void) | null };
 declare global { interface Window { CircloPush?: Port } }
 const pending = new Map<string, (reply: Reply) => void>();
 export function hasHostedPushBridge(): boolean { return typeof window !== "undefined" && Boolean(window.CircloPush); }
-async function request(command: "token" | "request" | "bind" | "clear" | "settings" | "status" | "dismiss" | "preview" | "privacy", userId?: string, notification?: LocalNotification, lockedChats?: string[] | null): Promise<Reply | null> {
+type CallSession = { callId: string; userId: string; clientId: string; conversationId: string };
+async function request(command: "token" | "request" | "bind" | "clear" | "settings" | "status" | "dismiss" | "preview" | "privacy" | "call-start" | "call-renew" | "call-stop" | "call-settings", userId?: string, notification?: LocalNotification, lockedChats?: string[] | null, call?: CallSession): Promise<Reply | null> {
   const port = window.CircloPush;
   if (!port) return null;
   port.onmessage = event => {
@@ -18,9 +19,16 @@ async function request(command: "token" | "request" | "bind" | "clear" | "settin
       clearTimeout(timer); pending.delete(id);
       if (reply.error) reject(new Error(reply.error)); else resolve(reply);
     });
-    try { port.postMessage(JSON.stringify({ id, command, userId, notification, lockedChats })); }
+    try { port.postMessage(JSON.stringify({ id, command, userId, notification, lockedChats, ...call })); }
     catch { clearTimeout(timer); pending.delete(id); reject(new Error("Notification bridge unavailable.")); }
   });
+}
+
+/** Metadata stays on-device; older APKs continue using their existing web call path. */
+export async function hostedCall(command: "call-start" | "call-renew" | "call-stop", call: CallSession): Promise<boolean> {
+  if (!hasHostedPushBridge()) return false;
+  try { return (await request(command, call.userId, undefined, undefined, call))?.token === "active"; }
+  catch { return false; }
 }
 
 export async function hostedPush(command: "token" | "request" | "bind" | "clear" | "settings" | "dismiss", userId?: string): Promise<string | null> {
@@ -31,6 +39,7 @@ export async function androidNotificationStatus(): Promise<AndroidNotificationSt
   if (!status || typeof status.enabled !== "boolean" || (status.messagesImportance !== null && typeof status.messagesImportance !== "number")) return null;
   return status;
 }
+export async function androidCallSettings(): Promise<void> { await request("call-settings"); }
 
 interface LocalNotification { recipientId: string; notificationId: string; conversationId: string; messageId: string; title: string; body: string; silent: boolean }
 /** Plaintext crosses only the exact-origin on-device WebView bridge. */

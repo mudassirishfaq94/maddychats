@@ -17,12 +17,16 @@ import org.json.JSONObject
 /** Existing Messages ID is permanent. Never delete/recreate channels to reset user choices. */
 object NotificationChannels {
     const val CALLS = "circlo-incoming-calls"
+    const val ONGOING_CALL = "circlo-active-calls"
     const val MESSAGES = "maddychats-messages"
     // A genuinely separate, non-interrupting purpose; never used to bypass Messages settings.
     const val QUIET = "circlo-quiet-activity"
     fun ensure(context: Context) {
         if (Build.VERSION.SDK_INT < 26) return
         val manager = context.getSystemService(NotificationManager::class.java) ?: return
+        if (manager.getNotificationChannel(ONGOING_CALL) == null) manager.createNotificationChannel(NotificationChannel(ONGOING_CALL, "Active calls", NotificationManager.IMPORTANCE_LOW).apply {
+            description = "Microphone use during an answered Circlo call"; setSound(null, null)
+        })
         if (manager.getNotificationChannel(CALLS) == null) manager.createNotificationChannel(NotificationChannel(CALLS, "Incoming calls", NotificationManager.IMPORTANCE_HIGH).apply {
             description = "Incoming Circlo audio calls"
             lockscreenVisibility = Notification.VISIBILITY_PRIVATE
@@ -67,6 +71,15 @@ object NotificationChannels {
         val importance = if (Build.VERSION.SDK_INT >= 26) context.getSystemService(NotificationManager::class.java)?.getNotificationChannel(MESSAGES)?.importance else null
         return JSONObject().put("enabled", NotificationManagerCompat.from(context).areNotificationsEnabled())
             .put("messagesImportance", importance ?: JSONObject.NULL)
+            .put("callsImportance", if (Build.VERSION.SDK_INT >= 26) context.getSystemService(NotificationManager::class.java)?.getNotificationChannel(CALLS)?.importance else JSONObject.NULL)
+            .put("fullScreenAllowed", Build.VERSION.SDK_INT < 34 || context.getSystemService(NotificationManager::class.java)?.canUseFullScreenIntent() == true)
+    }
+    fun openCallSettings(context: Context) {
+        val intent = if (Build.VERSION.SDK_INT >= 34 && context.getSystemService(NotificationManager::class.java)?.canUseFullScreenIntent() != true)
+            Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT, Uri.parse("package:${context.packageName}"))
+        else if (Build.VERSION.SDK_INT >= 26) Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName).putExtra(Settings.EXTRA_CHANNEL_ID, CALLS)
+        else Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}"))
+        context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }
     fun openSettings(context: Context) {
         ensure(context)

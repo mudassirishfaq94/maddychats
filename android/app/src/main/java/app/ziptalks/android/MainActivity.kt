@@ -282,12 +282,18 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        notificationDestination(intent)?.let { webView?.loadUrl(it) }
+        notificationDestination(intent)?.let { destination ->
+            val active = NativeCallSessionService.session
+            if (active != null && Uri.parse(destination).getQueryParameter("call") == active.id && WebOriginPolicy.isAllowed(webView?.url.orEmpty(), BuildConfig.API_BASE_URL)) {
+                // Returning from the ongoing-call notification must preserve WebRTC.
+                webView?.evaluateJavascript("window.dispatchEvent(new Event('circlo:native-call-open'))", null)
+            } else webView?.loadUrl(destination)
+        }
     }
 
     private fun createNotificationChannel() { NotificationChannels.ensure(this) }
 
-    override fun onDestroy() { webView?.destroy(); webView = null; super.onDestroy() }
+    override fun onDestroy() { NativeCallSessionService.stop(this); webView?.destroy(); webView = null; super.onDestroy() }
 
     fun hostedWebChromeClient() = object : WebChromeClient() {
         override fun onPermissionRequestCanceled(request: PermissionRequest) {

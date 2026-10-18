@@ -40,6 +40,14 @@ class HostedPushBridge(private val activity: MainActivity, private val requestPe
                 }.onFailure { respond(error = "Notifications are not configured for this Android build.") }
             }
             when (data.optString("command")) {
+                "call-start" -> respond(token = if (NativeCallSessionService.begin(activity, data)) "active" else "unavailable")
+                "call-renew" -> respond(token = if (NativeCallSessionService.renew(data)) "active" else "unavailable")
+                "call-stop" -> {
+                    val call = NativeCallSessionService.session
+                    if (call != null && call.id == data.optString("callId") && call.user == data.optString("userId") && call.client == data.optString("clientId")) NativeCallSessionService.stop(activity)
+                    respond()
+                }
+                "call-settings" -> { NotificationChannels.openCallSettings(activity); respond() }
                 "settings" -> { runCatching { NotificationChannels.openSettings(activity) }.onSuccess { respond() }.onFailure { respond(error = "Open Android Settings > Apps > Circlo > Notifications.") } }
                 "status" -> respond(status = NotificationChannels.status(activity))
                 "token" -> token()

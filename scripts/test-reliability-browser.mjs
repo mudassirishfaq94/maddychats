@@ -9,7 +9,7 @@ import {generateKeyPair,exportPublicKey,exportPrivateKey,encryptPrivateKeyForSto
 const url=new URL(process.env.DATABASE_URL??"");
 assert(url.hostname==="127.0.0.1"&&url.pathname==="/circlo_audit","Disposable local database required");
 const base="http://127.0.0.1:3137",pool=new Pool({connectionString:url.toString(),max:2});
-const accounts=[],contexts=[],errors=[];let browser,group;
+const accounts=[],contexts=[],errors=[];let browser,group,callChat;
 try {
  // Schema push omits triggers; install the real migration trigger for SSE tests.
  const guards=await readFile("drizzle/0037_realtime_and_admin_guards.sql","utf8");
@@ -104,9 +104,35 @@ try {
  await owner.page.getByLabel(/I have preserved any keys needed from this browser/).check();await owner.page.getByRole("button",{name:"Restore encrypted keys",exact:true}).click();
  await owner.page.waitForTimeout(1000);await owner.page.goto(`${base}/app/chats/${group}`);await owner.page.getByRole("region",{name:"Messages",exact:true}).getByText(normal,{exact:true}).waitFor();
  console.log("PASS: cloud recovery setup; browser storage loss; original encrypted history restored");
+ // Real WebRTC, cold recipient launch through Answer, then SSE-offline decline.
+ callChat=randomUUID();
+ await pool.query("insert into conversations(id,type,created_by_id) values($1,'dm',$2)",[callChat,owner.id]);
+ for(const account of [owner,member]) {
+  await pool.query("insert into conversation_members(conversation_id,user_id,accepted_at) values($1,$2,now())",[callChat,account.id]);
+  await pool.query("insert into e2ee_conversation_keys(conversation_id,user_id,device_id,recipient_device_id,encrypted_key,key_fingerprint) values($1,$2,$3,$3,$4,$5)",[callChat,account.id,account.deviceId,await encryptKeyForUser(key,account.pair.publicKey),fingerprint]);
+ }
+ await member.page.close();
+ await owner.page.goto(`${base}/app/chats/${callChat}`);
+ const ice=await owner.page.request.get(base+"/api/calls/ice");assert.equal(ice.status(),200);assert(Array.isArray((await ice.json()).iceServers));
+ await owner.page.getByRole("button",{name:"Start audio call",exact:true}).click();
+ await owner.page.getByText("Calling…",{exact:true}).waitFor();
+ const ringing=(await pool.query("select id from audio_calls where conversation_id=$1 and state='ringing'",[callChat])).rows[0];assert(ringing,"Offline recipient must still receive persisted signaling");
+ member.page=await contexts[1].newPage();member.page.setDefaultTimeout(30000);member.page.on("pageerror",error=>errors.push(error.message));
+ await contexts[1].route("**/api/realtime/stream",route=>route.abort());
+ await member.page.goto(`${base}/app/chats/${callChat}?call=${ringing.id}&callAction=answer`);
+ for(const account of [owner,member])await account.page.getByText("Audio connected",{exact:true}).waitFor({timeout:45000});
+ await member.page.getByRole("button",{name:"End call",exact:true}).click();
+ await owner.page.getByRole("button",{name:"Dismiss call notice",exact:true}).click();
+ await owner.page.getByRole("button",{name:"Start audio call",exact:true}).click();
+ await member.page.getByRole("button",{name:"Decline",exact:true}).waitFor();
+ await member.page.getByRole("button",{name:"Decline",exact:true}).click();
+ await owner.page.getByRole("button",{name:"Dismiss call notice",exact:true}).waitFor();
+ assert.equal((await pool.query("select count(*)::int as n from audio_calls where conversation_id=$1",[callChat])).rows[0].n,0);
+ console.log("PASS: cold Answer launch establishes real WebRTC; decline works without SSE; ended signaling removed");
  assert.deepEqual(errors,[]);console.log("Browser reliability suite passed.");
 } catch(error) { console.error("Workflow failed:",error);for(const [i,account] of accounts.entries()){if(account.page)await account.page.screenshot({path:`${process.env.TEMP??"."}/circlo-audit-failure-${i}.png`}).catch(()=>{});} throw error; } finally {
  if(browser)await browser.close();
+ if(callChat)await pool.query("delete from conversations where id=$1",[callChat]);
  if(group)await pool.query("delete from conversations where id=$1",[group]);
  if(accounts.length)await pool.query("delete from users where id=any($1::uuid[])",[accounts.map(account=>account.id)]);
  await pool.end();

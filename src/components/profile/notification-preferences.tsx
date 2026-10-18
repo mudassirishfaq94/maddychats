@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Bell, BellRing, Eye, Loader2, Smartphone, Volume2, Users } from "lucide-react";
 import { Toggle } from "@/components/ui/toggle";
 import { isNativeApp } from "@/lib/native-platform";
-import { hasHostedPushBridge, hostedPush, androidNotificationStatus, type AndroidNotificationStatus } from "@/lib/native-push-bridge";
+import { hasHostedPushBridge, hostedPush, androidNotificationStatus, androidCallSettings, type AndroidNotificationStatus } from "@/lib/native-push-bridge";
 
 interface Preferences {
   messageNotifications: boolean;
@@ -216,6 +216,12 @@ export function NotificationPreferences() {
               ? "Android has set Messages to quiet or blocked. Open settings to choose Alerting and Pop on screen."
               : "Android controls pop-ups, Do Not Disturb and sounds. If banners are missing, check Messages and Pop on screen (sometimes called Floating notifications)."}</p>
           <button type="button" className="mt-3 max-w-full rounded-xl border border-[var(--border)] px-3 py-2 text-sm font-semibold whitespace-normal" onClick={() => void hostedPush("settings").catch(() => setMessage("Open Android Settings > Apps > Circlo > Notifications > Messages. Older app versions may call this General."))}>Open Android notification settings</button>
+          {androidStatus?.fullScreenAllowed !== undefined ? <div className="mt-4 border-t border-[var(--border)] pt-3">
+            <p className="text-sm font-semibold">Incoming calls</p>
+            <p className="mt-1 text-xs text-[var(--muted)]">{androidStatus.callsImportance === 0 ? "Incoming call notifications are blocked in Android settings." : androidStatus.fullScreenAllowed ? "Full-screen call alerts are allowed. Android still controls Do Not Disturb and lock-screen presentation." : "Answer and Decline appear in the incoming-call notification. You can allow full-screen alerts for locked-screen calls in Android settings."}</p>
+            <button type="button" className="mt-2 min-h-11 text-sm underline" onClick={() => void androidCallSettings().catch(() => setMessage("Open Android Settings > Apps > Circlo > Notifications > Incoming calls, and Special app access > Full-screen notifications."))}>Open Android call settings</button>
+            <p className="mt-1 text-xs text-[var(--muted)]">Circlo requests microphone access only when you answer or start a call. Android force-stop prevents incoming calls until you reopen the app.</p>
+          </div> : null}
         </div>
       ) : null}
       {!preferences ? (

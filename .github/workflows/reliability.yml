@@ -2,7 +2,7 @@ name: Messaging reliability
 on:
   pull_request:
   push:
-    branches: ['codex/reliability-security-audit']
+    branches: ['codex/reliability-security-audit', 'codex/background-incoming-calls']
   workflow_dispatch:
 permissions:
   contents: read
