@@ -75,6 +75,10 @@ export async function testChatPolish(page, recipient) {
           if(right<=left||bottom<=top)return null;const x=(left+right)/2,y=(top+bottom)/2;
           return element.contains(document.elementFromPoint(x,y))?{x,y}:null;
         });
+        if (!point) {
+          const geometry=await bubble.evaluate(element=>({viewport:{width:innerWidth,height:innerHeight},bubble:element.getBoundingClientRect().toJSON(),ancestors:Array.from((function*(){for(let p=element.parentElement;p;p=p.parentElement)yield p;})()).map(p=>({className:p.className,rect:p.getBoundingClientRect().toJSON(),overflow:getComputedStyle(p).overflow})),composer:document.querySelector('.composer-row')?.getBoundingClientRect().toJSON()}));
+          console.error("Inaccessible message geometry:",JSON.stringify(geometry));
+        }
         assert(point,"Long press targets the visible message, including clipped landscape images");
         await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [point] });
         try { await menu.waitFor({timeout:5000}); }

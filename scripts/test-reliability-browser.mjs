@@ -76,7 +76,9 @@ try {
  await owner.page.getByRole("textbox",{name:"Message text"}).fill(normal);await owner.page.getByRole("button",{name:"Send message",exact:true}).click();
  await member.page.getByRole("region",{name:"Messages",exact:true}).getByText(normal,{exact:true}).waitFor();console.log("PASS: normal E2EE message decrypted across browser sessions");
  const note=`Ephemeral private note ${randomUUID()}`;
+ await owner.page.locator('summary').filter({hasText:/^Message options$/}).click();
  await owner.page.getByLabel("Self-destruct message · 5 seconds after first reveal",{exact:true}).check();
+ await owner.page.locator('summary').filter({hasText:/^Self-destruct: on$/}).click();
  await owner.page.getByRole("textbox",{name:"Message text"}).fill(note);await owner.page.getByRole("button",{name:"Send message",exact:true}).click();
  const reveal=member.page.getByRole("button",{name:"Reveal · disappears in 5 seconds",exact:true});await reveal.waitFor();assert.equal(await member.page.getByRole("region",{name:"Messages",exact:true}).getByText(note,{exact:true}).count(),0);
  await reveal.click();await member.page.getByRole("region",{name:"Messages",exact:true}).getByText(note,{exact:true}).waitFor();
