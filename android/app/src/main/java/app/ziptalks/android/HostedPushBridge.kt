@@ -23,10 +23,11 @@ class HostedPushBridge(private val activity: MainActivity, private val requestPe
             val data = runCatching { JSONObject(raw) }.getOrNull() ?: return@addWebMessageListener
             val id = data.optString("id")
             if (!Regex("[a-zA-Z0-9-]{1,64}").matches(id)) return@addWebMessageListener
-            fun respond(token: String? = null, error: String? = null, status: JSONObject? = null) {
+            fun respond(token: String? = null, error: String? = null, status: JSONObject? = null, audio: JSONObject? = null) {
                 if (!WebOriginPolicy.isAllowed(source.url.orEmpty(), BuildConfig.API_BASE_URL) || activity.isDestroyed) return
                 val result = JSONObject().put("id", id)
                 status?.let { result.put("status", it) }
+                audio?.let { result.put("audio", it) }
                 token?.let { result.put("token", it) }; error?.let { result.put("error", it) }
                 runCatching { reply.postMessage(result.toString()) }
             }
@@ -46,7 +47,10 @@ class HostedPushBridge(private val activity: MainActivity, private val requestPe
                     respond(token = if (accepted) "active" else "unavailable")
                 }
                 "call-start" -> respond(token = if (NativeCallSessionService.begin(activity, data)) "active" else "unavailable")
-                "call-renew" -> respond(token = if (NativeCallSessionService.renew(data)) "active" else "unavailable")
+                "call-renew" -> respond(token = if (NativeCallSessionService.renew(activity, data)) "active" else "unavailable")
+                "call-audio" -> runCatching { NativeCallSessionService.audio(activity, data) }
+                    .onSuccess { if (it == null) respond(error = "Call audio controls are unavailable.") else respond(audio = it) }
+                    .onFailure { respond(error = "Could not change audio output. Try again.") }
                 "call-stop" -> {
                     val call = NativeCallSessionService.session
                     if (call != null && call.id == data.optString("callId") && call.user == data.optString("userId") && call.client == data.optString("clientId")) NativeCallSessionService.stop(activity)

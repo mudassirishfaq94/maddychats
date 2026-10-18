@@ -1,10 +1,11 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Phone, PhoneOff, Mic, MicOff, Volume2, X, Minus } from "lucide-react";
+import { Phone, PhoneOff, Mic, MicOff, Volume2, X, Minus, ShieldCheck, Headphones } from "lucide-react";
 import { useAuth } from "./auth-provider";
 import { useRealtime } from "./realtime-provider";
-import { hostedCall } from "@/lib/native-push-bridge";
+import { hostedCall, hostedCallAudio, hasHostedPushBridge, type CallAudioState } from "@/lib/native-push-bridge";
+import { formatCallDuration } from "@/lib/call-duration";
 import { consumeCallAnswer } from "@/lib/call-answer-grant";
 import { usePathname, useRouter } from "next/navigation";
 import { notificationChatLocked } from "@/lib/local-notification-preview";
@@ -42,10 +43,16 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
   const [answerPending, setAnswerPending] = useState(false);
   const phaseRef = useRef<Phase>("idle");
   const [call, setCall] = useState<Call | null>(null);
+  const currentCallId = call?.id;
   const callRef = useRef<Call | null>(null);
   const [name, setName] = useState("");
   const [error, setError] = useState("");
   const [muted, setMuted] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
+  const connectedAt = useRef<number | null>(null);
+  const [routes, setRoutes] = useState<CallAudioState | null>(null);
+  const [routeBusy, setRouteBusy] = useState(false);
+  const [routeError, setRouteError] = useState("");
   const [minimized, setMinimized] = useState(false);
   const [needsPlay, setNeedsPlay] = useState(false);
   const client = useRef("");
@@ -68,6 +75,7 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
     stream.current?.getTracks().forEach(track => track.stop()); stream.current = null;
     if (audio.current) { audio.current.pause(); audio.current.srcObject = null; }
     storeCall(null); setStatus("idle"); setMuted(false); setMinimized(false); setNeedsPlay(false);
+    connectedAt.current = null; setElapsed(0); setRoutes(null); setRouteError(""); setRouteBusy(false);
   }, [setStatus, storeCall]);
   const end = useCallback((message = "") => {
     const current = callRef.current;
@@ -109,7 +117,7 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
     };
     connection.onconnectionstatechange = () => {
       if (pc.current !== connection) return;
-      if (connection.connectionState === "connected") { if (deadline.current) clearTimeout(deadline.current); setStatus("connected"); setMinimized(true); }
+      if (connection.connectionState === "connected") { if (deadline.current) clearTimeout(deadline.current); connectedAt.current ??= performance.now(); setStatus("connected"); setMinimized(true); }
       if (connection.connectionState === "failed") end(relayConfigured.current ? "The call could not connect through this network. Check your connection and try again." : "The call could not connect. Please try again shortly.");
       if (connection.connectionState === "disconnected") {
         setStatus("connecting");
@@ -142,6 +150,29 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
     const next = !muted;
     stream.current?.getAudioTracks().forEach(track => { track.enabled = !next; });
     setMuted(next);
+  };
+  const changeOutput = async (deviceId?: string) => {
+    if (routeBusy) return;
+    setRouteBusy(true); setRouteError("");
+    const current = callRef.current;
+    try {
+      if (nativeSession.current) {
+        const value = await hostedCallAudio({ ...nativeSession.current, deviceId });
+        if (callRef.current?.id === current?.id) {
+          if (!value) throw new Error("Audio output is unavailable on this device.");
+          setRoutes(value);
+        }
+      } else {
+        // Browser support is optional. Never render a speaker toggle that cannot route audio.
+        const devices = navigator.mediaDevices as MediaDevices & { selectAudioOutput?: () => Promise<MediaDeviceInfo> };
+        const player = audio.current as (HTMLAudioElement & { setSinkId?: (id: string) => Promise<void> }) | null;
+        if (!devices.selectAudioOutput || !player?.setSinkId) throw new Error("Choose audio output in your device settings.");
+        const selected = await devices.selectAudioOutput();
+        if (callRef.current?.id === current?.id) await player.setSinkId(selected.deviceId);
+      }
+    } catch (cause) {
+      if (callRef.current?.id === current?.id) setRouteError(cause instanceof DOMException && cause.name === "NotAllowedError" ? "Audio output selection was cancelled or not permitted." : cause instanceof Error ? cause.message : "Could not change audio output.");
+    } finally { setRouteBusy(false); }
   };
   const answer = useCallback(async () => {
     const current = callRef.current; if (!current || phaseRef.current !== "incoming") return;
@@ -231,6 +262,31 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(timer);
   }, [phase]);
 
+  useEffect(() => {
+    if (phase !== "connected" && phase !== "connecting") return;
+    const update = () => { if (connectedAt.current !== null) setElapsed(Math.floor((performance.now() - connectedAt.current) / 1000)); };
+    update(); const timer = setInterval(update, 1000);
+    document.addEventListener("visibilitychange", update);
+    return () => { clearInterval(timer); document.removeEventListener("visibilitychange", update); };
+  }, [phase]);
+
+  useEffect(() => {
+    if (phase !== "connected" || !currentCallId || !userId) return;
+    let disposed = false;
+    let metadataSent = false;
+    const update = async () => {
+      const session = nativeSession.current;
+      if (!session) return;
+      if (!metadataSent) { metadataSent = true; await hostedCall("call-renew", { ...session, connected: true, muted }); }
+      try { const value = await hostedCallAudio(session); if (!disposed) setRoutes(value); } catch { /* Older APKs retain existing call controls. */ }
+    };
+    void update();
+    const visible = () => { if (document.visibilityState === "visible") void update(); };
+    const timer = setInterval(visible, 3000);
+    document.addEventListener("visibilitychange", visible);
+    return () => { disposed = true; clearInterval(timer); document.removeEventListener("visibilitychange", visible); };
+  }, [phase, currentCallId, userId, muted]);
+
   useEffect(() => { if (connected) syncRef.current?.(); }, [connected]);
   useEffect(() => {
     const privacy = () => {
@@ -257,15 +313,16 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
     {children}
     <audio ref={audio} autoPlay className="hidden" />
     {!dedicated && minimized && phase === "connected" && !error && !needsPlay ? <section role="region" aria-label="Audio call" className="fixed left-3 top-[max(0.375rem,env(safe-area-inset-top))] z-[200] flex w-[calc(100%_-_8rem)] max-w-sm sm:left-auto sm:right-4 sm:top-16 sm:w-72 items-center gap-1 rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-2 shadow-xl">
-      <button type="button" aria-label="Open call controls" className="min-h-11 min-w-0 flex-1 text-left" onClick={() => setMinimized(false)}><span className="block truncate text-xs font-semibold">{name}</span><span className="block text-[10px] text-[var(--muted)]">Audio connected</span></button>
+      <button type="button" aria-label="Open call controls" className="min-h-11 min-w-0 flex-1 text-left" onClick={() => { setMinimized(false); if (call) router.push(`/app/call?call=${call.id}`); }}><span className="block truncate text-xs font-semibold">{name}</span><span className="block text-[10px] text-[var(--muted)]"><span>Audio connected</span><span className="ml-1 font-mono tabular-nums">{formatCallDuration(elapsed)}</span></span></button>
       <button type="button" aria-label={muted ? "Unmute" : "Mute"} aria-pressed={muted} className="flex h-11 w-11 shrink-0 items-center justify-center" onClick={toggleMute}>{muted ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}</button>
       <button type="button" aria-label="End call" className="flex h-11 w-11 shrink-0 items-center justify-center text-[var(--danger)]" onClick={() => end()}><PhoneOff className="h-4 w-4" /></button>
     </section> : phase !== "idle" || error ? <section role="region" aria-label="Audio call" className={dedicated ? "fixed inset-0 z-[250] flex flex-col justify-center overflow-y-auto bg-[var(--bg)] px-6 py-[max(2rem,env(safe-area-inset-top))] sm:px-[max(1.5rem,calc((100vw-28rem)/2))]" : "fixed inset-x-3 bottom-[max(1rem,env(safe-area-inset-bottom))] z-[200] mx-auto max-h-[85dvh] max-w-sm overflow-y-auto rounded-3xl border border-[var(--border)] bg-[var(--surface)] p-5 shadow-2xl"}>
-      {dedicated ? <p className="mb-12 text-center text-xl font-semibold text-[var(--accent)]">circlo</p> : null}
+      {dedicated ? <div className="mb-12 text-center"><p className="text-xl font-semibold tracking-wide text-[var(--accent)]">circlo</p><p className="mt-2 flex items-center justify-center gap-1.5 text-xs text-[var(--muted)]"><ShieldCheck className="h-3.5 w-3.5" />Encrypted audio call</p></div> : null}
       <div className={dedicated ? "flex flex-col items-center gap-6 text-center" : "flex items-start gap-3"}>
-        <Phone className={dedicated ? "h-20 w-20 rounded-full border border-[var(--border)] p-5 text-[var(--accent)]" : "mt-1 h-5 w-5 shrink-0 text-[var(--accent)]"} />
+        {dedicated ? <div aria-hidden="true" className="flex h-28 w-28 items-center justify-center rounded-full border border-[var(--accent)]/30 bg-[var(--surface)] text-4xl font-semibold text-[var(--accent)] shadow-xl ring-8 ring-[var(--accent)]/5">{(name || "C").trim().split(/\s+/).slice(0, 2).map(part => Array.from(part)[0]).join("")}</div> : <Phone className="mt-1 h-5 w-5 shrink-0 text-[var(--accent)]" />}
         <div className="min-w-0 flex-1"><p className={dedicated ? "text-3xl font-semibold break-words" : "truncate font-semibold"}>{name || "Audio call"}</p>
           <p role="status" className="mt-3 text-sm text-[var(--muted)]">{error || (answerPending ? "Connecting audio…" : { idle: "", preparing: "Preparing microphone…", incoming: "Incoming audio call", outgoing: "Calling…", connecting: "Connecting audio…", connected: "Audio connected" }[phase])}</p>
+          {phase === "connected" || elapsed > 0 ? <p aria-label="Call duration" className="mt-3 font-mono text-2xl tabular-nums tracking-wider text-[var(--accent)]">{formatCallDuration(elapsed)}</p> : null}
         </div>
         {phase === "connected" ? <button type="button" aria-label="Minimize call controls" className={dedicated ? "absolute top-4 right-4 min-h-11 min-w-11" : "min-h-11 min-w-11"} onClick={() => { setMinimized(true); if (dedicated) router.push(call ? `/app/chats/${call.conversation_id}` : "/app/chats"); }}><Minus className="mx-auto h-5 w-5" /></button> : null}
         {phase === "idle" ? <button aria-label="Dismiss call notice" className={dedicated ? "absolute top-4 right-4 min-h-11 min-w-11" : "min-h-11 min-w-11"} onClick={() => { setError(""); if (dedicated) router.replace("/app/chats"); }}><X className="mx-auto h-5 w-5" /></button> : null}
@@ -273,11 +330,13 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
       {phase === "incoming" ? <p className="mt-3 text-xs text-[var(--muted)]">Answer to share your microphone and establish a direct encrypted audio connection. Direct calls can reveal your network address to the other person.</p> : null}
       {phase !== "idle" ? <div className="mt-4 flex flex-wrap gap-3">
         {phase === "incoming" && !answerPending ? <button className={dedicated ? "btn min-h-14 flex-1 rounded-full bg-emerald-600 text-white" : "btn btn-primary min-h-11 flex-1"} onClick={() => void answer()}>Answer</button> : null}
-        {phase === "connected" ? <button className="btn btn-secondary min-h-11 flex-1" aria-pressed={muted} onClick={toggleMute}>{muted ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}{muted ? "Unmute" : "Mute"}</button> : null}
+        {phase === "connected" ? <button className="btn btn-secondary min-h-14 flex-1 rounded-2xl" aria-pressed={muted} onClick={toggleMute}>{muted ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}{muted ? "Unmute" : "Mute"}</button> : null}
+        {phase === "connected" && routes?.devices.length ? <label className="flex min-h-14 min-w-0 flex-1 items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3"><Headphones aria-hidden="true" className="h-5 w-5 shrink-0" /><select aria-label="Audio output" className="min-w-0 w-full bg-[var(--surface)] text-sm" value={routes.selected} disabled={routeBusy} onChange={event => void changeOutput(event.target.value)}>{!routes.devices.some(device => device.id === routes.selected) ? <option value="">System default</option> : null}{routes.devices.map(device => <option key={device.id} value={device.id}>{device.label}</option>)}</select></label> : phase === "connected" && !hasHostedPushBridge() && typeof (navigator.mediaDevices as MediaDevices & { selectAudioOutput?: unknown }).selectAudioOutput === "function" ? <button className="btn btn-secondary min-h-14 flex-1 rounded-2xl" disabled={routeBusy} onClick={() => void changeOutput()}><Headphones className="h-5 w-5" />Audio output</button> : null}
         <button className={dedicated ? "btn min-h-14 flex-1 rounded-full bg-red-700 text-white" : "btn btn-secondary min-h-11 flex-1"} onClick={() => end()}><PhoneOff className="h-4 w-4" />{phase === "incoming" ? "Decline" : "End call"}</button>
       </div> : null}
+      {routeError ? <p role="alert" className="mt-3 text-center text-sm text-[var(--danger)]">{routeError}</p> : null}
       {needsPlay ? <button className="btn btn-secondary mt-3 w-full" onClick={() => { void audio.current?.play().then(() => { setNeedsPlay(false); setError(""); }).catch(() => setError("Tap again to allow audio playback in your browser.")); }}><Volume2 className="h-4 w-4" />Play call audio</button> : null}
-      {call ? <p className="mt-3 text-xs text-[var(--muted)]">Audio only · No recording · Keep Circlo open during the call</p> : null}
+      {call ? <p className="mt-6 text-center text-xs text-[var(--muted)]">Audio only · No recording</p> : null}
     </section> : null}
   </Context.Provider>;
 }

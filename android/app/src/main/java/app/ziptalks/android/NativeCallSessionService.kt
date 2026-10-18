@@ -12,6 +12,8 @@ import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
 import android.os.SystemClock
+import android.media.AudioManager
+import android.media.AudioDeviceInfo
 import android.webkit.CookieManager
 import androidx.core.app.NotificationCompat
 import androidx.core.app.Person
@@ -32,9 +34,23 @@ class NativeCallSessionService : Service() {
     private val http = OkHttpClient.Builder().addInterceptor(NativeSessionCookies).followRedirects(false).followSslRedirects(false).callTimeout(3, TimeUnit.SECONDS).build()
     private var wake: PowerManager.WakeLock? = null
     private var endMediaOnStop = true
+    private fun notification(current: Session): android.app.Notification {
+        val open = PendingIntent.getActivity(this, 7001, Intent(this, MainActivity::class.java).putExtra("notification_url", "ziptalks://chat/${current.conversation}?call=${current.id}"), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val end = PendingIntent.getBroadcast(this, 7002, Intent(this, NativeCallEndReceiver::class.java).putExtra("callId", current.id), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val caller = "Circlo audio call"
+        return NotificationCompat.Builder(this, NotificationChannels.ONGOING_CALL)
+            .setSmallIcon(R.drawable.ic_stat_ic_notification).setColor(0xffb9a078.toInt())
+            .setContentTitle(caller).setContentText(if (connectedAt == 0L) "Connecting audio…" else if (microphoneMuted) "Microphone muted" else "Audio connected")
+            .setWhen(if (connectedAt == 0L) System.currentTimeMillis() else connectedAt)
+            .setUsesChronometer(connectedAt != 0L).setShowWhen(connectedAt != 0L)
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE).setOngoing(true).setSilent(true).setOnlyAlertOnce(true)
+            .setContentIntent(open).setCategory(NotificationCompat.CATEGORY_CALL)
+            .setStyle(NotificationCompat.CallStyle.forOngoingCall(Person.Builder().setName(caller).build(), end)).build()
+    }
     override fun onBind(intent: Intent?): IBinder? = null
     override fun onCreate() {
         super.onCreate()
+        running = this
         worker.scheduleWithFixedDelay({ maintain() }, 0, 10, TimeUnit.SECONDS)
     }
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -44,14 +60,7 @@ class NativeCallSessionService : Service() {
         }
         NotificationChannels.ensure(this)
         NativeIncomingCall.dismiss(this, current.id)
-        val open = PendingIntent.getActivity(this, 7001, Intent(this, MainActivity::class.java).putExtra("notification_url", "ziptalks://chat/${current.conversation}?call=${current.id}"), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-        val end = PendingIntent.getBroadcast(this, 7002, Intent(this, NativeCallEndReceiver::class.java).putExtra("callId", current.id), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-        val notice = NotificationCompat.Builder(this, NotificationChannels.ONGOING_CALL)
-            .setSmallIcon(R.drawable.ic_stat_ic_notification).setContentTitle("Circlo audio call")
-            .setContentText("Microphone in use. Tap to return to the call.")
-            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE).setOngoing(true).setSilent(true)
-            .setContentIntent(open).setCategory(NotificationCompat.CATEGORY_CALL)
-            .setStyle(NotificationCompat.CallStyle.forOngoingCall(Person.Builder().setName("Circlo contact").build(), end)).build()
+        val notice = notification(current)
         try {
             if (Build.VERSION.SDK_INT >= 29) startForeground(NOTICE_ID, notice, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
             else startForeground(NOTICE_ID, notice)
@@ -79,10 +88,13 @@ class NativeCallSessionService : Service() {
         } catch (_: Exception) { /* Temporary offline intervals retain the existing bounded lease. */ }
     }
     override fun onDestroy() {
+        if (running === this) running = null
         worker.shutdownNow()
         if (wake?.isHeld == true) wake?.release()
         val ended = session?.id
         session = null
+        connectedAt = 0; microphoneMuted = false
+        if (Build.VERSION.SDK_INT >= 31) runCatching { getSystemService(AudioManager::class.java).clearCommunicationDevice() }
         stopForeground(STOP_FOREGROUND_REMOVE)
         NativePushState.previewWebView?.get()?.let { view -> view.post {
             if (WebOriginPolicy.isAllowed(view.url.orEmpty(), BuildConfig.API_BASE_URL)) {
@@ -97,19 +109,51 @@ class NativeCallSessionService : Service() {
         private const val NOTICE_ID = 7003
         @Volatile var session: Session? = null; private set
         @Volatile private var renewedAt: Long = 0
+        @Volatile private var connectedAt: Long = 0
+        @Volatile private var microphoneMuted = false
+        @Volatile private var running: NativeCallSessionService? = null
+        private fun owns(context: Context, data: JSONObject): Boolean {
+            val current = session ?: return false
+            return boundUser(context) == current.user && current.id == data.optString("callId") && current.user == data.optString("userId") && current.client == data.optString("clientId")
+        }
+        fun audio(context: Context, data: JSONObject): JSONObject? {
+            if (!owns(context, data) || Build.VERSION.SDK_INT < 31) return null
+            val manager = context.getSystemService(AudioManager::class.java)
+            val devices = manager.availableCommunicationDevices
+            if (data.has("deviceId")) {
+                val target = devices.firstOrNull { it.id.toString() == data.optString("deviceId") } ?: return null
+                if (!manager.setCommunicationDevice(target)) return null
+            }
+            return JSONObject().put("selected", manager.communicationDevice?.id?.toString().orEmpty()).put("devices", org.json.JSONArray().apply {
+                devices.forEach { device -> put(JSONObject().put("id", device.id.toString()).put("label", when (device.type) {
+                    AudioDeviceInfo.TYPE_BUILTIN_SPEAKER -> "Speaker"
+                    AudioDeviceInfo.TYPE_BUILTIN_EARPIECE -> "Phone earpiece"
+                    AudioDeviceInfo.TYPE_BLUETOOTH_SCO, AudioDeviceInfo.TYPE_BLE_HEADSET -> "Bluetooth headset"
+                    AudioDeviceInfo.TYPE_WIRED_HEADSET, AudioDeviceInfo.TYPE_WIRED_HEADPHONES -> "Wired headphones"
+                    AudioDeviceInfo.TYPE_USB_HEADSET, AudioDeviceInfo.TYPE_USB_DEVICE -> "USB audio"
+                    else -> "Audio device"
+                })) }
+            })
+        }
         private fun boundUser(context: Context) = context.getSharedPreferences("circlo_push", MODE_PRIVATE).getString("user", null)
         fun begin(context: Context, data: JSONObject): Boolean {
             val info = Session(data.optString("callId"), data.optString("userId"), data.optString("clientId"), data.optString("conversationId"))
             if (!NativePushState.foreground || boundUser(context) != info.user || !NativeCallPolicy.uuid(info.id) || !NativeCallPolicy.uuid(info.client) || !NativeCallPolicy.uuid(info.conversation)) return false
             if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) return false
             if (session != null && session != info) return false
+            if (session == null) { connectedAt = 0; microphoneMuted = false }
             session = info; renewedAt = SystemClock.elapsedRealtime()
             return runCatching { ContextCompat.startForegroundService(context, Intent(context, NativeCallSessionService::class.java)); true }.getOrElse { session = null; false }
         }
-        fun renew(data: JSONObject): Boolean {
-            val current = session ?: return false
-            if (current.id != data.optString("callId") || current.user != data.optString("userId") || current.client != data.optString("clientId")) return false
-            renewedAt = SystemClock.elapsedRealtime(); return true
+        fun renew(context: Context, data: JSONObject): Boolean {
+            session ?: return false
+            if (!owns(context, data)) return false
+            renewedAt = SystemClock.elapsedRealtime()
+            if (data.optBoolean("connected") && connectedAt == 0L) connectedAt = System.currentTimeMillis()
+            microphoneMuted = data.optBoolean("muted", microphoneMuted)
+            // Refresh silently; the system chronometer advances without per-second work.
+            running?.let { service -> runCatching { context.getSystemService(NotificationManager::class.java).notify(NOTICE_ID, service.notification(session ?: return false)) } }
+            return true
         }
         fun stop(context: Context) { context.stopService(Intent(context, NativeCallSessionService::class.java)) }
     }

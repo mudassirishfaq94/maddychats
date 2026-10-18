@@ -1,12 +1,13 @@
 /** Exact-origin AndroidX message port. No cookies, keys or arbitrary native commands. */
 export type AndroidNotificationStatus = { enabled: boolean; messagesImportance: number | null; callsImportance?: number | null; fullScreenAllowed?: boolean };
-type Reply = { id: string; token?: string; error?: string; status?: AndroidNotificationStatus };
+export type CallAudioState = { selected: string; devices: { id: string; label: string }[] };
+type Reply = { id: string; token?: string; error?: string; status?: AndroidNotificationStatus; audio?: CallAudioState };
 type Port = { postMessage: (message: string) => void; onmessage: ((event: MessageEvent<string>) => void) | null };
 declare global { interface Window { CircloPush?: Port } }
 const pending = new Map<string, (reply: Reply) => void>();
 export function hasHostedPushBridge(): boolean { return typeof window !== "undefined" && Boolean(window.CircloPush); }
-type CallSession = { callId: string; userId: string; clientId?: string; conversationId?: string; actionToken?: string };
-async function request(command: "token" | "request" | "bind" | "reconcile" | "clear" | "settings" | "status" | "dismiss" | "preview" | "privacy" | "call-start" | "call-renew" | "call-stop" | "call-settings" | "call-answer", userId?: string, notification?: LocalNotification, lockedChats?: string[] | null, call?: CallSession): Promise<Reply | null> {
+type CallSession = { callId: string; userId: string; clientId?: string; conversationId?: string; actionToken?: string; connected?: boolean; muted?: boolean; deviceId?: string };
+async function request(command: "token" | "request" | "bind" | "reconcile" | "clear" | "settings" | "status" | "dismiss" | "preview" | "privacy" | "call-start" | "call-renew" | "call-stop" | "call-settings" | "call-answer" | "call-audio", userId?: string, notification?: LocalNotification, lockedChats?: string[] | null, call?: CallSession): Promise<Reply | null> {
   const port = window.CircloPush;
   if (!port) return null;
   port.onmessage = event => {
@@ -29,6 +30,13 @@ export async function hostedCall(command: "call-start" | "call-renew" | "call-st
   if (!hasHostedPushBridge()) return false;
   try { return (await request(command, call.userId, undefined, undefined, call))?.token === "active"; }
   catch { return false; }
+}
+
+/** Available communication routes only; never accepts arbitrary system settings. */
+export async function hostedCallAudio(call: CallSession): Promise<CallAudioState | null> {
+  if (!hasHostedPushBridge()) return null;
+  const value = (await request("call-audio", call.userId, undefined, undefined, call))?.audio;
+  return value && Array.isArray(value.devices) && typeof value.selected === "string" ? value : null;
 }
 
 export async function hostedPush(command: "token" | "request" | "bind" | "reconcile" | "clear" | "settings" | "dismiss", userId?: string): Promise<string | null> {

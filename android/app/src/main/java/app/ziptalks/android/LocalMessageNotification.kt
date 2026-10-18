@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import androidx.core.app.NotificationCompat
 import androidx.core.app.Person
+import androidx.core.graphics.drawable.IconCompat
 import org.json.JSONObject
 
 /** Device-only decrypted text. Never persisted or forwarded to FCM. */
@@ -37,16 +38,18 @@ object LocalMessageNotification {
             if (group) conversation.setConversationTitle(NativeNotificationText.title(text).removeSuffix(" · Circlo"))
             val sender = NativeNotificationText.title(mapOf("title" to notice.optString("senderName")))
             val body = NativeNotificationText.body(mapOf("body" to notice.optString("messageText", notice.optString("body"))))
-            conversation.addMessage(body, System.currentTimeMillis(), Person.Builder().setName(sender).build())
+            conversation.addMessage(body, System.currentTimeMillis(), Person.Builder().setName(sender).setIcon(IconCompat.createWithBitmap(NativeContactAvatar.create(sender))).build())
         } else NotificationCompat.BigTextStyle().bigText(NativeNotificationText.body(text))
         val builder = NotificationChannels.builder(context, notice.optBoolean("silent"))
             .addExtras(android.os.Bundle().apply { putString("circlo.message", message); putBoolean("circlo.preview", preview) })
             .setSmallIcon(R.drawable.ic_stat_ic_notification)
+            .setColor(0xffb9a078.toInt())
             .setContentTitle(NativeNotificationText.title(text))
             .setContentText(NativeNotificationText.body(text))
             .setStyle(style)
             .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
             .setOnlyAlertOnce(sameMessage).setAutoCancel(true).setContentIntent(tap)
+        if (preview) builder.setLargeIcon(NativeContactAvatar.create(if (notice.optBoolean("isGroup")) NativeNotificationText.title(text) else notice.optString("senderName")))
         runCatching { manager?.notify(tag, 0, builder.build()) }
     }
 }

@@ -52,9 +52,10 @@ object NativeIncomingCall {
         val builder = NotificationCompat.Builder(context, NotificationChannels.CALLS)
             .addExtras(android.os.Bundle().apply { putString("circlo.conversation", chat) })
             .setSmallIcon(R.drawable.ic_stat_ic_notification).setCategory(NotificationCompat.CATEGORY_CALL)
+            .setColor(0xffb9a078.toInt())
             .setPriority(NotificationCompat.PRIORITY_HIGH).setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
             .setContentTitle(caller).setContentText("Incoming audio call")
-            .setStyle(NotificationCompat.CallStyle.forIncomingCall(Person.Builder().setName(caller).build(), decline, open("answer")))
+            .setStyle(NotificationCompat.CallStyle.forIncomingCall(Person.Builder().setName(caller).setIcon(androidx.core.graphics.drawable.IconCompat.createWithBitmap(NativeContactAvatar.create(caller))).build(), decline, open("answer")))
             .setContentIntent(open("")).setAutoCancel(true).setOnlyAlertOnce(true)
             .setTimeoutAfter((expires-System.currentTimeMillis()).coerceIn(1,45000)).setSilent(data["silent"] == "true")
         // Eligibility and the user's full-screen setting are respected. Otherwise
