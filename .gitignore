@@ -111,3 +111,4 @@ public/downloads/
 # Python verification-tool bytecode caches
 __pycache__/
 *.py[cod]
+/server/staged-media/

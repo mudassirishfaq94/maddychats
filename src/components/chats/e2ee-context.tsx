@@ -23,7 +23,7 @@ import {useExpiredAt} from "@/hooks/use-expired-at";
 import { registerLocalAudio, forgetLocalAudio } from "@/lib/audio-analysis";
 
 type DecryptFn = (
-  encryptedBytesB64: string,
+  encryptedBytesB64: string | ArrayBuffer,
   wrappedKeyB64: string,
   conversationId: string,
 ) => Promise<ArrayBuffer>;
@@ -76,12 +76,6 @@ export function forgetDecryptedAttachments(ids: string[]) {
   }
 }
 
-function bufferToBase64(buffer: ArrayBuffer): string {
-  const bytes = new Uint8Array(buffer);
-  let binary = "";
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary);
-}
 
 /**
  * Resolves an attachment to a renderable URL. Plaintext attachments pass
@@ -118,7 +112,7 @@ export function useEncryptedAttachmentUrl(
     const controller = new AbortController();
 
     const timeoutId = typeof window !== "undefined"
-      ? window.setTimeout(() => controller.abort(), 15000)
+      ? window.setTimeout(() => controller.abort(), mimeType?.startsWith("video/") ? 900000 : 180000)
       : null;
 
     (async () => {
@@ -144,7 +138,7 @@ export function useEncryptedAttachmentUrl(
               throw new Error(`media_download_incomplete: received ${ciphertext.byteLength} bytes`);
             }
             plain = await ctx.decryptMedia(
-              bufferToBase64(ciphertext), attachment.encKey!, ctx.conversationId,
+              ciphertext, attachment.encKey!, ctx.conversationId,
             );
             break;
           } catch (error) {

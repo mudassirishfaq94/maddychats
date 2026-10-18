@@ -1,5 +1,9 @@
+import { MEDIA_TYPES, normalizeMediaType } from "@/lib/media-types";
+import { IMAGE_MAX_BYTES, MEDIA_MAX_BYTES } from "@/lib/media-limits";
 import { randomUUID } from "crypto";
-import { createReadStream } from "fs";
+import { createReadStream, createWriteStream } from "fs";
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import { mkdir, stat, unlink, writeFile } from "fs/promises";
 import path from "path";
 import { createClient } from "@supabase/supabase-js";
@@ -60,7 +64,7 @@ export const LIMITS = {
     return envBytes("MAX_AVATAR_MB", 10);
   },
   get image() {
-    return envBytes("MAX_IMAGE_MB", 10);
+    return IMAGE_MAX_BYTES;
   },
   get file() {
     return envBytes("MAX_FILE_MB", 10);
@@ -68,23 +72,8 @@ export const LIMITS = {
 };
 
 /** Allow-list: MIME type → permitted extensions. Anything else is rejected. */
-const IMAGE_TYPES: Record<string, string[]> = {
-  "image/jpeg": [".jpg", ".jpeg"],
-  "image/png": [".png"],
-  "image/gif": [".gif"],
-  "image/webp": [".webp"],
-  "image/avif": [".avif"],
-  "image/heic": [".heic"],
-  "image/bmp": [".bmp"],
-};
-
-const VIDEO_TYPES: Record<string, string[]> = {
-  "video/mp4": [".mp4"],
-  "video/webm": [".webm"],
-  "video/quicktime": [".mov"],
-  "video/x-msvideo": [".avi"],
-  "video/ogg": [".ogv"],
-};
+const IMAGE_TYPES = Object.fromEntries(Object.entries(MEDIA_TYPES).filter(([type])=>type.startsWith("image/")).map(([type,extensions])=>[type,extensions.map(ext=>"."+ext)]));
+const VIDEO_TYPES = Object.fromEntries(Object.entries(MEDIA_TYPES).filter(([type])=>type.startsWith("video/")).map(([type,extensions])=>[type,extensions.map(ext=>"."+ext)]));
 
 const DOCUMENT_TYPES: Record<string, string[]> = {
   "application/pdf": [".pdf"],
@@ -179,7 +168,7 @@ export function validateUpload(
     }
   }
 
-  const type = mimeType.split(";")[0].trim().toLowerCase();
+  const type = normalizeMediaType(originalName, mimeType);
   const isImage = Object.prototype.hasOwnProperty.call(IMAGE_TYPES, type);
   const isDoc = Object.prototype.hasOwnProperty.call(DOCUMENT_TYPES, type);
   const isAudio = Object.prototype.hasOwnProperty.call(AUDIO_TYPES, type);
@@ -231,8 +220,8 @@ export function validateUpload(
     if (!allowed || !allowed.includes(extension)) {
       return { ok: false, error: "File extension does not match its content type." };
     }
-    if (size > LIMITS.file) {
-      return { ok: false, error: `That video is too large (max ${Math.round(LIMITS.file / 1024 / 1024)} MB).` };
+    if (size > MEDIA_MAX_BYTES) {
+      return { ok: false, error: "Videos must be 250 MB or smaller." };
     }
     return { ok: true, kind: "video", extension, safeName };
   }
@@ -302,6 +291,20 @@ export async function saveBuffer(
   return relative;
 }
 
+/** Streams opaque ciphertext without allocating the complete large file in Node. */
+export async function saveFile(bucket:Bucket,storedName:string,file:Blob):Promise<string> {
+  if(!/^[a-zA-Z0-9.-]+$/.test(storedName)||storedName.includes(".."))throw new Error("invalid_path");
+  const relative=path.posix.join(BUCKETS[bucket],storedName);await trackUpload(relative);
+  if(supabaseStorage) {
+    const {error}=await supabaseStorage.storage.from(SUPABASE_MEDIA_BUCKET).upload(relative,file.stream(),{contentType:"application/octet-stream",upsert:false,duplex:"half"});
+    if(error)throw new Error("Encrypted media storage failed.");
+  }else{
+    await ensureBuckets();const absolute=resolveWithinUploads(relative);if(!absolute)throw new Error("invalid_path");
+    await pipeline(Readable.fromWeb(file.stream() as import("node:stream/web").ReadableStream),createWriteStream(absolute,{flags:"wx",mode:0o640}));
+  }
+  return relative;
+}
+
 async function trackUpload(relative: string) {
   const { db } = await import("@/db");
   const { storedUploads } = await import("@/db/schema");
@@ -358,11 +361,14 @@ export async function readStored(relativePath: string): Promise<{
   size: number | null;
 } | null> {
   if (supabaseStorage) {
-    const { data, error } = await supabaseStorage.storage
-      .from(SUPABASE_MEDIA_BUCKET)
-      .download(relativePath);
-    if (error || !data) return null;
-    return { body: data.stream(), size: data.size };
+    if(!/^(avatars|images|files|statuses)\/[a-zA-Z0-9.-]+$/.test(relativePath)||relativePath.includes(".."))return null;
+    const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),15000);
+    try {
+      const url=new URL(`/storage/v1/object/authenticated/${encodeURIComponent(SUPABASE_MEDIA_BUCKET)}/${relativePath.split('/').map(encodeURIComponent).join('/')}`,process.env.SUPABASE_URL!);
+      const response=await fetch(url,{headers:{Authorization:`Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY!}`,apikey:process.env.SUPABASE_SERVICE_ROLE_KEY!},signal:controller.signal,redirect:"error",cache:"no-store"});
+      if(!response.ok||!response.body)return null;
+      const length=response.headers.get("content-length");return {body:response.body,size:length&&Number.isFinite(Number(length))?Number(length):null};
+    }finally{clearTimeout(timer);}
   }
   const info = await statStored(relativePath);
   if (!info?.isFile()) return null;

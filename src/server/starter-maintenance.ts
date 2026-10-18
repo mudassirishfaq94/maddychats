@@ -1,4 +1,5 @@
 import { cleanupExpiredCalls } from "./call-push";
+import { cleanupStagedMedia } from "./staged-media";
 import { cleanupExpiredMessages } from "./message-lifetime";
 import { cleanupRealtimeEvents } from "./realtime";
 import { cleanupUploads } from "./upload-retention";
@@ -49,6 +50,7 @@ export function startStarterMaintenance() {
       await cleanupRealtimeEvents();
       await cleanupRateLimits();
       await cleanupUploads();
+      await cleanupStagedMedia();
       await db.delete(deviceLinkRequests).where(lt(deviceLinkRequests.expiresAt, new Date(Date.now() - 86400000)));
     } catch { console.error("[maintenance] Cleanup unavailable; retrying later."); }
     finally { running = false; }

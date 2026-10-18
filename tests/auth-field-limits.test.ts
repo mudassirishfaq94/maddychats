@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { registerSchema, loginSchema, forgotPasswordSchema, resetPasswordSchema } from "../src/lib/schemas";
 import { validateUpload } from "../src/server/storage";
-import { MEDIA_MAX_BYTES } from "../src/lib/media-limits";
+import { MEDIA_MAX_BYTES, IMAGE_MAX_BYTES } from "../src/lib/media-limits";
 
 test("authentication fields reject malformed, oversized and mismatched values before proceeding", () => {
   const valid = { displayName: "Test User", username: "test_user", email: "person@example.invalid", password: "StrongPassword9", confirmPassword: "StrongPassword9", acceptTerms: true, acceptPrivacy: true };
@@ -14,13 +14,14 @@ test("authentication fields reject malformed, oversized and mismatched values be
   assert(!resetPasswordSchema.safeParse({ token: "x".repeat(129), password: valid.password, confirmPassword: valid.password }).success);
 });
 
-test("media accepts 10 MB photos/videos and rejects oversized or executable uploads", () => {
+test("media accepts the configured photo/video budgets and rejects oversized or executable uploads", () => {
   const original = { image: process.env.MAX_IMAGE_MB, file: process.env.MAX_FILE_MB };
   delete process.env.MAX_IMAGE_MB; delete process.env.MAX_FILE_MB;
   try {
     for (const [name, mime] of [["photo.jpg", "image/jpeg"], ["video.mp4", "video/mp4"]]) {
-      assert(validateUpload(name, mime, MEDIA_MAX_BYTES, "message").ok);
-      assert(!validateUpload(name, mime, MEDIA_MAX_BYTES + 1, "message").ok);
+      const limit=mime.startsWith("image/")?IMAGE_MAX_BYTES:MEDIA_MAX_BYTES;
+      assert(validateUpload(name, mime, limit, "message").ok);
+      assert(!validateUpload(name, mime, limit + 1, "message").ok);
     }
     assert(!validateUpload("photo.exe", "image/jpeg", 100, "message").ok);
     assert(!validateUpload("script.svg", "image/svg+xml", 100, "message").ok);

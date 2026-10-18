@@ -1,3 +1,5 @@
+import { claimStage, type StageClaim } from "@/server/staged-media";
+import { normalizeMediaType } from "@/lib/media-types";
 import { safeError } from "@/server/safe-error";
 import { readUploadForm } from "@/server/http";
 import { after, NextRequest, NextResponse } from "next/server";
@@ -26,13 +28,12 @@ import { notifyNewMessage } from "@/server/notifications";
 import {
   deleteStored,
   generateStoredName,
-  LIMITS,
-  saveBuffer,
+  saveFile,
   validateUpload,
   sanitizeName,
 } from "@/server/storage";
 import { eq, sql } from "drizzle-orm";
-import { ENCRYPTED_MEDIA_OVERHEAD, MEDIA_MAX_BYTES } from "@/lib/media-limits";
+import { ENCRYPTED_MEDIA_OVERHEAD, MEDIA_MAX_BYTES, INLINE_MEDIA_MAX_BYTES } from "@/lib/media-limits";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -58,6 +59,8 @@ export async function POST(req: NextRequest) {
   if (!me) return jsonError(401, "Not authenticated.");
   if (!(await rateLimit(`encrypted-upload:${me.id}`, 10, 60000)).allowed) return jsonError(429, "Too many uploads. Try again later.");
 
+  const stageClaims:StageClaim[]=[];let stageCommitted=false;
+  try {
   let form: FormData;
   try {
     form = await readUploadForm(req);
@@ -99,13 +102,22 @@ export async function POST(req: NextRequest) {
   const entries = form
     .getAll("files")
     .filter((f): f is File => typeof f !== "string" && f !== null);
+  const stagedRaw=form.get("staged");
+  if(typeof stagedRaw === "string") {
+    let tokens:unknown;try{tokens=JSON.parse(stagedRaw);}catch{return jsonError(422,"Invalid upload references.");}
+    if(!Array.isArray(tokens)||tokens.length<1||tokens.length>5||entries.length)return jsonError(422,"Choose up to five files.");
+    form.delete("origTypes");
+    try {for(const token of tokens){if(typeof token!=="string")throw new Error();const claim=await claimStage(token,me.id,conversationId);stageClaims.push(claim);entries.push(claim.file);form.append("origTypes",claim.mime);}}
+    catch{return jsonError(409,"Upload expired, incomplete or already sent. Retry the selection.");}
+  }
   if (entries.length === 0) {
     return jsonError(422, "Choose at least one file to send.");
   }
   if (entries.length > 5) {
     return jsonError(422, "You can attach up to 5 files at a time.");
   }
-  if (entries.reduce((total, file) => total + file.size, 0) > MEDIA_MAX_BYTES + entries.length * ENCRYPTED_MEDIA_OVERHEAD) return jsonError(413, "Attachments must total 10 MB or less. Send larger batches separately.");
+  if(!stageClaims.length&&entries.reduce((total,file)=>total+file.size,0)>INLINE_MEDIA_MAX_BYTES+entries.length*ENCRYPTED_MEDIA_OVERHEAD)return jsonError(413,"Large attachments require the updated secure uploader. Refresh Circlo and retry.");
+  if (entries.reduce((total, file) => total + file.size, 0) > MEDIA_MAX_BYTES + entries.length * ENCRYPTED_MEDIA_OVERHEAD) return jsonError(413, "Attachments must total 250 MB or less. Send larger batches separately.");
 
   // Per-file wrapped media keys and original mime types (aligned with files).
   const wrappedKeys = form
@@ -130,10 +142,9 @@ export async function POST(req: NextRequest) {
       // Encrypted payloads arrive as opaque bytes — the server must never
       // inspect or validate content it cannot read.
       const originalMime =
-        origTypes[i]?.trim().toLowerCase().split(";")[0] ??
-        "application/octet-stream";
+        normalizeMediaType(file.name, origTypes[i] ?? "application/octet-stream");
       if (!/^[a-z0-9.+-]+\/[a-z0-9.+-]+$/.test(originalMime) || originalMime.length > 100) return jsonError(422, "Invalid media type.");
-      if (file.size < 29 || file.size > LIMITS.file + ENCRYPTED_MEDIA_OVERHEAD) return jsonError(413, "Attachments must be 10 MB or smaller.");
+      if (file.size < 29 || file.size > MEDIA_MAX_BYTES + ENCRYPTED_MEDIA_OVERHEAD) return jsonError(413, "Attachments must be 250 MB or smaller.");
       const metadataCheck = validateUpload(file.name, originalMime, file.size - ENCRYPTED_MEDIA_OVERHEAD, "message");
       if (!metadataCheck.ok) return jsonError(422, metadataCheck.error);
       if (!wrappedKeys[i] || wrappedKeys[i]!.length > 16384) return jsonError(422, "An encrypted media key is required.");
@@ -211,13 +222,11 @@ export async function POST(req: NextRequest) {
       const message = rows[0];
 
       for (const item of prepared) {
-        const buffer = Buffer.from(await item.file.arrayBuffer());
-        const limit = LIMITS.file + ENCRYPTED_MEDIA_OVERHEAD;
-        if (buffer.byteLength > limit) throw new Error("too_large");
+        if (item.file.size > MEDIA_MAX_BYTES + ENCRYPTED_MEDIA_OVERHEAD) throw new Error("too_large");
 
         const bucket = item.kind === "image" ? "images" : "files";
         const attachmentKind: string = item.kind === "audio" ? "audio" : item.kind;
-        const relative = await saveBuffer(bucket, item.storedName, buffer);
+        const relative = await saveFile(bucket, item.storedName, item.file);
         written.push(relative);
 
         await tx.insert(messageAttachments).values({
@@ -225,7 +234,7 @@ export async function POST(req: NextRequest) {
           originalName: item.safeName,
           storedName: item.storedName,
           mimeType: item.originalMime,
-          size: buffer.byteLength,
+          size: item.file.size,
           path: relative,
           kind: attachmentKind,
           encrypted: isEncrypted,
@@ -240,7 +249,7 @@ export async function POST(req: NextRequest) {
       return message;
     });
 
-    committed = true;
+    committed = true;stageCommitted=true;
     // Conversation ordering.
     const now = new Date();
     await db
@@ -284,4 +293,5 @@ export async function POST(req: NextRequest) {
     console.error("[maddy-chats] attachment upload failed:", safeError(err));
     return jsonError(500, "Upload failed. Please try again.");
   }
+  } finally { await Promise.all(stageClaims.map(claim=>claim.finish(stageCommitted))); }
 }

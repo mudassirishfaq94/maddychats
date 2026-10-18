@@ -948,9 +948,9 @@ export function useE2EE(userId: string | undefined) {
    *  message itself (key sharing is async).
    */
   const decryptMedia = useCallback(async (
-    encryptedBytesB64: string, wrappedKeyB64: string, conversationId: string,
+    encryptedBytesB64: string | ArrayBuffer, wrappedKeyB64: string, conversationId: string,
   ): Promise<ArrayBuffer> => {
-    if (atob(encryptedBytesB64).length < 28) throw new Error("media_download_incomplete");
+    if ((typeof encryptedBytesB64 === "string" ? atob(encryptedBytesB64).length : encryptedBytesB64.byteLength) < 28) throw new Error("media_download_incomplete");
     let lastError: unknown;
     // Try up to 3 times with increasing delay — the key may still be in-flight.
     for (let attempt = 0; attempt < 3; attempt++) {

@@ -183,13 +183,13 @@ export async function encryptBytes(
 
 /** Decrypt bytes previously produced by encryptBytes. */
 export async function decryptBytes(
-  ciphertextBase64: string,
+  ciphertextBase64: string | ArrayBuffer,
   key: CryptoKey,
 ): Promise<ArrayBuffer> {
-  const combined = new Uint8Array(base64ToBuffer(ciphertextBase64));
+  const combined = new Uint8Array(typeof ciphertextBase64 === "string" ? base64ToBuffer(ciphertextBase64) : ciphertextBase64);
   if (combined.byteLength <= IV_LENGTH) throw new Error("bad_ciphertext");
-  const iv = combined.slice(0, IV_LENGTH);
-  const ciphertext = combined.slice(IV_LENGTH);
+  const iv = combined.subarray(0, IV_LENGTH);
+  const ciphertext = combined.subarray(IV_LENGTH);
   const decrypted = await crypto.subtle.decrypt(
     { name: ALGORITHM, iv },
     key,

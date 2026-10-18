@@ -197,7 +197,7 @@ export function Lightbox({
       {resolved.failed || (!isDecrypting && failed) ? (
         <div className="flex max-w-sm flex-col items-center gap-3 text-center text-white/75">
           <AlertTriangle className="h-8 w-8" />
-          <p className="text-sm">{resolved.failed ? "This device could not decrypt this media. Check Security & recovery from the chat." : "This media could not be loaded. Check your connection, then close and reopen it."}</p>
+          <p className="text-sm">{resolved.failed ? "This device could not decrypt this media. Check Security & recovery from the chat." : "This device cannot preview this format. Download the original file using the download button above."}</p>
         </div>
       ) : null}
       {!isDecrypting && activeSrc ? (
@@ -390,7 +390,7 @@ export function InlineMedia({
     return (
       <span className="flex h-40 w-full flex-col items-center justify-center gap-2 bg-black/10 text-xs text-[var(--muted)]">
         <AlertTriangle className="h-5 w-5" />
-        Media unavailable
+        {failedRender && url ? "Preview not supported. Open to download the original." : "Media unavailable"}
       </span>
     );
   }

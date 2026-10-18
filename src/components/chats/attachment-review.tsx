@@ -19,6 +19,8 @@ export function AttachmentReview(props: {
 function Review({ pending, progress, phase, busy, caption, error, onCaptionChange, onCaptionInput, onSend, onRemove, onCancel, onClear }: Parameters<typeof AttachmentReview>[0]) {
   const dialog = useRef<HTMLDialogElement>(null), input = useRef<HTMLTextAreaElement>(null);
   const [selectedId, setSelectedId] = useState(pending[0].id);
+  const [previewFailures,setPreviewFailures]=useState<Set<string>>(()=>new Set());
+  const previewFailed=()=>setPreviewFailures(previous=>new Set(previous).add(selected.id));
   const selected = pending.find(file => file.id === selectedId) ?? pending[0];
   useLayoutEffect(() => {
     const element = dialog.current!, previous = document.activeElement as HTMLElement | null;
@@ -49,10 +51,10 @@ function Review({ pending, progress, phase, busy, caption, error, onCaptionChang
         <Lock aria-label="End-to-end encrypted" className="h-4 w-4 shrink-0 text-[var(--accent-fg)]" />
       </header>
       <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-[var(--surface-2)] p-3 sm:p-6">
-        {selected.previewUrl && selected.file.type.startsWith("image/") ? (
+        {previewFailures.has(selected.id) ? <div className="max-w-xs rounded-2xl bg-[var(--surface)] p-5 text-center"><FileText className="mx-auto mb-3 h-8 w-8 text-[var(--accent-fg)]" /><p className="break-all text-sm font-semibold">{selected.file.name}</p><p className="mt-2 text-xs text-[var(--muted)]">Preview isn&apos;t supported on this device. You can still send the original file securely.</p></div> : selected.previewUrl && selected.file.type.startsWith("image/") ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={selected.previewUrl} alt={selected.file.name} className="h-full max-h-full w-full object-contain" />
-        ) : selected.previewUrl && selected.file.type.startsWith("video/") ? <video key={selected.id} src={selected.previewUrl} controls playsInline preload="metadata" className="h-full max-h-full w-full object-contain" />
+          <img src={selected.previewUrl} alt={selected.file.name} onError={previewFailed} className="h-full max-h-full w-full object-contain" />
+        ) : selected.previewUrl && selected.file.type.startsWith("video/") ? <video key={selected.id} src={selected.previewUrl} onError={previewFailed} controls playsInline preload="metadata" className="h-full max-h-full w-full object-contain" />
           : <div className="min-w-0 max-w-sm rounded-3xl border border-[var(--border)] bg-[var(--surface)] p-6 text-center"><FileText className="mx-auto mb-4 h-10 w-10 text-[var(--accent-fg)]" /><p className="break-all text-sm font-medium">{selected.file.name}</p><p className="mt-2 text-xs text-[var(--muted)]">{humanSize(selected.file.size)}</p>{selected.previewUrl && selected.file.type.startsWith("audio/") ? <audio key={selected.id} src={selected.previewUrl} controls preload="metadata" className="mt-4 w-full" /> : null}</div>}
       </div>
       <footer className="shrink-0 border-t border-[var(--border)] bg-[var(--surface)] px-3 pt-3 pb-[max(12px,env(safe-area-inset-bottom))] sm:px-5">
