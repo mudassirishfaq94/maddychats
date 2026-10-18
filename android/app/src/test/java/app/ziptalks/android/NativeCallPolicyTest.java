@@ -15,4 +15,11 @@ public class NativeCallPolicyTest {
         for (String destination : new String[]{"https://attacker.invalid/", url + "&callAction=answer", url + "#x", url.replace("chat/", "attacker/"), url.replace(id + "?", "bad?"), "ziptalks://user@chat/" + id + "?call=" + id})
             assertFalse(destination, NativeCallPolicy.valid("user", "user", id, destination, 100, 1));
     }
+    @Test public void answerProofIsBoundAndConsumedProofCannotBeReplayed() {
+        assertTrue(NativeCallPolicy.validAction("user", "user", id, id, id, id, 100, 1));
+        assertFalse(NativeCallPolicy.validAction("user", "other", id, id, id, id, 100, 1));
+        assertFalse(NativeCallPolicy.validAction("user", "user", id, "other", id, id, 100, 1));
+        assertFalse(NativeCallPolicy.validAction("user", "user", id, id, id, null, 100, 1));
+        assertFalse(NativeCallPolicy.validAction("user", "user", id, id, id, id, 100, 100));
+    }
 }

@@ -40,6 +40,7 @@ class HostedPushBridge(private val activity: MainActivity, private val requestPe
                 }.onFailure { respond(error = "Notifications are not configured for this Android build.") }
             }
             when (data.optString("command")) {
+                "call-answer" -> respond(token = if (NativeCallActions.valid(activity, data.optString("callId"), data.optString("actionToken"), true)) "active" else "unavailable")
                 "call-start" -> respond(token = if (NativeCallSessionService.begin(activity, data)) "active" else "unavailable")
                 "call-renew" -> respond(token = if (NativeCallSessionService.renew(data)) "active" else "unavailable")
                 "call-stop" -> {

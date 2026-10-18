@@ -48,6 +48,7 @@ class IncomingCallActivity : Activity() {
             val open = Intent(this@IncomingCallActivity, MainActivity::class.java).apply {
                 addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
                 putExtra("notification_url", "$url&callAction=answer")
+                putExtra("callActionToken", NativeCallActions.issue(this@IncomingCallActivity, call, expires))
             }
             startActivity(open)
             if (Build.VERSION.SDK_INT >= 26) getSystemService(KeyguardManager::class.java)?.requestDismissKeyguard(this@IncomingCallActivity, null)

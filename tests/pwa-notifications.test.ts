@@ -54,7 +54,7 @@ function harness() {
     fetch: async (url: string, options?: { body?: string }) => { fetches.push({ url, body: options?.body }); if (offline) throw new Error("offline"); return { status, ok: status === 200, json: async () => detail }; },
   });
   const dispatch = async (name: string, extra: any) => { let done: Promise<unknown> = Promise.resolve(); handlers[name]({ ...extra, waitUntil(p: Promise<unknown>) { done = p; } }); await done; };
-  return { cards, opened, fetches, setWindows: (value: any[]) => { windows = value; }, setDetail: (value: any) => { detail = { ...detail, ...value }; }, setStatus: (value: number) => { status = value; }, setOffline: (value = true) => { offline = value; },
+  return { cards, opened, fetches, grants: locks, setWindows: (value: any[]) => { windows = value; }, setDetail: (value: any) => { detail = { ...detail, ...value }; }, setStatus: (value: number) => { status = value; }, setOffline: (value = true) => { offline = value; },
     push: (extra: Record<string, unknown> = {}) => dispatch("push", { data: { json: () => ({ notificationId: notice, recipientId: user, ...extra }) } }),
     click: (notification: any, action = "open") => dispatch("notificationclick", { notification, action }),
     privacy: (lockedChats: string[] | null = [chat]) => dispatch("message", { source: { url: "https://circlo.chat/app/profile" }, data: { type: "CIRCLO_PRIVACY_CHANGED", recipientId: user, lockedChats } }),
@@ -193,4 +193,16 @@ test("closed-app requests use synchronized lock state and unknown state stays pr
   await h.privacy([chat]); await h.push();
   assert.equal(h.cards[0].title, "Circlo"); assert.equal(h.cards[0].body, "New message received.");
   await h.privacy(null); await h.push(); assert.equal(h.cards[0].title, "Circlo");
+});
+
+
+test("Answer creates local expiring proof only for a live authorized notification", async () => {
+  const h=harness();h.setDetail({callId:message,expiresAt:new Date(Date.now()+30000).toISOString()});
+  await h.push({callId:message});await h.click(h.cards[0],"answer");
+  const grant=h.grants.get(`call-action:${message}`) as {recipientId:string;token:string;expiresAt:number};
+  assert.equal(grant.recipientId,user);assert.equal(grant.token,message);assert(grant.expiresAt>Date.now());
+  assert(h.opened[0].endsWith(`&callAction=answer&callActionToken=${message}`));
+  const stale=harness();stale.setDetail({callId:message,expiresAt:new Date(Date.now()+30000).toISOString()});
+  await stale.push({callId:message});const notice=stale.cards[0];stale.setStatus(404);await stale.click(notice,"answer");
+  assert.equal(stale.grants.has(`call-action:${message}`),false);assert(!stale.opened[0].includes("callAction=answer"));
 });

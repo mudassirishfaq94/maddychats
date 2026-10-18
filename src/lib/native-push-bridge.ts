@@ -5,8 +5,8 @@ type Port = { postMessage: (message: string) => void; onmessage: ((event: Messag
 declare global { interface Window { CircloPush?: Port } }
 const pending = new Map<string, (reply: Reply) => void>();
 export function hasHostedPushBridge(): boolean { return typeof window !== "undefined" && Boolean(window.CircloPush); }
-type CallSession = { callId: string; userId: string; clientId: string; conversationId: string };
-async function request(command: "token" | "request" | "bind" | "clear" | "settings" | "status" | "dismiss" | "preview" | "privacy" | "call-start" | "call-renew" | "call-stop" | "call-settings", userId?: string, notification?: LocalNotification, lockedChats?: string[] | null, call?: CallSession): Promise<Reply | null> {
+type CallSession = { callId: string; userId: string; clientId?: string; conversationId?: string; actionToken?: string };
+async function request(command: "token" | "request" | "bind" | "clear" | "settings" | "status" | "dismiss" | "preview" | "privacy" | "call-start" | "call-renew" | "call-stop" | "call-settings" | "call-answer", userId?: string, notification?: LocalNotification, lockedChats?: string[] | null, call?: CallSession): Promise<Reply | null> {
   const port = window.CircloPush;
   if (!port) return null;
   port.onmessage = event => {
@@ -25,7 +25,7 @@ async function request(command: "token" | "request" | "bind" | "clear" | "settin
 }
 
 /** Metadata stays on-device; older APKs continue using their existing web call path. */
-export async function hostedCall(command: "call-start" | "call-renew" | "call-stop", call: CallSession): Promise<boolean> {
+export async function hostedCall(command: "call-start" | "call-renew" | "call-stop" | "call-answer", call: CallSession): Promise<boolean> {
   if (!hasHostedPushBridge()) return false;
   try { return (await request(command, call.userId, undefined, undefined, call))?.token === "active"; }
   catch { return false; }

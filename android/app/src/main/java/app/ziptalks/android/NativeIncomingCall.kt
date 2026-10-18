@@ -34,6 +34,7 @@ object NativeIncomingCall {
             val intent = Intent(context, MainActivity::class.java).apply {
                 addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
                 putExtra("notification_url", url + if (action.isEmpty()) "" else "&callAction=$action")
+                if (action == "answer") putExtra("callActionToken", NativeCallActions.issue(context, call, expires))
                 this.data = android.net.Uri.parse("ziptalks://chat/call/$call/$action")
             }
             return PendingIntent.getActivity(context, (call+action).hashCode(), intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)

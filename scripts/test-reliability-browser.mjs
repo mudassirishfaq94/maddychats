@@ -119,7 +119,16 @@ try {
  const ringing=(await pool.query("select id from audio_calls where conversation_id=$1 and state='ringing'",[callChat])).rows[0];assert(ringing,"Offline recipient must still receive persisted signaling");
  member.page=await contexts[1].newPage();member.page.setDefaultTimeout(30000);member.page.on("pageerror",error=>errors.push(error.message));
  await contexts[1].route("**/api/realtime/stream",route=>route.abort());
- await member.page.goto(`${base}/app/chats/${callChat}?call=${ringing.id}&callAction=answer`);
+ await member.page.goto(`${base}/app/chats/${callChat}?call=${ringing.id}&callAction=answer&callActionToken=${randomUUID()}`);
+ await member.page.getByRole("button",{name:"Answer",exact:true}).waitFor();
+ assert.equal((await pool.query("select state from audio_calls where id=$1",[ringing.id])).rows[0].state,"ringing","An arbitrary URL must never auto-answer");
+ const actionToken=randomUUID();
+ await member.page.evaluate(async({user,call,token})=>{
+  const database=await new Promise((resolve,reject)=>{const request=indexedDB.open("circlo-notification-privacy",1);request.onupgradeneeded=()=>request.result.createObjectStore("locks");request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error);});
+  const tx=database.transaction("locks","readwrite");tx.objectStore("locks").put({recipientId:user,token,expiresAt:Date.now()+15000},`call-action:${call}`);
+  await new Promise((resolve,reject)=>{tx.oncomplete=resolve;tx.onerror=reject;});database.close();
+ },{user:member.id,call:ringing.id,token:actionToken});
+ await member.page.goto(`${base}/app/chats/${callChat}?call=${ringing.id}&callAction=answer&callActionToken=${actionToken}`);
  for(const account of [owner,member])await account.page.getByText("Audio connected",{exact:true}).waitFor({timeout:45000});
  await member.page.getByRole("button",{name:"End call",exact:true}).click();
  await owner.page.getByRole("button",{name:"Dismiss call notice",exact:true}).click();

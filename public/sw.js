@@ -38,7 +38,10 @@ const appPath = value => {
     const id = url.pathname.match(/^\/app\/chats\/([^/]+)$/)?.[1];
     if (!id || !uuid.test(id)) return null;
     const call = url.searchParams.get("call");
-    if (call && uuid.test(call)) return `/app/chats/${id}?call=${call}${url.searchParams.get("callAction") === "answer" ? "&callAction=answer" : ""}`;
+    if (call && uuid.test(call)) {
+      const token = url.searchParams.get("callActionToken");
+      return `/app/chats/${id}?call=${call}${url.searchParams.get("callAction") === "answer" && uuid.test(token) ? `&callAction=answer&callActionToken=${token}` : ""}`;
+    }
     const message = url.searchParams.get("message");
     return `/app/chats/${id}?${message && uuid.test(message) ? `message=${message}` : "latest=1"}`;
   } catch { return null; }
@@ -48,7 +51,7 @@ const appWindows = async () => (await self.clients.matchAll({ type: "window", in
 const clearAlerts = async () => {
   for (const notification of await self.registration.getNotifications()) notification.close();
 };
-// Store only device-local lock IDs, keyed by account; never keys or previews.
+// Store only device-local privacy IDs and short-lived Answer proofs; never keys or previews.
 async function lockState(recipientId, value) {
   try {
     const database = await new Promise((resolve, reject) => {
@@ -220,6 +223,19 @@ self.addEventListener("notificationclick", event => {
     })());
     return;
   }
-  const data = event.action === "answer" && uuid.test(event.notification.data?.callId) ? { ...event.notification.data, url: `${event.notification.data.url}&callAction=answer` } : event.notification.data;
-  event.waitUntil(openChatFromNotification(data));
+  event.waitUntil((async () => {
+    let data = event.notification.data;
+    if (event.action === "answer" && uuid.test(data?.callId)) {
+      try {
+        const response = await fetch(`/api/notifications/push/delivery?id=${encodeURIComponent(data.notificationId)}`, { credentials: "same-origin", cache: "no-store", signal: AbortSignal.timeout(3000) });
+        const detail = response.ok ? await response.json() : null;
+        if (detail?.recipientId === data.recipientId && detail?.callId === data.callId && Date.parse(detail.expiresAt) > Date.now()) {
+          const token = crypto.randomUUID();
+          await lockState(`call-action:${data.callId}`, { token, recipientId: data.recipientId, expiresAt: Math.min(Date.now()+15000, Date.parse(detail.expiresAt)) });
+          data = { ...data, url: `${data.url}&callAction=answer&callActionToken=${token}` };
+        }
+      } catch { /* Offline opens controls; it cannot consent to an unavailable call. */ }
+    }
+    await openChatFromNotification(data);
+  })());
 });

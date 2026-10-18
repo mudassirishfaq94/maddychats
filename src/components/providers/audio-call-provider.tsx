@@ -5,6 +5,7 @@ import { Phone, PhoneOff, Mic, MicOff, Volume2, X, Minus } from "lucide-react";
 import { useAuth } from "./auth-provider";
 import { useRealtime } from "./realtime-provider";
 import { hostedCall } from "@/lib/native-push-bridge";
+import { consumeCallAnswer } from "@/lib/call-answer-grant";
 
 type Call = { id: string; conversation_id: string; caller_id: string; callee_id: string; owned: boolean; offer: string; answer: string | null; state: "ringing" | "active" | "ended"; expires_at: string; peer_name?: string };
 type Phase = "idle" | "preparing" | "outgoing" | "incoming" | "connecting" | "connected";
@@ -165,9 +166,10 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
           storeCall(current); setName(current.peer_name ?? "Circlo contact"); setStatus("incoming");
           const query = new URLSearchParams(window.location.search);
           const action = query.get("callAction");
-          if (query.get("call") === current.id && (action === "answer" || action === "decline")) {
-            query.delete("callAction"); window.history.replaceState(null,"",`${window.location.pathname}?${query}`);
-            if(action === "decline") end(); else void answer();
+          if (query.get("call") === current.id && action === "answer") {
+            const proof = query.get("callActionToken");
+            query.delete("callAction"); query.delete("callActionToken"); window.history.replaceState(null,"",`${window.location.pathname}?${query}`);
+            if (await consumeCallAnswer(userId, current.id, proof) && !disposed && callRef.current?.id === current.id) void answer();
           }
         } else if (callRef.current?.id === current.id) {
           if (current.callee_id === userId && current.state === "active" && !current.owned) { cleanup(); setError("Call answered on another browser."); return; }

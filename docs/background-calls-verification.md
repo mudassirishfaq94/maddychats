@@ -11,10 +11,13 @@ The approved messaging release is on main. Additional calling changes are on `co
 - The ongoing-call notification supports Return/End. Returning preserves WebRTC instead of reloading the WebView.
 - Optional TURN_URLS/TURN_SECRET support expiring coturn REST credentials. The shared secret stays server-side and user identifiers are pseudonymized. A reachable TURN server is still required for restrictive networks; no paid service was added. Without configuration, direct calling remains available.
 - Settings expose Android call-channel/full-screen controls without silently changing permission, battery or Do Not Disturb preferences.
+- Automatic Answer requires one-time, account/call-bound local proof from the immutable native notification/private incoming activity or the PWA notification-click handler. An ordinary URL cannot consent to microphone capture. PWA proof is consumed atomically in device-local IndexedDB; native proof is consumed through the exact-origin bridge. No proof or encryption key is transmitted through push providers.
 
 ## Evidence
 
 Debug and non-debuggable release builds passed. All 14 JVM tests passed, including new recipient/destination/deadline validation. Typecheck and targeted lint passed. The 22 targeted call/push/PWA/bridge tests passed, including relay credential isolation and expiry.
+
+Additional Answer-proof/PWA tests passed (16 tests in the focused run). A new native proof-binding JVM test and rebuilt APK are being verified before physical calls. The user enabled full-screen notification permission; ADB confirmed the UID-level permission is allowed. No battery exemption was changed.
 
 A new Chromium regression closes the recipient page, cold-opens the Answer deep link, establishes real WebRTC with fake audio devices, then declines another call with SSE unavailable. These new assertions require a passing CI run before being reported verified.
 
