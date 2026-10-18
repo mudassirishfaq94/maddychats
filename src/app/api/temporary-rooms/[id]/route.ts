@@ -14,7 +14,7 @@ const action=z.discriminatedUnion("action",[
 async function handle(req:NextRequest,ctx:{params:Promise<{id:string}>},write:boolean){
  const blocked=guardSameOrigin(req);if(blocked)return blocked;const {id}=await ctx.params;if(!z.uuid().safeParse(id).success)return jsonError(404,"Room unavailable.");
  const requestedRole=req.nextUrl.searchParams.get("role");if(requestedRole&&requestedRole!=="host"&&requestedRole!=="guest")return jsonError(422,"Invalid participant role.");
- const role=requestedRole||(req.cookies.has(roomCookie(id,"host"))?"host":"guest");const cookieName=roomCookie(id,role);
+ const role=requestedRole==="host"||requestedRole==="guest"?requestedRole:(req.cookies.has(roomCookie(id,"host"))?"host":"guest");const cookieName=roomCookie(id,role);
  const credential=req.cookies.get(cookieName)?.value;if(!credential||!/^[a-f0-9]{64}$/.test(credential))return jsonError(404,"Room unavailable or expired.");
  const ip=resolveClientIp(req.headers,{render:Boolean(process.env.RENDER),production:process.env.NODE_ENV==="production",trustedHops:process.env.TRUSTED_PROXY_HOPS});
  const ipLimit=await rateLimit(`temporary-api-ip:${credentialHash(ip)}`,240,60000);if(!ipLimit.allowed)return jsonError(429,"Please wait a moment and try again.");
