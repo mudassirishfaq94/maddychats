@@ -74,7 +74,8 @@ export async function testPwaNotifications(base, pool) {
     // Notification objects still run in the real worker. Closed-window delivery
     // below uses the actual clients API without this override.
     await worker.evaluate("self.originalMatchAll = self.clients.matchAll.bind(self.clients); self.clients.matchAll = async options => (await self.originalMatchAll(options)).map(client => ({url: client.url, visibilityState: 'hidden'}))");
-    await push(0); let shown = await cards(); assert.equal(shown.length, 1); assert.equal(shown[0].title, "Owned push sender · Circlo");
+    await push(0); let shown = await cards(); assert.equal(shown.length, 1); assert.equal(shown[0].title, "Circlo", "Unknown lock state must hide sender identity");
+    assert.equal(shown[0].body, "New message received.");
     assert(!shown[0].body.includes("Must not expose"));
     await push(1); shown = await cards(); assert.equal(shown.length, 1); assert.equal(shown[0].data.count, 2);
     await push(1); assert.equal((await cards())[0].data.count, 2, "Redelivery cannot duplicate a message");
@@ -112,7 +113,9 @@ export async function testPwaNotifications(base, pool) {
     await pool.query("delete from message_deletions where message_id=$1 and user_id=$2", [messageId, owner.id]);
     await pool.query("update messages set expires_at=now()-interval '1 second' where id=$1", [messageId]);
     assert.equal((await delivery()).status(), 404, "Expired messages cannot be presented");
-    await pool.query("update messages set expires_at=null where id=$1", [messageId]);
+    // Expired content is never resurrected merely to reuse a fixture.
+    const replacement = (await pool.query("insert into messages(conversation_id,sender_id,text,encrypted) values($1,$2,'disposable-notification-ciphertext',true) returning id", [conversation,peer.id])).rows[0];
+    notices[4] = (await pool.query("insert into notifications(user_id,actor_id,type,data) values($1,$2,'message',$3) returning id", [owner.id,peer.id,JSON.stringify({conversationId:conversation,messageId:replacement.id})])).rows[0];
     // Exercise the actual WindowClient navigation, not a mocked browser URL.
     const tapped = shown[0].data;
     const tappedPage = await context.newPage();
