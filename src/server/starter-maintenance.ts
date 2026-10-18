@@ -1,4 +1,5 @@
 import { cleanupExpiredCalls } from "./call-push";
+import { cleanupTemporaryRooms } from "./temporary-rooms";
 import { cleanupStagedMedia } from "./staged-media";
 import { cleanupExpiredMessages } from "./message-lifetime";
 import { cleanupRealtimeEvents } from "./realtime";
@@ -22,7 +23,7 @@ export function startStarterMaintenance() {
   if (!state.__messageExpiryMaintenance) {
     let expiring = false;
     const expire = async () => { if (expiring) return; expiring = true;
-      try { await cleanupExpiredMessages(); await cleanupExpiredCalls(); } catch { console.error("[expiry] Cleanup unavailable; retrying."); } finally { expiring = false; }
+      try { await cleanupExpiredMessages(); await cleanupExpiredCalls(); await cleanupTemporaryRooms(); } catch { console.error("[expiry] Cleanup unavailable; retrying."); } finally { expiring = false; }
     };
     state.__messageExpiryMaintenance = setInterval(() => { void expire(); }, 5000);
     state.__messageExpiryMaintenance.unref(); void expire();

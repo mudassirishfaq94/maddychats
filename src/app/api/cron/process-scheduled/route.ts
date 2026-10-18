@@ -5,6 +5,7 @@ import { jsonError } from "@/server/http";
 import { cleanupUploads } from "@/server/upload-retention";
 import { cleanupRateLimits } from "@/server/rate-limit";
 import { cleanupRealtimeEvents } from "@/server/realtime";
+import { cleanupTemporaryRooms } from "@/server/temporary-rooms";
 
 export const dynamic = "force-dynamic";
 
@@ -39,6 +40,7 @@ export async function GET(req: NextRequest) {
     const retention = await cleanupUploads();
     const expiredRateLimits = await cleanupRateLimits();
     const expiredRealtimeEvents = await cleanupRealtimeEvents();
+    const expiredTemporaryRooms = await cleanupTemporaryRooms();
     return NextResponse.json({
       success: true,
       processed: result.processed,
@@ -46,6 +48,7 @@ export async function GET(req: NextRequest) {
       retention,
       expiredRateLimits,
       expiredRealtimeEvents,
+      expiredTemporaryRooms,
       timestamp: new Date().toISOString(),
     });
   } catch (err) {

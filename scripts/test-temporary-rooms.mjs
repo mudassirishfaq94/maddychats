@@ -1,0 +1,35 @@
+import assert from "node:assert/strict";
+export async function testTemporaryRooms(browser,base,pool){
+ const contexts=await Promise.all([0,1,2].map(()=>browser.newContext({viewport:{width:390,height:844},serviceWorkers:"block"})));let id;const roomIds=[];
+ try{const [a,b,c]=await Promise.all(contexts.map(context=>context.newPage()));
+  for(const page of [a,b,c])page.setDefaultTimeout(30000);
+  await a.goto(base+"/temporary");await a.getByRole("button",{name:"Create a one-time code",exact:true}).click();await a.waitForURL(/\/temporary\/[a-f0-9-]{36}$/);id=a.url().split("/").at(-1);roomIds.push(id);
+  const code=(await a.locator("code").innerText()).replaceAll("-","");assert.match(code,/^[a-f0-9]{24}$/);
+  assert.equal((await c.request.get(`${base}/api/temporary-rooms/${id}`)).status(),404);
+  assert.equal((await c.request.get(`${base}/api/temporary-rooms/${id}/events`)).status(),404);
+  await b.goto(base+"/temporary");await b.getByLabel("One-time code",{exact:true}).fill(code);await b.getByRole("button",{name:"Join temporary chat",exact:true}).click();await b.waitForURL(base+`/temporary/${id}`);
+  await a.getByRole("textbox",{name:"Temporary message",exact:true}).waitFor();await a.getByRole("textbox",{name:"Temporary message",exact:true}).fill("Temporary private "+id);await a.getByRole("button",{name:"Send temporary message",exact:true}).click();
+  await b.getByRole("main",{name:"Temporary messages",exact:true}).getByText("Temporary private "+id,{exact:true}).waitFor();
+  const stored=(await pool.query("select r.invite_hash,m.ciphertext from temporary_rooms r join temporary_room_messages m on m.room_id=r.id where r.id=$1",[id])).rows[0];assert(!stored.ciphertext.includes("Temporary private"));assert.notEqual(stored.invite_hash,code);
+  await b.reload();await b.getByRole("main",{name:"Temporary messages",exact:true}).getByText("Temporary private "+id,{exact:true}).waitFor();
+  await c.goto(base+"/temporary");await c.getByLabel("One-time code",{exact:true}).fill(code);await c.getByRole("button",{name:"Join temporary chat",exact:true}).click();await c.getByRole("alert").waitFor();assert.equal(c.url(),base+"/temporary");
+  await a.getByRole("button",{name:"Ask for time",exact:true}).click();await b.getByRole("button",{name:"Approve",exact:true}).click();
+  await a.getByText(/Waiting for the other person to approve/).waitFor({state:"hidden"});
+  const remaining=await a.getByRole("timer",{name:"Time remaining",exact:true}).innerText();assert(Number(remaining.split(":")[0])>=40);
+  await a.locator('input[type="file"]').setInputFiles({name:"private.txt",mimeType:"text/plain",buffer:Buffer.from("Private temporary attachment")});await a.getByRole("button",{name:"Send temporary message",exact:true}).click();
+  const download=b.waitForEvent("download");await b.getByRole("link",{name:"private.txt · Download",exact:true}).click();const saved=await download;assert.equal(saved.suggestedFilename(),"private.txt");const stream=await saved.createReadStream();assert(stream);const chunks=[];for await(const part of stream)chunks.push(part);assert.equal(Buffer.concat(chunks).toString(),"Private temporary attachment");
+  a.on("dialog",dialog=>dialog.accept());await a.getByRole("button",{name:"End",exact:true}).click();await a.getByRole("heading",{name:"This room has ended",exact:true}).waitFor();await b.getByRole("heading",{name:"This room has ended",exact:true}).waitFor();
+  assert.equal((await a.request.get(`${base}/api/temporary-rooms/${id}`)).status(),404);assert.equal((await pool.query("select count(*)::int as count from temporary_rooms where id=$1",[id])).rows[0].count,0);
+  for(const page of [a,b])assert.equal(await page.evaluate(id=>sessionStorage.getItem(`circlo:temporary:${id}`),id),null,"Ending removes each browser’s temporary key");
+  await a.goto(base+"/temporary");await a.getByRole("button",{name:"Create a one-time code",exact:true}).click();await a.waitForURL(/\/temporary\/[a-f0-9-]{36}$/);id=a.url().split("/").at(-1);roomIds.push(id);const expiringCode=(await a.locator("code").innerText()).replaceAll("-","");
+  await b.goto(base+"/temporary");await b.getByLabel("One-time code",{exact:true}).fill(expiringCode);await b.getByRole("button",{name:"Join temporary chat",exact:true}).click();await b.waitForURL(base+`/temporary/${id}`);
+  await a.getByRole("textbox",{name:"Temporary message",exact:true}).fill("Must expire permanently");await a.getByRole("button",{name:"Send temporary message",exact:true}).click();await b.getByText("Must expire permanently",{exact:true}).waitFor();
+  await pool.query("update temporary_rooms set expires_at=now()+interval '3 seconds' where id=$1",[id]);await pool.query("select pg_notify('circlo_temporary',$1)",[id]);
+  await a.getByRole("heading",{name:"This room has ended",exact:true}).waitFor();await b.getByRole("heading",{name:"This room has ended",exact:true}).waitFor();await b.reload();assert.equal(await b.getByText("Must expire permanently",{exact:true}).count(),0);
+  assert.equal((await b.request.get(`${base}/api/temporary-rooms/${id}`)).status(),404);
+  await c.goto(base+"/help");const outgoing=[];c.on("request",request=>{if(request.method()==="POST")outgoing.push(request.url());});await c.getByRole("searchbox",{name:"Ask Circlo Help",exact:true}).fill("How do I schedule a message?");await c.getByRole("button",{name:"Find help",exact:true}).click();await c.getByRole("button",{name:"Schedule, edit or cancel a message",exact:true}).first().click();await c.getByRole("article",{name:"Help answer",exact:true}).getByText(/Write the message in the schedule dialog/).waitFor();
+  await c.getByRole("searchbox",{name:"Ask Circlo Help",exact:true}).fill("What is the weather tomorrow?");await c.getByRole("button",{name:"Find help",exact:true}).click();await c.getByText("I don’t have a verified guide for that question.",{exact:true}).waitFor();assert.deepEqual(outgoing,[],"Built-in help queries never leave the browser");
+  assert(await c.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));await c.screenshot({path:"test-artifacts/circlo-help-mobile.png",animations:"disabled"});
+  console.log("PASS: unauthenticated two-browser encrypted temporary room, single-use invite, reload, mutual extension, encrypted download, both-party ending and local-only help");
+ }finally{for(const context of contexts)await context.close();if(roomIds.length)await pool.query("delete from temporary_rooms where id=any($1::uuid[])",[roomIds]);}
+}
