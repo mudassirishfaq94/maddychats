@@ -32,7 +32,10 @@ export async function testProfilePhotos(base, pool, owner, peer, source, unrelat
   await source.page.goto(base + "/app/chats");
   await source.page.setViewportSize({ width: 320, height: 740 });
   const newGroup = source.page.getByRole("button", { name: "New group", exact: true });
-  assert(await newGroup.getByText("New group", { exact: true }).isVisible(), "Mobile group creation has a visible text label");
+  await newGroup.waitFor({state:"visible"});
+  assert.equal(await newGroup.getAttribute("title"),"New group","Compact group action has a discoverable tooltip and accessible name");
+  const groupTarget=await newGroup.boundingBox();
+  assert(groupTarget&&groupTarget.width>=44&&groupTarget.height>=44,"Mobile group action retains a 44px touch target");
   await newGroup.click();
   const createDialog = source.page.getByRole("dialog", { name: "Select people", exact: true });
   await createDialog.getByPlaceholder("Type exact full name or username…").fill(peer.username);
