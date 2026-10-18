@@ -996,7 +996,8 @@ export const privacySettings = pgTable(
     profileVisibility: text("profile_visibility")
       .default("everyone")
       .notNull(),
-    /** Who can see last seen: everyone | contacts | nobody */
+    lastSeenContacts: jsonb("last_seen_contacts").$type<string[]>().default([]).notNull(),
+    /** Who can see last seen: everyone | contacts | specific | nobody */
     lastSeenVisibility: text("last_seen_visibility")
       .default("everyone")
       .notNull(),

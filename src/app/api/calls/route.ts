@@ -80,9 +80,13 @@ export async function POST(req: NextRequest) {
     if (!call) { await connection.query("ROLLBACK"); return jsonError(409, "This call expired or was answered on another browser."); }
     let noticeId: string | undefined;
     if (body.action === "invite") {
+      await connection.query("INSERT INTO notifications(user_id,actor_id,type,data,read_at) VALUES($1,$2,'call',$3::jsonb,now())", [call.caller_id,call.callee_id,JSON.stringify({conversationId,callId:call.id,direction:"outgoing",callOutcome:"ringing"})]);
       noticeId = (await connection.query("INSERT INTO notifications(user_id,actor_id,type,data) VALUES($1,$2,'call',$3::jsonb) RETURNING id", [call.callee_id, call.caller_id, JSON.stringify({ conversationId, callId: call.id, preview: "Audio call", actorName: me.displayName })])).rows[0].id;
     } else if (body.action !== "heartbeat") {
       noticeId = (await connection.query("UPDATE notifications SET read_at=now() WHERE user_id=$1 AND type='call' AND data->>'callId'=$2 RETURNING id", [call.callee_id, call.id])).rows[0]?.id;
+    }
+    if (body.action === "answer" || body.action === "end") {
+      await connection.query("UPDATE notifications SET data=data || jsonb_build_object('callOutcome',CASE WHEN $2='answer' THEN 'connected' WHEN data->>'callOutcome'='connected' THEN 'ended' WHEN $3::uuid=$4::uuid THEN 'declined' ELSE 'cancelled' END) WHERE type='call' AND data->>'callId'=$1",[call.id,body.action,me.id,call.callee_id]);
     }
     // Keep signaling ephemeral. No SDP/IP history is retained after calls finish.
     await connection.query("DELETE FROM audio_calls WHERE state='ended'");

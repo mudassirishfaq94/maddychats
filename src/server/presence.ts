@@ -1,3 +1,4 @@
+import { visiblePresenceIds } from "./presence-privacy";
 import { and, eq, gte, inArray, ne } from "drizzle-orm";
 import { db } from "@/db";
 import { conversationMembers, users } from "@/db/schema";
@@ -130,8 +131,10 @@ export async function presenceSnapshotFor(
     .from(users)
     .where(inArray(users.id, ids));
 
+  const allowed = new Set(await visiblePresenceIds(userId,ids));
   const state: PresenceState = {};
   for (const row of rows) {
+    if (!allowed.has(row.id)) { state[row.id] = { online: false, lastSeenAt: null }; continue; }
     const entry = registry.get(row.id);
     const online = Boolean(
       (entry && entry.connections > 0) ||

@@ -15,12 +15,10 @@ import {
 import { getSessionUser } from "@/server/session";
 import { isUuid } from "@/server/users";
 import { publishToUsers } from "@/server/realtime";
-import { onlineMembersOf } from "@/server/presence";
 import {
   getMembership,
   getConversationForUser,
   getMessageDTO,
-  markMessageDelivered,
   memberIdsOf,
   isBlockedBetween,
 } from "@/server/chat";
@@ -257,8 +255,6 @@ export async function POST(req: NextRequest) {
       .set({ lastMessageAt: now, updatedAt: now })
       .where(eq(conversations.id, conversationId));
 
-    const online = await onlineMembersOf(conversationId, me.id);
-    if (online.length > 0) await markMessageDelivered(created.id);
 
     const dto = (await getMessageDTO(created.id, me.id))!;
     await publishToUsers(members, {

@@ -1,3 +1,4 @@
+import { canSeePresence } from "@/server/presence-privacy";
 import { randomUUID } from "node:crypto";
 import { NextRequest } from "next/server";
 import { pool } from "@/db";
@@ -7,7 +8,6 @@ import { jsonError } from "@/server/http";
 import { publishToUsers, publishToConversation } from "@/server/realtime";
 import { realtimeListener, type Delivery } from "@/server/realtime-listener";
 import { addConnection, connectionCount, peersOf, presenceSnapshotFor, removeConnection, touch } from "@/server/presence";
-import { markDeliveredFor } from "@/server/chat";
 import { isUuid } from "@/server/users";
 import { startStarterMaintenance } from "@/server/starter-maintenance";
 
@@ -71,6 +71,14 @@ export async function GET(req: NextRequest) {
         }
         seen.add(row.id);
         if (seen.size > 5000) seen.delete(seen.values().next().value!);
+        if (row.payload.type === "presence:update") {
+          const event = row.payload;
+          void canSeePresence(me.id, event.userId).then(allowed => {
+            const payload = allowed ? event : { ...event, online: false, lastSeenAt: null };
+            send(`id: ${row.id}\ndata: ${JSON.stringify(payload)}\n\n`);
+          }).catch(() => send(`id: ${row.id}\ndata: ${JSON.stringify({...event, online:false, lastSeenAt:null})}\n\n`));
+          return;
+        }
         send(`id: ${row.id}\ndata: ${JSON.stringify(row.payload)}\n\n`);
       };
       consume = deliver;
@@ -116,9 +124,7 @@ export async function GET(req: NextRequest) {
         }, 5000);
         heartbeat = setInterval(() => { send(": ping\n\n"); void touch(me.id).catch(cleanup); }, 25000);
         lifetime = setTimeout(cleanup, 280000);
-        void markDeliveredFor(me.id).then(async (delivered) => {
-          for (const [conversationId, messageIds] of delivered) await publishToConversation(conversationId, { type: "message:delivered", conversationId, messageIds, deliveredAt: new Date().toISOString() });
-        }).catch(() => undefined);
+
       } catch { cleanup(); }
     },
     cancel() { stop(); },

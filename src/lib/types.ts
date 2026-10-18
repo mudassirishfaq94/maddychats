@@ -301,7 +301,7 @@ export interface RealtimeTypingEvent {
 
 export interface RealtimeLifetimeEvent { type: "message:lifetime"; conversationId: string; messageId: string; expiresAt: string; revealedAt?: string; serverNow?: string }
 
-export type RealtimeEvent = RealtimeLifetimeEvent
+export type RealtimeEvent = { type:"community:updated";communityId:string } | RealtimeLifetimeEvent
   | { type: "scheduled:changed"; conversationId: string }
   | { type: "call:changed"; conversationId: string }
   | RealtimeMessageEvent

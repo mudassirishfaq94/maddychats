@@ -1,3 +1,5 @@
+import { publishToUsers } from "@/server/realtime";
+import { isOnline } from "@/server/presence";
 import { NextRequest, NextResponse } from "next/server";
 import { pool } from "@/db";
 import { getSessionUser } from "@/server/session";
@@ -11,7 +13,7 @@ export async function GET() {
   const me = await getSessionUser();
   if (!me) return jsonError(401, "Not authenticated.");
   const rows = await pool.query(`SELECT u.id, u.username, u.display_name AS "displayName", u.avatar_url AS "avatarUrl", u.bio,
-    u.created_at AS "createdAt", u.last_seen_at AS "lastSeenAt"
+    u.created_at AS "createdAt", NULL AS "lastSeenAt"
     FROM user_contacts c JOIN users u ON u.id=c.contact_id WHERE c.owner_id=$1
     AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id=$1 AND b.blocked_id=u.id) OR (b.blocked_id=$1 AND b.blocker_id=u.id))
     ORDER BY u.display_name, u.id LIMIT 500`, [me.id]);
@@ -28,6 +30,7 @@ async function change(req: NextRequest, remove: boolean) {
     if (await isBlockedBetween(me.id, body.userId)) return jsonError(403, "This person cannot be added.");
     await pool.query("INSERT INTO user_contacts(owner_id, contact_id) SELECT $1,id FROM users WHERE id=$2 ON CONFLICT DO NOTHING", [me.id, body.userId]);
   }
+  await publishToUsers([body.userId],{type:"presence:update",userId:me.id,online:isOnline(me.id),lastSeenAt:new Date().toISOString()});
   return NextResponse.json({ ok: true });
 }
 export const POST = (req: NextRequest) => change(req, false);

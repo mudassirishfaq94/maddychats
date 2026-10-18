@@ -11,7 +11,6 @@ import {
 } from "@/server/http";
 import { getSessionUser } from "@/server/session";
 import { isUuid } from "@/server/users";
-import { isOnline } from "@/server/presence";
 import {
   createMessage,
   decodeCursor,
@@ -176,9 +175,7 @@ export async function POST(
       clientMessageId: parsed.data.clientMessageId,
       disappearingSeconds: detail.disappearing_seconds,
       selfDestruct: parsed.data.selfDestruct,
-      deliveredAt: members.some((memberId) => memberId !== me.id && isOnline(memberId))
-        ? new Date()
-        : null,
+      deliveredAt: null,
       sender: me,
       realtimeRecipients: members,
       enforceMessageRequest: detail.type === "dm" && detail.request_pending,

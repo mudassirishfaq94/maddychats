@@ -133,6 +133,7 @@ export async function getFailedLogins(userId: string, since: Date) {
 export interface PrivacySettingsInput {
   profileVisibility?: string;
   lastSeenVisibility?: string;
+  lastSeenContacts?: string[];
   statusVisibility?: string;
   whoCanMessage?: string;
   loginAlerts?: boolean;
@@ -157,6 +158,7 @@ export async function upsertPrivacySettings(
     const patch: Record<string, any> = { updatedAt: new Date() };
     if (input.profileVisibility !== undefined)
       patch.profileVisibility = input.profileVisibility;
+    if (input.lastSeenContacts !== undefined) patch.lastSeenContacts = input.lastSeenContacts;
     if (input.lastSeenVisibility !== undefined)
       patch.lastSeenVisibility = input.lastSeenVisibility;
     if (input.statusVisibility !== undefined)
@@ -182,6 +184,7 @@ export async function upsertPrivacySettings(
         userId,
         profileVisibility: input.profileVisibility || "everyone",
         lastSeenVisibility: input.lastSeenVisibility || "everyone",
+        lastSeenContacts: input.lastSeenContacts ?? [],
         statusVisibility: input.statusVisibility || "everyone",
         whoCanMessage: input.whoCanMessage || "everyone",
         loginAlerts: input.loginAlerts ?? true,

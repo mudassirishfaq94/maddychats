@@ -39,7 +39,7 @@ export function toPublicUser(user: UserRow): PublicUser {
     avatarUrl: user.avatarUrl,
     bio: user.bio,
     createdAt: user.createdAt.toISOString(),
-    lastSeenAt: user.lastSeenAt ? user.lastSeenAt.toISOString() : null,
+    lastSeenAt: null,
   };
 }
 

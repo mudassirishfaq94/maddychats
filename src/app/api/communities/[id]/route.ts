@@ -1,3 +1,6 @@
+import { z } from "zod";
+import { revalidateTag } from "next/cache";
+import { manageCommunity, PUBLIC_COMMUNITIES_CACHE_TAG } from "@/server/communities";
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser } from "@/server/session";
 import { isUuid } from "@/server/users";
@@ -63,13 +66,21 @@ export async function POST(
   }
 
   if (action === "leave") {
-    await leaveCommunity(id, user.id);
+    if (!(await leaveCommunity(id, user.id))) return jsonError(403,"Community owners must transfer ownership before leaving.");
     return NextResponse.json({ success: true });
   }
 
+  if (["edit","role","remove","transfer"].includes(action)) {
+    const parsed=z.object({action:z.enum(["edit","role","remove","transfer"]),userId:z.string().uuid().optional(),role:z.enum(["admin","member"]).optional(),name:z.string().trim().min(2).max(100).optional(),description:z.string().max(500).optional(),isPublic:z.boolean().optional()}).strict().safeParse(data);
+    if(!parsed.success)return jsonError(422,"Invalid community change.");
+    if(!(await manageCommunity(id,user.id,parsed.data)))return jsonError(403,"You cannot make this community change.");
+    revalidateTag(PUBLIC_COMMUNITIES_CACHE_TAG,{expire:0});
+    return NextResponse.json({success:true});
+  }
   if (action === "create_channel") {
     const name = data.name ? String(data.name).trim() : "";
     if (!name) return jsonError(422, "Channel name is required.");
+    if (data.type !== undefined && !["text","announcement"].includes(String(data.type))) return jsonError(422,"Choose a group or announcement channel.");
     if (name.length > 100) return jsonError(422, "Channel name must be 100 characters or shorter.");
 
     let channel;

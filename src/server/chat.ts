@@ -15,6 +15,7 @@ import {
   messages,
   messageMentions,
   pinnedMessages,
+  realtimeEvents,
   users,
   type ConversationRow,
   type MessageRow,
@@ -814,7 +815,7 @@ export async function createMessage(
   const seconds = options?.selfDestruct ? 0 : options?.disappearingSeconds ?? 0;
   const expiresAt = seconds > 0 ? new Date(now.getTime() + seconds * 1000) : null;
   const eventDefaults = options?.sender ? {
-    sender: {id:options.sender.id,username:options.sender.username,displayName:options.sender.displayName,avatarUrl:options.sender.avatarUrl,bio:options.sender.bio,createdAt:options.sender.createdAt,lastSeenAt:options.sender.lastSeenAt},
+    sender: {id:options.sender.id,username:options.sender.username,displayName:options.sender.displayName,avatarUrl:options.sender.avatarUrl,bio:options.sender.bio,createdAt:options.sender.createdAt,lastSeenAt:null},
     replyTo:replyPreview,reactions:[],readBy:[],attachments:[],starred:false,deletedForMe:false,pinned:false,
   } : null;
   if (options?.realtimeRecipients?.length && !eventDefaults) throw new Error("Realtime message sender required.");
@@ -907,7 +908,7 @@ export async function createMessage(
         avatarUrl: sender.avatarUrl,
         bio: sender.bio,
         createdAt: sender.createdAt,
-        lastSeenAt: sender.lastSeenAt,
+        lastSeenAt: null,
       },
       starred: false,
       deletedForMe: false,
@@ -931,7 +932,7 @@ export async function editMessage(
       .where(eq(messages.id, messageId)).limit(1).for("update", { of: conversationMembers });
     if (!found) return "not_found";
     const msg = found.message;
-    if (msg.senderId !== userId) return "forbidden";
+    if (msg.senderId !== userId || msg.type === "system") return "forbidden";
     if (msg.deletedAt) return "deleted";
     if (msg.selfDestruct) return "not_found";
     if ((msg.expiresAt && msg.expiresAt <= new Date()) || (found.membership.clearedAt && msg.createdAt <= found.membership.clearedAt)) return "not_found";
@@ -952,7 +953,7 @@ export async function softDeleteMessage(
       .where(eq(messages.id, messageId)).limit(1).for("update", { of: conversationMembers });
     if (!found) return "not_found";
     const msg = found.message;
-    if (msg.senderId !== userId) return "forbidden";
+    if (msg.senderId !== userId || msg.type === "system") return "forbidden";
     if ((msg.expiresAt && msg.expiresAt <= new Date()) || (found.membership.clearedAt && msg.createdAt <= found.membership.clearedAt)) return "not_found";
     if (msg.deletedAt) return msg;
     const now = new Date();
@@ -1001,57 +1002,6 @@ export async function markConversationRead(
     .onConflictDoNothing();
 
   return { messageIds: ids, readAt };
-}
-
-/**
- * Marks messages addressed to `userId` as delivered (called when they come
- * online). Returns affected ids grouped by conversation.
- */
-export async function markDeliveredFor(
-  userId: string,
-): Promise<Map<string, string[]>> {
-  const deliveredAt = new Date();
-  const rows = await db
-    .select({ id: messages.id, conversationId: messages.conversationId })
-    .from(messages)
-    .innerJoin(
-      conversationMembers,
-      and(
-        eq(conversationMembers.conversationId, messages.conversationId),
-        eq(conversationMembers.userId, userId),
-      ),
-    )
-    .where(and(ne(messages.senderId, userId), isNull(messages.deliveredAt)));
-
-  if (rows.length === 0) return new Map();
-
-  await db
-    .update(messages)
-    .set({ deliveredAt })
-    .where(
-      inArray(
-        messages.id,
-        rows.map((r) => r.id),
-      ),
-    );
-
-  const byConv = new Map<string, string[]>();
-  for (const r of rows) {
-    const list = byConv.get(r.conversationId) ?? [];
-    list.push(r.id);
-    byConv.set(r.conversationId, list);
-  }
-  return byConv;
-}
-
-/** Stamps a single message as delivered (recipient already online). */
-export async function markMessageDelivered(messageId: string): Promise<Date> {
-  const deliveredAt = new Date();
-  await db
-    .update(messages)
-    .set({ deliveredAt })
-    .where(and(eq(messages.id, messageId), isNull(messages.deliveredAt)));
-  return deliveredAt;
 }
 
 /* -------------------------------- reactions -------------------------------- */
@@ -1165,12 +1115,27 @@ export async function setDisappearingMessages(
   userId: string,
   seconds: number,
 ): Promise<boolean> {
-  const membership = await getMembership(conversationId, userId);
-  if (!membership) return false;
-  await db.update(conversations)
-    .set({ disappearingSeconds: seconds, updatedAt: new Date() })
-    .where(eq(conversations.id, conversationId));
-  return true;
+  if (![0,86400,604800,2592000].includes(seconds)) return false;
+  return db.transaction(async tx=>{
+    const [conversation]=await tx.select().from(conversations).where(eq(conversations.id,conversationId)).for("update");
+    if(!conversation||conversation.deletedAt)return false;
+    const members=await tx.select().from(conversationMembers).where(eq(conversationMembers.conversationId,conversationId)).for("share");
+    const actor=members.find(member=>member.userId===userId);
+    if(!actor || (conversation.type==="group"&&!groupAllows(actor.role,conversation,"editInfo")) || (conversation.type==="dm"&&members.some(member=>!member.acceptedAt)))return false;
+    if(conversation.type==="dm") {const peer=members.find(member=>member.userId!==userId);if(peer){const blocked=await tx.select({id:blocks.id}).from(blocks).where(or(and(eq(blocks.blockerId,userId),eq(blocks.blockedId,peer.userId)),and(eq(blocks.blockerId,peer.userId),eq(blocks.blockedId,userId)))).limit(1);if(blocked.length)return false;}}
+    if(conversation.disappearingSeconds===seconds)return true;
+    const now=new Date();
+    await tx.update(conversations).set({disappearingSeconds:seconds,updatedAt:now,lastMessageAt:now}).where(eq(conversations.id,conversationId));
+    const text=seconds===0?"Disappearing messages turned off for new messages.":`New messages disappear after ${seconds===86400?"24 hours":seconds===604800?"7 days":"30 days"}.`;
+    const [notice]=await tx.insert(messages).values({conversationId,senderId:userId,text,type:"system",encrypted:false}).returning();
+    const [sender]=await tx.select().from(users).where(eq(users.id,userId));
+    const message=baseDTO(notice,sender);
+    await tx.insert(realtimeEvents).values(members.flatMap(member=>[
+      {userId:member.userId,payload:{type:"message:new" as const,conversationId,message}},
+      {userId:member.userId,payload:{type:"group:updated" as const,conversationId}},
+    ]));
+    return true;
+  });
 }
 
 export async function applyConversationControl(

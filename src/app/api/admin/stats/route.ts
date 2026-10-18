@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sql, eq, gte } from "drizzle-orm";
 import { db } from "@/db";
-import { users, messages, conversations, conversationMembers, notifications } from "@/db/schema";
+import { users, messages, conversations, conversationMembers, notifications, communities, reports } from "@/db/schema";
 import { requireAdmin } from "@/server/admin";
 import { guardSameOrigin, jsonError } from "@/server/http";
 
@@ -67,7 +67,7 @@ export async function GET(req: NextRequest) {
   const [{ bannedUsers }] = await db
     .select({ bannedUsers: sql<number>`count(*)::int` })
     .from(users)
-    .where(sql`${users.tokenInvalidBeforeAt} IS NOT NULL`);
+    .where(sql`${users.suspendedAt} is not null and (${users.suspendedUntil} is null or ${users.suspendedUntil}>now())`);
 
   // Group vs DM conversations
   const [{ groupCount }] = await db
@@ -113,7 +113,12 @@ export async function GET(req: NextRequest) {
     .groupBy(sql`${users.createdAt}::date`)
     .orderBy(sql`${users.createdAt}::date`);
 
+  const healthStarted=performance.now();
+  const metrics=await db.execute(sql`select (select count(*)::int from communities) as communities,(select count(*)::int from reports where status='pending') as reports,(select count(*)::int from users where last_seen_at>now()-interval '90 seconds') as recently_active`);
+  const metricsRow=metrics.rows[0];
   return NextResponse.json({
+    observedAt:new Date().toISOString(),
+    health:{database:"reachable",databaseLatencyMs:Math.round((performance.now()-healthStarted)*10)/10,processUptimeSeconds:Math.floor(process.uptime())},
     totals: {
       users: totalUsers,
       messages: totalMessages,
@@ -121,8 +126,11 @@ export async function GET(req: NextRequest) {
       groups: groupCount,
       directMessages: dmCount,
       bannedUsers,
+      communities:Number(metricsRow.communities),
+      pendingReports:Number(metricsRow.reports),
     },
     activity: {
+      recentlyActive:Number(metricsRow.recently_active),
       activeLast24h,
       activeLast7d,
       activeLast30d,
@@ -134,5 +142,5 @@ export async function GET(req: NextRequest) {
       messagesPerDay,
       newUsersPerDay,
     },
-  });
+  },{headers:{"Cache-Control":"private, no-store"}});
 }

@@ -193,3 +193,74 @@ test("group information policy, invitations and ownership transfer enforce role 
  assert.equal(await chat.leaveGroup(group,another),"ok");
  assert.equal(await chat.getMembership(group,another),null);
 });
+
+
+test("delivery requires a recipient device acknowledgment, is owner-isolated and atomic",async()=>{
+ const {acknowledgeDelivery}=await import("../../src/server/delivery");
+ const conversation=randomUUID();await pool.query("insert into conversations(id,type,created_by_id) values($1,'dm',$2)",[conversation,owner]);
+ try{
+  for(const user of [owner,member])await pool.query("insert into conversation_members(conversation_id,user_id,accepted_at) values($1,$2,now())",[conversation,user]);
+  const message=(await pool.query("insert into messages(conversation_id,sender_id,text,encrypted) values($1,$2,'opaque-device-envelope',true) returning id,delivered_at",[conversation,owner])).rows[0];assert.equal(message.delivered_at,null);
+  const presence=await import("../../src/server/presence");await presence.addConnection(member);assert.equal((await pool.query("select delivered_at from messages where id=$1",[message.id])).rows[0].delivered_at,null,"Presence cannot imply delivery");await presence.removeConnection(member);
+  assert.deepEqual(await acknowledgeDelivery(owner,[message.id]),[]);assert.deepEqual(await acknowledgeDelivery(outsider,[message.id]),[]);
+  assert.deepEqual(await acknowledgeDelivery(member,[message.id]),[message.id]);const stamp=(await pool.query("select delivered_at from messages where id=$1",[message.id])).rows[0].delivered_at;
+  assert(stamp);assert.deepEqual(await acknowledgeDelivery(member,[message.id]),[]);assert.equal((await pool.query("select delivered_at from messages where id=$1",[message.id])).rows[0].delivered_at.toISOString(),stamp.toISOString());
+  assert.equal((await pool.query("select count(*)::int as n from realtime_events where user_id=$1 and payload->>'type'='message:delivered' and payload->>'conversationId'=$2",[owner,conversation])).rows[0].n,1);
+  const expired=(await pool.query("insert into messages(conversation_id,sender_id,text,encrypted,expires_at) values($1,$2,'expired',true,now()-interval '1 second') returning id",[conversation,owner])).rows[0].id;assert.deepEqual(await acknowledgeDelivery(member,[expired]),[]);
+ }finally{await pool.query("delete from conversations where id=$1",[conversation]);}
+});
+
+test("presence privacy enforces all audiences, contact direction, selected contacts and blocks",async()=>{
+ const {canSeePresence}=await import("../../src/server/presence-privacy");
+ try{
+  await pool.query("insert into user_contacts(owner_id,contact_id) values($1,$2) on conflict do nothing",[another,member]);
+  for(const [mode,selected,expected] of [["everyone",[],true],["contacts",[],true],["specific",[],false],["specific",[member],true],["nobody",[],false]] as const){
+   await pool.query("insert into privacy_settings(user_id,last_seen_visibility,last_seen_contacts) values($1,$2,$3::jsonb) on conflict(user_id) do update set last_seen_visibility=$2,last_seen_contacts=$3::jsonb",[another,mode,JSON.stringify(selected)]);
+   assert.equal(await canSeePresence(member,another),expected);assert.equal(await canSeePresence(another,another),true);
+   if(mode!=="everyone")assert.equal(await canSeePresence(outsider,another),false);
+  }
+  await pool.query("update privacy_settings set last_seen_visibility='everyone' where user_id=$1",[another]);
+  for(const [blocker,blocked] of [[another,member],[member,another]]){await pool.query("insert into blocks(blocker_id,blocked_id) values($1,$2)",[blocker,blocked]);assert.equal(await canSeePresence(member,another),false);await pool.query("delete from blocks where blocker_id=$1 and blocked_id=$2",[blocker,blocked]);}
+ }finally{await pool.query("delete from privacy_settings where user_id=$1",[another]);await pool.query("delete from user_contacts where owner_id=$1",[another]);}
+});
+
+test("community counts, concurrent joins, roles and underlying group permissions are real",async()=>{
+ const community=await import("../../src/server/communities");const created=await community.createCommunity({name:"Counted community",createdBy:owner});let channel:string|null=null;
+ try{
+  assert.equal((await community.listUserCommunities(owner)).find(row=>row.id===created.id)?.memberCount,1);
+  await Promise.all([community.joinCommunity(created.id,member),community.joinCommunity(created.id,member)]);
+  assert.equal((await community.getCommunity(created.id))?.memberCount,2);
+  const group=await community.createChannel({communityId:created.id,name:"Private group",type:"announcement",createdBy:owner});channel=group.conversationId;
+  assert(channel);assert.equal((await chat.getConversationForUser(channel,member))?.adminOnlyMessaging,true);
+  await assert.rejects(community.createChannel({communityId:created.id,name:"Denied",createdBy:member}),/forbidden/);
+  assert.equal(await community.manageCommunity(created.id,member,{action:"role",userId:owner,role:"member"}),false);
+  assert.equal(await community.manageCommunity(created.id,owner,{action:"role",userId:member,role:"admin"}),true);
+  assert.equal((await chat.getMembership(channel,member))?.role,"admin");
+  assert.equal(await community.manageCommunity(created.id,member,{action:"remove",userId:owner}),false);
+  assert.equal(await community.manageCommunity(created.id,owner,{action:"edit",description:"Be kind. Keep discussions relevant."}),true);
+  assert.equal((await community.getCommunity(created.id))?.description,"Be kind. Keep discussions relevant.");
+  assert.equal(await community.leaveCommunity(created.id,owner),false);
+  assert.equal(await community.manageCommunity(created.id,member,{action:"transfer",userId:owner}),false);
+  assert.equal(await community.manageCommunity(created.id,owner,{action:"transfer",userId:member}),true);
+  assert.equal((await community.getCommunityMembership(created.id,member))?.role,"owner");
+  assert.equal(await community.manageCommunity(created.id,member,{action:"transfer",userId:owner}),true);
+  assert.equal(await community.leaveCommunity(created.id,member),true);assert.equal(await chat.getMembership(channel,member),null);
+  assert.equal((await community.getCommunity(created.id))?.memberCount,1);
+ }finally{await pool.query("delete from communities where id=$1",[created.id]);if(channel)await pool.query("delete from conversations where id=$1",[channel]);}
+});
+
+test("disappearing policy changes create one authoritative notice for both members",async()=>{
+ const conversation=randomUUID();await pool.query("insert into conversations(id,type,created_by_id) values($1,'dm',$2)",[conversation,owner]);
+ try{
+  for(const user of [owner,member])await pool.query("insert into conversation_members(conversation_id,user_id,accepted_at) values($1,$2,now())",[conversation,user]);
+  assert.equal(await chat.setDisappearingMessages(conversation,outsider,86400),false);
+  assert.equal(await chat.setDisappearingMessages(conversation,owner,86400),true);
+  assert.equal(await chat.setDisappearingMessages(conversation,owner,86400),true);
+  const notice=(await pool.query("select id,text,encrypted from messages where conversation_id=$1 and type='system'",[conversation])).rows;
+  assert.equal(notice.length,1);assert.match(notice[0].text,/24 hours/);assert.equal(notice[0].encrypted,false,"Only fixed policy metadata is plaintext");
+  assert.equal(await chat.editMessage(notice[0].id,owner,"forged notice",false),"forbidden");
+  for(const user of [owner,member])assert.equal((await pool.query("select count(*)::int as n from realtime_events where user_id=$1 and payload->>'type'='message:new' and payload->>'conversationId'=$2",[user,conversation])).rows[0].n,1);
+  assert.equal(await chat.setDisappearingMessages(conversation,member,0),true);
+  assert.equal((await pool.query("select disappearing_seconds from conversations where id=$1",[conversation])).rows[0].disappearing_seconds,0);
+ }finally{await pool.query("delete from conversations where id=$1",[conversation]);}
+});

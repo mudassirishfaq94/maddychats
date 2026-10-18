@@ -393,6 +393,13 @@
       "when": 1792281600012,
       "tag": "0054_encrypted_recovery_backups",
       "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1792281600013,
+      "tag": "0055_presence_privacy",
+      "breakpoints": true
     }
   ]
 }

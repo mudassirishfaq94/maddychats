@@ -1,7 +1,18 @@
 import { eq, and, sql, inArray } from "drizzle-orm";
 import { unstable_cache } from "next/cache";
 import { db } from "@/db";
-import { communities, communityMembers, channels, users, conversations, conversationMembers } from "@/db/schema";
+import { communities, communityMembers, channels, users, conversations, conversationMembers, realtimeEvents } from "@/db/schema";
+
+async function withCounts<T extends {id:string}>(rows:T[]) {
+  if (!rows.length) return [];
+  const ids=rows.map(row=>row.id);
+  const [members,groups]=await Promise.all([
+    db.select({id:communityMembers.communityId,count:sql<number>`count(*)::int`}).from(communityMembers).where(inArray(communityMembers.communityId,ids)).groupBy(communityMembers.communityId),
+    db.select({id:channels.communityId,count:sql<number>`count(*)::int`}).from(channels).where(inArray(channels.communityId,ids)).groupBy(channels.communityId),
+  ]);
+  const memberMap=new Map(members.map(row=>[row.id,row.count])),groupMap=new Map(groups.map(row=>[row.id,row.count]));
+  return rows.map(row=>({...row,memberCount:memberMap.get(row.id)??0,channelCount:groupMap.get(row.id)??0}));
+}
 
 /** Create a new community */
 export async function createCommunity(input: {
@@ -10,24 +21,11 @@ export async function createCommunity(input: {
   createdBy: string;
   isPublic?: boolean;
 }) {
-  const [community] = await db
-    .insert(communities)
-    .values({
-      name: input.name,
-      description: input.description ?? null,
-      createdBy: input.createdBy,
-      isPublic: input.isPublic ?? true,
-    })
-    .returning();
-
-  // Add creator as owner
-  await db.insert(communityMembers).values({
-    communityId: community.id,
-    userId: input.createdBy,
-    role: "owner",
+  return db.transaction(async tx=>{
+    const [community]=await tx.insert(communities).values({name:input.name,description:input.description??null,createdBy:input.createdBy,isPublic:input.isPublic??true}).returning();
+    await tx.insert(communityMembers).values({communityId:community.id,userId:input.createdBy,role:"owner"});
+    return community;
   });
-
-  return community;
 }
 
 /** Get a community by ID with member count */
@@ -88,11 +86,11 @@ export async function listUserCommunities(userId: string) {
 
   const communityMap = new Map(communityList.map((c) => [c.id, c]));
 
-  return memberships.map((m) => ({
+  return withCounts(memberships.map((m) => ({
     ...communityMap.get(m.communityId)!,
     myRole: m.role,
     joinedAt: m.joinedAt,
-  }));
+  })));
 }
 
 /** List public communities */
@@ -131,7 +129,7 @@ export async function listPublicCommunities(limit = 20) {
   // older than our TTL, even when an external SQL edit bypasses invalidation.
   const rows = Date.now() < snapshot.expiresAt ? snapshot.rows : await readPublicCommunities(limit);
   // Next serializes cached values; retain the existing server Date contract.
-  return rows.map(row => ({ ...row, createdAt: new Date(row.createdAt) }));
+  return withCounts(rows.map(row => ({ ...row, createdAt: new Date(row.createdAt) })));
 }
 
 /** Join a community */
@@ -139,97 +137,45 @@ export async function joinCommunity(
   communityId: string,
   userId: string,
 ): Promise<{ success: boolean; error?: string }> {
-  // Check if already a member
-  const [existing] = await db
-    .select()
-    .from(communityMembers)
-    .where(
-      and(
-        eq(communityMembers.communityId, communityId),
-        eq(communityMembers.userId, userId),
-      ),
-    )
-    .limit(1);
-
-  if (existing) return { success: true };
-
-  // Check if community exists and is public
-  const [community] = await db
-    .select({ isPublic: communities.isPublic })
-    .from(communities)
-    .where(eq(communities.id, communityId))
-    .limit(1);
-
-  if (!community) return { success: false, error: "Community not found." };
-  if (!community.isPublic) return { success: false, error: "This community is private." };
-
-  await db.insert(communityMembers).values({
-    communityId,
-    userId,
-    role: "member",
+  return db.transaction(async tx=>{
+    const [community]=await tx.select().from(communities).where(eq(communities.id,communityId)).for("update");
+    if(!community)return {success:false,error:"Community not found."};
+    const [existing]=await tx.select().from(communityMembers).where(and(eq(communityMembers.communityId,communityId),eq(communityMembers.userId,userId)));
+    if(existing)return {success:true};if(!community.isPublic)return {success:false,error:"This community is private."};
+    await tx.insert(communityMembers).values({communityId,userId,role:"member"});
+    const linked=await tx.select().from(channels).where(eq(channels.communityId,communityId));
+    for(const channel of linked){if(!channel.conversationId)continue;await tx.select({id:conversations.id}).from(conversations).where(eq(conversations.id,channel.conversationId)).for("update");await tx.insert(conversationMembers).values({conversationId:channel.conversationId,userId,role:"member",acceptedAt:new Date()}).onConflictDoNothing();const peers=await tx.select({id:conversationMembers.userId}).from(conversationMembers).where(eq(conversationMembers.conversationId,channel.conversationId));await tx.insert(realtimeEvents).values(peers.map(peer=>({userId:peer.id,payload:{type:"group:member-added" as const,conversationId:channel.conversationId!,userId}})));}
+    await communityChanged(tx,communityId);return {success:true};
   });
-
-  // Also add user to all existing channel conversations
-  const communityChannels = await db
-    .select({ conversationId: channels.conversationId })
-    .from(channels)
-    .where(eq(channels.communityId, communityId));
-
-  for (const ch of communityChannels) {
-    if (ch.conversationId) {
-      await db
-        .insert(conversationMembers)
-        .values({
-          conversationId: ch.conversationId,
-          userId,
-          role: "member",
-          acceptedAt: new Date(),
-        })
-        .onConflictDoNothing();
-    }
-  }
-
-  return { success: true };
 }
 
-/** Leave a community */
-export async function leaveCommunity(
-  communityId: string,
-  userId: string,
-): Promise<boolean> {
-  const deleted = await db
-    .delete(communityMembers)
-    .where(
-      and(
-        eq(communityMembers.communityId, communityId),
-        eq(communityMembers.userId, userId),
-      ),
-    )
-    .returning();
-
-  if (deleted.length > 0) {
-    // Also remove from all channel conversations
-    const communityChannels = await db
-      .select({ conversationId: channels.conversationId })
-      .from(channels)
-      .where(eq(channels.communityId, communityId));
-
-    for (const ch of communityChannels) {
-      if (ch.conversationId) {
-        await db
-          .delete(conversationMembers)
-          .where(
-            and(
-              eq(conversationMembers.conversationId, ch.conversationId),
-              eq(conversationMembers.userId, userId),
-            ),
-          );
-      }
-    }
-  }
-
-  return deleted.length > 0;
+type CommunityTx=Parameters<Parameters<typeof db.transaction>[0]>[0];
+async function communityChanged(tx:CommunityTx,communityId:string,extra:string[]=[]) {
+ const members=await tx.select({id:communityMembers.userId}).from(communityMembers).where(eq(communityMembers.communityId,communityId));const ids=[...new Set([...members.map(row=>row.id),...extra])];if(ids.length)await tx.insert(realtimeEvents).values(ids.map(userId=>({userId,payload:{type:"community:updated" as const,communityId}})));
 }
+export async function manageCommunity(communityId:string,actorId:string,input:{action:"edit"|"role"|"remove"|"leave"|"transfer";userId?:string;role?:"admin"|"member";name?:string;description?:string;isPublic?:boolean}) {
+ return db.transaction(async tx=>{
+  const [community]=await tx.select().from(communities).where(eq(communities.id,communityId)).for("update");if(!community)return false;
+  const members=await tx.select().from(communityMembers).where(eq(communityMembers.communityId,communityId)).for("update");const actor=members.find(row=>row.userId===actorId);if(!actor)return false;
+  if(input.action==="edit") {if(!["owner","admin"].includes(actor.role))return false;await tx.update(communities).set({...(input.name!==undefined?{name:input.name}:{}),...(input.description!==undefined?{description:input.description}:{}),...(input.isPublic!==undefined?{isPublic:input.isPublic}:{})}).where(eq(communities.id,communityId));await communityChanged(tx,communityId);return true;}
+  const targetId=input.action==="leave"?actorId:input.userId;const target=members.find(row=>row.userId===targetId);if(!target||target.role==="owner")return false;
+  if(input.action==="transfer") {
+    if(actor.role!=="owner"||target.userId===actorId)return false;
+    await tx.update(communities).set({createdBy:target.userId}).where(eq(communities.id,communityId));
+    await tx.update(communityMembers).set({role:"admin"}).where(eq(communityMembers.id,actor.id));
+    await tx.update(communityMembers).set({role:"owner"}).where(eq(communityMembers.id,target.id));
+    const linked=await tx.select().from(channels).where(eq(channels.communityId,communityId)).orderBy(channels.conversationId);
+    for(const channel of linked){if(!channel.conversationId)continue;await tx.update(conversations).set({createdById:target.userId,updatedAt:new Date()}).where(eq(conversations.id,channel.conversationId));await tx.update(conversationMembers).set({role:"admin"}).where(and(eq(conversationMembers.conversationId,channel.conversationId),eq(conversationMembers.role,"owner")));await tx.insert(conversationMembers).values({conversationId:channel.conversationId,userId:target.userId,role:"owner",acceptedAt:new Date()}).onConflictDoUpdate({target:[conversationMembers.conversationId,conversationMembers.userId],set:{role:"owner"}});const peers=await tx.select({id:conversationMembers.userId}).from(conversationMembers).where(eq(conversationMembers.conversationId,channel.conversationId));await tx.insert(realtimeEvents).values(peers.map(peer=>({userId:peer.id,payload:{type:"group:member-updated" as const,conversationId:channel.conversationId!,userId:target.userId,role:"owner" as const}})));}
+    await communityChanged(tx,communityId);return true;
+  }
+  if(input.action==="role") {if(actor.role!=="owner"||!input.role)return false;await tx.update(communityMembers).set({role:input.role}).where(eq(communityMembers.id,target.id));}
+  else {if(input.action!=="leave"&&(actorId===targetId||!["admin","owner"].includes(actor.role)||(actor.role==="admin"&&target.role!=="member")))return false;await tx.delete(communityMembers).where(eq(communityMembers.id,target.id));}
+  const linked=await tx.select().from(channels).where(eq(channels.communityId,communityId)).orderBy(channels.conversationId);
+  for(const channel of linked){if(!channel.conversationId)continue;await tx.select({id:conversations.id}).from(conversations).where(eq(conversations.id,channel.conversationId)).for("update");if(input.action==="role")await tx.update(conversationMembers).set({role:input.role}).where(and(eq(conversationMembers.conversationId,channel.conversationId),eq(conversationMembers.userId,target.userId)));else await tx.delete(conversationMembers).where(and(eq(conversationMembers.conversationId,channel.conversationId),eq(conversationMembers.userId,target.userId)));const peers=await tx.select({id:conversationMembers.userId}).from(conversationMembers).where(eq(conversationMembers.conversationId,channel.conversationId));const ids=[...new Set([...peers.map(row=>row.id),target.userId])];await tx.insert(realtimeEvents).values(ids.map(userId=>({userId,payload:{type:input.action==="role"?"group:member-updated" as const:"group:member-removed" as const,conversationId:channel.conversationId!,userId:target.userId}})));}
+  await communityChanged(tx,communityId,[target.userId]);return true;
+ });
+}
+export async function leaveCommunity(communityId:string,userId:string){return manageCommunity(communityId,userId,{action:"leave"});}
 
 /** Create a channel in a community — also creates a conversation for chat */
 export async function createChannel(input: {
@@ -240,6 +186,7 @@ export async function createChannel(input: {
   createdBy: string;
 }) {
   return db.transaction(async tx => {
+  await tx.select({id:communities.id}).from(communities).where(eq(communities.id,input.communityId)).for("update");
   const [actor] = await tx.select({ role: communityMembers.role }).from(communityMembers)
     .where(and(eq(communityMembers.communityId, input.communityId), eq(communityMembers.userId, input.createdBy))).limit(1).for("share");
   if (!actor) throw new Error("community_not_found");
@@ -254,6 +201,7 @@ export async function createChannel(input: {
       name: `${input.name}`,
       description: input.description ?? null,
       createdById: input.createdBy,
+      adminOnlyMessaging: input.type === "announcement",
     })
     .returning();
 
@@ -287,6 +235,7 @@ export async function createChannel(input: {
     })
     .returning();
 
+  await communityChanged(tx,input.communityId);
   return channel;
   });
 }

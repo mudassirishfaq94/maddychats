@@ -15,7 +15,7 @@ import { deleteStored, generateStoredName, saveBuffer } from "@/server/storage";
 export const runtime = "nodejs";
 export async function GET() {
   const me = await getSessionUser(); if (!me) return jsonError(401, "Not authenticated.");
-  return NextResponse.json({ statuses: await listVisibleStatuses(me.id) });
+  return NextResponse.json({ statuses: await listVisibleStatuses(me.id) }, { headers: {"Cache-Control":"private, no-store"} });
 }
 
 export async function POST(req: NextRequest) {
