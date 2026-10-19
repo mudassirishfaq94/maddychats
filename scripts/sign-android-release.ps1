@@ -21,7 +21,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Cannot inspect bundle identity before signing.
 $manifestDocument = [xml]($manifestText -join "`n")
 $androidNamespace = 'http://schemas.android.com/apk/res/android'
 $manifest = $manifestDocument.DocumentElement
-if ($manifest.GetAttribute('package') -ne 'chat.circlo.app' -or $manifest.GetAttribute('versionCode', $androidNamespace) -ne '17' -or $manifest.GetAttribute('versionName', $androidNamespace) -ne '0.9.8') { throw 'Bundle identity/version does not match the approved release.' }
+if ($manifest.GetAttribute('package') -ne 'chat.circlo.app' -or $manifest.GetAttribute('versionCode', $androidNamespace) -ne '18' -or $manifest.GetAttribute('versionName', $androidNamespace) -ne '0.9.9') { throw 'Bundle identity/version does not match the approved release.' }
 if ($manifest.application.GetAttribute('debuggable', $androidNamespace) -eq 'true') { throw 'Debuggable bundle must not be release-signed.' }
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $archive = [IO.Compression.ZipFile]::OpenRead([IO.Path]::GetFullPath($UnsignedBundle))
