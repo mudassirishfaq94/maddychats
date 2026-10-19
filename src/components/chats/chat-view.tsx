@@ -1264,7 +1264,7 @@ export function ChatView({
       }
       const created = data.message;
       chatPerf("send-server-confirmed", sendStarted);
-      void removeQueuedMessage(me.id, conversationId, clientMessageId).catch(() => undefined);
+      await removeQueuedMessage(me.id, conversationId, clientMessageId).catch(() => undefined);
       await clearDeliveredDraft(submittedDraft);
       setDecryptedTexts((prev) => {
         const next = new Map(prev);
