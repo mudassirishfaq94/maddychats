@@ -94,6 +94,7 @@ import { chatPerf } from "@/lib/performance";
 import { offlineHistoryRows } from "@/lib/offline-history";
 import { rememberHistory } from "../../../public/offline-store.js";
 import { loadChatDraft, saveChatDraft, loadQueuedMessages, removeQueuedMessage, saveQueuedMessage } from "@/lib/chat-outbox";
+import { claimQueuedSend } from "@/lib/queued-send-claim";
 
 class SecureDeliveryWaiting extends Error {}
 
@@ -1174,6 +1175,8 @@ export function ChatView({
     const queued = items.find(message => (message.sendStatus === "queued" || message.sendStatus === "sending") && decryptedTextsRef.current.get(message.id) === text && message.replyToMessageId === (replyTo?.id ?? null));
     if (queued) { await retryFailedMessage(queued); return; }
     const clientMessageId = crypto.randomUUID();
+    const releaseSend = claimQueuedSend(me.id, clientMessageId);
+    if (!releaseSend) return;
     const optimisticId = `client:${clientMessageId}`;
     const now = new Date().toISOString();
     const optimistic: MessageDTO = {
@@ -1301,6 +1304,7 @@ export function ChatView({
       }
       setItems((prev) => prev.map((m) => m.id === optimisticId ? { ...m, sendStatus: waiting ? "queued" : "failed", queueReason: waiting ? cause.message : undefined } : m));
     } finally {
+      releaseSend();
       setSendPending(false);
       composerRef.current?.focus();
     }
@@ -1444,6 +1448,8 @@ export function ChatView({
     if (!['failed', 'queued'].includes(message.sendStatus ?? '') || !message.clientMessageId || retryingMessages.current.has(message.clientMessageId) || cancelledMessages.current.has(message.clientMessageId)) return;
     const plain = decryptedTextsRef.current.get(message.id);
     if (!plain) return;
+    const releaseSend = claimQueuedSend(me.id, message.clientMessageId);
+    if (!releaseSend) return;
     retryingMessages.current.add(message.clientMessageId);
     setError(null);
     try {
@@ -1504,6 +1510,7 @@ export function ChatView({
         setError(cause instanceof Error ? cause.message : "Message failed to send.");
       }
     } finally {
+      releaseSend();
       retryingMessages.current.delete(message.clientMessageId);
     }
   }

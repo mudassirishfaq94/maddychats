@@ -8,6 +8,7 @@ import type { ConversationSummary } from "@/lib/types";
 import { useRealtime } from "./realtime-provider";
 import { offlineHistoryRows } from "@/lib/offline-history";
 import { notificationLockedChatIds } from "@/lib/local-notification-preview";
+import { claimQueuedSend } from "@/lib/queued-send-claim";
 
 /** Revalidate account, membership and encryption on device before every retry. */
 export function OfflineComposeProvider() {
@@ -54,6 +55,9 @@ export function OfflineComposeProvider() {
       finally { running = false; }
     };
     const send = async (entry: OfflineText) => {
+      const releaseSend = claimQueuedSend(user.id, entry.id);
+      if (!releaseSend) return;
+      try {
       const text = await current.current.encryption.encrypt(entry.text, entry.conversationId);
       if (stopped || current.current.user?.id !== user.id || (entry.source === "offline" && activeAccount() !== user.id)) return;
       if (!(await queuedTexts(user.id)).some(item => item.id === entry.id)) return;
@@ -69,6 +73,7 @@ export function OfflineComposeProvider() {
       await removeText(user.id, entry.id);
       if ((await loadChatDraft(user.id, entry.conversationId))?.trim() === entry.text.trim()) await saveChatDraft(user.id, entry.conversationId, "");
       setStatus("Queued message sent.");
+      } finally { releaseSend(); }
     };
     const resume = () => { void run(); };
     const refresh = () => { void refreshChats(); void run(); };
