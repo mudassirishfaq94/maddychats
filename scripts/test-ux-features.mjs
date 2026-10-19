@@ -34,6 +34,7 @@ export async function testUxFeatures(context,base,owner,member) {
    const scroller=page.locator('aside[aria-label="Conversations"] > div.overflow-y-auto');
    const scrollBounds=await scroller.boundingBox();
    assert(scrollBounds&&scrollBounds.y+scrollBounds.height>helpBounds.y+helpBounds.height,"Help must float over the list without a full-width footer");
+   await scroller.evaluate(element=>{element.scrollTop=element.scrollHeight;});
    const lastOptions=page.getByRole("complementary",{name:"Conversations"}).getByRole("button",{name:"Conversation options",exact:true}).last();
    await lastOptions.scrollIntoViewIfNeeded();
    assert(await lastOptions.evaluate(button=>{const box=button.getBoundingClientRect();return button.contains(document.elementFromPoint(box.x+box.width/2,box.y+box.height/2));}),"The final conversation's controls remain reachable beside the floating Help button");
