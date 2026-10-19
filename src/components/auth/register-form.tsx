@@ -100,7 +100,6 @@ export function RegisterForm({ consent, agreement }: { consent: PolicyConsent; a
         onChange={update("displayName")}
         placeholder="Zara Malik"
         autoComplete="name"
-        autoFocus
         error={errors.displayName}
       />
 

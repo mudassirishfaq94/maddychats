@@ -9,6 +9,7 @@ import {testCommunityUx} from "./test-community-ux.mjs";
 import {testUxFeatures,testDeliveryApi} from "./test-ux-features.mjs";
 import {testNativeNotificationState} from "./test-native-notification-state.mjs";
 import {testTemporaryRooms} from "./test-temporary-rooms.mjs";
+import {testOfflineCompose} from "./test-offline-compose.mjs";
 import {testNavigationLatency} from "./test-navigation-latency.mjs";
 import {signSessionToken} from "../src/server/jwt.ts";
 import {generateKeyPair,exportPublicKey,exportPrivateKey,encryptPrivateKeyForStorage,generateConversationKey,encryptKeyForUser,conversationFingerprint,encryptMessage} from "../src/lib/crypto.ts";
@@ -37,7 +38,7 @@ try {
  for(const account of accounts)await pool.query("insert into e2ee_conversation_keys(conversation_id,user_id,device_id,recipient_device_id,encrypted_key,key_fingerprint) values($1,$2,$3,$3,$4,$5)",[group,account.id,account.deviceId,await encryptKeyForUser(key,account.pair.publicKey),fingerprint]);
  browser=await chromium.launch({headless:true,args:["--use-fake-device-for-media-stream","--use-fake-ui-for-media-stream"]});
  for(const account of accounts.slice(0,2)) {
-  const context=await browser.newContext({viewport:{width:430,height:900},timezoneId:"Asia/Dubai",permissions:["microphone"],serviceWorkers:"block"});contexts.push(context);
+  const context=await browser.newContext({viewport:{width:430,height:900},timezoneId:"Asia/Dubai",permissions:["microphone"],serviceWorkers:process.env.OFFLINE_ONLY==="1"?"allow":"block"});contexts.push(context);
   await context.addCookies([{name:"maddy_session",value:account.token,url:base,httpOnly:true,sameSite:"Lax"}]);
   // Initialize once; reloads and storage-loss tests must exercise actual application recovery.
   await context.addInitScript(account=>{
@@ -50,7 +51,9 @@ try {
   const page=await context.newPage();page.setDefaultTimeout(30000);page.setDefaultNavigationTimeout(120000);page.on("pageerror",error=>{errors.push(error.message);console.error("Browser runtime error:",error.message);});account.page=page;
   await page.goto(`${base}/app/chats/${group}`);await page.getByRole("textbox",{name:"Message text"}).waitFor();
  }
- if(process.env.NAVIGATION_ONLY==="1"){
+ if(process.env.OFFLINE_ONLY==="1"){
+  await testOfflineCompose(contexts[0],base,owner,group,pool,member);
+ }else if(process.env.NAVIGATION_ONLY==="1"){
   await testNavigationLatency(contexts[0],base,group);
  }else{
  const api=async(account,path,body,method="POST")=>account.page.request.fetch(base+path,{method,headers:{Origin:base,"Content-Type":"application/json"},...(body?{data:body}:{})});

@@ -213,6 +213,7 @@ export function AuthProvider({ children, initialUser }: { children: ReactNode; i
       // will expire shortly; /api/auth/me remains the source of truth.
     }
     if (signedOutUserId) {
+      await import("../../../public/offline-store.js").then(({ forgetOffline }) => forgetOffline(signedOutUserId)).catch(() => {});
       // Best-effort local hygiene. These records are device-encrypted either
       // way, but logout should not retain readable history for this account.
       void import("@/lib/e2ee-message-cache")

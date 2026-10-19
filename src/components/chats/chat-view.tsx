@@ -91,6 +91,8 @@ import {
 } from "@/lib/crypto";
 import { mapWithConcurrency } from "@/lib/async";
 import { chatPerf } from "@/lib/performance";
+import { offlineHistoryRows } from "@/lib/offline-history";
+import { rememberHistory } from "../../../public/offline-store.js";
 import { loadChatDraft, saveChatDraft, loadQueuedMessages, removeQueuedMessage, saveQueuedMessage } from "@/lib/chat-outbox";
 
 class SecureDeliveryWaiting extends Error {}
@@ -362,6 +364,12 @@ export function ChatView({
       return plaintext === undefined ? [] : [[message.id, plaintext] as const];
     }),
   ));
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void rememberHistory(me.id, conversationId, offlineHistoryRows(items, decryptedTexts, me.id, conversation.disappearingSeconds > 0 || conversation.requestPending || Boolean(conversation.awaitingApproval)), true).catch(() => {});
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [me.id, conversationId, items, decryptedTexts, conversation.disappearingSeconds, conversation.requestPending, conversation.awaitingApproval]);
   const [decryptedReplies, setDecryptedReplies] = useState<Map<string, string>>(new Map());
   const decryptedTextsRef = useRef(decryptedTexts);
   const decryptedRepliesRef = useRef(decryptedReplies);
@@ -579,6 +587,7 @@ export function ChatView({
    * can change while a chat remains open, so the initial UI snapshot is not
    * a safe basis for deciding whether plaintext may leave the device. */
   const prepareEncryptedSend = useCallback(async (allowMessageRequest = false) => {
+    if (!navigator.onLine) throw new SecureDeliveryWaiting("No internet connection. This message will send automatically when you are back online.");
     // A fast first keystroke/send can beat local key restoration on navigation.
     // Keep the optimistic message and draft while setup finishes, with a bound
     // so a failed initialization cannot leave the sending spinner running.
@@ -1161,6 +1170,7 @@ export function ChatView({
     }
 
     if (!text || sendPendingRef.current) return;
+    if (!navigator.onLine && selfDestruct) { setError("Reconnect to send a self-destructing message."); return; }
     const queued = items.find(message => (message.sendStatus === "queued" || message.sendStatus === "sending") && decryptedTextsRef.current.get(message.id) === text && message.replyToMessageId === (replyTo?.id ?? null));
     if (queued) { await retryFailedMessage(queued); return; }
     const clientMessageId = crypto.randomUUID();
@@ -1236,12 +1246,13 @@ export function ChatView({
       } catch {
         // A lost response may happen after the server committed. The stable
         // client id makes this retry return the original row, never a duplicate.
-        res = await request();
+        res = await request().catch(() => { throw new SecureDeliveryWaiting("No internet connection. This message will send automatically when you are back online."); });
       }
       const data = (await res.json().catch(() => null)) as {
         message?: MessageDTO;
         error?: string;
       } | null;
+      if (res.status >= 500 || res.status === 429) throw new SecureDeliveryWaiting("Connection unavailable. Your message will send automatically when the service is ready.");
       if (!res.ok || !data?.message) {
         await removeQueuedMessage(me.id, conversationId, clientMessageId).catch(() => undefined);
         setError(data?.error ?? "Message failed to send. Try again.");
@@ -1274,7 +1285,16 @@ export function ChatView({
       if (ta && !draftRef.current) ta.style.height = "auto";
     } catch (cause) {
       const waiting = cause instanceof SecureDeliveryWaiting;
-      if (waiting) await saveQueuedMessage(me.id, { message: { ...optimistic, sendStatus: "queued", queueReason: cause.message }, plain: text }).catch(() => undefined);
+      if (waiting) {
+        try {
+          await saveQueuedMessage(me.id, { message: { ...optimistic, sendStatus: "queued", queueReason: cause.message }, plain: text });
+          if (!selfDestruct) await clearDeliveredDraft(submittedDraft);
+        } catch {
+          setError("Could not save the queued message. Your draft is still here; try again.");
+          setItems(previous => previous.map(message => message.id === optimisticId ? { ...message, sendStatus: "failed" } : message));
+          return;
+        }
+      }
       if (!waiting) {
         await removeQueuedMessage(me.id, conversationId, clientMessageId).catch(() => undefined);
         setError(cause instanceof Error ? cause.message : "Network error. Message was not sent.");
@@ -1445,8 +1465,9 @@ export function ChatView({
         }),
       });
       let res: Response;
-      try { res = await request(); } catch { res = await request(); }
+      try { res = await request(); } catch { res = await request().catch(() => { throw new SecureDeliveryWaiting("No internet connection. This message will send automatically when you are back online."); }); }
       const data = await res.json().catch(() => null) as { message?: MessageDTO; error?: string } | null;
+      if (res.status >= 500 || res.status === 429) throw new SecureDeliveryWaiting("Connection unavailable. Your message will send automatically when the service is ready.");
       if (!res.ok || !data?.message) throw new Error(data?.error ?? "Message failed to send.");
       const created = data.message;
       await removeQueuedMessage(me.id, conversationId, message.clientMessageId).catch(() => undefined);
@@ -1477,7 +1498,9 @@ export function ChatView({
         item.id === message.id ? { ...item, sendStatus: waiting ? "queued" : "failed", queueReason: waiting ? cause.message : undefined } : item,
       ));
       if (!waiting) {
-        await removeQueuedMessage(me.id, conversationId, message.clientMessageId).catch(() => undefined);
+        // A rejected retry must not discard text already accepted into the
+        // durable offline queue. Keep it for explicit retry or cancellation.
+        await saveQueuedMessage(me.id, { message: { ...message, sendStatus: "failed", queueReason: cause instanceof Error ? cause.message : "Message failed to send." }, plain }).catch(() => undefined);
         setError(cause instanceof Error ? cause.message : "Message failed to send.");
       }
     } finally {
@@ -1510,7 +1533,7 @@ export function ChatView({
       });
       setItems(current => {
         const known = new Set(current.map(message => message.clientMessageId));
-        return [...current, ...pending.filter(entry => !known.has(entry.message.clientMessageId)).map(entry => ({ ...entry.message, sendStatus: "queued" as const }))];
+        return [...current, ...pending.filter(entry => !known.has(entry.message.clientMessageId)).map(entry => ({ ...entry.message, sendStatus: entry.message.sendStatus === "failed" ? "failed" as const : "queued" as const }))];
       });
     }).catch(() => undefined);
     const resume = () => { if (!stopped) void queuedRetry.current(); };

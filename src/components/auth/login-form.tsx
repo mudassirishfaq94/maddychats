@@ -72,7 +72,6 @@ export function LoginForm({ next, consent, agreement }: { next?: string; consent
         onChange={(e) => setIdentifier(e.target.value)}
         placeholder="you@example.com"
         autoComplete="username"
-        autoFocus
         error={errors.identifier}
       />
 

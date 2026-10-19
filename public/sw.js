@@ -1,8 +1,8 @@
-const CACHE_NAME = "circlo-offline-notifications-v10";
+const CACHE_NAME = "circlo-offline-notifications-v12";
 const OFFLINE_URL = "/offline.html";
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.add(OFFLINE_URL)));
+  event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll([OFFLINE_URL, "/offline.css", "/offline-compose.js", "/offline-store.js", "/icons/circlo-mark.svg"])));
   self.skipWaiting();
 });
 
@@ -15,12 +15,17 @@ self.addEventListener("activate", (event) => {
   ]));
 });
 
-// Cache only the public offline screen. Chats, API responses, decrypted
+// Cache only the public offline shell and its static assets. Chats, API responses, decrypted
 // media, and authenticated HTML must never enter the service-worker cache.
 self.addEventListener("fetch", (event) => {
+  const url = new URL(event.request.url);
+  if (url.origin === self.location.origin && ["/offline.css", "/offline-compose.js", "/offline-store.js", "/icons/circlo-mark.svg"].includes(url.pathname) && event.request.method === "GET") {
+    event.respondWith(caches.open(CACHE_NAME).then(async cache => (await cache.match(event.request)) || fetch(event.request)));
+    return;
+  }
   if (event.request.mode !== "navigate" || event.request.method !== "GET") return;
   if (new URL(event.request.url).origin !== self.location.origin) return;
-  event.respondWith(fetch(event.request).catch(async () => {
+  event.respondWith(fetch(event.request).then(response => { if (response.status >= 500) throw new Error("Service unavailable"); return response; }).catch(async () => {
     const fallback = await caches.match(OFFLINE_URL);
     return fallback || new Response("You are offline. Reconnect and reload Circlo.", {
       status: 503, headers: { "Content-Type": "text/plain; charset=utf-8" },
