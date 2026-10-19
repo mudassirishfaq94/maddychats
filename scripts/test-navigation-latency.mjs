@@ -30,6 +30,11 @@ export async function testNavigationLatency(context,base,conversationId) {
  const rows=[],additionalTabs=[];const cdp=await context.newCDPSession(page);
  try{
   await page.goto(base+"/app");await page.getByLabel("Search conversations",{exact:true}).waitFor();
+  const sidebar=page.getByRole("complementary",{name:"Conversations",exact:true});
+  const help=await sidebar.getByRole("link",{name:"Open Circlo Help",exact:true}).boundingBox();
+  const listBottom=await sidebar.getByRole("list").first().evaluate(list=>list.parentElement.getBoundingClientRect().bottom);
+  assert(help&&help.width>=44&&help.height>=44,"Help remains an accessible touch target");
+  assert(listBottom>help.y+help.height,"Chat scrolling must extend behind Help without a full-width footer cutting off the list");
   await page.waitForTimeout(2000);
   for(const scenario of ["normal","mobile-100ms-4xCPU"]){
    if(scenario!=="normal"){

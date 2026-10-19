@@ -19,6 +19,11 @@ export function OfflineComposeProvider() {
   useEffect(() => { current.current = { user, encryption }; });
   const [status, setStatus] = useState("");
   useEffect(() => {
+    if (status !== "Queued message sent.") return;
+    const timer = window.setTimeout(() => setStatus(current => current === "Queued message sent." ? "" : current), 2000);
+    return () => window.clearTimeout(timer);
+  }, [status]);
+  useEffect(() => {
     if (!user) return;
     let stopped = false, running = false;
     const refreshChats = async () => {
