@@ -16,8 +16,8 @@ def main():
     for name in ("aab", "certificate", "bundletool", "output"):
         parser.add_argument("--" + name, required=True)
     parser.add_argument("--package", default="chat.circlo.app")
-    parser.add_argument("--version-code", type=int, default=15)
-    parser.add_argument("--version-name", default="0.9.6")
+    parser.add_argument("--version-code", type=int, default=16)
+    parser.add_argument("--version-name", default="0.9.7")
     args = parser.parse_args()
     spec = importlib.util.spec_from_file_location("artifact_inspector", Path(__file__).with_name("inspect-android-build.py"))
     helper = importlib.util.module_from_spec(spec)
