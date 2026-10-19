@@ -18,6 +18,14 @@ import { ConversationMenu } from "./conversation-menu";
 import { useRealtime } from "@/components/providers/realtime-provider";
 import { cn, timeAgo } from "@/lib/utils";
 
+// Warm JavaScript only: message history and server expiration timestamps must
+// be read on navigation, rather than retained in a full-route prefetch.
+let chatCode: Promise<unknown> | undefined;
+function warmChatCode() {
+  chatCode ??= import("./chat-view").catch(() => { chatCode = undefined; });
+  return chatCode;
+}
+
 function previewText(conv: ConversationSummary, previews: Map<string, string>): string {
   const last = conv.lastMessage;
   if (!last) return "No messages yet";
@@ -61,6 +69,10 @@ const ConversationRow = memo(function ConversationRow({ conv, active, online, pr
     <li key={conv.id} className="group/row relative flex min-w-0 items-center border-b border-[var(--border)] last:border-b-0">
       <Link
         href={`/app/chats/${conv.id}`}
+        prefetch={false}
+        onPointerEnter={() => void warmChatCode()}
+        onFocus={() => void warmChatCode()}
+        onTouchStart={() => void warmChatCode()}
         aria-current={active ? "page" : undefined}
         className={cn(
           "chat-list-row flex min-h-[76px] min-w-0 flex-1 items-center gap-3 border-0 px-4 py-3 transition-colors duration-150",
@@ -160,6 +172,12 @@ export function ChatsLayout({
   children: ReactNode;
 }) {
   const hydrated = useHydrated();
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (document.visibilityState === "visible") void warmChatCode();
+    }, 300);
+    return () => clearTimeout(timer);
+  }, []);
   const [liveList, setLiveList] = useState<{
     source: ConversationSummary[]; items: ConversationSummary[];
   } | null>(null);
@@ -201,7 +219,7 @@ export function ChatsLayout({
   }, [conversations, initialized, decrypt]);
   const pathname = usePathname();
   const router = useRouter();
-  const { subscribe, presence } = useRealtime();
+  const { subscribe, presence, connected } = useRealtime();
   const activeId = pathname.startsWith("/app/chats/")
     ? pathname.split("/")[3]
     : null;
@@ -215,6 +233,20 @@ export function ChatsLayout({
   useEffect(() => {
     let controller: AbortController | null = null;
     let needsPageRefresh = false;
+    const refreshList = () => {
+      controller?.abort();
+      controller = new AbortController();
+      const signal = controller.signal;
+      void fetch("/api/conversations", { cache: "no-store", signal })
+        .then((response) => response.ok ? response.json() : null)
+        .then((data: { conversations?: ConversationSummary[] } | null) => {
+          if (!signal.aborted && data?.conversations) setLiveList({ source: initialConversations, items: data.conversations });
+        })
+        .catch(() => undefined);
+    };
+    // A prefetched tab can miss events while unmounted. Reconcile on entry
+    // and reconnect without blocking the already visible conversation list.
+    refreshList();
     const unsubscribe = subscribe((event) => {
       // Presence and typing already update through client state; refreshing
       // server components for those high-frequency events caused avoidable
@@ -242,15 +274,7 @@ export function ChatsLayout({
           router.refresh();
           return;
         }
-        controller?.abort();
-        controller = new AbortController();
-        const signal = controller.signal;
-        void fetch("/api/conversations", { cache: "no-store", signal })
-          .then((response) => response.ok ? response.json() : null)
-          .then((data: { conversations?: ConversationSummary[] } | null) => {
-            if (!signal.aborted && data?.conversations) setLiveList({ source: initialConversations, items: data.conversations });
-          })
-          .catch(() => undefined);
+        refreshList();
       // A short debounce groups message receipts and edits arriving together,
       // while keeping the conversation preview feeling immediate.
       }, 180);
@@ -260,7 +284,7 @@ export function ChatsLayout({
       controller?.abort();
       if (refreshTimer.current) clearTimeout(refreshTimer.current);
     };
-  }, [subscribe, router, initialConversations]);
+  }, [subscribe, router, initialConversations, connected]);
 
   useEffect(() => {
     return () => {

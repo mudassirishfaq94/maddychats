@@ -13,7 +13,7 @@ import {
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
-  { href: "/app", icon: MessagesSquare, label: "Chats", match: "/app" },
+  { href: "/app/chats", icon: MessagesSquare, label: "Chats", match: "/app" },
   { href: "/app/calls", icon: Phone, label: "Calls", match: "/app/calls" },
   { href: "/app/communities", icon: Globe, label: "Communities", match: "/app/communities" },
   { href: "/app/people", icon: Users, label: "People", match: "/app/people" },
@@ -32,7 +32,7 @@ export function MobileNav() {
       <div className="flex items-center justify-between px-0 pt-1.5 pb-1">
         {NAV_ITEMS.map((item) => {
           const active =
-            item.href === "/app"
+            item.match === "/app"
               ? pathname === "/app" || pathname.startsWith("/app/chats")
               : pathname.startsWith(item.match);
           const Icon = item.icon;
@@ -40,6 +40,7 @@ export function MobileNav() {
             <Link
               key={item.href}
               href={item.href}
+              prefetch={true}
               aria-label={item.label}
               aria-current={active ? "page" : undefined}
               className={cn(
