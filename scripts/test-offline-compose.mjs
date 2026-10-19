@@ -62,6 +62,7 @@ export async function testOfflineCompose(context, base, owner, group, pool, memb
   await member.page.reload();
   await member.page.getByRole("region",{name:"Messages",exact:true}).getByText(plain,{exact:true}).waitFor();
   await page.waitForFunction(async id=>(await(await import("/offline-store.js")).queuedTexts(id)).length===0,owner.id);
+  await page.getByRole("status").filter({hasText:/^Queued message sent\.$/}).waitFor({state:"visible",timeout:5000});
   await page.getByRole("status").filter({hasText:/^Queued message sent\.$/}).waitFor({state:"hidden",timeout:5000});
   await member.page.reload();
   await member.page.getByRole("region",{name:"Messages",exact:true}).getByText(hotPlain,{exact:true}).waitFor();
