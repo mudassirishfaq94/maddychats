@@ -85,6 +85,7 @@ export function UserMenu({ user }: { user: SafeUser }) {
           </Link>
           <Link
             href="/app/settings"
+            prefetch={true}
             role="menuitem"
             onClick={() => setOpen(false)}
             className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm text-[var(--muted)] transition-colors hover:bg-[color-mix(in_srgb,var(--muted)_10%,transparent)] hover:text-[var(--text)]"

@@ -112,3 +112,6 @@ public/downloads/
 __pycache__/
 *.py[cod]
 /server/staged-media/
+
+# Generated browser screenshots and navigation measurements
+/test-artifacts/

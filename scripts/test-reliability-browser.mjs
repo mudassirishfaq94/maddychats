@@ -9,6 +9,7 @@ import {testCommunityUx} from "./test-community-ux.mjs";
 import {testUxFeatures,testDeliveryApi} from "./test-ux-features.mjs";
 import {testNativeNotificationState} from "./test-native-notification-state.mjs";
 import {testTemporaryRooms} from "./test-temporary-rooms.mjs";
+import {testNavigationLatency} from "./test-navigation-latency.mjs";
 import {signSessionToken} from "../src/server/jwt.ts";
 import {generateKeyPair,exportPublicKey,exportPrivateKey,encryptPrivateKeyForStorage,generateConversationKey,encryptKeyForUser,conversationFingerprint,encryptMessage} from "../src/lib/crypto.ts";
 const url=new URL(process.env.DATABASE_URL??"");
@@ -49,6 +50,9 @@ try {
   const page=await context.newPage();page.setDefaultTimeout(30000);page.setDefaultNavigationTimeout(120000);page.on("pageerror",error=>{errors.push(error.message);console.error("Browser runtime error:",error.message);});account.page=page;
   await page.goto(`${base}/app/chats/${group}`);await page.getByRole("textbox",{name:"Message text"}).waitFor();
  }
+ if(process.env.NAVIGATION_ONLY==="1"){
+  await testNavigationLatency(contexts[0],base,group);
+ }else{
  const api=async(account,path,body,method="POST")=>account.page.request.fetch(base+path,{method,headers:{Origin:base,"Content-Type":"application/json"},...(body?{data:body}:{})});
  // Warm mutation routes before measuring five-second foreground countdowns.
  for(const path of ["/api/messages/11111111-1111-4111-8111-111111111111/reveal","/api/conversations/11111111-1111-4111-8111-111111111111/messages"])await api(member,path,{});
@@ -211,6 +215,8 @@ try {
  await testCommunityUx(contexts[0],base,owner,member,pool);
  await testDeliveryApi(base,owner,member,accounts[2],pool,await encryptMessage("Background receipt fixture",key));
  await testTemporaryRooms(browser,base,pool);
+ await testNavigationLatency(contexts[0],base,group);
+ }
  assert.deepEqual(errors,[]);console.log("Browser reliability suite passed.");
 } catch(error) { console.error("Workflow failed:",error);for(const [i,account] of accounts.entries()){if(account.page)await account.page.screenshot({path:`${process.env.TEMP??"."}/circlo-audit-failure-${i}.png`}).catch(()=>{});} throw error; } finally {
  if(browser)await browser.close();

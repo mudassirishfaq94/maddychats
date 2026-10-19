@@ -39,7 +39,7 @@ export function AppShell({
       </a>
 
       <header className="z-40 flex h-14 w-full min-w-0 shrink-0 items-center gap-0.5 overflow-visible border-b border-[var(--border)] bg-[var(--surface)] px-2 sm:gap-1 sm:px-4">
-        <Link href="/app" aria-label="Circlo home" className="mr-0.5 shrink-0 sm:mr-3">
+        <Link href="/app/chats" aria-label="Circlo home" className="mr-0.5 shrink-0 sm:mr-3">
           <span className="flex items-center sm:hidden">
             <LogoWordmark size={25} />
           </span>
@@ -50,7 +50,8 @@ export function AppShell({
 
         <nav aria-label="Primary" className="hidden min-w-0 items-center gap-0 sm:flex sm:gap-0.5">
           <Link
-            href="/app"
+            href="/app/chats"
+            prefetch={true}
             aria-current={onChats ? "page" : undefined}
             className={cn(
               "flex h-9 w-9 items-center justify-center rounded-full text-sm font-medium transition-colors sm:w-auto sm:gap-1.5 sm:px-3 sm:py-1.5",
@@ -62,9 +63,10 @@ export function AppShell({
             <MessagesSquare className="h-4 w-4" />
             <span className="hidden sm:inline">Chats</span>
           </Link>
-          <Link href="/app/calls" aria-current={onCalls ? "page" : undefined} className={cn("flex min-h-11 items-center gap-1.5 rounded-full px-3 text-sm font-medium transition-colors", onCalls ? "bg-[var(--surface-2)] text-[var(--text)]" : "text-[var(--muted)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]")}><Phone className="h-4 w-4"/><span className="hidden sm:inline">Calls</span></Link>
+          <Link href="/app/calls" prefetch={true} aria-current={onCalls ? "page" : undefined} className={cn("flex min-h-11 items-center gap-1.5 rounded-full px-3 text-sm font-medium transition-colors", onCalls ? "bg-[var(--surface-2)] text-[var(--text)]" : "text-[var(--muted)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]")}><Phone className="h-4 w-4"/><span className="hidden sm:inline">Calls</span></Link>
           <Link
             href="/app/people"
+            prefetch={true}
             aria-current={onPeople ? "page" : undefined}
             className={cn(
               "flex h-9 w-9 items-center justify-center rounded-full text-sm font-medium transition-colors sm:w-auto sm:gap-1.5 sm:px-3 sm:py-1.5",
@@ -76,6 +78,7 @@ export function AppShell({
           </Link>
           <Link
             href="/app/communities"
+            prefetch={true}
             aria-current={onCommunities ? "page" : undefined}
             className={cn(
               "flex h-9 w-9 items-center justify-center rounded-full text-sm font-medium transition-colors sm:w-auto sm:gap-1.5 sm:px-3 sm:py-1.5",
@@ -89,6 +92,7 @@ export function AppShell({
           </Link>
           <Link
             href="/app/status"
+            prefetch={true}
             aria-current={onStatus ? "page" : undefined}
             className={cn(
               "flex h-9 w-9 items-center justify-center rounded-full text-sm font-medium transition-colors sm:w-auto sm:gap-1.5 sm:px-3 sm:py-1.5",

@@ -94,8 +94,8 @@ export async function testMobilePerformance(base, pool, source, owner, conversat
     await page.waitForTimeout(200);
     assert.equal(await composer.inputValue(), "", "Late restoration never overwrites a user-cleared draft");
     await composer.fill("Rapid navigation draft");
-    await page.locator('a[href="/app"]:visible').first().click();
-    await page.waitForURL(base + "/app");
+    await page.getByRole("navigation", { name: "Mobile navigation", exact: true }).getByRole("link", { name: "Chats", exact: true }).click();
+    await page.waitForURL(base + "/app/chats");
     await page.goBack(); await composer.waitFor();
     await page.waitForFunction(() => document.querySelector('textarea[aria-label="Message text"]')?.value === "Rapid navigation draft", undefined, { timeout: 60000 });
     // Poll from Node: Playwright waitForFunction treats a returned Promise as
