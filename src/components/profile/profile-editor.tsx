@@ -1,7 +1,7 @@
 "use client";
 import { PhoneDiscovery } from "./phone-discovery";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useRef } from "react";
 import {
   AlertTriangle,
@@ -26,6 +26,8 @@ import { cn } from "@/lib/utils";
  */
 export function ProfileEditor({ user }: { user: SafeUser }) {
   const router = useRouter();
+  const mounted = useRef(false);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const { refresh } = useAuth();
 
   const [editing, setEditing] = useState(false);
@@ -58,7 +60,7 @@ export function ProfileEditor({ user }: { user: SafeUser }) {
       }
       setSaved(true);
       await refresh();
-      router.refresh();
+      if (mounted.current) router.refresh();
     } catch {
       setFormError("Network error during avatar upload.");
     } finally {
@@ -136,7 +138,7 @@ export function ProfileEditor({ user }: { user: SafeUser }) {
       setSaved(true);
       setEditing(false);
       await refresh();
-      router.refresh();
+      if (mounted.current) router.refresh();
     } catch {
       setFormError("Network error. Please try again.");
     } finally {
