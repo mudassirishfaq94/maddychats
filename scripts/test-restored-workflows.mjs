@@ -226,7 +226,9 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
       const packet=route.request().postDataJSON(); clientIds.add(packet.clientMessageId); sendAttempts++;
       if(sendAttempts===1) {
         await new Promise(resolve=>setTimeout(resolve,300));
-        return route.fulfill({status:503,contentType:"application/json",body:JSON.stringify({error:"Disposable test send failure"})});
+        // Permanent rejection exposes manual Retry. Transient 503s now queue
+        // automatically and are covered by the offline/reconnect suite.
+        return route.fulfill({status:403,contentType:"application/json",body:JSON.stringify({error:"Disposable test send failure"})});
       }
       if(sendAttempts===2) {const accepted=await route.fetch();if(!accepted.ok()){console.log("Retry acceptance:",accepted.status(),await accepted.text());return route.fulfill({response:accepted});}return route.abort("failed");}
       return route.continue();
