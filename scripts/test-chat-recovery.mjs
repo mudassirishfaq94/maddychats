@@ -65,10 +65,13 @@ export async function testChatRecovery(base, cookieHeader, conversationId) {
     await source.waitForTimeout(300);
     assert.equal(await composer.inputValue(), nextDraft, "A send confirmation must not erase newer input");
 
-    const failSend = route => route.request().method() === "POST" ? route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "Recovery test transport unavailable" }) }) : route.continue();
+    // A temporary 503 now queues durably and clears the input by design.
+    // Use a permanent rejection to exercise unsent-draft retention here;
+    // transient outage/reconnect behavior has its own real browser suite.
+    const failSend = route => route.request().method() === "POST" ? route.fulfill({ status: 403, contentType: "application/json", body: JSON.stringify({ error: "Recovery test transport rejected" }) }) : route.continue();
     await source.route(messageUrl, failSend);
     await composer.press("Enter");
-    await source.getByText("Recovery test transport unavailable", { exact: true }).waitFor();
+    await source.getByText("Recovery test transport rejected", { exact: true }).waitFor();
     assert.equal(await composer.inputValue(), nextDraft, "A failed send must preserve the draft");
     await source.unroute(messageUrl, failSend);
     const typingSamples = await source.evaluate(() => window.__typingSamples);
