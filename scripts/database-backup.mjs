@@ -87,7 +87,7 @@ const childEnv = { ...process.env,
 };
 const executable = action === "backup" ? "pg_dump" : "pg_restore";
 const args = action === "backup"
-  ? ["--no-password", "--lock-wait-timeout=10s", "--format=custom", "--no-owner", "--no-acl", "--schema=public", "--schema=drizzle", "--file", path]
+  ? ["--no-password", "--lock-wait-timeout=10s", "--format=custom", "--no-owner", "--no-acl", "--schema=public", "--schema=drizzle", "--exclude-table-data=public.temporary_rooms", "--exclude-table-data=public.temporary_room_messages", "--file", path]
   : ["--no-password", "--dbname", childEnv.PGDATABASE, "--no-owner", "--no-acl", "--exit-on-error", "--single-transaction", path];
 const bin = process.env.PG_BIN ? join(process.env.PG_BIN, executable + (process.platform === "win32" ? ".exe" : "")) : executable;
 const execute = (options, capture = false) => new Promise((accept, reject) => {

@@ -1467,3 +1467,12 @@ export const recoveryBackups = pgTable("recovery_backups", {
   createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
 }, table => [check("recovery_backups_revision_positive",sql`${table.revision}>0`),check("recovery_backups_envelope_size",sql`octet_length(${table.envelope}::text)<=12582912`),index("recovery_backups_user_updated_idx").on(table.userId, table.updatedAt)]).enableRLS();
+
+export const temporaryRooms=pgTable("temporary_rooms",{
+ id:uuid("id").primaryKey(),inviteHash:text("invite_hash").notNull().unique(),hostCredentialHash:text("host_credential_hash").notNull(),guestCredentialHash:text("guest_credential_hash"),
+ hostPublicKey:text("host_public_key").notNull(),guestPublicKey:text("guest_public_key"),createdAt:timestamp("created_at",{withTimezone:true}).defaultNow().notNull(),expiresAt:timestamp("expires_at",{withTimezone:true}).notNull(),
+ extensionId:uuid("extension_id"),extensionBy:text("extension_by"),extensionMinutes:integer("extension_minutes"),extensionAt:timestamp("extension_at",{withTimezone:true}),
+},table=>[index("temporary_rooms_expiry_idx").on(table.expiresAt)]).enableRLS();
+export const temporaryRoomMessages=pgTable("temporary_room_messages",{
+ id:uuid("id").primaryKey(),roomId:uuid("room_id").notNull().references(()=>temporaryRooms.id,{onDelete:"cascade"}),sender:text("sender").notNull(),ciphertext:text("ciphertext").notNull(),createdAt:timestamp("created_at",{withTimezone:true}).defaultNow().notNull(),
+},table=>[index("temporary_room_messages_room_idx").on(table.roomId,table.createdAt,table.id)]).enableRLS();

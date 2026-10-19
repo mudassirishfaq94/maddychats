@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Transparent mark, padded inside Android's splash icon safe area. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="288dp" android:height="288dp"
+    android:viewportWidth="144" android:viewportHeight="144">
+    <group android:translateX="24" android:translateY="24">
+        <path android:strokeColor="#FFFFFF" android:strokeWidth="12"
+            android:strokeLineCap="round" android:fillColor="#00000000"
+            android:pathData="M53,15A25,25 0,1 0,46 54M46,40A25,25 0,1 1,43 78" />
+        <path android:fillColor="#FFFFFF"
+            android:pathData="M38.5,32A6.5,6.5 0,1 1,25.5 32A6.5,6.5 0,1 1,38.5 32M70.5,60A6.5,6.5 0,1 1,57.5 60A6.5,6.5 0,1 1,70.5 60" />
+    </group>
+</vector>

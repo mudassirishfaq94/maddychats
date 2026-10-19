@@ -24,7 +24,7 @@
     <!-- Splash screen shown while the WebView loads the hosted app -->
     <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
         <item name="windowSplashScreenBackground">#0b1211</item>
-        <item name="windowSplashScreenAnimatedIcon">@drawable/splash</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/circlo_splash_mark</item>
         <item name="postSplashScreenTheme">@style/AppTheme</item>
     </style>
 </resources>

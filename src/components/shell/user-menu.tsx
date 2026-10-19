@@ -100,6 +100,8 @@ export function UserMenu({ user }: { user: SafeUser }) {
             <Star className="h-4 w-4" />
             Starred messages
           </Link>
+          <Link href="/temporary" role="menuitem" onClick={()=>setOpen(false)} className="flex min-h-11 items-center rounded-xl px-3 py-2.5 text-sm hover:bg-[var(--surface-2)]">Temporary code chat</Link>
+          <Link href="/help" role="menuitem" onClick={()=>setOpen(false)} className="flex min-h-11 items-center rounded-xl px-3 py-2.5 text-sm hover:bg-[var(--surface-2)]">Circlo Help</Link>
           <button
             type="button"
             role="menuitem"

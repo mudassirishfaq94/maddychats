@@ -210,6 +210,41 @@ test("delivery requires a recipient device acknowledgment, is owner-isolated and
  }finally{await pool.query("delete from conversations where id=$1",[conversation]);}
 });
 
+test("temporary rooms enforce one-time joins, device credentials, mutual extensions, replay safety and offline expiry",async()=>{
+ const rooms=await import("../../src/server/temporary-rooms");const crypto=await import("../../src/lib/temporary-room-crypto");
+ const host=await crypto.newRoomIdentity(),guest=await crypto.newRoomIdentity(),other=await crypto.newRoomIdentity(),code=crypto.newRoomCode(),id=randomUUID();
+ const credential=()=>crypto.newRoomCode()+crypto.newRoomCode()+crypto.newRoomCode().slice(0,16);
+ const hostCredential=credential(),guestCredential=credential(),otherCredential=credential(),second=randomUUID();
+ try{
+  const room=await rooms.createTemporaryRoom({id,inviteHash:await crypto.roomCodeHash(code),publicKey:host.publicKey,credential:hostCredential,minutes:30});
+  assert.equal(room.role,"host");assert.equal(Math.round((Date.parse(room.expiresAt)-Date.parse(room.serverNow))/60000),30);
+  const joins=await Promise.allSettled([rooms.joinTemporaryRoom({inviteHash:await crypto.roomCodeHash(code),publicKey:guest.publicKey,credential:guestCredential}),rooms.joinTemporaryRoom({inviteHash:await crypto.roomCodeHash(code),publicKey:other.publicKey,credential:otherCredential})]);
+  assert.equal(joins.filter(result=>result.status==="fulfilled").length,1);const winner=joins[0].status==="fulfilled"?guestCredential:otherCredential;
+  await assert.rejects(rooms.readTemporaryRoom(id,credential()),/unavailable/);
+  const proposal=await rooms.actOnTemporaryRoom(id,hostCredential,{action:"extend",minutes:15});assert("extension" in proposal&&proposal.extension);
+  if(!("extension" in proposal)||!proposal.extension)throw Error("Expected extension request");
+  await assert.rejects(rooms.actOnTemporaryRoom(id,hostCredential,{action:"approve",requestId:proposal.extension.id}),/other person/);
+  await rooms.actOnTemporaryRoom(id,winner,{action:"approve",requestId:proposal.extension.id});
+  const extended=await rooms.readTemporaryRoom(id,hostCredential);assert.equal(Date.parse(extended.expiresAt)-Date.parse(room.expiresAt),15*60000);
+  await assert.rejects(rooms.actOnTemporaryRoom(id,winner,{action:"approve",requestId:proposal.extension.id}),/no longer current/);
+  const messageId=randomUUID(),ciphertext="AAAAAAAAAAAAAAAA."+"B".repeat(64);
+  await rooms.actOnTemporaryRoom(id,hostCredential,{action:"message",messageId,ciphertext});await rooms.actOnTemporaryRoom(id,hostCredential,{action:"message",messageId,ciphertext});
+  assert.equal((await pool.query("select count(*)::int as count from temporary_room_messages where room_id=$1",[id])).rows[0].count,1);
+  assert.equal((await rooms.readTemporaryRoom(id,winner)).messages[0].ciphertext,ciphertext);
+  const first=(await rooms.readTemporaryRoom(id,winner)).messages[0];
+  assert.match(first.createdAt,/\.\d{6}Z$/);assert.equal((await rooms.readTemporaryRoom(id,winner,{at:first.createdAt,id:first.id})).messages.length,0,"Full-precision cursor must not replay its own last message");
+  await Promise.all([rooms.actOnTemporaryRoom(id,hostCredential,{action:"message",messageId:randomUUID(),ciphertext}),rooms.actOnTemporaryRoom(id,winner,{action:"message",messageId:randomUUID(),ciphertext})]);
+  assert.equal((await rooms.readTemporaryRoom(id,winner,{at:first.createdAt,id:first.id})).messages.length,2,"Concurrent commits cannot fall behind a delivered cursor");
+  await assert.rejects(rooms.actOnTemporaryRoom(id,winner,{action:"message",messageId,ciphertext}),/already in use/);
+  await rooms.actOnTemporaryRoom(id,winner,{action:"end"});await assert.rejects(rooms.readTemporaryRoom(id,hostCredential),/ended or expired/);
+  assert.equal((await pool.query("select count(*)::int as count from temporary_room_messages where room_id=$1",[id])).rows[0].count,0);
+  await rooms.createTemporaryRoom({id:second,inviteHash:await crypto.roomCodeHash(crypto.newRoomCode()),publicKey:host.publicKey,credential:hostCredential,minutes:5});
+  await pool.query("update temporary_rooms set expires_at=now()-interval '1 second' where id=$1",[second]);
+  await assert.rejects(rooms.readTemporaryRoom(second,hostCredential),/ended or expired/);await assert.rejects(rooms.actOnTemporaryRoom(second,hostCredential,{action:"extend",minutes:30}),/ended or expired/);
+  await rooms.cleanupTemporaryRooms();assert.equal((await pool.query("select count(*)::int as count from temporary_rooms where id=$1",[second])).rows[0].count,0);
+ }finally{await pool.query("delete from temporary_rooms where id=any($1::uuid[])",[[id,second]]);}
+});
+
 test("presence privacy enforces all audiences, contact direction, selected contacts and blocks",async()=>{
  const {canSeePresence,visiblePresenceIds}=await import("../../src/server/presence-privacy");
  assert.deepEqual(await visiblePresenceIds(member,[undefined as unknown as string,"invalid"]),[]);

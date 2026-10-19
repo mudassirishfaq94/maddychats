@@ -17,6 +17,9 @@ export async function testUxFeatures(context,base,owner,member) {
   await page.getByLabel("Contact link or ID").fill(`${base}/contact/${member.id}`);await page.getByRole("button",{name:"Open contact",exact:true}).click();await page.getByRole("button",{name:"Add contact",exact:true}).click();await page.getByRole("button",{name:"Contact saved",exact:true}).waitFor();
   const contacts=await page.request.get(base+"/api/contacts");const saved=(await contacts.json()).users;assert(saved.some(user=>user.id===member.id));assert(saved.every(user=>user.lastSeenAt===null),"Contacts cannot bypass presence privacy");
   await page.goto(base+"/app/chats");await page.getByLabel("Search conversations",{exact:true}).waitFor();
+  const help=page.getByRole("link",{name:"Open Circlo Help",exact:true});
+  await help.click();await page.getByRole("heading",{name:"Circlo Help",exact:true}).waitFor();
+  await page.goto(base+"/app/chats");await page.getByLabel("Search conversations",{exact:true}).waitFor();
   const filters=page.locator(".chat-filters");assert.equal(await filters.evaluate(element=>getComputedStyle(element).scrollbarWidth),"none");
   const bounds=await filters.boundingBox();assert(bounds);await filters.evaluate(element=>{element.scrollLeft=0;});await page.mouse.move(bounds.x+bounds.width-12,bounds.y+bounds.height/2);await page.mouse.down();await page.mouse.move(bounds.x+12,bounds.y+bounds.height/2,{steps:12});await page.mouse.up();
   assert(await filters.evaluate(element=>element.scrollWidth<=element.clientWidth||element.scrollLeft>0),"Filters must support mouse dragging");
@@ -26,6 +29,10 @@ export async function testUxFeatures(context,base,owner,member) {
    await page.setViewportSize({width,height:width===1280?900:844});
    await page.evaluate(()=>{document.documentElement.classList.add("light");document.querySelector(".chat-filters").scrollLeft=0;});
    assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),`Inbox must fit ${width}px`);
+   const helpBounds=await help.boundingBox();const listBounds=await page.getByRole("complementary",{name:"Conversations"}).boundingBox();
+   assert(helpBounds&&listBounds&&helpBounds.width>=44&&helpBounds.x>=listBounds.x&&helpBounds.x+helpBounds.width<=listBounds.x+listBounds.width&&helpBounds.y+helpBounds.height<=listBounds.y+listBounds.height,"Help must stay inside the chat list with an accessible touch target");
+   const scrollBounds=await page.locator('aside[aria-label="Conversations"] > div.overflow-y-auto').boundingBox();
+   assert(scrollBounds&&helpBounds.y>=scrollBounds.y+scrollBounds.height,"Pinned Help must not cover scrollable conversation controls");
    const heading=await page.getByRole("heading",{name:"Chats",exact:true}).boundingBox();
    const firstRow=await page.locator(".chat-list-row").first().boundingBox();
    assert(heading&&firstRow&&firstRow.y-heading.y<200,"Compact controls must leave room for conversations");

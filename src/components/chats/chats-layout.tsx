@@ -320,7 +320,7 @@ export function ChatsLayout({
       {/* ------------------------ conversation sidebar ------------------------ */}
       <aside
         className={cn(
-          "min-w-0 w-full shrink-0 flex-col border-r border-[var(--border)] bg-[var(--surface)] lg:flex lg:w-[360px] xl:w-[380px]",
+          "relative min-w-0 w-full shrink-0 flex-col border-r border-[var(--border)] bg-[var(--surface)] lg:flex lg:w-[360px] xl:w-[380px]",
           activeId ? "hidden" : "flex",
         )}
         aria-label="Conversations"
@@ -401,6 +401,12 @@ export function ChatsLayout({
               />)}
             </ul>
           )}
+        </div>
+        <div className="flex h-16 shrink-0 items-center justify-end px-4">
+        <Link href="/help" aria-label="Open Circlo Help" title="Circlo Help" className="relative flex h-12 w-12 items-center justify-center rounded-full border border-[var(--border-strong)] bg-[var(--surface)] text-[var(--accent-fg)] shadow-lg transition-colors hover:bg-[var(--surface-2)] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--accent)]">
+          <LogoMark size={26} />
+          <span aria-hidden="true" className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-[var(--accent)] text-[10px] font-bold text-white">?</span>
+        </Link>
         </div>
       </aside>
 

@@ -51,6 +51,7 @@ export default async function LoginPage({
       {mfa === "1" ? <MfaForm next={next} /> : <>
         {process.env.STARTER_MODE === "1" ? <p className="mb-4 text-sm text-[var(--muted)]">{emailProof === "google" ? "Google verified your email. Enter your existing password to continue." : "New here? Continue with Google. If password sign-in asks for verification, continue with Google first, then enter your existing password."}</p> : null}
         <LoginOptions next={next} phoneEnabled={process.env.STARTER_MODE !== "1"} />
+        <div className="mt-5 flex flex-wrap gap-3 border-t border-[var(--border)] pt-4 text-sm"><Link href="/temporary" className="inline-flex min-h-11 items-center text-[var(--accent-fg)]">Chat with a one-time code</Link><Link href="/help" className="inline-flex min-h-11 items-center text-[var(--muted)]">Circlo Help</Link></div>
       </>}
     </AuthLayout>
   );
