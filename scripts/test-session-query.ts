@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { randomUUID, createHash } from "node:crypto";
+import { randomBytes, randomUUID, createHash } from "node:crypto";
 import { Pool } from "pg";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
@@ -17,7 +17,7 @@ async function main() {
     await admin.query(`CREATE DATABASE "${name}"`); created = true;
     url.pathname = `/${name}`;
     process.env.DATABASE_URL = url.toString();
-    process.env.JWT_SECRET = "isolated-session-query-test-secret-32chars";
+    process.env.JWT_SECRET = randomBytes(32).toString("hex");
     local = new Pool({ connectionString: url.toString() });
     await migrate(drizzle(local), { migrationsFolder: "drizzle" });
     const { resolveSessionToken, resolveSessionAccess } = await import("../src/server/session");
@@ -138,7 +138,8 @@ async function main() {
     const { verifyPassword } = await import("../src/server/password");
     const resetToken=randomUUID(); const digest=(value:string)=>createHash("sha256").update(value).digest("hex");
     await local.query("INSERT INTO password_reset_tokens(user_id,token_hash,expires_at) VALUES($1,$2,now()+interval '1 day')",[id,digest(resetToken)]);
-    const password="ResetCompatibility99!";
+    // Disposable credentials belong only to this run's isolated localhost database.
+    const password=`Test-${randomBytes(24).toString("base64url")}Aa1!`;
     const resetResults=await Promise.all([consumePasswordReset(resetToken,password),consumePasswordReset(resetToken,password)]);
     assert.equal(resetResults.filter(Boolean).length,1,"reset token remains single-use under concurrent requests");
     const hash=(await local.query("SELECT password_hash FROM users WHERE id=$1",[id])).rows[0].password_hash;
@@ -146,7 +147,7 @@ async function main() {
     assert.equal(await resolveSessionToken(token),null,"password reset still revokes old sessions");
     const expiring=randomUUID();
     await local.query("INSERT INTO password_reset_tokens(user_id,token_hash,expires_at) VALUES($1,$2,now()+interval '1 day')",[id,digest(expiring)]);
-    const changing=consumePasswordReset(expiring,"ExpiredResetPassword99!");
+    const changing=consumePasswordReset(expiring,`Test-${randomBytes(24).toString("base64url")}Aa1!`);
     const workState=globalThis as typeof globalThis & {__passwordWork?:{active:number}};
     for(let i=0;i<100 && !workState.__passwordWork?.active;i++) await new Promise(resolve=>setTimeout(resolve,5));
     assert(workState.__passwordWork?.active,"hashing begins before the expiry change");
