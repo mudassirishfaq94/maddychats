@@ -6,7 +6,7 @@ import { useHydrated } from "@/hooks/use-hydrated";
 
 import { memo, useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import type * as React from "react";
 import { Archive, BellOff, Pin, Search, Star } from "lucide-react";
 import type { ConversationSummary } from "@/lib/types";
@@ -218,7 +218,6 @@ export function ChatsLayout({
     return () => { cancelled = true; };
   }, [conversations, initialized, decrypt]);
   const pathname = usePathname();
-  const router = useRouter();
   const { subscribe, presence, connected } = useRealtime();
   const activeId = pathname.startsWith("/app/chats/")
     ? pathname.split("/")[3]
@@ -232,7 +231,6 @@ export function ChatsLayout({
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     let controller: AbortController | null = null;
-    let needsPageRefresh = false;
     const refreshList = () => {
       controller?.abort();
       controller = new AbortController();
@@ -266,14 +264,8 @@ export function ChatsLayout({
       ) {
         return;
       }
-      needsPageRefresh ||= event.type === "conversation:new" || event.type === "conversation:delete";
       if (refreshTimer.current) clearTimeout(refreshTimer.current);
       refreshTimer.current = setTimeout(() => {
-        if (needsPageRefresh) {
-          needsPageRefresh = false;
-          router.refresh();
-          return;
-        }
         refreshList();
       // A short debounce groups message receipts and edits arriving together,
       // while keeping the conversation preview feeling immediate.
@@ -284,7 +276,7 @@ export function ChatsLayout({
       controller?.abort();
       if (refreshTimer.current) clearTimeout(refreshTimer.current);
     };
-  }, [subscribe, router, initialConversations, connected]);
+  }, [subscribe, initialConversations, connected]);
 
   useEffect(() => {
     return () => {

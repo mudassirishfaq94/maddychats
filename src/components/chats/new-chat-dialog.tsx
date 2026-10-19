@@ -63,13 +63,15 @@ export function NewChatDialog({ start = "choose", compact = false, openExternall
     return () => { clearTimeout(timer); controller.abort(); };
   }, [query, open, mode]);
 
+  // The destination fetches fresh authorized history; sidebar events refresh
+  // its list. A simultaneous router.refresh can interrupt this navigation.
   async function startDirect(person: PublicUser) {
     setStarting(true); setError(null);
     try {
     const res = await fetch("/api/conversations", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: person.id }) });
     const data = await res.json().catch(() => null) as { conversation?: ConversationDetail; error?: string } | null;
     if (!res.ok || !data?.conversation) { setError(data?.error ?? "Could not start the conversation."); setStarting(false); return; }
-    close(); router.push(`/app/chats/${data.conversation.id}`); router.refresh();
+    close(); router.push(`/app/chats/${data.conversation.id}`);
     } catch { setError("Could not start the chat. Check your connection and try again."); setStarting(false); }
   }
 
@@ -90,7 +92,7 @@ export function NewChatDialog({ start = "choose", compact = false, openExternall
         const uploaded = await upload.json().catch(() => null) as { avatarUrl?: string } | null;
         if (!upload.ok || !uploaded?.avatarUrl) throw new Error("The group was created, but its image could not be uploaded.");
       }
-      close(); router.push(`/app/chats/${groupId}`); router.refresh();
+      close(); router.push(`/app/chats/${groupId}`);
     } catch (cause) { setError((cause as Error).message); setStarting(false); }
   }
 
@@ -165,7 +167,7 @@ export function NewChatDialog({ start = "choose", compact = false, openExternall
           <div><label className="mb-1 block text-xs font-semibold">Description <span className="font-normal text-[var(--muted)]">(optional)</span></label><textarea value={description} maxLength={500} onChange={(e) => setDescription(e.target.value)} className="field-input min-h-20 resize-none" disabled={Boolean(createdGroupId)} placeholder="What is this group about?" /></div>
           <button type="button" disabled={starting || !name.trim()} onClick={() => void createGroup()} className="btn btn-primary w-full disabled:opacity-50">{starting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Users className="h-4 w-4" />} {createdGroupId ? "Retry group photo" : "Create group"}</button>
         </div> : null}
-        {createdGroupId && error ? <button type="button" className="btn btn-secondary mt-3 w-full" onClick={() => { const id = createdGroupId; close(); router.push(`/app/chats/${id}`); router.refresh(); }}>Open created group</button> : null}
+        {createdGroupId && error ? <button type="button" className="btn btn-secondary mt-3 w-full" onClick={() => { const id = createdGroupId; close(); router.push(`/app/chats/${id}`); }}>Open created group</button> : null}
         {error ? <p className="mt-3 flex items-center gap-2 text-sm text-[var(--danger)]"><AlertTriangle className="h-4 w-4" />{error}</p> : null}
       </div>
     </div> : null}

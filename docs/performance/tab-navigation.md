@@ -13,6 +13,8 @@
 - Refresh the conversation list in the background on entry/reconnection, and
   retain its existing debounced realtime updates. Other tabs retain their fresh
   API reads. No private data is added to persistent caches or a service worker.
+- Creating/opening a conversation performs one navigation. Sidebar events use
+  the list API instead of racing a page refresh against that navigation.
 
 ## Local measurements (2026-10-19)
 
