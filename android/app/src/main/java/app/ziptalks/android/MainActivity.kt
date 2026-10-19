@@ -434,22 +434,18 @@ class MainActivity : ComponentActivity() {
         loadUrl(notificationDestination(intent) ?: "${BuildConfig.API_BASE_URL}/app")
     }
 
-    @Volatile private var offlineShellVisible = false
     private fun showOfflineShell(view: WebView) {
-        offlineShellVisible = true
         hideCallTransition()
-        val html = assets.open("circlo-offline/offline.html").bufferedReader().use { it.readText() }
-        // Keep the canonical origin, so only this app's existing encrypted device
-        // storage is available. No file:// access, native keys or private HTML.
-        view.loadDataWithBaseURL("${BuildConfig.API_BASE_URL}/offline.html", html, "text/html", "UTF-8", null)
+        // A real same-origin navigation preserves storage, module/CSP semantics
+        // and reload behavior. The strict public asset handler works offline.
+        view.loadUrl("${BuildConfig.API_BASE_URL}/offline.html")
     }
 
     fun hostedWebClient() = object : WebViewClient() {
             override fun shouldInterceptRequest(view: WebView, request: android.webkit.WebResourceRequest): android.webkit.WebResourceResponse? {
-                val path = request.url.path
-                if (offlineShellVisible && WebOriginPolicy.isAllowed(request.url.toString(), BuildConfig.API_BASE_URL) && request.method == "GET" && path in setOf("/offline.css", "/offline-compose.js", "/offline-store.js", "/icons/circlo-mark.svg")) {
-                    val mime = when { path!!.endsWith(".css") -> "text/css"; path.endsWith(".svg") -> "image/svg+xml"; else -> "application/javascript" }
-                    return android.webkit.WebResourceResponse(mime, "UTF-8", assets.open("circlo-offline${path}"))
+                val asset = OfflineShellAssets.assetPath(request.url.toString(), BuildConfig.API_BASE_URL, request.method)
+                if (asset != null) {
+                    return android.webkit.WebResourceResponse(OfflineShellAssets.mimeType(asset), "UTF-8", assets.open(asset))
                 }
                 return super.shouldInterceptRequest(view, request)
             }
@@ -466,7 +462,6 @@ class MainActivity : ComponentActivity() {
             }
             override fun onPageCommitVisible(view: WebView, url: String) {
                 super.onPageCommitVisible(view, url)
-                if (Uri.parse(url).path != "/offline.html") offlineShellVisible = false
                 if (WebOriginPolicy.isAllowed(url, BuildConfig.API_BASE_URL)) hideCallTransition()
             }
             override fun onPageFinished(view: WebView, url: String) {
