@@ -62,7 +62,9 @@ export async function testProfilePhotos(base, pool, owner, peer, source, unrelat
   paths.push(initialAvatar.replace("/api/media/", ""));
   await source.page.unroute("**/api/groups/*/avatar", initialPhotoRoute);
   assert.equal((await pool.query("SELECT count(*)::int AS n FROM conversations WHERE created_by_id=$1 AND type='group' AND name='Photo test group'",[owner.id])).rows[0].n,1,"Photo retry does not create a duplicate group");
-  await source.page.waitForURL(base + `/app/chats/${group.id}`);
+  await source.page.waitForURL(base + `/app/chats/${group.id}`).catch(async cause => {
+    throw new Error(`Group retry navigation stayed at ${source.page.url()}; dialog visible=${await groupDialog.isVisible()}; page=${(await source.page.locator("body").innerText()).slice(-2400)}`, {cause});
+  });
   const form = () => { const body = new FormData(); body.append("file", new File([png], "photo.png", { type: "image/png" })); return body; };
   const avatar = await fetch(base + `/api/groups/${group.id}/avatar`, { method: "POST", headers: { Origin: base, Cookie: source.cookies }, body: form() });
   assert.equal(avatar.status, 200); const avatarUrl = (await avatar.json()).avatarUrl; paths.push(avatarUrl.replace("/api/media/", ""));
