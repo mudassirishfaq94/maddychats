@@ -63,7 +63,7 @@ try {
     await page.getByRole("listitem",{name:"Team chat",exact:true}).waitFor();
     assert.equal(await page.getByText("Private locked chat",{exact:true}).count(),0);
     await page.getByRole("button",{name:"Favorites",exact:true}).click();
-    assert.equal(await page.getByRole("listitem",{name:"Team chat",exact:true}).count(),0);
+    await page.getByRole("listitem",{name:"Team chat",exact:true}).waitFor({state:"hidden"});
     await page.getByRole("button",{name:"All",exact:true}).click();
     await page.getByRole("listitem",{name:"Saved chat",exact:true}).click();
     await page.getByRole("region",{name:"Messages",exact:true}).getByText("Saved conversation history",{exact:true}).waitFor();
@@ -80,7 +80,7 @@ try {
     await page.getByRole("region",{name:"Messages",exact:true}).getByText("Offline fixture message",{exact:true}).waitFor({state:"hidden"});
     await page.getByRole("button",{name:"Back to chats",exact:true}).click();
     await page.getByRole("listitem",{name:"Locked chat",exact:true}).click();
-    assert.equal(await page.getByRole("textbox",{name:"Message text"}).isDisabled(),true);
+    await page.waitForFunction(()=>document.querySelector<HTMLTextAreaElement>("#text")?.disabled===true);
     await page.evaluate(async id => { const store=await import(/* webpackIgnore: true */ ("/offline-store.js" as string));await store.forgetOffline(id); },userId);
     await page.goto(origin+"/app/chats");await page.getByText("Connect and sign in once to save your conversations on this device.",{exact:true}).waitFor();
     const cached = await page.evaluate(async () => {
