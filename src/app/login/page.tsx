@@ -1,3 +1,4 @@
+import { TemporaryChatEntry } from "@/components/auth/temporary-chat-entry";
 import { MfaForm } from "@/components/auth/mfa-form";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -31,6 +32,7 @@ export default async function LoginPage({
 
   return (
     <AuthLayout
+      entry={mfa !== "1" && reauth !== "1" ? <TemporaryChatEntry /> : null}
       title="Welcome back"
       subtitle="Sign in to pick up right where you left off."
       footer={
@@ -51,7 +53,7 @@ export default async function LoginPage({
       {mfa === "1" ? <MfaForm next={next} /> : <>
         {process.env.STARTER_MODE === "1" ? <p className="mb-4 text-sm text-[var(--muted)]">{emailProof === "google" ? "Google verified your email. Enter your existing password to continue." : "New here? Continue with Google. If password sign-in asks for verification, continue with Google first, then enter your existing password."}</p> : null}
         <LoginOptions next={next} phoneEnabled={process.env.STARTER_MODE !== "1"} />
-        <div className="mt-5 flex flex-wrap gap-3 border-t border-[var(--border)] pt-4 text-sm"><Link href="/temporary" className="inline-flex min-h-11 items-center text-[var(--accent-fg)]">Chat with a one-time code</Link><Link href="/help" className="inline-flex min-h-11 items-center text-[var(--muted)]">Circlo Help</Link></div>
+        <Link href="/help" className="mt-5 inline-flex min-h-11 items-center text-sm text-[var(--muted)]">Need a hand? Circlo Help</Link>
       </>}
     </AuthLayout>
   );

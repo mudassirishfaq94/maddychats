@@ -1,0 +1,92 @@
+import assert from "node:assert/strict";
+import { mkdir } from "node:fs/promises";
+export async function testOfflineCompose(context, base, owner, group, pool, member) {
+  const page = owner.page;
+  await page.goto(base+"/app/chats/"+group);
+  const historyText="Are we still meeting at six?";
+  const {encryptMessage,decryptKeyFromSender}=await import("../src/lib/crypto.ts");
+  const wrapped=(await pool.query("select encrypted_key from e2ee_conversation_keys where conversation_id=$1 and user_id=$2 and recipient_device_id=$3",[group,owner.id,owner.deviceId])).rows[0].encrypted_key;
+  const historyCiphertext=await encryptMessage(historyText,await decryptKeyFromSender(wrapped,owner.pair.privateKey));
+  const historyResponse=await page.request.post(base+`/api/conversations/${group}/messages`,{headers:{Origin:base},data:{clientMessageId:crypto.randomUUID(),text:historyCiphertext,encrypted:true}});
+  assert.equal(historyResponse.status(),201);
+  await page.reload();
+  await page.getByRole("region",{name:"Messages",exact:true}).getByText(historyText,{exact:true}).waitFor();
+  await page.waitForFunction(async ({userId,group,text})=>(await(await import("/offline-store.js")).offlineHistory(userId,group)).messages.some(row=>row.text===text),{userId:owner.id,group,text:historyText});
+  await page.evaluate(async () => { await navigator.serviceWorker.register("/sw.js"); await navigator.serviceWorker.ready; });
+  await page.reload();
+  await page.waitForFunction(() => !!navigator.serviceWorker.controller);
+  await page.waitForFunction(async userId => {
+    const store = await import("/offline-store.js");
+    return store.activeAccount() === userId && (await store.offlineChats(userId)).length > 0;
+  },owner.id);
+  const wrongAccount = await page.request.post(base+`/api/conversations/${group}/messages`, {headers:{Origin:base},data:{clientMessageId:crypto.randomUUID(),expectedSenderId:member.id,text:"ciphertext-account-binding-fixture",encrypted:true}});
+  assert.equal(wrongAccount.status(),409,"Queued sends must reject a switched account on the server");
+  await context.setOffline(true);
+  const hotPlain = "I'm on my way. I'll reply when I'm back online.";
+  await page.getByRole("textbox", {name:"Message text"}).fill(hotPlain);
+  await page.getByRole("button", {name:"Send message",exact:true}).click();
+  await page.getByRole("region",{name:"Messages",exact:true}).getByText("No internet connection. This message will send automatically when you are back online.",{exact:true}).waitFor();
+  assert.equal(await page.getByRole("textbox",{name:"Message text"}).inputValue(),"");
+  await page.goto(base+"/app/chats");
+  await page.getByRole("heading",{name:"Chats",exact:true}).waitFor();
+  await page.getByRole("listitem",{name:"Browser audit group",exact:true}).waitFor();
+  await page.screenshot({path:"test-artifacts/offline-chat-list-mobile.png",fullPage:true});
+  await page.getByRole("listitem",{name:"Browser audit group",exact:true}).click();
+  await page.getByRole("heading",{name:"Browser audit group",exact:true}).waitFor();
+  await page.getByRole("region",{name:"Messages",exact:true}).getByText(historyText,{exact:true}).waitFor();
+  const plain="I will send you the details when I am back online.";
+  await page.getByRole("textbox",{name:"Message text"}).fill(plain);
+  await page.getByRole("textbox",{name:"Message text"}).press("Enter");
+  await page.getByText(plain,{exact:true}).waitFor();
+  const allEntries=await page.evaluate(async id=>(await import("/offline-store.js")).queuedTexts(id),owner.id);
+  assert.equal(allEntries.length,2);
+  assert(allEntries.some(entry=>entry.text===hotPlain),"The normal composer queue remains visible after an offline cold start");
+  const entries=allEntries.filter(entry=>entry.text===plain);assert.equal(entries.length,1);
+  // Read the physical record: neither message text nor chat names are stored in clear.
+  const secure = await page.evaluate(async ({id,plain}) => {
+    const db=await new Promise((resolve,reject)=>{const r=indexedDB.open(`circlo-compose:${id}`);r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});
+    const records=await new Promise(resolve=>{const r=db.transaction("records").objectStore("records").getAll();r.onsuccess=()=>resolve(r.result);});db.close();
+    return records.every(r=>!JSON.stringify(r).includes(plain)&&r.ciphertext instanceof ArrayBuffer&&r.iv.length===12);
+  },{id:owner.id,plain});assert(secure,"Queue and metadata must be encrypted at rest");
+  await page.reload();await page.getByText(plain,{exact:true}).waitFor();
+  assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
+  await mkdir("test-artifacts",{recursive:true});await page.screenshot({path:"test-artifacts/offline-compose-mobile.png",fullPage:true});
+  const cached=await page.evaluate(async()=>{const result=[];for(const name of await caches.keys())for(const request of await(await caches.open(name)).keys())result.push(new URL(request.url).pathname);return result;});
+  assert(cached.every(path=>["/offline.html","/offline.css","/offline-store.js","/offline-compose.js","/icons/circlo-mark.svg"].includes(path)),"No private responses in SW cache");
+  await context.setOffline(false);
+  await page.waitForURL(base+"/app/chats/"+group);
+  const started=Date.now();let rows=[];
+  while(Date.now()-started<45000){rows=(await pool.query("select text,encrypted from messages where conversation_id=$1 and client_message_id=$2",[group,entries[0].id])).rows;if(rows.length)break;await page.waitForTimeout(500);}
+  assert.equal(rows.length,1,"Queued text must automatically reach real server after reconnect");
+  assert.equal(rows[0].encrypted,true);assert.notEqual(rows[0].text,plain);
+  await member.page.reload();
+  await member.page.getByRole("region",{name:"Messages",exact:true}).getByText(plain,{exact:true}).waitFor();
+  await page.waitForFunction(async id=>(await(await import("/offline-store.js")).queuedTexts(id)).length===0,owner.id);
+  await member.page.reload();
+  await member.page.getByRole("region",{name:"Messages",exact:true}).getByText(hotPlain,{exact:true}).waitFor();
+  await page.reload();await page.waitForTimeout(1200);
+  assert.equal((await pool.query("select count(*)::int n from messages where conversation_id=$1 and client_message_id=$2",[group,entries[0].id])).rows[0].n,1);
+  // Controlled server rejection must preserve an already durable queued message.
+  await context.setOffline(true);
+  const rejectedText="Keep this text if a retry is rejected.";
+  await page.getByRole("textbox",{name:"Message text"}).fill(rejectedText);
+  await page.getByRole("button",{name:"Send message",exact:true}).click();
+  await page.getByRole("region",{name:"Messages",exact:true}).getByText("No internet connection. This message will send automatically when you are back online.",{exact:true}).waitFor();
+  const rejectedId=await page.evaluate(async({userId,text})=>(await(await import("/offline-store.js")).queuedTexts(userId)).find(entry=>entry.text===text).id,{userId:owner.id,text:rejectedText});
+  const rejectRoute=route=>route.request().method()==="POST"?route.fulfill({status:403,json:{error:"Controlled rejected retry"}}):route.continue();
+  const pattern=base+`/api/conversations/${group}/messages`;
+  await page.route(pattern,rejectRoute);await context.setOffline(false);
+  await page.getByRole("button",{name:"Retry failed message",exact:true}).waitFor();
+  await page.reload();await page.getByRole("button",{name:"Retry failed message",exact:true}).waitFor();
+  const preserved=await page.evaluate(async({userId,id})=>(await(await import("/offline-store.js")).queuedTexts(userId)).find(entry=>entry.id===id),{userId:owner.id,id:rejectedId});
+  assert.equal(preserved.text,rejectedText);assert.equal(preserved.failed,true);
+  await page.unroute(pattern,rejectRoute);
+  await page.getByRole("button",{name:"Retry failed message",exact:true}).click();
+  await page.getByRole("button",{name:"Retry failed message",exact:true}).waitFor({state:"hidden"});
+  // Retry changes the bubble to queued before its request is acknowledged.
+  // Wait for the actual commit, then verify the original ID delivered once.
+  await page.waitForFunction(async ({userId,id})=>!(await(await import("/offline-store.js")).queuedTexts(userId)).some(entry=>entry.id===id),{userId:owner.id,id:rejectedId});
+  assert.equal((await pool.query("select count(*)::int n from messages where conversation_id=$1 and client_message_id=$2",[group,rejectedId])).rows[0].n,1);
+  console.log("PASS: rejected retry keeps encrypted text across reload; explicit retry succeeds with the original client ID (403 response mocked)");
+  console.log("PASS: offline cold navigation, encrypted durable queue, reload, automatic E2EE delivery, server acknowledgment, no duplicates, no private SW cache");
+}

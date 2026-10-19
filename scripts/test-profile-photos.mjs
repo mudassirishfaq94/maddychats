@@ -26,7 +26,15 @@ export async function testProfilePhotos(base, pool, owner, peer, source, unrelat
   const displayName = "Profile verified " + owner.id.slice(0, 8);
   await source.page.getByLabel("Display name", { exact: true }).fill(displayName);
   const save = source.page.waitForResponse(r => r.url().endsWith("/api/users/me") && r.request().method() === "PATCH");
+  // Hold the profile's follow-up account refresh while navigating away. Its
+  // eventual completion must not refresh/cancel an unrelated chat navigation.
+  let releaseProfileRefresh, profileRefreshStarted;
+  const profileGate = new Promise(resolve => { releaseProfileRefresh = resolve; });
+  const profileStarted = new Promise(resolve => { profileRefreshStarted = resolve; });
+  const holdProfileRefresh = async route => { profileRefreshStarted(); await profileGate; await route.continue(); };
+  await source.page.route("**/api/auth/me", holdProfileRefresh);
   await source.page.getByRole("button", { name: "Save changes", exact: true }).click(); assert.equal((await save).status(), 200);
+  await Promise.race([profileStarted, source.page.waitForTimeout(10000).then(()=>{throw new Error("Profile account refresh did not start");})]);
   assert.equal((await pool.query("select display_name from users where id=$1", [owner.id])).rows[0].display_name, displayName);
   await pool.query("update users set display_name=$2,bio=$3 where id=$1", [owner.id, original.display_name, original.bio]);
   await source.page.goto(base + "/app/chats");
@@ -58,11 +66,15 @@ export async function testProfilePhotos(base, pool, owner, peer, source, unrelat
   const initialPhoto = source.page.waitForResponse(response => response.url().endsWith(`/api/groups/${group.id}/avatar`) && response.status() === 200);
   await groupDialog.getByRole("button", { name: "Retry group photo", exact: true }).click();
   assert.equal((await initialPhoto).status(),200);
+  releaseProfileRefresh();
+  await source.page.unroute("**/api/auth/me", holdProfileRefresh);
   const initialAvatar = (await pool.query("SELECT avatar_url FROM conversations WHERE id=$1",[group.id])).rows[0].avatar_url;
   paths.push(initialAvatar.replace("/api/media/", ""));
   await source.page.unroute("**/api/groups/*/avatar", initialPhotoRoute);
   assert.equal((await pool.query("SELECT count(*)::int AS n FROM conversations WHERE created_by_id=$1 AND type='group' AND name='Photo test group'",[owner.id])).rows[0].n,1,"Photo retry does not create a duplicate group");
-  await source.page.waitForURL(base + `/app/chats/${group.id}`);
+  await source.page.waitForURL(base + `/app/chats/${group.id}`).catch(async cause => {
+    throw new Error(`Group retry navigation stayed at ${source.page.url()}; dialog visible=${await groupDialog.isVisible()}; page=${(await source.page.locator("body").innerText()).slice(-2400)}`, {cause});
+  });
   const form = () => { const body = new FormData(); body.append("file", new File([png], "photo.png", { type: "image/png" })); return body; };
   const avatar = await fetch(base + `/api/groups/${group.id}/avatar`, { method: "POST", headers: { Origin: base, Cookie: source.cookies }, body: form() });
   assert.equal(avatar.status, 200); const avatarUrl = (await avatar.json()).avatarUrl; paths.push(avatarUrl.replace("/api/media/", ""));

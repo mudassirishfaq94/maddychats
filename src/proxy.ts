@@ -100,5 +100,5 @@ export async function proxy(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|api/health|api/ready|api/cron|api/security/csp-report|favicon.ico|icons/|brand/|gifs/|stickers/|signal/|sw.js|manifest.webmanifest|theme-init.js).*)"],
+  matcher: ["/((?!_next/static|_next/image|api/health|api/ready|api/cron|api/security/csp-report|favicon.ico|icons/|brand/|gifs/|stickers/|signal/|sw.js|offline.html|offline.css|offline-compose.js|offline-store.js|manifest.webmanifest|theme-init.js).*)"],
 };

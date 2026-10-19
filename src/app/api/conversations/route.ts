@@ -26,7 +26,7 @@ export async function GET() {
 
   const started = performance.now();
   const list = await listConversationsFor(me.id);
-  return NextResponse.json({ conversations: list }, { headers: { "Server-Timing": `conversations;dur=${(performance.now() - started).toFixed(1)}`, "Cache-Control": "no-store" } });
+  return NextResponse.json({ conversations: list, viewerId: me.id }, { headers: { "Server-Timing": `conversations;dur=${(performance.now() - started).toFixed(1)}`, "Cache-Control": "no-store" } });
 }
 
 /**

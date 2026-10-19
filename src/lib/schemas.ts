@@ -107,6 +107,7 @@ export const groupRoleSchema = z.object({
 export const transferOwnershipSchema = z.object({ userId: z.uuid("Invalid user id") });
 
 export const sendMessageSchema = z.object({
+  expectedSenderId: z.uuid().optional(),
   selfDestruct: z.boolean().optional().default(false),
   clientMessageId: z.uuid("Invalid client message id").optional(),
   // When E2EE is active the client sends ciphertext (base64), which is longer

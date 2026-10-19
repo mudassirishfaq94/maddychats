@@ -14,11 +14,13 @@ export function AuthLayout({
   subtitle,
   children,
   footer,
+  entry,
 }: {
   title: string;
   subtitle: string;
   children: ReactNode;
   footer?: ReactNode;
+  entry?: ReactNode;
 }) {
   return (
     <main className="grid min-h-dvh bg-[var(--bg)] lg:grid-cols-[1fr_1fr]">
@@ -73,7 +75,7 @@ export function AuthLayout({
         </div>
 
         <p className="text-xs text-[var(--muted)]">
-          Real-time Â· End-to-end encrypted Â· Simple
+          Real-time · End-to-end encrypted · Simple
         </p>
         <div className="mt-2 flex items-center gap-2 rounded-xl border border-[color-mix(in_srgb,var(--accent)_20%,transparent)] bg-[color-mix(in_srgb,var(--accent)_5%,transparent)] px-3 py-2">
           <Lock className="h-3.5 w-3.5 shrink-0 text-[var(--accent-fg)]" />
@@ -93,7 +95,8 @@ export function AuthLayout({
           <ThemeToggle />
         </div>
 
-        <div className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center py-10">
+        <div className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center py-6">
+          {entry}
           <h1
             className="font-display text-[1.9rem] font-bold leading-tight animate-fade-up"
             style={{ "--d": "60ms" } as React.CSSProperties}

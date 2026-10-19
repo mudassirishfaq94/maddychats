@@ -89,6 +89,8 @@ export async function POST(
     );
   }
 
+  if (parsed.data.expectedSenderId && parsed.data.expectedSenderId !== me.id) return jsonError(409, "Sign in to the original account to send this queued message.");
+
   const isEncrypted = parsed.data.encrypted === true;
   if (!isEncrypted) {
     return jsonError(422, "End-to-end encrypted message payload required.");
