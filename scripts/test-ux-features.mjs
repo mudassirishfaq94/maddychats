@@ -31,6 +31,8 @@ export async function testUxFeatures(context,base,owner,member) {
    assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),`Inbox must fit ${width}px`);
    const helpBounds=await help.boundingBox();const listBounds=await page.getByRole("complementary",{name:"Conversations"}).boundingBox();
    assert(helpBounds&&listBounds&&helpBounds.width>=44&&helpBounds.x>=listBounds.x&&helpBounds.x+helpBounds.width<=listBounds.x+listBounds.width&&helpBounds.y+helpBounds.height<=listBounds.y+listBounds.height,"Help must stay inside the chat list with an accessible touch target");
+   const scrollBounds=await page.locator('aside[aria-label="Conversations"] > div.overflow-y-auto').boundingBox();
+   assert(scrollBounds&&helpBounds.y>=scrollBounds.y+scrollBounds.height,"Pinned Help must not cover scrollable conversation controls");
    const heading=await page.getByRole("heading",{name:"Chats",exact:true}).boundingBox();
    const firstRow=await page.locator(".chat-list-row").first().boundingBox();
    assert(heading&&firstRow&&firstRow.y-heading.y<200,"Compact controls must leave room for conversations");
