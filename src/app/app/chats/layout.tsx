@@ -3,7 +3,6 @@ import type { ReactNode } from "react";
 import type { Metadata } from "next";
 import { getSessionUser } from "@/server/session";
 import { listConversationsFor } from "@/server/chat";
-import { AppShell } from "@/components/shell/app-shell";
 import { ChatsLayout } from "@/components/chats/chats-layout";
 
 export const metadata: Metadata = { title: "Chats" };
@@ -21,8 +20,8 @@ export default async function ChatsSectionLayout({
   const conversations = await listConversationsFor(user.id);
 
   return (
-    <AppShell user={user}>
+    <>
       <ChatsLayout conversations={conversations}>{children}</ChatsLayout>
-    </AppShell>
+    </>
   );
 }

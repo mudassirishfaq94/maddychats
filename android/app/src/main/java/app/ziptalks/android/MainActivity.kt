@@ -33,26 +33,8 @@ import androidx.credentials.exceptions.NoCredentialException
 import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
-import androidx.activity.compose.LocalActivity
-import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.viewinterop.AndroidView
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -442,21 +424,6 @@ class MainActivity : ComponentActivity() {
         view.loadUrl("${BuildConfig.API_BASE_URL}/offline.html")
     }
 
-    /**
-     * Wipes the WebView HTTP cache only when the installed APK version is
-     * newer than the one that last populated it. This keeps repeat cold starts
-     * reusing the compiled _next/static bundles (a big win for app-open speed)
-     * while still busting stale scripts after an update.
-     */
-    private fun clearHttpCacheOnVersionBump(): Boolean {
-        val prefs = getSharedPreferences("ziptalk-cache", MODE_PRIVATE)
-        val last = prefs.getInt("lastVersionCode", 0)
-        val now = BuildConfig.VERSION_CODE
-        if (last == now) return false
-        prefs.edit().putInt("lastVersionCode", now).apply()
-        return true
-    }
-
     fun hostedWebClient() = object : WebViewClient() {
             override fun shouldInterceptRequest(view: WebView, request: android.webkit.WebResourceRequest): android.webkit.WebResourceResponse? {
                 val asset = OfflineShellAssets.assetPath(request.url.toString(), BuildConfig.API_BASE_URL, request.method)
@@ -513,86 +480,6 @@ class MainActivity : ComponentActivity() {
         }
 }
 
-/**
- * The production Android experience deliberately renders the existing ZipTalk
- * application in an app-owned WebView. This is a standalone Android window
- * (not Chrome, a Custom Tab, or a PWA), while preserving exact web parity and
- * the proven browser E2EE implementation during the native migration.
- */
-@Composable private fun ZipTalkHostedExperience(api: ZipTalkApi, onReady: (WebView) -> Unit) {
-    var startUrl by remember { mutableStateOf<String?>(null) }
-
-    // A cookie saved by the retired Compose client can be expired or belong to
-    // an earlier deployment. Do not render an authenticated route until the
-    // server has accepted it; doing so left the WebView showing an empty shell.
-    LaunchedEffect(Unit) {
-        val hasValidSession = withContext(Dispatchers.IO) { api.currentUserId() != null }
-        // Sessions created in this WebView are HttpOnly and intentionally not
-        // readable by OkHttp. Preserve them across an APK update too.
-        val hasWebSession = CookieManager.getInstance()
-            .getCookie(BuildConfig.API_BASE_URL)
-            ?.contains("maddy_session=") == true
-        startUrl = if (hasValidSession || hasWebSession) {
-            "${BuildConfig.API_BASE_URL}/app"
-        } else {
-            "${BuildConfig.API_BASE_URL}/login?next=%2Fapp"
-        }
-    }
-
-    if (startUrl == null) {
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center,
-        ) { CircularProgressIndicator(color = Color(0xFFAAA6FF)) }
-        return
-    }
-
-    AndroidView(
-        modifier = Modifier.fillMaxSize(),
-        factory = { context ->
-            WebView(context).apply {
-                settings.javaScriptEnabled = true
-                settings.domStorageEnabled = true
-                settings.allowFileAccess = false
-                settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
-                // HTML5 DB is unused by the hosted app; disabling it saves
-                // WebView heap and avoids creating a database file on every launch.
-                settings.databaseEnabled = false
-                // Keep the WebView HTTP cache so repeat cold starts reuse the
-                // compiled _next/static bundles instead of re-downloading the
-                // whole app on every launch. LOAD_DEFAULT serves cached assets
-                // first and revalidates with the server only when needed.
-                settings.cacheMode = WebSettings.LOAD_DEFAULT
-                settings.mediaPlaybackRequiresUserGesture = false
-                settings.loadWithOverviewMode = false
-                // The hosted app sets width=device-width in CSS, so the viewport
-                // must scale to the screen; otherwise the page renders at desktop
-                // width and is scaled down at extra layout/paint cost.
-                settings.useWideViewPort = true
-                settings.userAgentString = "${settings.userAgentString} ZipTalkAndroid/0.8"
-                // DOM storage holds the browser E2EE keys - never erase it.
-                // Only wipe cached HTTP resources on an APK version bump so an
-                // update cannot keep rendering stale Next.js scripts.
-                if (clearHttpCacheOnVersionBump()) {
-                    clearHttpCache(true)
-                }
-                CookieManager.getInstance().setAcceptThirdPartyCookies(this, false)
-                // Older native builds saved the login cookie in OkHttp. Move it
-                // into WebView before the first server-rendered page request so
-                // the hosted UI receives the same signed-in session and data.
-                val cookieManager = CookieManager.getInstance()
-                WebSessionCookieMigration.cookiesToImport(cookieManager.getCookie(BuildConfig.API_BASE_URL), api.cookiesForWeb())
-                    .forEach { cookieManager.setCookie(BuildConfig.API_BASE_URL, it) }
-                cookieManager.flush()
-                webChromeClient = (context as? MainActivity)?.hostedWebChromeClient() ?: WebChromeClient()
-                webViewClient = (context as? MainActivity)?.hostedWebClient() ?: WebViewClient()
-                loadUrl(startUrl!!)
-                onReady(this)
-            }
-        },
-    )
-}
-
 private suspend fun nativeGoogleSignIn(activity: Activity, api: ZipTalkApi, policiesAccepted: Boolean = false): JSONObject {
     if (!policiesAccepted) throw IOException("Agree to both policies on the sign-in page. Link Google accounts in a browser.")
     val clientId = withContext(Dispatchers.IO) { api.googleClientId() }
@@ -620,75 +507,3 @@ private fun authErrorMessage(error: Throwable): String {
     } else raw.ifBlank { "Sign-in could not be completed. Please try again." }
 }
 
-@Composable private fun ZipTalkNativeApp(api: ZipTalkApi) {
-    val scope = rememberCoroutineScope(); var signedIn by remember { mutableStateOf(false) }; var restoring by remember { mutableStateOf(true) }; var error by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(Unit) { signedIn = withContext(Dispatchers.IO) { api.currentUserId() != null }; restoring = false }
-    val colors = darkColorScheme(
-        primary = Color(0xFFA9A7FF), onPrimary = Color(0xFF202743),
-        secondary = Color(0xFFC1C0FF), onSecondary = Color(0xFF24284D),
-        background = Color(0xFF182033), onBackground = Color(0xFFF4F5FF),
-        surface = Color(0xFF222C42), onSurface = Color(0xFFF4F5FF),
-        surfaceVariant = Color(0xFF2B3650), onSurfaceVariant = Color(0xFFBFC8E3),
-        outline = Color(0xFF64718F), error = Color(0xFFFF858D), onError = Color(0xFF4A111A),
-    )
-    MaterialTheme(colorScheme = colors) {
-        if (restoring) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-        else if (!signedIn) {
-            val activity = LocalActivity.current
-            LoginScreen(error,
-                signIn = { email, password -> scope.launch { runCatching { withContext(Dispatchers.IO) { api.login(email, password) } }.onSuccess { signedIn = true }.onFailure { error = authErrorMessage(it) } } },
-                signUp = { name, username, email, password -> scope.launch { runCatching { withContext(Dispatchers.IO) { api.register(name, username, email, password) } }.onSuccess { signedIn = true }.onFailure { error = authErrorMessage(it) } } },
-                googleSignIn = { if (activity != null) scope.launch { runCatching { nativeGoogleSignIn(activity, api) }.onSuccess { signedIn = true }.onFailure { error = authErrorMessage(it) } } },
-            )
-        }
-        else ConversationScreen(api)
-    }
-}
-
-@Composable private fun LoginScreen(error: String?, signIn: (String, String) -> Unit, signUp: (String, String, String, String) -> Unit, googleSignIn: () -> Unit) {
-    var creating by remember { mutableStateOf(false) }; var name by remember { mutableStateOf("") }; var username by remember { mutableStateOf("") }
-    var email by remember { mutableStateOf("") }; var password by remember { mutableStateOf("") }; var submitting by remember { mutableStateOf(false) }
-    Column(Modifier.fillMaxSize().padding(horizontal = 24.dp), verticalArrangement = Arrangement.Center) {
-        Surface(color = MaterialTheme.colorScheme.primary.copy(alpha = 0.18f), shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp)) { Text("ZipTalk", modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp), fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.secondary) }
-        Spacer(Modifier.height(20.dp)); Text(if (creating) "Create your account" else "Welcome back", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.ExtraBold)
-        Spacer(Modifier.height(8.dp)); Text(if (creating) "Start chatting securely with the people you know." else "Your conversations are waiting for you.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Spacer(Modifier.height(28.dp))
-        if (creating) {
-            OutlinedTextField(name, { name = it }, label = { Text("Your name") }, singleLine = true, modifier = Modifier.fillMaxWidth()); Spacer(Modifier.height(10.dp))
-            OutlinedTextField(username, { username = it }, label = { Text("Username") }, singleLine = true, modifier = Modifier.fillMaxWidth()); Spacer(Modifier.height(10.dp))
-        }
-        OutlinedTextField(email, { email = it }, label = { Text(if (creating) "Email address" else "Email or username") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-        Spacer(Modifier.height(10.dp)); OutlinedTextField(password, { password = it }, label = { Text("Password") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
-        error?.let { Spacer(Modifier.height(12.dp)); Text(it, color = MaterialTheme.colorScheme.error) }; Spacer(Modifier.height(18.dp))
-        Button({ submitting = true; if (creating) signUp(name.trim(), username.trim(), email.trim(), password) else signIn(email.trim(), password); submitting = false }, Modifier.fillMaxWidth().height(54.dp), enabled = !submitting && email.isNotBlank() && password.isNotBlank() && (!creating || (name.isNotBlank() && username.isNotBlank()))) { Text(if (creating) "Create account" else "Sign in", fontWeight = FontWeight.Bold) }
-        Spacer(Modifier.height(14.dp)); Text("or", modifier = Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-        Spacer(Modifier.height(12.dp)); OutlinedButton(googleSignIn, Modifier.fillMaxWidth().height(54.dp)) { Text("G", fontWeight = FontWeight.Bold); Spacer(Modifier.width(10.dp)); Text("Continue with Google") }
-        Spacer(Modifier.height(14.dp)); TextButton({ creating = !creating; submitting = false }, Modifier.align(Alignment.CenterHorizontally)) { Text(if (creating) "Already have an account? Sign in" else "New to ZipTalk? Create an account") }
-    }
-}
-
-@Composable private fun ConversationScreen(api: ZipTalkApi) {
-    var conversations by remember { mutableStateOf<List<Conversation>>(emptyList()) }; var selected by remember { mutableStateOf<Conversation?>(null) }; var loading by remember { mutableStateOf(true) }; var loadError by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(Unit) { runCatching { withContext(Dispatchers.IO) { api.conversations() } }.onSuccess { conversations = it }.onFailure { loadError = it.message }.also { loading = false } }
-    if (selected == null) Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
-        Spacer(Modifier.height(20.dp)); Text("ZipTalk", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.secondary); Spacer(Modifier.height(20.dp)); Text("Chats", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-        when { loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-            loadError != null -> Text(loadError ?: "Could not load chats", color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 24.dp))
-            conversations.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("No conversations yet", color = MaterialTheme.colorScheme.onSurfaceVariant) }
-            else -> LazyColumn(Modifier.fillMaxSize().padding(top = 12.dp)) { items(conversations) { c -> Row(Modifier.fillMaxWidth().clip(androidx.compose.foundation.shape.RoundedCornerShape(18.dp)).clickable { selected = c }.padding(12.dp), verticalAlignment = Alignment.CenterVertically) { Box(Modifier.size(48.dp).clip(androidx.compose.foundation.shape.CircleShape), contentAlignment = Alignment.Center) { Surface(color = MaterialTheme.colorScheme.primary) { Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text(c.title.take(1).uppercase(), fontWeight = FontWeight.Bold) } } }; Spacer(Modifier.width(12.dp)); Column(Modifier.weight(1f)) { Text(c.title, fontWeight = FontWeight.SemiBold); Text(c.preview, maxLines = 1, color = MaterialTheme.colorScheme.onSurfaceVariant) } } } }
-        }
-    }
-    else ChatScreen(selected!!, api) { selected = null }
-}
-
-@Composable private fun ChatScreen(conversation: Conversation, api: ZipTalkApi, back: () -> Unit) {
-    val scope = rememberCoroutineScope(); val resolver = LocalContext.current.contentResolver; var messages by remember { mutableStateOf<List<Message>>(emptyList()) }; var draft by remember { mutableStateOf("") }; var me by remember { mutableStateOf<String?>(null) }; var attachment by remember { mutableStateOf<Uri?>(null) }; var uploadError by remember { mutableStateOf<String?>(null) }
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> attachment = uri }
-    suspend fun refresh() { messages = withContext(Dispatchers.IO) { api.messages(conversation.id, me) } }
-    LaunchedEffect(conversation.id) { me = withContext(Dispatchers.IO) { api.currentUserId() }; refresh() }
-    DisposableEffect(conversation.id) {
-        val stream = api.listen { event -> if (event.optString("conversationId") == conversation.id && event.optString("type").startsWith("message:")) scope.launch { refresh() } }
-        onDispose { stream.cancel() }
-    }
-    Column(Modifier.fillMaxSize().padding(16.dp)) { TextButton(back) { Text("‹ ${conversation.title}") }; LazyColumn(Modifier.weight(1f)) { items(messages) { message -> Column(Modifier.padding(vertical = 8.dp)) { Text(if (message.mine) "You" else message.sender, style = MaterialTheme.typography.labelSmall); if (message.encrypted) Text("Encrypted message — native key support is being added", color = MaterialTheme.colorScheme.secondary) else if (message.text.isNotBlank()) Text(message.text); message.attachmentNames.forEach { Text("📎 $it", color = MaterialTheme.colorScheme.primary) } } } }; attachment?.let { Text("Attachment selected", color = MaterialTheme.colorScheme.primary) }; uploadError?.let { Text(it, color = MaterialTheme.colorScheme.error) }; Row { Button({ picker.launch(arrayOf("*/*")) }) { Text("Attach") }; OutlinedTextField(draft, { draft = it }, Modifier.weight(1f), label = { Text("Message") }); Button({ val text = draft.trim(); if (text.isNotEmpty() || attachment != null) scope.launch { runCatching { withContext(Dispatchers.IO) { attachment?.let { api.upload(resolver, conversation.id, it, text) } ?: api.send(conversation.id, text) } }.onSuccess { refresh(); draft = ""; attachment = null; uploadError = null }.onFailure { uploadError = it.message } } }) { Text("Send") } } }
-}

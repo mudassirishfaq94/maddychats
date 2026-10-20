@@ -4,7 +4,7 @@ import Image from "next/image";
 import { SwipeFilters } from "./swipe-filters";
 import { useHydrated } from "@/hooks/use-hydrated";
 
-import { memo, useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { memo, useDeferredValue, useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type * as React from "react";
@@ -16,6 +16,7 @@ import { LogoMark } from "@/components/brand/logo";
 import { NewChatDialog } from "./new-chat-dialog";
 import { ConversationMenu } from "./conversation-menu";
 import { useRealtime } from "@/components/providers/realtime-provider";
+import { useConversationList } from "@/components/providers/conversation-list-provider";
 import { mapWithConcurrency } from "@/lib/async";
 import { cn, timeAgo } from "@/lib/utils";
 
@@ -182,8 +183,11 @@ export function ChatsLayout({
   const [liveList, setLiveList] = useState<{
     source: ConversationSummary[]; items: ConversationSummary[];
   } | null>(null);
-  const conversations = liveList?.source === initialConversations
-    ? liveList.items : initialConversations;
+  const { snapshot, seed } = useConversationList();
+  useEffect(() => { seed(initialConversations); }, [initialConversations, seed]);
+  const sourceConversations = snapshot?.conversations ?? initialConversations;
+  const conversations = liveList?.source === sourceConversations
+    ? liveList.items : sourceConversations;
   const { initialized, decrypt } = useSharedE2EE();
   const [previews, setPreviews] = useState<Map<string, string>>(new Map());
   useEffect(()=>{
@@ -191,12 +195,12 @@ export function ChatsLayout({
     if(!pending.length)return;
     const expire=()=>{
       const now=Date.now();
-      setLiveList({source:initialConversations,items:conversations.map(conversation=>conversation.lastMessage?.expiresAt && Date.parse(conversation.lastMessage.expiresAt)<=now ? {...conversation,lastMessage:{...conversation.lastMessage,text:"",deletedAt:conversation.lastMessage.expiresAt}} : conversation)});
+      setLiveList({source:sourceConversations,items:conversations.map(conversation=>conversation.lastMessage?.expiresAt && Date.parse(conversation.lastMessage.expiresAt)<=now ? {...conversation,lastMessage:{...conversation.lastMessage,text:"",deletedAt:conversation.lastMessage.expiresAt}} : conversation)});
       setPreviews(current=>new Map([...current].filter(([key])=>!conversations.some(conversation=>conversation.lastMessage?.expiresAt && Date.parse(conversation.lastMessage.expiresAt)<=now && key.startsWith(`${conversation.lastMessage.id}:`)))));
     };
     const timer=setTimeout(expire,Math.min(2147483647,Math.max(0,Math.min(...pending)-Date.now()+1)));
     return()=>clearTimeout(timer);
-  },[conversations,initialConversations]);
+  },[conversations,sourceConversations]);
   useEffect(() => {
     if (!initialized) return;
     let cancelled = false;
@@ -222,7 +226,7 @@ export function ChatsLayout({
     return () => { cancelled = true; };
   }, [conversations, initialized, decrypt]);
   const pathname = usePathname();
-  const { subscribe, presence, connected } = useRealtime();
+  const { presence } = useRealtime();
   const activeId = pathname.startsWith("/app/chats/")
     ? pathname.split("/")[3]
     : null;
@@ -230,63 +234,6 @@ export function ChatsLayout({
   const deferredFilter = useDeferredValue(filter);
   const [showArchived, setShowArchived] = useState(false);
   const [chatFilter, setChatFilter] = useState<"all" | "unread" | "favorites" | "groups" | "dms">("all");
-
-  // Live activity → debounced server refresh keeps previews ordered & fresh.
-  const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => {
-    let controller: AbortController | null = null;
-    const refreshList = () => {
-      controller?.abort();
-      controller = new AbortController();
-      const signal = controller.signal;
-      void fetch("/api/conversations", { cache: "no-store", signal })
-        .then((response) => response.ok ? response.json() : null)
-        .then((data: { conversations?: ConversationSummary[] } | null) => {
-          if (!signal.aborted && data?.conversations) setLiveList({ source: initialConversations, items: data.conversations });
-        })
-        .catch(() => undefined);
-    };
-    // A prefetched tab can miss events while unmounted. Reconcile on entry
-    // and reconnect without blocking the already visible conversation list.
-    refreshList();
-    const unsubscribe = subscribe((event) => {
-      // Presence and typing already update through client state; refreshing
-      // server components for those high-frequency events caused avoidable
-      // network traffic and renders. Revalidate only persisted sidebar data.
-      if (
-        event.type !== "message:new" &&
-        event.type !== "message:update" &&
-        event.type !== "message:deleted" &&
-        event.type !== "message:lifetime" &&
-        event.type !== "message:read" &&
-        event.type !== "conversation:new" &&
-        event.type !== "group:updated" &&
-        event.type !== "group:member-added" &&
-        event.type !== "group:member-removed" &&
-        event.type !== "group:member-updated" &&
-        event.type !== "conversation:delete"
-      ) {
-        return;
-      }
-      if (refreshTimer.current) clearTimeout(refreshTimer.current);
-      refreshTimer.current = setTimeout(() => {
-        refreshList();
-      // A short debounce groups message receipts and edits arriving together,
-      // while keeping the conversation preview feeling immediate.
-      }, 180);
-    });
-    return () => {
-      unsubscribe();
-      controller?.abort();
-      if (refreshTimer.current) clearTimeout(refreshTimer.current);
-    };
-  }, [subscribe, initialConversations, connected]);
-
-  useEffect(() => {
-    return () => {
-      if (refreshTimer.current) clearTimeout(refreshTimer.current);
-    };
-  }, []);
 
   const archivedCount = useMemo(
     () => conversations.filter((c) => c.archived).length,

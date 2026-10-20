@@ -12,8 +12,8 @@ android {
         applicationId "chat.circlo.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 18
-        versionName "0.9.9"
+        versionCode 19
+        versionName "0.9.10"
         manifestPlaceholders = [appLinkHost: 'circlo.chat']
         buildConfigField "String", "API_BASE_URL", '"' + appOrigin + '"'
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
@@ -24,11 +24,7 @@ android {
         }
     }
     buildFeatures {
-        compose true
         buildConfig true
-    }
-    composeOptions {
-        kotlinCompilerExtensionVersion '1.5.15'
     }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
@@ -41,7 +37,7 @@ android {
         release {
             // R8 shrinks, obfuscates and optimizes the DEX. With a hosted WebView
             // the web bundle is the big cost, but shrinking the native Kotlin
-            // graph (Compose, Credentials, OkHttp, Firebase) cuts APK size and
+            // graph (Credentials, OkHttp, Firebase) cuts APK size and
             // cold-start DEX verification time. Keep the existing rules file.
             minifyEnabled true
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
@@ -50,16 +46,10 @@ android {
 }
 
 dependencies {
-    // The launch theme still inherits from AppCompat; Compose owns the app UI.
+    // The active UI is the hosted WebView; retain only its Activity integration.
     implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
     implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
-    implementation 'androidx.activity:activity-compose:1.10.1'
-    implementation platform('androidx.compose:compose-bom:2025.04.01')
-    implementation 'androidx.compose.ui:ui'
-    implementation 'androidx.compose.ui:ui-tooling-preview'
-    implementation 'androidx.compose.material3:material3'
-    implementation 'androidx.lifecycle:lifecycle-viewmodel-compose:2.9.0'
-    // 1.3.x is Kotlin 1.9 compatible with this Compose build.
+    implementation "androidx.activity:activity-ktx:$androidxActivityVersion"
     implementation 'androidx.credentials:credentials:1.3.0'
     implementation 'androidx.credentials:credentials-play-services-auth:1.3.0'
     implementation 'com.google.android.libraries.identity.googleid:googleid:1.1.0'
@@ -69,7 +59,6 @@ dependencies {
     // Firebase Cloud Messaging for native push notifications
     implementation platform('com.google.firebase:firebase-bom:33.7.0')
     implementation 'com.google.firebase:firebase-messaging'
-    debugImplementation 'androidx.compose.ui:ui-tooling'
     testImplementation "junit:junit:$junitVersion"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"

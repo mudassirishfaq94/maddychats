@@ -12,7 +12,6 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { getSessionUser } from "@/server/session";
-import { AppShell } from "@/components/shell/app-shell";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { PrivacySettings } from "@/components/profile/privacy-settings";
 import { NotificationPreferences } from "@/components/profile/notification-preferences";
@@ -32,7 +31,7 @@ export default async function SettingsPage() {
 
 
   return (
-    <AppShell user={user}>
+    <>
       <div className="mx-auto h-full w-full min-w-0 max-w-3xl overflow-y-auto overflow-x-hidden px-4 py-6 sm:px-6">
         {/* Header */}
         <div className="flex items-center gap-3">
@@ -124,6 +123,6 @@ export default async function SettingsPage() {
           </p>
         </div>
       </div>
-    </AppShell>
+    </>
   );
 }

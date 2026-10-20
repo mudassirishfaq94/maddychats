@@ -11,7 +11,6 @@ import {
   Mail,
 } from "lucide-react";
 import { getSessionUser } from "@/server/session";
-import { AppShell } from "@/components/shell/app-shell";
 import { ProfileEditor } from "@/components/profile/profile-editor";
 import { NotificationPreferences } from "@/components/profile/notification-preferences";
 import { AuthenticationMethods } from "@/components/profile/authentication-methods";
@@ -67,7 +66,7 @@ export default async function ProfilePage({
   ];
 
   return (
-    <AppShell user={user}>
+    <>
     <div className="mx-auto h-full w-full min-w-0 max-w-5xl overflow-y-auto overflow-x-hidden px-3 py-5 sm:px-6 sm:py-6">
       <Link
         href="/app"
@@ -131,6 +130,6 @@ export default async function ProfilePage({
         </div>
       </div>
     </div>
-    </AppShell>
+    </>
   );
 }

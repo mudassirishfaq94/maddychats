@@ -8,10 +8,17 @@ import { E2EEProvider } from "@/components/providers/e2ee-provider";
 import { RealtimeProvider } from "@/components/providers/realtime-provider";
 import { CloudRecoverySync } from "@/components/profile/cloud-recovery";
 import { OfflineComposeProvider } from "@/components/providers/offline-compose-provider";
+import { useAuth } from "@/components/providers/auth-provider";
+import { AppShell } from "@/components/shell/app-shell";
+import { ConversationListProvider } from "@/components/providers/conversation-list-provider";
 import { PwaNotificationPrompt } from "@/components/pwa-notification-prompt";
 
 /** Keep private chat startup code out of public/login route bundles. */
 export default function ApplicationLayout({ children }: { children: ReactNode }) {
-  const setupOnly = usePathname() === "/app/device-access";
-  return <E2EEProvider setupOnly={setupOnly}>{setupOnly ? children : <RealtimeProvider><AudioCallProvider>{children}<ForegroundMessageBanner /><CloudRecoverySync /><PwaNotificationPrompt /><OfflineComposeProvider /></AudioCallProvider></RealtimeProvider>}</E2EEProvider>;
+  const pathname = usePathname();
+  const { user } = useAuth();
+  const setupOnly = pathname === "/app/device-access";
+  const sharedShell = user && pathname !== "/app/call" && !pathname.startsWith("/app/admin") && !setupOnly;
+  const content = sharedShell ? <AppShell user={user}>{children}</AppShell> : children;
+  return <E2EEProvider setupOnly={setupOnly}>{setupOnly ? children : <RealtimeProvider><AudioCallProvider><ConversationListProvider>{content}<ForegroundMessageBanner /><CloudRecoverySync /><PwaNotificationPrompt /><OfflineComposeProvider /></ConversationListProvider></AudioCallProvider></RealtimeProvider>}</E2EEProvider>;
 }
