@@ -318,8 +318,8 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     await source.page.getByRole("button", { name: "Send attachments", exact: true }).click();
     const fileResponse = await upload; assert.equal(fileResponse.status(), 201);
     const fileMessage = (await fileResponse.json()).message;
-    const download = recipient.page.getByRole("link", { name: "Download workflow-check.txt", exact: true });
-    await download.waitFor(); await recipient.page.waitForFunction(() => document.querySelector('a[aria-label="Download workflow-check.txt"]')?.href.startsWith("blob:"), undefined, { timeout: 60000 });
+    const download = recipient.page.getByRole("button", { name: "Download workflow-check.txt", exact: true });
+    await download.waitFor();
     await download.scrollIntoViewIfNeeded();
     assert(await download.evaluate(element => {const box=element.getBoundingClientRect();return element.contains(document.elementFromPoint(box.x+box.width/2,box.y+box.height/2));}), "Encrypted download target cannot be covered by message actions");
     const [downloaded] = await Promise.all([recipient.page.waitForEvent("download"), download.click()]);
