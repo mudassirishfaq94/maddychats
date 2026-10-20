@@ -28,7 +28,7 @@ import { loadSignalBridge } from "@/lib/e2ee-signal-bridge";
 import { ensureSignalDeviceRegistered, maintainSignalPrekeyReserve } from "@/lib/e2ee-signal-registration";
 import {
   getMessageCacheKey,
-  readVerifiedMessage,
+  readVerifiedMessages,
   writeVerifiedMessage,
   purgeVerifiedMessages,
 } from "@/lib/e2ee-message-cache";
@@ -72,6 +72,7 @@ export function useE2EE(userId: string | undefined) {
 
   const decryptionKeysRef = useRef<Map<string, CryptoKey[]>>(new Map());
   const decryptionLoadRef = useRef<Map<string, Promise<CryptoKey[]>>>(new Map());
+  const localKeyLoadsRef = useRef(new Map<string, { signature: string; load: Promise<CryptoKey[]> }>());
   // Deliberately memory-only. Plaintext never survives a reload or crosses an
   // account boundary, but returning to a chat in the same signed-in session
   // can render already authenticated text without repeating crypto work.
@@ -102,6 +103,7 @@ export function useE2EE(userId: string | undefined) {
       let keyPair: CryptoKeyPair;
       let publicKeyStr: string;
       let privateKeyStr: string;
+      let protectedEnvelope: string | undefined;
 
       // Fetch the owner's device backup before trusting browser storage. The
       // device id is intentionally browser-wide, while the keypair is scoped
@@ -149,6 +151,9 @@ export function useE2EE(userId: string | undefined) {
             : typeof parsed.privateKey === "string"
               ? parsed.privateKey
               : (() => { throw new Error("Stored encryption key is invalid"); })();
+          // Reuse the authenticated v2 envelope; deriving and rewrapping an
+          // unchanged backup on every startup delays readable local history.
+          if (typeof parsed.encryptedPrivateKey === "string" && parsed.encryptedPrivateKey.startsWith("v2:")) protectedEnvelope = parsed.encryptedPrivateKey;
           const privateKey = await importPrivateKey(privateKeyStr);
           const publicKey = await importPublicKey(parsed.publicKey);
           keyPair = { privateKey, publicKey };
@@ -164,6 +169,7 @@ export function useE2EE(userId: string | undefined) {
         }
       } else if (serverDevice?.encryptedPrivateKey) {
         privateKeyStr = await restorePrivateKey(serverDevice.encryptedPrivateKey);
+        if (serverDevice.encryptedPrivateKey.startsWith("v2:")) protectedEnvelope = serverDevice.encryptedPrivateKey;
         const privateKey = await importPrivateKey(privateKeyStr);
         const publicKey = await importPublicKey(serverDevice.publicKey);
         keyPair = { privateKey, publicKey };
@@ -188,7 +194,7 @@ export function useE2EE(userId: string | undefined) {
         recoverySecret = Array.from(secretBytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
         localStorage.setItem(recoveryStorageKey, recoverySecret);
       }
-      const encryptedPrivateKey = `v2:${await encryptPrivateKeyForStorage(privateKeyStr, recoverySecret)}`;
+      const encryptedPrivateKey = protectedEnvelope ?? `v2:${await encryptPrivateKeyForStorage(privateKeyStr, recoverySecret)}`;
       controller.signal.throwIfAborted();
       // Never persist the raw, exportable JWK. This also migrates legacy
       // browser records after their next successful initialization.
@@ -277,7 +283,7 @@ export function useE2EE(userId: string | undefined) {
     })); });
     return () => {
       active=false;controller.abort();keyPairRef.current=null;
-      sendingKeys.clear();decryptionKeys.clear();plaintextCache.clear();
+      sendingKeys.clear();decryptionKeys.clear();plaintextCache.clear();localKeyLoadsRef.current.clear();
     };
   }, [userId]);
 
@@ -342,6 +348,11 @@ export function useE2EE(userId: string | undefined) {
     } catch {
       return [];
     }
+    const pair = keyPairRef.current;
+    const signature = JSON.stringify(saved);
+    const previous = localKeyLoadsRef.current.get(conversationId);
+    if (previous?.signature === signature) return previous.load;
+    const load = (async () => {
     const existing = decryptionKeysRef.current.get(conversationId) ?? [];
     const keys = [...existing];
     const fingerprints = new Set<string>();
@@ -351,7 +362,7 @@ export function useE2EE(userId: string | undefined) {
     for (const entry of saved) {
       if (!entry.wrapped) continue;
       try {
-        const key = await decryptKeyFromSender(entry.wrapped, keyPairRef.current.privateKey);
+        const key = await decryptKeyFromSender(entry.wrapped, pair.privateKey);
         const fingerprint = await conversationFingerprint(key);
         if (!fingerprints.has(fingerprint)) {
           fingerprints.add(fingerprint);
@@ -359,8 +370,16 @@ export function useE2EE(userId: string | undefined) {
         }
       } catch { /* A corrupt local entry must not block other messages. */ }
     }
+    if (keyPairRef.current !== pair) return [];
     decryptionKeysRef.current.set(conversationId, keys);
     return keys;
+    })();
+    localKeyLoadsRef.current.set(conversationId, { signature, load });
+    try { return await load; }
+    catch (cause) {
+      if (localKeyLoadsRef.current.get(conversationId)?.load === load) localKeyLoadsRef.current.delete(conversationId);
+      throw cause;
+    }
   }, [userId]);
 
   /**
@@ -996,11 +1015,18 @@ export function useE2EE(userId: string | undefined) {
     }
     try {
       const cacheKey = await messageCacheKeyRef.current;
-      const cached = await mapWithConcurrency(messages.filter((message) => message.encrypted), 4, async (message) => {
-        const plaintext = await readVerifiedMessage(cacheKey, userId, conversationId, message.id, message.text);
-        return plaintext === undefined ? null : [message.id, plaintext] as const;
+      const result = new Map<string, string>();
+      const missing = messages.filter(message => {
+        if (!message.encrypted) return false;
+        const memory = decryptedMessageCacheRef.current.get(`${conversationId}:${message.id}`);
+        if (memory?.ciphertext === message.text) { result.set(message.id, memory.plaintext); return false; }
+        return true;
       });
-      return new Map(cached.filter((entry): entry is readonly [string, string] => entry !== null));
+      if (missing.length) {
+        const stored = await readVerifiedMessages(cacheKey, userId, conversationId, missing);
+        for (const [id, text] of stored) result.set(id, text);
+      }
+      return result;
     } catch {
       return new Map();
     }

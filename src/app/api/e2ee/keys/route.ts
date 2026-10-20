@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { after, NextRequest, NextResponse } from "next/server";
 import { eq, and, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { e2eeKeys, deviceSessions, users } from "@/db/schema";
@@ -94,7 +94,7 @@ export async function POST(req: NextRequest) {
   const sessionId = await getSessionDeviceId();
   // Upsert: update if device already registered, insert otherwise
   const [existing] = await db
-    .select({ id: e2eeKeys.id, sessionId: e2eeKeys.sessionId })
+    .select({ id: e2eeKeys.id, sessionId: e2eeKeys.sessionId, ipCountryAt: e2eeKeys.ipCountryAt })
     .from(e2eeKeys)
     .where(and(eq(e2eeKeys.userId, user.id), eq(e2eeKeys.deviceId, deviceId)))
     .limit(1);
@@ -115,7 +115,6 @@ export async function POST(req: NextRequest) {
     // Trust and the session binding are deliberately untouched here. Rebinding
     // a device to a new session requires the bind-session proof, because the
     // session binding is what lets this device hand out trust to another one.
-    const detectedCountry = sessionId ? await detectCountry(req) : null;
     // A restricted sign-in may describe its own pending key, never change the
     // name, activity or backup of another browser just by knowing its public ID.
     if (!(await getSessionAccess())?.approvalRequired || existing.sessionId === sessionId) await db
@@ -127,14 +126,12 @@ export async function POST(req: NextRequest) {
         lastUsedAt: new Date(),
         platform,
         ...(requestedName ? { deviceName: requestedName } : {}),
-        ...(detectedCountry ? { ipCountry: detectedCountry, ipCountryAt: new Date() } : {}),
       })
       .where(eq(e2eeKeys.id, existing.id));
   } else {
     // Bootstrap only a genuinely new account. An account with lost/revoked
     // keys must explicitly recover; an empty trusted set is not permission.
     // Serialize first registrations so two browsers cannot both bootstrap.
-    const detectedCountry = await detectCountry(req);
     await db.transaction(async tx => {
       await tx.select({ id: users.id }).from(users).where(eq(users.id, user.id)).for("update");
       const [priorDevice] = await tx.select({ id: e2eeKeys.id }).from(e2eeKeys).where(eq(e2eeKeys.userId, user.id)).limit(1);
@@ -147,9 +144,9 @@ export async function POST(req: NextRequest) {
         trustedAt: priorDevice ? null : new Date(),
         deviceName: requestedName || null,
         platform,
-        country: detectedCountry,
-        ipCountry: detectedCountry,
-        ipCountryAt: detectedCountry ? new Date() : null,
+        country: null,
+        ipCountry: null,
+        ipCountryAt: null,
       }).onConflictDoNothing();
     });
   }
@@ -167,6 +164,20 @@ export async function POST(req: NextRequest) {
     await Promise.all(requests.rows.map(row => publishToConversation(row.id, {
       type: "conversation:encryption-ready", conversationId: row.id, userId: user.id,
     })));
+  }
+  // Display-only enrichment must not delay secure-send readiness. Refresh at
+  // most daily; authorization and device trust above never depend on GeoIP.
+  if (!existing?.ipCountryAt || Date.now() - existing.ipCountryAt.getTime() > 86400000) {
+    after(async () => {
+      try {
+        const country = await detectCountry(req);
+        if (!country) return;
+        await db.update(e2eeKeys).set({
+          ipCountry: country, ipCountryAt: new Date(),
+          ...(!existing ? { country: sql`coalesce(${e2eeKeys.country}, ${country})` } : {}),
+        }).where(and(eq(e2eeKeys.userId, user.id), eq(e2eeKeys.deviceId, deviceId), eq(e2eeKeys.publicKey, publicKey)));
+      } catch { /* Optional location labels are retried on a later registration. */ }
+    });
   }
   return NextResponse.json({ success: true, pendingApproval: !registered?.trustedAt, needsSessionBinding: Boolean(sessionId && (registered?.sessionId !== sessionId || (registered.trustedAt && (await getSessionAccess())?.approvalRequired))) });
 }

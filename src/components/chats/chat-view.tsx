@@ -375,7 +375,6 @@ export function ChatView({
   const decryptedTextsRef = useRef(decryptedTexts);
   const decryptedRepliesRef = useRef(decryptedReplies);
   const { prepareConversation, decrypt, cacheDecryptedMessage, loadCachedDecryptedMessages } = e2ee;
-  const [cacheHydrated, setCacheHydrated] = useState(false);
 
   // On open: fetch-or-create the conversation key, share it with every peer
   // device, and learn whether this chat can actually be E2EE right now.
@@ -435,9 +434,8 @@ export function ChatView({
   }, [conversationId]);
   useEffect(() => { decryptedTextsRef.current = decryptedTexts; }, [decryptedTexts]);
   useEffect(() => { decryptedRepliesRef.current = decryptedReplies; }, [decryptedReplies]);
-  // Read only locally authenticated, device-bound cached text before starting
-  // background decryption. A cache miss remains fail-closed and falls through
-  // to normal WebCrypto decryption below.
+  // Verified cache reads race normal local-key decryption; optional storage
+  // must never hold fresh authorized history behind a full page scan.
   useEffect(() => {
     if (!e2ee.initialized) return;
     let alive = true;
@@ -445,13 +443,11 @@ export function ChatView({
       if (alive && cached.size > 0) {
         setDecryptedTexts((current) => new Map([...current, ...cached]));
       }
-    }).finally(() => {
-      if (alive) setCacheHydrated(true);
-    });
+    }).catch(() => { /* Optional cache never blocks normal decryption. */ });
     return () => { alive = false; };
   }, [conversationId, e2ee.initialized, items, loadCachedDecryptedMessages]);
   useEffect(() => {
-    if (!e2ee.initialized || !cacheHydrated) return;
+    if (!e2ee.initialized) return;
     const pending = items.filter(
       (m) =>
         m.encrypted &&
@@ -554,7 +550,7 @@ export function ChatView({
       alive = false;
       if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
     };
-  }, [items, e2ee.initialized, cacheHydrated, conversationId, decrypt, decryptRetry, cacheDecryptedMessage]);
+  }, [items, e2ee.initialized, conversationId, decrypt, decryptRetry, cacheDecryptedMessage]);
 
   /** Plaintext for a message: decrypted locally, or raw when not encrypted. */
   const textOf = useCallback((m: { encrypted: boolean; text: string; id: string }) => {

@@ -1,4 +1,5 @@
 import "client-only";
+import { mapWithConcurrency } from "@/lib/async";
 
 import {
   decryptKeyFromSender,
@@ -115,6 +116,40 @@ export async function readVerifiedMessage(
   } catch {
     return undefined;
   }
+}
+
+/** One database/transaction for a history page, rather than an open per row. */
+export async function readVerifiedMessages(
+  cacheKey: CryptoKey, userId: string, conversationId: string,
+  messages: Array<{ id: string; text: string }>,
+): Promise<Map<string, string>> {
+  if (!messages.length) return new Map();
+  const database = await openDatabase();
+  const rows = new Map<string, CachedMessage>();
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const tx = database.transaction(MESSAGES, "readonly");
+      for (const message of messages) {
+        const request = tx.objectStore(MESSAGES).get(messageId(userId, conversationId, message.id));
+        request.onsuccess = () => { if (request.result) rows.set(message.id, request.result as CachedMessage); };
+      }
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error);
+    });
+  } finally { database.close(); }
+  const verified = await mapWithConcurrency(messages, 4, async message => {
+    const cached = rows.get(message.id);
+    if (!cached || cached.userId !== userId || cached.sourceCiphertext !== message.text) return null;
+    try {
+      const bytes = await crypto.subtle.decrypt({
+        name: "AES-GCM", iv: new Uint8Array(cached.iv),
+        additionalData: associatedData(userId, conversationId, message.id, message.text),
+      }, cacheKey, cached.ciphertext);
+      return [message.id, new TextDecoder().decode(bytes)] as const;
+    } catch { return null; }
+  });
+  return new Map(verified.filter((entry): entry is readonly [string, string] => entry !== null));
 }
 
 export async function writeVerifiedMessage(
