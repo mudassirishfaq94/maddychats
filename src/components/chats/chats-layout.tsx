@@ -295,8 +295,12 @@ export function ChatsLayout({
         aria-label="Conversations"
       >
         <div className="flex h-14 shrink-0 items-center justify-between gap-3 px-4">
-          <h1 className="text-xl font-semibold tracking-tight">Chats</h1>
+          <h1 className="min-w-0 truncate text-xl font-semibold tracking-tight">Chats</h1>
           <div className="flex shrink-0 items-center gap-1">
+        <Link href="/help" aria-label="Open Circlo Help" title="Circlo Help" className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[var(--border-strong)] bg-[var(--surface)] text-[var(--accent-fg)] transition-colors hover:bg-[var(--surface-2)] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--accent)]">
+          <LogoMark size={26} />
+          <span aria-hidden="true" className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-[var(--accent)] text-[10px] font-bold text-white">?</span>
+        </Link>
             <NewChatDialog start="group-people" compact />
             <NewChatDialog start="direct" compact />
           </div>
@@ -347,7 +351,7 @@ export function ChatsLayout({
           ) : null}
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain pb-20">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain pb-2">
           {conversations.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center px-6 text-center">
               <LogoMark size={30} className="text-[var(--muted)]" />
@@ -371,10 +375,7 @@ export function ChatsLayout({
             </ul>
           )}
         </div>
-        <Link href="/help" aria-label="Open Circlo Help" title="Circlo Help" className="absolute bottom-4 right-4 z-10 flex h-12 w-12 items-center justify-center rounded-full border border-[var(--border-strong)] bg-[var(--surface)] text-[var(--accent-fg)] shadow-lg transition-colors hover:bg-[var(--surface-2)] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--accent)]">
-          <LogoMark size={26} />
-          <span aria-hidden="true" className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-[var(--accent)] text-[10px] font-bold text-white">?</span>
-        </Link>
+
       </aside>
 
       {/* ------------------------------ chat area ------------------------------ */}
