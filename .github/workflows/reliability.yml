@@ -38,6 +38,15 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci
+      - name: Read guidance bundled with pinned Next.js
+        run: |
+          node - <<'JS'
+          const fs = require('node:fs');
+          const root = 'node_modules/next/dist/docs';
+          if (!fs.existsSync(root)) { console.log('Pinned package does not include dist/docs; official Next.js guides were consulted.'); process.exit(0); }
+          function walk(dir) { for (const entry of fs.readdirSync(dir, {withFileTypes:true})) { const file = dir + '/' + entry.name; if (entry.isDirectory()) walk(file); else if (/(layout|after|image)\.(md|mdx)$/.test(entry.name)) { console.log('\nGUIDE ' + file + '\n' + fs.readFileSync(file,'utf8')); } } }
+          walk(root);
+          JS
       - run: npm run db:migrate
       - run: npm run lint
       - run: npm run typecheck

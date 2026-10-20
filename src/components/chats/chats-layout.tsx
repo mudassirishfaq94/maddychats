@@ -16,6 +16,7 @@ import { LogoMark } from "@/components/brand/logo";
 import { NewChatDialog } from "./new-chat-dialog";
 import { ConversationMenu } from "./conversation-menu";
 import { useRealtime } from "@/components/providers/realtime-provider";
+import { useConversationList } from "@/components/providers/conversation-list-provider";
 import { mapWithConcurrency } from "@/lib/async";
 import { cn, timeAgo } from "@/lib/utils";
 
@@ -83,7 +84,7 @@ const ConversationRow = memo(function ConversationRow({ conv, active, online, pr
         )}
       >
         {conv.type === "group" && conv.avatarUrl ? (
-          <Image width={44} height={44} src={conv.avatarUrl} alt="Group photo" loading="lazy" decoding="async" className="h-11 w-11 shrink-0 rounded-full object-cover" />
+          <Image unoptimized width={44} height={44} src={conv.avatarUrl} alt="Group photo" loading="lazy" decoding="async" className="h-11 w-11 shrink-0 rounded-full object-cover" />
         ) : conv.otherMember ? (
           <span className="relative shrink-0">
             <Avatar user={conv.otherMember} size={44} />
@@ -182,25 +183,30 @@ export function ChatsLayout({
   const [liveList, setLiveList] = useState<{
     source: ConversationSummary[]; items: ConversationSummary[];
   } | null>(null);
-  const conversations = liveList?.source === initialConversations
-    ? liveList.items : initialConversations;
+  const { snapshot, seed } = useConversationList();
+  useEffect(() => { seed(initialConversations); }, [initialConversations, seed]);
+  const sourceConversations = snapshot?.conversations ?? initialConversations;
+  const conversations = liveList?.source === sourceConversations
+    ? liveList.items : sourceConversations;
   const { initialized, decrypt } = useSharedE2EE();
   const [previews, setPreviews] = useState<Map<string, string>>(new Map());
+  const previewCache = useRef(previews);
+  useEffect(() => { previewCache.current = previews; }, [previews]);
   useEffect(()=>{
     const pending=conversations.flatMap(conversation=>conversation.lastMessage?.expiresAt && !conversation.lastMessage.deletedAt ? [Date.parse(conversation.lastMessage.expiresAt)] : []);
     if(!pending.length)return;
     const expire=()=>{
       const now=Date.now();
-      setLiveList({source:initialConversations,items:conversations.map(conversation=>conversation.lastMessage?.expiresAt && Date.parse(conversation.lastMessage.expiresAt)<=now ? {...conversation,lastMessage:{...conversation.lastMessage,text:"",deletedAt:conversation.lastMessage.expiresAt}} : conversation)});
+      setLiveList({source:sourceConversations,items:conversations.map(conversation=>conversation.lastMessage?.expiresAt && Date.parse(conversation.lastMessage.expiresAt)<=now ? {...conversation,lastMessage:{...conversation.lastMessage,text:"",deletedAt:conversation.lastMessage.expiresAt}} : conversation)});
       setPreviews(current=>new Map([...current].filter(([key])=>!conversations.some(conversation=>conversation.lastMessage?.expiresAt && Date.parse(conversation.lastMessage.expiresAt)<=now && key.startsWith(`${conversation.lastMessage.id}:`)))));
     };
     const timer=setTimeout(expire,Math.min(2147483647,Math.max(0,Math.min(...pending)-Date.now()+1)));
     return()=>clearTimeout(timer);
-  },[conversations,initialConversations]);
+  },[conversations,sourceConversations]);
   useEffect(() => {
     if (!initialized) return;
     let cancelled = false;
-    const pending = conversations.filter(c => c.lastMessage?.encrypted && c.lastMessage.text && !c.lastMessage.deletedAt);
+    const pending = conversations.filter(c => c.lastMessage?.encrypted && c.lastMessage.text && !c.lastMessage.deletedAt && !previewCache.current.has(`${c.lastMessage.id}:${c.lastMessage.text}`));
     // Decrypting previews for every encrypted conversation at once fans out
     // unbounded crypto work onto the main thread as soon as the list renders.
     // Cap concurrency so the chat list stays responsive on a slow device.
@@ -222,7 +228,7 @@ export function ChatsLayout({
     return () => { cancelled = true; };
   }, [conversations, initialized, decrypt]);
   const pathname = usePathname();
-  const { subscribe, presence, connected } = useRealtime();
+  const { presence } = useRealtime();
   const activeId = pathname.startsWith("/app/chats/")
     ? pathname.split("/")[3]
     : null;
@@ -230,63 +236,6 @@ export function ChatsLayout({
   const deferredFilter = useDeferredValue(filter);
   const [showArchived, setShowArchived] = useState(false);
   const [chatFilter, setChatFilter] = useState<"all" | "unread" | "favorites" | "groups" | "dms">("all");
-
-  // Live activity → debounced server refresh keeps previews ordered & fresh.
-  const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => {
-    let controller: AbortController | null = null;
-    const refreshList = () => {
-      controller?.abort();
-      controller = new AbortController();
-      const signal = controller.signal;
-      void fetch("/api/conversations", { cache: "no-store", signal })
-        .then((response) => response.ok ? response.json() : null)
-        .then((data: { conversations?: ConversationSummary[] } | null) => {
-          if (!signal.aborted && data?.conversations) setLiveList({ source: initialConversations, items: data.conversations });
-        })
-        .catch(() => undefined);
-    };
-    // A prefetched tab can miss events while unmounted. Reconcile on entry
-    // and reconnect without blocking the already visible conversation list.
-    refreshList();
-    const unsubscribe = subscribe((event) => {
-      // Presence and typing already update through client state; refreshing
-      // server components for those high-frequency events caused avoidable
-      // network traffic and renders. Revalidate only persisted sidebar data.
-      if (
-        event.type !== "message:new" &&
-        event.type !== "message:update" &&
-        event.type !== "message:deleted" &&
-        event.type !== "message:lifetime" &&
-        event.type !== "message:read" &&
-        event.type !== "conversation:new" &&
-        event.type !== "group:updated" &&
-        event.type !== "group:member-added" &&
-        event.type !== "group:member-removed" &&
-        event.type !== "group:member-updated" &&
-        event.type !== "conversation:delete"
-      ) {
-        return;
-      }
-      if (refreshTimer.current) clearTimeout(refreshTimer.current);
-      refreshTimer.current = setTimeout(() => {
-        refreshList();
-      // A short debounce groups message receipts and edits arriving together,
-      // while keeping the conversation preview feeling immediate.
-      }, 180);
-    });
-    return () => {
-      unsubscribe();
-      controller?.abort();
-      if (refreshTimer.current) clearTimeout(refreshTimer.current);
-    };
-  }, [subscribe, initialConversations, connected]);
-
-  useEffect(() => {
-    return () => {
-      if (refreshTimer.current) clearTimeout(refreshTimer.current);
-    };
-  }, []);
 
   const archivedCount = useMemo(
     () => conversations.filter((c) => c.archived).length,
@@ -346,8 +295,12 @@ export function ChatsLayout({
         aria-label="Conversations"
       >
         <div className="flex h-14 shrink-0 items-center justify-between gap-3 px-4">
-          <h1 className="text-xl font-semibold tracking-tight">Chats</h1>
+          <h1 className="min-w-0 truncate text-xl font-semibold tracking-tight">Chats</h1>
           <div className="flex shrink-0 items-center gap-1">
+        <Link href="/help" aria-label="Open Circlo Help" title="Circlo Help" className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[var(--border-strong)] bg-[var(--surface)] text-[var(--accent-fg)] transition-colors hover:bg-[var(--surface-2)] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--accent)]">
+          <LogoMark size={26} />
+          <span aria-hidden="true" className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-[var(--accent)] text-[10px] font-bold text-white">?</span>
+        </Link>
             <NewChatDialog start="group-people" compact />
             <NewChatDialog start="direct" compact />
           </div>
@@ -398,7 +351,7 @@ export function ChatsLayout({
           ) : null}
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain pb-20">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain pb-2">
           {conversations.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center px-6 text-center">
               <LogoMark size={30} className="text-[var(--muted)]" />
@@ -422,10 +375,7 @@ export function ChatsLayout({
             </ul>
           )}
         </div>
-        <Link href="/help" aria-label="Open Circlo Help" title="Circlo Help" className="absolute bottom-4 right-4 z-10 flex h-12 w-12 items-center justify-center rounded-full border border-[var(--border-strong)] bg-[var(--surface)] text-[var(--accent-fg)] shadow-lg transition-colors hover:bg-[var(--surface-2)] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--accent)]">
-          <LogoMark size={26} />
-          <span aria-hidden="true" className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-[var(--accent)] text-[10px] font-bold text-white">?</span>
-        </Link>
+
       </aside>
 
       {/* ------------------------------ chat area ------------------------------ */}

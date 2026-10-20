@@ -30,6 +30,7 @@ export async function testNavigationLatency(context,base,conversationId) {
  const rows=[],additionalTabs=[];const cdp=await context.newCDPSession(page);
  try{
   await page.goto(base+"/app");await page.getByLabel("Search conversations",{exact:true}).waitFor();
+  const shell=await page.locator(".circlo-shell").elementHandle();assert(shell,"Shared shell exists");
   const sidebar=page.getByRole("complementary",{name:"Conversations",exact:true});
   const help=await sidebar.getByRole("link",{name:"Open Circlo Help",exact:true}).boundingBox();
   const listBottom=await sidebar.getByRole("list").first().evaluate(list=>list.parentElement.getBoundingClientRect().bottom);
@@ -49,6 +50,7 @@ export async function testNavigationLatency(context,base,conversationId) {
      {name:"Chats",path:"/app/chats",selector:"h1",text:"Chats"},
     ]){
      const before=requests.length;const timing=await measure(page,nav().getByRole("link",{name:target.name,exact:true}),target.path,target.selector,target.text,target.readySelector,target.readyText);
+     assert(await shell.evaluate(node=>node.isConnected),"Tab navigation must preserve the same shell DOM");
      rows.push({scenario,round,route:target.name,...timing,rscRequests:requests.length-before});
      await page.waitForTimeout(250);
     }

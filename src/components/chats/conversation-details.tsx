@@ -258,7 +258,7 @@ export function ConversationDetails({
         {group.type === "group" ? (
           <div className="border-b border-[var(--border)] px-4 py-5">
             <div className="flex flex-col items-center gap-2">
-              {group.avatarUrl ? <Image width={64} height={64} src={group.avatarUrl} alt="" className="h-16 w-16 rounded-full object-cover" /> : <span className="flex h-16 w-16 items-center justify-center rounded-full bg-[var(--accent-soft)]"><Users className="h-7 w-7 text-[var(--accent-fg)]" /></span>}
+              {group.avatarUrl ? <Image unoptimized width={64} height={64} src={group.avatarUrl} alt="" className="h-16 w-16 rounded-full object-cover" /> : <span className="flex h-16 w-16 items-center justify-center rounded-full bg-[var(--accent-soft)]"><Users className="h-7 w-7 text-[var(--accent-fg)]" /></span>}
               <span className="max-w-full break-words text-center text-base font-semibold [overflow-wrap:anywhere]">{group.name}</span>
               <span className="text-xs text-[var(--muted)]">{group.members.length} members · {group.members.filter((m) => m.role === "owner" || m.role === "admin").length} admins</span>
               {group.description ? <p className="text-center text-xs text-[var(--muted)]">{group.description}</p> : null}
@@ -1428,7 +1428,7 @@ function GroupSettingsPanel({ conversationId, group, busy, onUpdate }: {
     {open ? <div className="mt-2 space-y-4 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
       <p className="text-xs text-[var(--muted)]">Group permissions determine who can edit these details. Group names, descriptions and photos are visible to the service; chat messages stay encrypted.</p>
       <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4"><p className="mb-3 text-xs font-semibold uppercase tracking-wider text-[var(--muted)]">Your group’s identity</p><div className="flex flex-wrap items-center gap-3">
-        {group.avatarUrl ? <Image src={group.avatarUrl} alt="Group photo" width={64} height={64} className="h-16 w-16 rounded-full object-cover" /> : null}
+        {group.avatarUrl ? <Image unoptimized src={group.avatarUrl} alt="Group photo" width={64} height={64} className="h-16 w-16 rounded-full object-cover" /> : null}
         <button type="button" disabled={infoLocked} onClick={() => fileRef.current?.click()} className="btn min-h-11 text-xs">Change group photo</button>
         <input ref={fileRef} type="file" aria-label="Group photo" accept="image/jpeg,image/png,image/webp,image/gif,image/avif" hidden onChange={event => { const file = event.target.files?.[0]; event.target.value = ""; if (file) void submit(file); }} />
       </div></div>

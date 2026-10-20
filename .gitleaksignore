@@ -9,3 +9,11 @@ c26358f526fd64cf53ed2c77502064e0e1354601:signal-bridge/Cargo.lock:generic-api-ke
 
 # Same reviewed disposable loopback JWT fixture moved by the OAuth regression additions.
 63b5ff7d47792684bc47e42eaeaf448c3503a752:scripts/test-item3-authorization.ts:generic-api-key:73
+# Re-reviewed on main 7341141: RFC 6238 public vector (two MFA fixtures),
+# loopback-only disposable JWT fixtures (two tests), and crates.io package checksum.
+# These are exact historical fingerprints, not path/rule exclusions.
+7341141ede32971d51558d5837dd3fe00ff27fac:scripts/test-item1-security.ts:generic-api-key:47
+7341141ede32971d51558d5837dd3fe00ff27fac:scripts/test-remaining-hardening.ts:generic-api-key:67
+7341141ede32971d51558d5837dd3fe00ff27fac:scripts/test-items4-6.ts:generic-api-key:65
+7341141ede32971d51558d5837dd3fe00ff27fac:scripts/test-item3-authorization.ts:generic-api-key:91
+7341141ede32971d51558d5837dd3fe00ff27fac:signal-bridge/Cargo.lock:generic-api-key:778

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   CircleDashed,
   Phone,
@@ -27,6 +27,11 @@ const NAV_ITEMS = [
 
 export function MobileNav() {
   const pathname = usePathname();
+  const router = useRouter();
+  const warm = (href: string) => {
+    if (!PREFETCHED.has(href)) router.prefetch(href);
+    if (href === "/app/status") void import("@/components/status/status-entry").then(module => module.warmStatusCode()).catch(() => undefined);
+  };
 
   return (
     <nav
@@ -45,6 +50,9 @@ export function MobileNav() {
               key={item.href}
               href={item.href}
               prefetch={PREFETCHED.has(item.href)}
+              onPointerEnter={() => warm(item.href)}
+              onFocus={() => warm(item.href)}
+              onTouchStart={() => warm(item.href)}
               aria-label={item.label}
               aria-current={active ? "page" : undefined}
               className={cn(

@@ -60,10 +60,11 @@ export function AuthProvider({ children, initialUser }: { children: ReactNode; i
   const loginRetryAt = useRef(0);
   // Tracks the last time we refreshed the session, so focus/visibility
   // handlers cannot fire a request on every tab switch.
-  const lastRefreshAt = useRef(Date.now());
+  const lastRefreshAt = useRef(0);
 
   useEffect(() => {
     mounted.current = true;
+    lastRefreshAt.current = Date.now();
     return () => {
       mounted.current = false;
     };
@@ -94,9 +95,12 @@ export function AuthProvider({ children, initialUser }: { children: ReactNode; i
   }, []);
 
   useEffect(() => {
+    // The root already authorized this request. Focus/visibility still revalidate,
+    // and every protected API independently enforces current session eligibility.
+    if (initialUser !== undefined) return;
     const timer = window.setTimeout(() => void refresh(), 0);
     return () => window.clearTimeout(timer);
-  }, [refresh]);
+  }, [refresh, initialUser]);
 
   useEffect(() => {
     // Keep the signed cookie rolling for tabs that remain open for days. Also
@@ -165,7 +169,7 @@ export function AuthProvider({ children, initialUser }: { children: ReactNode; i
         return { ok: false, error: "Network error. Please try again." };
       }
     },
-    [router],
+    [],
   );
 
   const signUp = useCallback(
@@ -208,7 +212,7 @@ export function AuthProvider({ children, initialUser }: { children: ReactNode; i
         return { ok: false, error: "Network error. Please try again." };
       }
     },
-    [router],
+    [],
   );
 
   const signOut = useCallback(async () => {

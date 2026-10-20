@@ -65,6 +65,22 @@ test("disappearing content is denied before cleanup and erased with both partici
   assert.equal((await pool.query("select text from messages where id=$1",[created.message.id])).rows[0].text, "");
 });
 
+test("history masks expired text and attachments without a cleanup write", async () => {
+  const conversation = (await chat.createGroupConversation({creatorId:owner,name:"Read-only history",memberIds:[member]})).id;
+  const expired = await chat.createMessage(conversation, owner, "cipher-expired", null, false, true, { disappearingSeconds:1, clientMessageId:randomUUID() });
+  await pool.query("update messages set expires_at=now()-interval '1 second' where id=$1", [expired.message.id]);
+  const current = await chat.createMessage(conversation, member, "cipher-current", expired.message.id, false, true, {clientMessageId:randomUUID()});
+  const history = await chat.listMessages(conversation, null, 30, member);
+  const old = history.messages.find(message=>message.id===expired.message.id)!;
+  assert.equal(old.text, ""); assert.deepEqual(old.attachments, []); assert(old.deletedAt);
+  const reply = history.messages.find(message=>message.id===current.message.id)!;
+  assert.equal(reply.replyTo?.text, ""); assert.equal(reply.replyTo?.deleted, true);
+  const stored = (await pool.query("select text,deleted_at from messages where id=$1", [expired.message.id])).rows[0];
+  assert.equal(stored.text, "cipher-expired"); assert.equal(stored.deleted_at, null, "History does not wait on a cleanup UPDATE");
+  const summaries = await chat.listConversationsFor(owner);
+  assert.equal(summaries.find(item=>item.id===conversation)?.lastMessage?.id, current.message.id);
+});
+
 test("scheduled delivery uses locked latest job, rejects plaintext and never duplicates concurrent/restarted workers", async () => {
   await assert.rejects(schedules.scheduleMessage({ senderId:owner,conversationId:group,text:"plaintext",scheduledFor:new Date(Date.now()+60000),encrypted:false }));
   const job = await schedules.scheduleMessage({ senderId:owner,conversationId:group,text:"opaque-before",scheduledFor:new Date(Date.now()+60000),encrypted:true });

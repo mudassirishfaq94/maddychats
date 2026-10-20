@@ -2,7 +2,6 @@ import { redirect } from "next/navigation";
 import type { Metadata } from "next";
 import type * as React from "react";
 import { getSessionUser } from "@/server/session";
-import { AppShell } from "@/components/shell/app-shell";
 import { PeopleSearch } from "@/components/people/people-search";
 import { Users } from "lucide-react";
 
@@ -14,7 +13,7 @@ export default async function PeoplePage() {
   if (!user) redirect("/login?next=/app/people");
 
   return (
-    <AppShell user={user}>
+    <>
     <div className="mx-auto h-full w-full max-w-3xl overflow-y-auto px-4 py-6 sm:px-6">
       <section className="animate-fade-up">
         <span className="badge badge-accent">
@@ -33,6 +32,6 @@ export default async function PeoplePage() {
         <PeopleSearch />
       </div>
     </div>
-    </AppShell>
+    </>
   );
 }

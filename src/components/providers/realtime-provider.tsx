@@ -27,6 +27,18 @@ interface NotificationPreferences {
   showNotificationDetails: boolean;
 }
 
+// Share only in-flight reads; never retain one account's response for another.
+const preferenceReads = new Map<string, Promise<NotificationPreferences | null>>();
+function readNotificationPreferences(userId: string): Promise<NotificationPreferences | null> {
+  const pending = preferenceReads.get(userId);
+  if (pending) return pending;
+  const load = fetch("/api/notifications/preferences", { cache: "no-store", signal: AbortSignal.timeout(10000) })
+    .then(async response => response.ok ? (await response.json() as { preferences?: NotificationPreferences }).preferences ?? null : null);
+  preferenceReads.set(userId, load);
+  void load.finally(() => { if (preferenceReads.get(userId) === load) preferenceReads.delete(userId); }).catch(() => undefined);
+  return load;
+}
+
 /**
  * Latest notification preferences. Every surface that renders an alert reads
  * this snapshot so the sender and preview follow the same rule everywhere.
@@ -67,6 +79,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const { decrypt } = useSharedE2EE();
   const { status, user } = useAuth();
+  const userId = user?.id;
   const [connected, setConnected] = useState(false);
   const [presence, setPresence] = useState<PresenceState>({});
   const privacyVersion = useRef(0);
@@ -189,10 +202,10 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     // visibilitychange so returning from another app or switching tabs does
     // not rebind the token on every focus.
     let lastPushSyncAt = 0;
-    const sync = async (): Promise<void> => {
+    const sync = async (force = false): Promise<void> => {
       if (stopped || document.visibilityState !== "visible") return;
-      if (Date.now() - lastPushSyncAt < 30_000) return;
-      if (running) { resyncRequested = true; return; }
+      if (running) { if (force) resyncRequested = true; return; }
+      if (!force && Date.now() - lastPushSyncAt < 30_000) return;
       running = true;
       const epoch = preferenceEpoch;
       try {
@@ -206,11 +219,10 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
         // Preserve the same account during a failed retry, but detach a previous
         // account before network work. Older APKs retain their legacy clear path.
         if (bridge.hasHostedPushBridge()) await bridge.hostedPush("reconcile", user.id).catch(() => bridge.hostedPush("clear"));
-        const preferenceResponse = await fetch("/api/notifications/preferences", { cache: "no-store", signal: AbortSignal.timeout(10000) });
-        if (!preferenceResponse.ok || stopped) return;
-        const settings = await preferenceResponse.json() as { preferences?: NotificationPreferences };
-        if (settings.preferences?.pushNotifications !== true) {
-          if (settings.preferences?.pushNotifications === false && bridge.hasHostedPushBridge()) await bridge.hostedPush("clear");
+        const settings = await readNotificationPreferences(user.id);
+        if (!settings || stopped) return;
+        if (settings.pushNotifications !== true) {
+          if (settings.pushNotifications === false && bridge.hasHostedPushBridge()) await bridge.hostedPush("clear");
           return;
         }
         if (bridge.hasHostedPushBridge()) await bridge.hostedPush("bind", user.id);
@@ -226,7 +238,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
       finally {
         lastPushSyncAt = Date.now();
         running = false;
-        if (resyncRequested && !stopped) { resyncRequested = false; void sync(); }
+        if (resyncRequested && !stopped) { resyncRequested = false; void sync(true); }
       }
     };
     void import("@/lib/capacitor-push").then(async native => {
@@ -237,13 +249,15 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
       const enabled = (event as CustomEvent<NotificationPreferences>).detail?.pushNotifications;
       preferenceEpoch++;
       if (enabled === false) void import("@/lib/native-push-bridge").then(bridge => bridge.hasHostedPushBridge() ? bridge.hostedPush("clear") : null).catch(() => {});
-      else void sync();
+      else void sync(true);
     };
+    const resume = () => { void sync(); };
+    const explicitRefresh = () => { void sync(true); };
     void sync();
     window.addEventListener("maddy:notification-preferences", preferenceChanged);
-    document.addEventListener("visibilitychange", sync);
-    window.addEventListener("circlo:native-push-refresh", sync);
-    return () => { stopped = true; removeTap?.(); window.removeEventListener("maddy:notification-preferences", preferenceChanged); document.removeEventListener("visibilitychange", sync); window.removeEventListener("circlo:native-push-refresh", sync); };
+    document.addEventListener("visibilitychange", resume);
+    window.addEventListener("circlo:native-push-refresh", explicitRefresh);
+    return () => { stopped = true; removeTap?.(); window.removeEventListener("maddy:notification-preferences", preferenceChanged); document.removeEventListener("visibilitychange", resume); window.removeEventListener("circlo:native-push-refresh", explicitRefresh); };
   }, [status, user?.id]);
 
 
@@ -265,16 +279,16 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (status !== "authenticated") {
+    if (status !== "authenticated" || !userId) {
       // A signed-out device must not keep the previous account's alert rules.
       notificationPreferencesSnapshot = null;
       return;
     }
+    notificationPreferencesSnapshot = null;
     const controller = new AbortController();
-    void fetch("/api/notifications/preferences", { cache: "no-store", signal: controller.signal })
-      .then((response) => response.ok ? response.json() : null)
-      .then((data: { preferences?: NotificationPreferences } | null) => {
-        if (data?.preferences) notificationPreferencesSnapshot = data.preferences;
+    void readNotificationPreferences(userId)
+      .then(preferences => {
+        if (!controller.signal.aborted && preferences) notificationPreferencesSnapshot = preferences;
       })
       .catch(() => undefined);
     const update = (event: Event) => {
@@ -285,7 +299,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
       controller.abort();
       window.removeEventListener("maddy:notification-preferences", update);
     };
-  }, [status]);
+  }, [status, userId]);
 
   useEffect(() => {
     const ring = () => { if (notificationPreferencesSnapshot?.notificationSound) playNotificationSound(); };
@@ -318,7 +332,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (status !== "authenticated") return;
+    if (status !== "authenticated" || !userId) return;
 
     let disposed = false;
     const es = new EventSource("/api/realtime/stream");
@@ -381,7 +395,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
       } catch {
         return;
       }
-      if (event.type === "message:new" && event.message.senderId !== user?.id) acknowledge(event.message.id);
+      if (event.type === "message:new" && event.message.senderId !== userId) acknowledge(event.message.id);
       // Presence is centrally tracked so any component can read it.
       if (event.type === "presence:update") {
         setPresence((prev) => ({
@@ -411,12 +425,12 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
           return;
         }
         const version = privacyVersion.current;
-        if (isNativeApp() && preferences?.pushNotifications && user?.id) {
-          void resolveLocalNotification(event.notification.id, user.id, decrypt, () => !disposed && version === privacyVersion.current).then(async detail => {
+        if (isNativeApp() && preferences?.pushNotifications && userId) {
+          void resolveLocalNotification(event.notification.id, userId, decrypt, () => !disposed && version === privacyVersion.current).then(async detail => {
             if (!detail || disposed || version !== privacyVersion.current || document.visibilityState === "visible") return;
             const bridge = await import("@/lib/native-push-bridge");
             if (disposed || version !== privacyVersion.current) return;
-            await bridge.showLocalNotification({ ...detail, recipientId: user.id, notificationId: event.notification.id });
+            await bridge.showLocalNotification({ ...detail, recipientId: userId, notificationId: event.notification.id });
           }).catch(() => {});
         }
         if (preferences?.notificationSound && localStorage.getItem("maddy:web-push-subscribed") !== "1") playNotificationSound();
@@ -427,11 +441,11 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
           Notification.permission === "granted" &&
           (document.visibilityState === "hidden" || !document.hasFocus())
         ) {
-          void resolveLocalNotification(event.notification.id, user!.id, decrypt, () => !disposed && version === privacyVersion.current).then(detail => {
+          void resolveLocalNotification(event.notification.id, userId, decrypt, () => !disposed && version === privacyVersion.current).then(detail => {
             if (!detail || disposed || version !== privacyVersion.current || document.visibilityState === "visible") return;
             const url = `/app/chats/${detail.conversationId}?message=${detail.messageId}`;
             const options: NotificationOptions = {
-              body: detail.body, tag: `circlo-${user?.id}-${conversationId}`,
+              body: detail.body, tag: `circlo-${userId}-${conversationId}`,
               icon: "/icons/circlo-192.png", badge: "/icons/circlo-badge-96.png", data: { url }, silent: detail.silent,
             };
             if ("serviceWorker" in navigator) {
@@ -458,7 +472,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
       setConnected(false);
       setPresence({});
     };
-  }, [playNotificationSound, router, status, user, decrypt]);
+  }, [playNotificationSound, router, status, userId, decrypt]);
 
   const value = useMemo<RealtimeContextValue>(
     () => ({ connected, subscribe, presence }),

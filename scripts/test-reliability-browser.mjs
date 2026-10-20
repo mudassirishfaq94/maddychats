@@ -50,6 +50,8 @@ try {
   },{id:account.id,deviceId:account.deviceId,secret:account.secret,publicKey:account.publicKey,encryptedPrivateKey:account.encryptedPrivateKey});
   const page=await context.newPage();page.setDefaultTimeout(30000);page.setDefaultNavigationTimeout(120000);page.on("pageerror",error=>{errors.push(error.message);console.error("Browser runtime error:",error.message);});account.page=page;
   await page.goto(`${base}/app/chats/${group}`);await page.getByRole("textbox",{name:"Message text"}).waitFor();
+  await page.waitForFunction(id=>Boolean(localStorage.getItem(`e2ee_keypair_${id}`)),account.id);
+  assert.equal(await page.evaluate(({id,envelope})=>JSON.parse(localStorage.getItem(`e2ee_keypair_${id}`)).encryptedPrivateKey===envelope,{id:account.id,envelope:account.encryptedPrivateKey}),true,"An unchanged protected key envelope is reused during startup");
  }
  if(process.env.OFFLINE_ONLY==="1"){
   await testOfflineCompose(contexts[0],base,owner,group,pool,member);
@@ -128,6 +130,25 @@ try {
  const image=member.page.getByRole("region",{name:"Messages",exact:true}).getByAltText("large-encrypted-preview.png",{exact:true});
  await image.evaluate(element=>new Promise((resolve,reject)=>{if(element.complete&&element.naturalWidth>0)return resolve();element.addEventListener('load',()=>resolve(),{once:true});element.addEventListener('error',()=>reject(new Error('Recipient could not decode encrypted image')),{once:true});}));
  console.log("PASS: large encrypted chunk upload and real recipient image decryption");
+ // File chips must not download ciphertext until the recipient requests it.
+ const downloads = [];
+ const observeMedia = request => { if (new URL(request.url()).pathname.startsWith("/api/media/")) downloads.push(request.url()); };
+ member.page.on("request", observeMedia);
+ await owner.page.locator('input[type="file"]').first().setInputFiles({name:"on-demand-performance.txt",mimeType:"text/plain",buffer:Buffer.from("disposable performance file")});
+ const fileResponse = owner.page.waitForResponse(response=>new URL(response.url()).pathname==="/api/upload/message"&&response.request().method()==="POST");
+ await owner.page.getByRole("button",{name:"Send attachments",exact:true}).click();
+ const fileResult = await fileResponse; assert.equal(fileResult.status(),201,await fileResult.text());
+ const fileAttachment = (await fileResult.json()).message.attachments[0];
+ await member.page.getByRole("button",{name:"Download on-demand-performance.txt",exact:true}).waitFor();
+ await member.page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+ assert.equal(downloads.filter(url=>new URL(url).pathname===`/api/media/${fileAttachment.id}`).length,0,"File chips must not eagerly download encrypted bytes");
+ const download = member.page.waitForEvent("download");
+ await member.page.getByRole("button",{name:"Download on-demand-performance.txt",exact:true}).click();
+ assert.equal((await download).suggestedFilename(),"on-demand-performance.txt");
+ assert.equal(downloads.filter(url=>new URL(url).pathname===`/api/media/${fileAttachment.id}`).length,1,"Requested file downloads once");
+ member.page.off("request",observeMedia);
+ console.log("PASS: encrypted file is fetched once on recipient intent");
+
 
  await owner.page.goto(base+"/app/profile#encryption-devices");await openDeviceTools(owner.page);
  await owner.page.getByRole("button",{name:"Set up recovery code",exact:true}).click();const code=await owner.page.locator('[aria-label="New recovery code"]').textContent();assert(code);

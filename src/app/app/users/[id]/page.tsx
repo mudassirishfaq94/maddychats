@@ -10,7 +10,6 @@ import {
 } from "lucide-react";
 import { getSessionUser } from "@/server/session";
 import { findUserById, toPublicUser } from "@/server/users";
-import { AppShell } from "@/components/shell/app-shell";
 import { StartConversationButton } from "@/components/chats/start-conversation-button";
 import { Avatar } from "@/components/avatar";
 import { formatDate, timeAgo } from "@/lib/utils";
@@ -32,7 +31,7 @@ export default async function PublicProfilePage({
   const target = await findUserById(id);
 
   return (
-    <AppShell user={me}>
+    <>
     <div className="mx-auto h-full w-full max-w-3xl overflow-y-auto px-4 py-6 sm:px-6">
       <Link
         href="/app/people"
@@ -120,6 +119,6 @@ export default async function PublicProfilePage({
         </>
       )}
     </div>
-    </AppShell>
+    </>
   );
 }

@@ -1,10 +1,12 @@
 "use client";
 import { createContext, useContext, useEffect, type ReactNode } from "react";
+import { clearAttachmentMediaCache } from "@/components/chats/e2ee-context";
 import { useE2EE } from "@/hooks/use-e2ee";
 import { useAuth } from "./auth-provider";
 const Context = createContext<ReturnType<typeof useE2EE> | null>(null);
 function UserEncryption({ userId, children, setupOnly }: { userId?: string; children: ReactNode; setupOnly: boolean }) {
   const encryption = useE2EE(userId);
+  useEffect(() => () => clearAttachmentMediaCache(), []);
   const { initialized, getConversationKey, prepareConversation } = encryption;
   useEffect(() => {
     if (!initialized || !userId || setupOnly) return;
