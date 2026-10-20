@@ -1,4 +1,5 @@
 import { pool } from "@/db";
+import { matchesBearer } from "@/server/secret-token";
 import { NextRequest } from "next/server";
 import { realtimeListener } from "@/server/realtime-listener";
 
@@ -9,7 +10,7 @@ export async function GET(req: NextRequest) {
   const secret = process.env.HEALTHCHECK_SECRET;
   const headers = { "Cache-Control": "no-store" };
   if (!secret) return Response.json({ ok: false }, { status: 503, headers });
-  if (req.headers.get("authorization") !== `Bearer ${secret}`) {
+  if (!matchesBearer(req.headers.get("authorization"), secret)) {
     return Response.json({ ok: false }, { status: 401, headers });
   }
   try {
