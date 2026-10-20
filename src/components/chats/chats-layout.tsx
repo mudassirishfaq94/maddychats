@@ -4,7 +4,7 @@ import Image from "next/image";
 import { SwipeFilters } from "./swipe-filters";
 import { useHydrated } from "@/hooks/use-hydrated";
 
-import { memo, useDeferredValue, useEffect, useMemo, useState, type ReactNode } from "react";
+import { memo, useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type * as React from "react";
@@ -190,6 +190,8 @@ export function ChatsLayout({
     ? liveList.items : sourceConversations;
   const { initialized, decrypt } = useSharedE2EE();
   const [previews, setPreviews] = useState<Map<string, string>>(new Map());
+  const previewCache = useRef(previews);
+  useEffect(() => { previewCache.current = previews; }, [previews]);
   useEffect(()=>{
     const pending=conversations.flatMap(conversation=>conversation.lastMessage?.expiresAt && !conversation.lastMessage.deletedAt ? [Date.parse(conversation.lastMessage.expiresAt)] : []);
     if(!pending.length)return;
@@ -204,7 +206,7 @@ export function ChatsLayout({
   useEffect(() => {
     if (!initialized) return;
     let cancelled = false;
-    const pending = conversations.filter(c => c.lastMessage?.encrypted && c.lastMessage.text && !c.lastMessage.deletedAt);
+    const pending = conversations.filter(c => c.lastMessage?.encrypted && c.lastMessage.text && !c.lastMessage.deletedAt && !previewCache.current.has(`${c.lastMessage.id}:${c.lastMessage.text}`));
     // Decrypting previews for every encrypted conversation at once fans out
     // unbounded crypto work onto the main thread as soon as the list renders.
     // Cap concurrency so the chat list stays responsive on a slow device.

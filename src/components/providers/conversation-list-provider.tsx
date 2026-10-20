@@ -21,8 +21,11 @@ function AccountConversationList({ userId, children }: { userId: string; childre
   const pending = useRef<Promise<Snapshot> | null>(null);
   const controller = useRef<AbortController | null>(null);
   const active = useRef(true);
+  const revision = useRef(0);
   const refresh = useCallback((): Promise<Snapshot> => {
+    if (!userId) return Promise.reject(new Error("Sign in to load conversations"));
     if (pending.current) return pending.current;
+    const version = revision.current;
     const request = new AbortController();
     controller.current = request;
     const load = (async () => {
@@ -33,8 +36,8 @@ function AccountConversationList({ userId, children }: { userId: string; childre
       const data = await response.json() as Snapshot;
       if (data.viewerId !== userId || !Array.isArray(data.conversations)) throw new Error("Conversation account changed");
       request.signal.throwIfAborted();
-      if (active.current) { current.current = data; setSnapshot(data); }
-      return data;
+      if (active.current && revision.current === version) { current.current = data; setSnapshot(data); }
+      return current.current ?? data;
     })();
     pending.current = load;
     void load.finally(() => {
@@ -44,6 +47,7 @@ function AccountConversationList({ userId, children }: { userId: string; childre
   }, [userId]);
   const read = useCallback(() => pending.current ?? (current.current ? Promise.resolve(current.current) : refresh()), [refresh]);
   const seed = useCallback((conversations: ConversationSummary[]) => {
+    revision.current++;
     const data = { viewerId: userId, conversations };
     current.current = data;
     setSnapshot(data);
@@ -56,18 +60,20 @@ function AccountConversationList({ userId, children }: { userId: string; childre
   useEffect(() => {
     // Server-rendered list seeds arrive before this parent's passive effect.
     // Reconcile after stream connection to cover the SSR-to-SSE gap.
-    if (connected || !current.current) void refresh().catch(() => undefined);
-  }, [connected, refresh]);
+    if (userId && (connected || !current.current)) void refresh().catch(() => undefined);
+  }, [userId, connected, refresh]);
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | undefined;
     let dirty = false;
-    const reconcile = () => {
-      if (!dirty || !active.current) return;
+    let stopped = false;
+    const reconcile = async () => {
+      // Wait out a pre-event snapshot, then request a post-event snapshot.
+      // Multiple subscribers still share each network request.
+      if (pending.current) await pending.current.catch(() => undefined);
+      if (!dirty || stopped || !active.current) return;
       dirty = false;
-      void refresh().catch(() => undefined).finally(() => {
-        // A persisted event during an in-flight request needs a later snapshot.
-        if (dirty && active.current) timer = setTimeout(reconcile, 180);
-      });
+      await refresh().catch(() => undefined);
+      if (dirty && !stopped && active.current) timer = setTimeout(() => void reconcile(), 180);
     };
     const remove = subscribe(event => {
       if (!["message:new", "message:update", "message:deleted", "message:lifetime", "message:read",
@@ -75,9 +81,9 @@ function AccountConversationList({ userId, children }: { userId: string; childre
         "group:member-added", "group:member-removed", "group:member-updated"].includes(event.type)) return;
       dirty = true;
       clearTimeout(timer);
-      timer = setTimeout(reconcile, 180);
+      timer = setTimeout(() => void reconcile(), 180);
     });
-    return () => { clearTimeout(timer); remove(); };
+    return () => { stopped = true; clearTimeout(timer); remove(); };
   }, [subscribe, refresh]);
   const value = useMemo(() => ({ snapshot, seed, read, refresh }), [snapshot, seed, read, refresh]);
   return <Context.Provider value={value}>{children}</Context.Provider>;

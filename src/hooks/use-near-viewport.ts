@@ -8,7 +8,10 @@ export function useNearViewport<T extends HTMLElement>() {
   useEffect(() => {
     const node = ref.current;
     if (!node) return;
-    if (typeof IntersectionObserver === "undefined") { setNear(true); return; }
+    if (typeof IntersectionObserver === "undefined") {
+      const frame = requestAnimationFrame(() => setNear(true));
+      return () => cancelAnimationFrame(frame);
+    }
     const observer = new IntersectionObserver(entries => {
       setNear(entries.some(entry => entry.isIntersecting));
     }, { rootMargin: "240px" });
