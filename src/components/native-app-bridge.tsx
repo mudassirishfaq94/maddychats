@@ -2,17 +2,30 @@
 
 import { navigateWithReload } from "@/lib/navigation";
 
+import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { isNativeApp } from "@/lib/native-platform";
+
+declare global { interface Window { __circloNavigate?: (destination: string) => boolean } }
 
 /**
  * Makes the installed build behave like an Android application instead of a
  * browser tab. This is deliberately not mounted on the public web site.
  */
 export function NativeAppBridge() {
+  const router = useRouter();
   useEffect(() => {
     if (!isNativeApp()) return;
 
+    const navigate = (destination: string) => {
+      try {
+        const target = new URL(destination, window.location.origin);
+        if (target.origin !== window.location.origin || !(target.pathname === "/app" || target.pathname.startsWith("/app/"))) return false;
+        router.push(`${target.pathname}${target.search}${target.hash}`);
+        return true;
+      } catch { return false; }
+    };
+    window.__circloNavigate = navigate;
     let disposed = false;
     const removeListeners: Array<() => Promise<void>> = [];
 
@@ -66,9 +79,10 @@ export function NativeAppBridge() {
 
     return () => {
       disposed = true;
+      if (window.__circloNavigate === navigate) delete window.__circloNavigate;
       void Promise.all(removeListeners.map((remove) => remove()));
     };
-  }, []);
+  }, [router]);
 
   return null;
 }

@@ -8,7 +8,7 @@ import type { SafeUser, StatusDTO, PublicUser } from "@/lib/types";
 // status tab. Lazy-loading it keeps the initial bundle small.
 let statusCode: Promise<typeof import("./status-page")> | undefined;
 export function warmStatusCode() { return statusCode ??= import("./status-page").catch(cause => { statusCode = undefined; throw cause; }); }
-const StatusPage = dynamic(warmStatusCode, { ssr: false });
+const StatusPage = dynamic(() => warmStatusCode().then(module => module.StatusPage), { ssr: false });
 type Preview={owner:PublicUser;expiresAt:string};
 // Only lightweight identities in memory. No media, status text, persistent cache or clickable stale stories.
 const previews=new Map<string,Preview[]>();

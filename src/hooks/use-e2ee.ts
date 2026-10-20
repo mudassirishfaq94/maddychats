@@ -90,7 +90,7 @@ export function useE2EE(userId: string | undefined) {
     const activeUserId = userId;
     let active = true;
     const controller = new AbortController();
-    const sendingKeys=conversationKeysRef.current,decryptionKeys=decryptionKeysRef.current,plaintextCache=decryptedMessageCacheRef.current;
+    const sendingKeys=conversationKeysRef.current,decryptionKeys=decryptionKeysRef.current,plaintextCache=decryptedMessageCacheRef.current,localKeyLoads=localKeyLoadsRef.current;
     messageCacheKeyRef.current = null;
 
     async function init() {
@@ -283,7 +283,7 @@ export function useE2EE(userId: string | undefined) {
     })); });
     return () => {
       active=false;controller.abort();keyPairRef.current=null;
-      sendingKeys.clear();decryptionKeys.clear();plaintextCache.clear();localKeyLoadsRef.current.clear();
+      sendingKeys.clear();decryptionKeys.clear();plaintextCache.clear();localKeyLoads.clear();
     };
   }, [userId]);
 

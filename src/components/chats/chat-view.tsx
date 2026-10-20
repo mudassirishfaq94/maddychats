@@ -9,6 +9,7 @@ const starterMode = process.env.NEXT_PUBLIC_STARTER_MODE === "1";
 import { useHydrated } from "@/hooks/use-hydrated";
 
 import {
+  memo,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -60,7 +61,7 @@ import type { ConversationDetail, MessageDTO, MessagePage, PublicUser, SafeUser 
 import { Avatar } from "@/components/avatar";
 import { useRealtime } from "@/components/providers/realtime-provider";
 import { MessageActions } from "./message-actions";
-import { MessageSearch } from "./message-search";
+const MessageSearch = dynamic(() => import("./message-search").then(module => module.MessageSearch));
 import { ChatActionsMenu } from "./chat-actions-menu";
 import { AttachmentList } from "./attachments";
 const ConversationDetails = dynamic(() => import("./conversation-details").then((module) => module.ConversationDetails));
@@ -78,9 +79,10 @@ import { AudioMessage } from "./audio-message";
 import { VoiceComposer } from "./voice-composer";
 import { useVoiceRecorder } from "@/hooks/use-voice-recorder";
 import { LongPressTouchable } from "./long-press-touchable";
-import { MobileMessageMenu } from "./mobile-message-menu";
-import { ForwardDialog } from "./forward-dialog";
-import { PeerVerificationDialog, type PeerVerification } from "./peer-verification-dialog";
+const MobileMessageMenu = dynamic(() => import("./mobile-message-menu").then(module => module.MobileMessageMenu));
+const ForwardDialog = dynamic(() => import("./forward-dialog").then(module => module.ForwardDialog));
+import type { PeerVerification } from "./peer-verification-dialog";
+const PeerVerificationDialog = dynamic(() => import("./peer-verification-dialog").then(module => module.PeerVerificationDialog));
 const ReportDialog = dynamic(() => import("@/components/profile/report-dialog").then((module) => module.ReportDialog));
 import { E2EEMediaProvider } from "./e2ee-context";
 import { useSharedE2EE } from "@/components/providers/e2ee-provider";
@@ -1750,26 +1752,6 @@ export function ChatView({
     });
   }
 
-  /** Parse status reply messages and extract status context + reply text. */
-  function parseStatusReply(text: string): { isStatusReply: boolean; statusType?: string; statusText?: string; replyText?: string } {
-    const match = text.match(/^\[STATUS_REPLY:(\w+)\]([\s\S]*?)\[\/STATUS_REPLY\]\n([\s\S]*)$/);
-    if (!match) return { isStatusReply: false };
-    return {
-      isStatusReply: true,
-      statusType: match[1],
-      statusText: match[2],
-      replyText: match[3],
-    };
-  }
-
-  /** Status type icon for inline display. */
-  function StatusTypeIcon({ type, large }: { type: string; large?: boolean }) {
-    const size = large ? "h-5 w-5" : "h-3.5 w-3.5";
-    if (type === 'image') return <ImageIcon className={cn(size, "text-[#7c3aed]")} />;
-    if (type === 'video') return <Play className={cn(size, "text-[#2563eb]")} />;
-    return <MessageSquare className={cn(size, "text-[var(--accent-fg)]")} />;
-  }
-
   const bgValue = conversation.backgroundStyle ?? null;
   const bgOpacity = (conversation.backgroundOpacity ?? 100) / 100;
   const bubbleTheme = chatBubbleTheme(bgValue);
@@ -1926,7 +1908,7 @@ export function ChatView({
 
         {isGroup ? <button type="button" aria-label="Open group settings" title="Group settings" onClick={() => setShowDetails(true)} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full hover:bg-[var(--surface-2)]"><Settings className="h-5 w-5" /></button> : null}
         {!isGroup && other ? <button type="button" aria-label="Start audio call" title="Direct audio call · keep Circlo open" disabled={audioCall.busy || conversation.blocked || conversation.requestPending || conversation.awaitingApproval} onClick={() => audioCall.start(conversationId, otherName)} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full hover:bg-[var(--surface-2)] disabled:opacity-40"><Phone className="h-5 w-5" /></button> : null}
-        <MessageSearch open={showHeaderSearch} onOpenChange={setShowHeaderSearch} />
+        {showHeaderSearch ? <MessageSearch open onOpenChange={setShowHeaderSearch} /> : null}
 
         <button
           type="button"
@@ -2455,64 +2437,7 @@ export function ChatView({
                                     onSecurity={() => { if (e2ee.error || msg.text === "signal:v2") router.push("/app/profile#encryption-devices"); else setShowEncryptionInfo(true); }}
                                   />
                                 ) : textOf(msg) ? (
-                                  (() => {
-                                    const parsed = parseStatusReply(textOf(msg));
-                                    if (parsed.isStatusReply) {
-                                      const statusGradients: Record<string, string> = {
-                                        text: "linear-gradient(135deg, #0c8c7e22, #0c8c7e08)",
-                                        image: "linear-gradient(135deg, #7c3aed22, #c026d308)",
-                                        video: "linear-gradient(135deg, #2563eb22, #0891b208)",
-                                      };
-                                      const statusBorders: Record<string, string> = {
-                                        text: "border-[var(--accent)]",
-                                        image: "border-[#7c3aed]",
-                                        video: "border-[#2563eb]",
-                                      };
-                                      const statusAccents: Record<string, string> = {
-                                        text: "text-[var(--accent-fg)]",
-                                        image: "text-[#7c3aed]",
-                                        video: "text-[#2563eb]",
-                                      };
-                                      const statusGrad = statusGradients[parsed.statusType ?? 'text'] ?? statusGradients.text;
-                                      const statusBorder = statusBorders[parsed.statusType ?? 'text'] ?? statusBorders.text;
-                                      const statusAccent = statusAccents[parsed.statusType ?? 'text'] ?? statusAccents.text;
-                                      return (
-                                        <div className="space-y-2.5">
-                                          <div
-                                            className="overflow-hidden rounded-xl border-l-[3px] shadow-sm"
-                                            style={{ borderColor: statusBorder.match(/#[a-f0-9]+/i)?.[0] ?? 'var(--accent)', background: statusGrad }}
-                                          >
-                                            <div className="flex items-start gap-3 px-3 py-2.5">
-                                              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--surface)] shadow-sm">
-                                                <StatusTypeIcon type={parsed.statusType ?? 'text'} />
-                                              </div>
-                                              <div className="min-w-0 flex-1">
-                                                <div className="flex items-center gap-2">
-                                                  <span className="rounded-md bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] px-1.5 py-0.5 text-[0.6rem] font-bold uppercase tracking-widest">
-                                                    Status
-                                                  </span>
-                                                  <span className={cn("text-[0.65rem] font-medium", statusAccent)}>
-                                                    {parsed.statusType === 'image' ? 'Photo' : parsed.statusType === 'video' ? 'Video' : 'Text'}
-                                                  </span>
-                                                </div>
-                                                <p className="mt-1 text-[0.78rem] leading-relaxed text-[var(--muted)] line-clamp-2">
-                                                  {parsed.statusText}
-                                                </p>
-                                              </div>
-                                            </div>
-                                          </div>
-                                          <p className="whitespace-pre-wrap break-words text-[0.9rem] leading-relaxed">
-                                            {parsed.replyText}
-                                          </p>
-                                        </div>
-                                      );
-                                    }
-                                    return (
-                                      <p className={cn("whitespace-pre-wrap break-words", emojiOnlyCount(textOf(msg)) === 1 ? "emoji-message text-[3.5rem] leading-tight py-1" : emojiOnlyCount(textOf(msg)) ? "text-[2.5rem] leading-tight py-1" : "text-[0.9rem] leading-relaxed")}>
-                                        {textOf(msg)}
-                                      </p>
-                                    );
-                                  })()
+                                  <MessageText text={textOf(msg)} />
                                 ) : null}
                               </>
                             )}
@@ -2905,7 +2830,7 @@ export function ChatView({
       ) : null}
 
       {/* Mobile long-press context menu */}
-      <MobileMessageMenu
+      {mobileMenuMsg ? <MobileMessageMenu
         open={mobileMenuMsg !== null}
         onClose={() => setMobileMenuMsg(null)}
         own={mobileMenuMsg?.senderId === me.id}
@@ -2949,7 +2874,7 @@ export function ChatView({
         onDeleteForEveryone={() => {
           if (mobileMenuMsg) setPendingDelete({ id: mobileMenuMsg.id, mode: "for_everyone" });
         }}
-      />
+      /> : null}
 
       {/* Forward dialog */}
       {peerReview ? <PeerVerificationDialog key={peerReview.signature} review={peerReview}
@@ -2964,13 +2889,13 @@ export function ChatView({
             setE2eeState(previous => ({ ...previous, ready: prepared.ready, fingerprint: prepared.fingerprint, checking: false, trustChanged: Boolean(prepared.trustChanged) })))
             .catch(() => { setE2eeState(previous => ({ ...previous, ready: false, checking: false })); setError("Secure delivery is waiting. Retry when your connection returns."); });
         }} /> : null}
-      <ForwardDialog
+      {forwardMsg ? <ForwardDialog
         open={forwardMsg !== null}
         message={forwardMsg}
         preview={forwardMsg ? copyableText(forwardMsg) : ""}
         onClose={() => setForwardMsg(null)}
         onForward={forwardMessage}
-      />
+      /> : null}
 
       {/* Report dialog */}
       {reportMsg ? (
@@ -3238,3 +3163,84 @@ function SelfDestructCountdown({ deadline, offset }: { deadline: string | null; 
   useEffect(() => { if (!deadline) return; const timer = setInterval(() => setNow(Date.now()), 250); return () => clearInterval(timer); }, [deadline]);
   return <span className="mb-1 block text-[0.65rem] opacity-75" role="timer">{deadline ? `${Math.max(0, Math.ceil((Date.parse(deadline) - now - offset) / 1000))}s remaining` : "5 seconds after first reveal"}</span>;
 }
+
+/** Parse status reply messages and extract status context + reply text. */
+function parseStatusReply(text: string): { isStatusReply: boolean; statusType?: string; statusText?: string; replyText?: string } {
+  const match = text.match(/^\[STATUS_REPLY:(\w+)\]([\s\S]*?)\[\/STATUS_REPLY\]\n([\s\S]*)$/);
+  if (!match) return { isStatusReply: false };
+  return {
+    isStatusReply: true,
+    statusType: match[1],
+    statusText: match[2],
+    replyText: match[3],
+  };
+}
+
+/** Status type icon for inline display. */
+function StatusTypeIcon({ type, large }: { type: string; large?: boolean }) {
+  const size = large ? "h-5 w-5" : "h-3.5 w-3.5";
+  if (type === 'image') return <ImageIcon className={cn(size, "text-[#7c3aed]")} />;
+  if (type === 'video') return <Play className={cn(size, "text-[#2563eb]")} />;
+  return <MessageSquare className={cn(size, "text-[var(--accent-fg)]")} />;
+}
+
+
+const MessageText = memo(function MessageText({ text }: { text: string }) {
+  const parsed = parseStatusReply(text);
+  if (parsed.isStatusReply) {
+    const statusGradients: Record<string, string> = {
+      text: "linear-gradient(135deg, #0c8c7e22, #0c8c7e08)",
+      image: "linear-gradient(135deg, #7c3aed22, #c026d308)",
+      video: "linear-gradient(135deg, #2563eb22, #0891b208)",
+    };
+    const statusBorders: Record<string, string> = {
+      text: "border-[var(--accent)]",
+      image: "border-[#7c3aed]",
+      video: "border-[#2563eb]",
+    };
+    const statusAccents: Record<string, string> = {
+      text: "text-[var(--accent-fg)]",
+      image: "text-[#7c3aed]",
+      video: "text-[#2563eb]",
+    };
+    const statusGrad = statusGradients[parsed.statusType ?? 'text'] ?? statusGradients.text;
+    const statusBorder = statusBorders[parsed.statusType ?? 'text'] ?? statusBorders.text;
+    const statusAccent = statusAccents[parsed.statusType ?? 'text'] ?? statusAccents.text;
+    return (
+      <div className="space-y-2.5">
+        <div
+          className="overflow-hidden rounded-xl border-l-[3px] shadow-sm"
+          style={{ borderColor: statusBorder.match(/#[a-f0-9]+/i)?.[0] ?? 'var(--accent)', background: statusGrad }}
+        >
+          <div className="flex items-start gap-3 px-3 py-2.5">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--surface)] shadow-sm">
+              <StatusTypeIcon type={parsed.statusType ?? 'text'} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <span className="rounded-md bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] px-1.5 py-0.5 text-[0.6rem] font-bold uppercase tracking-widest">
+                  Status
+                </span>
+                <span className={cn("text-[0.65rem] font-medium", statusAccent)}>
+                  {parsed.statusType === 'image' ? 'Photo' : parsed.statusType === 'video' ? 'Video' : 'Text'}
+                </span>
+              </div>
+              <p className="mt-1 text-[0.78rem] leading-relaxed text-[var(--muted)] line-clamp-2">
+                {parsed.statusText}
+              </p>
+            </div>
+          </div>
+        </div>
+        <p className="whitespace-pre-wrap break-words text-[0.9rem] leading-relaxed">
+          {parsed.replyText}
+        </p>
+      </div>
+    );
+  }
+  return (
+    <p className={cn("whitespace-pre-wrap break-words", emojiOnlyCount(text) === 1 ? "emoji-message text-[3.5rem] leading-tight py-1" : emojiOnlyCount(text) ? "text-[2.5rem] leading-tight py-1" : "text-[0.9rem] leading-relaxed")}>
+      {text}
+    </p>
+  );
+
+});

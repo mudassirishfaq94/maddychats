@@ -308,6 +308,21 @@ class MainActivity : ComponentActivity() {
         return "${BuildConfig.API_BASE_URL}/app/chats/$id?" + (message?.let { "message=$it" } ?: "latest=1")
     }
 
+    private var navigationGeneration = 0
+
+    private fun navigateHosted(destination: String) {
+        val browser = webView ?: return
+        val generation = ++navigationGeneration
+        if (!WebOriginPolicy.isAllowed(browser.url.orEmpty(), BuildConfig.API_BASE_URL)) {
+            browser.loadUrl(destination)
+            return
+        }
+        val script = "typeof window.__circloNavigate === 'function' && window.__circloNavigate(${JSONObject.quote(destination)})"
+        browser.evaluateJavascript(script) { handled ->
+            if (generation == navigationGeneration && webView === browser && handled != "true") browser.loadUrl(destination)
+        }
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
@@ -318,7 +333,7 @@ class MainActivity : ComponentActivity() {
                 webView?.evaluateJavascript("window.dispatchEvent(new Event('circlo:native-call-open'))", null)
             } else {
                 if (Uri.parse(destination).path == "/app/call") showCallTransition()
-                webView?.loadUrl(destination)
+                navigateHosted(destination)
             }
         }
     }

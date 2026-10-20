@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { usePathname } from "next/navigation";
@@ -13,10 +13,10 @@ import { cn } from "@/lib/utils";
 // These components pull in search indexes, SSE/push wiring and theme state.
 // Lazy-loading them keeps the initial JS bundle small so tab switches and the
 // first paint do not pay for code the user has not asked for yet.
-const ThemeToggle = dynamic(() => import("@/components/theme-toggle"), { ssr: false });
-const NotificationBell = dynamic(() => import("./notification-bell"), { ssr: false });
-const MessageSearch = dynamic(() => import("@/components/chats/message-search"), { ssr: false });
-const UserMenu = dynamic(() => import("./user-menu"), { ssr: false });
+const ThemeToggle = dynamic(() => import("@/components/theme-toggle").then(module => module.ThemeToggle), { ssr: false });
+const NotificationBell = dynamic(() => import("./notification-bell").then(module => module.NotificationBell), { ssr: false });
+const MessageSearch = dynamic(() => import("@/components/chats/message-search").then(module => module.MessageSearch), { ssr: false });
+const UserMenu = dynamic(() => import("./user-menu").then(module => module.UserMenu), { ssr: false });
 
 /**
  * Authenticated shell: one compact header over a full-height content area.
@@ -30,6 +30,13 @@ export function AppShell({
   children: ReactNode;
 }) {
   const pathname = usePathname();
+  const [wide, setWide] = useState(false);
+  useEffect(() => {
+    const media = window.matchMedia("(min-width: 640px)");
+    const update = () => setWide(media.matches);
+    update(); media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
   const onPeople = pathname.startsWith("/app/people") || pathname.startsWith("/app/users");
   const onStatus = pathname.startsWith("/app/status");
   const onCommunities = pathname.startsWith("/app/communities");
@@ -112,10 +119,10 @@ export function AppShell({
         </nav>
 
         <div className="ml-auto flex min-w-0 shrink-0 items-center gap-0.5 sm:gap-1">
-          {!onPeople ? <span className="hidden md:inline-flex"><MessageSearch /></span> : null}
+          {wide && !onPeople ? <span className="hidden md:inline-flex"><MessageSearch /></span> : null}
           {/* Hide extra icons on mobile when inside a chat (chat header has its own controls) */}
           <span className={cn("hidden sm:inline-flex", inChat && "md:inline-flex")}>
-            <NotificationBell />
+            {wide ? <NotificationBell /> : null}
           </span>
           {user.role === "admin" || user.role === "moderator" ? (
             <Link

@@ -64,8 +64,6 @@ const viewerQuery = db.select({ id: messages.id, star: messageStars.id,
   .leftJoin(messageDeletions, and(eq(messageDeletions.messageId, messages.id), eq(messageDeletions.userId, sql.placeholder("viewerId"))))
   .leftJoin(pinnedMessages, and(eq(pinnedMessages.messageId, messages.id), eq(pinnedMessages.conversationId, messages.conversationId)))
   .where(sql`${messages.id}=any(${sql.placeholder("ids")}::uuid[])`).prepare("");
-const expireQuery = db.update(messages).set({ deletedAt: sql`${sql.placeholder("now")}::timestamptz`, updatedAt: sql`${sql.placeholder("now")}::timestamptz` })
-  .where(and(eq(messages.conversationId, sql.placeholder("conversationId")), isNull(messages.deletedAt), lte(messages.expiresAt, sql.placeholder("now")))).prepare("");
 const cursorTimestamp = sql<string>`to_char(${messages.createdAt} at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`;
 const newestQuery = db.select({ message: messages, sender: users, cursorTimestamp }).from(messages)
   .innerJoin(users, eq(messages.senderId, users.id)).where(eq(messages.conversationId, sql.placeholder("conversationId")))
@@ -339,9 +337,13 @@ export async function listConversationsFor(
     conversationListQuery.execute({ ids: convIds }),
     conversationMembersQuery.execute({ ids: convIds }),
     db.execute<{ id: string; conversation_id: string; sender_id: string; text: string; type: string; created_at: string; deleted_at: string | null; expires_at: string | null; encrypted: boolean }>(sql`
-      SELECT DISTINCT ON (conversation_id) id, conversation_id, sender_id, CASE WHEN self_destruct THEN '' ELSE text END as text, type, created_at, deleted_at, expires_at, encrypted
-      FROM messages WHERE conversation_id = any(${sql.param(convIds)}::uuid[]) AND (expires_at IS NULL OR expires_at>now())
-      ORDER BY conversation_id, created_at DESC
+      SELECT latest.* FROM unnest(${sql.param(convIds)}::uuid[]) AS wanted(conversation_id)
+      CROSS JOIN LATERAL (
+        SELECT id, conversation_id, sender_id, CASE WHEN self_destruct THEN '' ELSE text END as text,
+          type, created_at, deleted_at, expires_at, encrypted
+        FROM messages WHERE conversation_id = wanted.conversation_id AND (expires_at IS NULL OR expires_at>now())
+        ORDER BY created_at DESC, id DESC LIMIT 1
+      ) latest
     `),
     db.execute<{ conversation_id: string; count: string }>(sql`
       SELECT m.conversation_id, count(*)::text AS count FROM messages m
@@ -688,9 +690,8 @@ export async function listMessages(
   limit = MESSAGE_PAGE_SIZE,
   viewerId = "",
 ): Promise<MessagePage> {
-  // Expiry is enforced server-side, including for inactive clients returning
-  // long after the selected duration elapsed.
-  await expireQuery.execute({ conversationId, now: new Date() });
+  // baseDTO and reply hydration mask expired content on every read. Physical
+  // cleanup is maintained separately; history must not wait on an UPDATE lock.
   const pageSize = Math.min(Math.max(1, limit), MAX_PAGE_SIZE);
 
   const parameters = { conversationId, limit: pageSize + 1 };
