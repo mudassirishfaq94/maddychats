@@ -1,0 +1,1 @@
+ALTER TABLE "conversations" ADD COLUMN "background_opacity" integer DEFAULT 100;

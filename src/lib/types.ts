@@ -1,0 +1,343 @@
+/**
+ * Shape of a user as exposed to its owner. `passwordHash` is intentionally
+ * absent — it must never leave the server.
+ */
+export interface SafeUser {
+  id: string;
+  username: string;
+  displayName: string;
+  email: string;
+  avatarUrl: string | null;
+  bio: string | null;
+  role: "user" | "moderator" | "admin";
+  createdAt: string;
+  updatedAt: string;
+  lastSeenAt: string | null;
+  /** Free-text label the owner gave this browser/device. */
+  deviceName: string | null;
+  /** IANA country the owner chose for this account. */
+  country: string | null;
+}
+
+/**
+ * Public profile shape shown to OTHER users (search results, profile views).
+ * Note: no email — that is private to the account owner.
+ */
+export interface PublicUser {
+  phoneUnverified?: boolean;
+  id: string;
+  username: string;
+  displayName: string;
+  avatarUrl: string | null;
+  bio: string | null;
+  createdAt: string;
+  lastSeenAt: string | null;
+}
+
+export type AuthStatus = "loading" | "authenticated" | "unauthenticated";
+
+export interface ApiFieldErrors {
+  [field: string]: string;
+}
+
+/* --------------------------------- chat --------------------------------- */
+
+export interface ReactionGroup {
+  emoji: string;
+  count: number;
+  /** Whether the requesting user reacted with this emoji. */
+  mine: boolean;
+  userIds: string[];
+}
+
+export interface ReplyPreview {
+  expiresAt?: string | null;
+  id: string;
+  text: string;
+  senderId: string;
+  senderName: string;
+  deleted: boolean;
+  /** True when the preview text is E2EE ciphertext awaiting client decryption. */
+  encrypted: boolean;
+}
+
+export interface ReadReceipt {
+  userId: string;
+  readAt: string;
+}
+
+export interface AttachmentDTO {
+  expiresAt?: string | null;
+  id: string;
+  originalName: string;
+  mimeType: string;
+  size: number;
+  kind: "image" | "video" | "file" | "audio";
+  /** Authenticated media endpoint — never a raw filesystem path. */
+  url: string;
+  /** True when stored bytes are E2EE ciphertext; decrypt before rendering. */
+  encrypted: boolean;
+  /** Per-file AES key wrapped with the conversation key (base64), null when plaintext. */
+  encKey: string | null;
+}
+
+export interface SearchHit {
+  message: {
+    id: string;
+    text: string;
+    createdAt: string;
+    conversationId: string;
+  };
+  conversation: { id: string; name: string | null };
+  sender: PublicUser;
+}
+
+export interface MessageDTO {
+  id: string;
+  /** Stable id supplied by the sending client; also reconciles realtime echoes. */
+  clientMessageId: string | null;
+  conversationId: string;
+  /** Empty string once soft-deleted; clients render "Message deleted". */
+  text: string;
+  type: string;
+  senderId: string;
+  createdAt: string;
+  updatedAt: string;
+  editedAt: string | null;
+  deletedAt: string | null;
+  selfDestruct?: boolean;
+  revealedAt?: string | null;
+  /** Server-enforced expiry timestamp for disappearing messages. */
+  expiresAt: string | null;
+  deliveredAt: string | null;
+  replyToMessageId: string | null;
+  replyTo: ReplyPreview | null;
+  reactions: ReactionGroup[];
+  /** Reads by OTHER members (the sender's own read is implicit). */
+  readBy: ReadReceipt[];
+  attachments: AttachmentDTO[];
+  sender: PublicUser;
+  /** Per-viewer state: whether this viewer starred the message. */
+  starred: boolean;
+  /** Per-viewer state: whether this message is deleted for this viewer. */
+  deletedForMe: boolean;
+  /** Conversation-level state: whether the message is pinned. */
+  pinned: boolean;
+  /** Whether this message was forwarded from another conversation. */
+  forwarded: boolean;
+  /** True when text holds E2EE ciphertext — decrypt client-side with the conversation key. */
+  encrypted: boolean;
+  /** Client-only optimistic state; never persisted. */
+  sendStatus?: "sending" | "sent" | "failed" | "queued";
+  queueReason?: string;
+}
+
+export interface ConversationSummary {
+  id: string;
+  type: "dm" | "group";
+  name: string | null;
+  description: string | null;
+  avatarUrl: string | null;
+  memberCount: number;
+  requestPending: boolean;
+  createdAt: string;
+  updatedAt: string;
+  lastMessageAt: string | null;
+  /** The other participant (direct chats). */
+  otherMember: PublicUser | null;
+  /** Messages from others this viewer hasn't read yet. */
+  unreadCount: number;
+  /** Per-user conversation state (never shared between participants). */
+  pinned: boolean;
+  muted: boolean;
+  favorited: boolean;
+  archived: boolean;
+  markedUnread: boolean;
+  /** True when either side has blocked the other. */
+  blocked: boolean;
+  /** Whether any messages are pinned in this conversation. */
+  hasPinnedMessages: boolean;
+  lastMessage: {
+    expiresAt?: string | null;
+    id: string;
+    text: string;
+    type: string;
+    senderId: string;
+    createdAt: string;
+    deletedAt: string | null;
+    encrypted: boolean;
+  } | null;
+}
+
+export interface ConversationDetail {
+  id: string;
+  type: "dm" | "group";
+  name: string | null;
+  description: string | null;
+  avatarUrl: string | null;
+  createdById: string | null;
+  myRole: "owner" | "admin" | "member";
+  muted: boolean;
+  /** Personal favorite state for this conversation. */
+  favorited: boolean;
+  blocked: boolean;
+  requestPending: boolean;
+  requestInitiatorId: string | null;
+  /** Sender-side first-contact gate; recipient consent is independent of encryption. */
+  awaitingApproval?: boolean;
+  introductionSent?: boolean;
+  createdAt: string;
+  updatedAt: string;
+  lastMessageAt: string | null;
+  backgroundStyle: string | null;
+  backgroundOpacity: number;
+  /** Image background focal point (0-100 %) for drag-to-position. */
+  backgroundPositionX: number;
+  backgroundPositionY: number;
+  /** Group settings */
+  adminOnlyAddingMembers: boolean;
+  adminOnlyEditingInfo: boolean;
+  adminOnlyMessaging: boolean;
+  rules: string | null;
+  announcements: string | null;
+  slowModeSeconds: number;
+  /** 0 means disappearing messages are disabled. Applies to new messages. */
+  disappearingSeconds: number;
+  members: Array<PublicUser & { role: "owner" | "admin" | "member"; joinedAt: string }>;
+}
+
+export interface MessagePage {
+  serverNow?: string;
+  /** Chronological order (oldest → newest) for direct rendering. */
+  messages: MessageDTO[];
+  /** Cursor to fetch the next OLDER page; null when no more history. */
+  nextCursor: string | null;
+  hasMore: boolean;
+}
+
+/* ------------------------------- realtime -------------------------------
+ * Event contract pushed to clients over the realtime stream. Shaped like
+ * Socket.IO events so the transport can be swapped later without touching
+ * UI logic. */
+export interface RealtimeMessageEvent {
+  type: "message:new" | "message:update" | "message:deleted";
+  conversationId: string;
+  message: MessageDTO;
+}
+
+export interface RealtimePinnedEvent {
+  type: "message:pinned" | "message:unpinned";
+  conversationId: string;
+  messageId: string;
+  pinnedBy?: string;
+}
+
+export interface RealtimeDeleteForMeEvent {
+  type: "message:deleted_for_me";
+  conversationId: string;
+  messageId: string;
+}
+
+export interface RealtimeConversationEvent {
+  type:
+    | "conversation:new"
+    | "conversation:delete"
+    | "conversation:accepted"
+    | "conversation:encryption-ready"
+    | "conversation:keys-shared"
+    | "group:created"
+    | "group:updated"
+    | "group:member-added"
+    | "group:member-removed"
+    | "group:member-updated";
+  conversationId: string;
+  userId?: string;
+  role?: "owner" | "admin" | "member";
+}
+
+export interface RealtimePresenceEvent {
+  type: "presence:update";
+  userId: string;
+  online: boolean;
+  lastSeenAt: string | null;
+}
+
+export interface RealtimeReadEvent {
+  type: "message:read";
+  conversationId: string;
+  userId: string;
+  messageIds: string[];
+  readAt: string;
+}
+
+export interface RealtimeDeliveredEvent {
+  type: "message:delivered";
+  conversationId: string;
+  messageIds: string[];
+  deliveredAt: string;
+}
+
+export interface NotificationDTO {
+  id: string;
+  type: string;
+  data: Record<string, unknown> | null;
+  readAt: string | null;
+  createdAt: string;
+  actorId: string | null;
+}
+
+export interface RealtimeNotificationEvent {
+  type: "notification:new";
+  notification: NotificationDTO;
+}
+
+export interface RealtimeTypingEvent {
+  type: "typing:update";
+  conversationId: string;
+  userId: string;
+  typing: boolean;
+  expiresAt: string;
+}
+
+export interface RealtimeLifetimeEvent { type: "message:lifetime"; conversationId: string; messageId: string; expiresAt: string; revealedAt?: string; serverNow?: string }
+
+export type RealtimeEvent = { type:"community:updated";communityId:string } | RealtimeLifetimeEvent
+  | { type: "scheduled:changed"; conversationId: string }
+  | { type: "call:changed"; conversationId: string }
+  | RealtimeMessageEvent
+  | RealtimeConversationEvent
+  | RealtimePresenceEvent
+  | RealtimeReadEvent
+  | RealtimeDeliveredEvent
+  | RealtimeNotificationEvent
+  | RealtimeTypingEvent
+  | RealtimePinnedEvent
+  | RealtimeDeleteForMeEvent
+  | RealtimeStatusEvent;
+
+/** Presence snapshot delivered on connect and via presence:update. */
+export interface PresenceState {
+  [userId: string]: { online: boolean; lastSeenAt: string | null };
+}
+
+export interface StatusDTO {
+  id: string;
+  userId: string;
+  type: "text" | "image" | "video";
+  text: string | null;
+  mediaUrl: string | null;
+  backgroundStyle: string | null;
+  privacy: "all" | "selected";
+  createdAt: string;
+  expiresAt: string;
+  viewed: boolean;
+  viewCount: number;
+  owner: PublicUser;
+  reactions: Array<{ emoji: string; count: number; mine: boolean }>;
+}
+
+export interface RealtimeStatusEvent {
+  type: "status:new" | "status:deleted" | "status:reaction";
+  statusId: string;
+  userId: string;
+}

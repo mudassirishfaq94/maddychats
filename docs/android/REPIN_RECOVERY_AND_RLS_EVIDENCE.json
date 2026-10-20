@@ -1,0 +1,113 @@
+{
+  "backupStartedUtc": "2026-10-16T16:37:21.214957+00:00",
+  "backupCompletedUtc": "2026-10-16T16:38:03.457180+00:00",
+  "backupSha256": "a03ee67792208165aba3ba05d68fa01a5bcb0644c46e8b590e9e4ac77d6d1802",
+  "archiveBytes": 719648,
+  "encrypted": "AES-256-GCM; key protected with Windows CurrentUser DPAPI",
+  "backupRecoveryPortable": false,
+  "isolatedRestorationCompletedUtc": "2026-10-16T16:38:17.226261+00:00",
+  "tableCountsMatch": true,
+  "tables": 50,
+  "foreignKeysChecked": 84,
+  "danglingReferences": 0,
+  "invalidIndexes": 0,
+  "restoreSeconds": 1.85,
+  "migrationRehearsal": {
+    "checkedUtc": "2026-10-16T16:38:17.167Z",
+    "snapshotHead": "0048",
+    "appliedInIsolatedCloneOnly": [
+      "0049",
+      "0050"
+    ],
+    "publicTablesUnchanged": 49,
+    "allRowDigestsAndCountsUnchanged": true,
+    "runtimeAuthenticationReads": "PASS",
+    "runtimeMessagingReadLock": "PASS",
+    "runtimeAccountDeletionPrivilege": "PASS (WHERE false; actual cascade tested in HTTP fixture suite)",
+    "validSessionBoundTokenInsert": "PASS (rolled back)",
+    "invalidTokenSessionFK": "PASS (rejected)",
+    "auditMutationDenied": "PASS",
+    "untrustedRoleDenied": [
+      "users",
+      "messages",
+      "fcm_tokens",
+      "e2ee_keys"
+    ],
+    "productionModified": false
+  },
+  "productionInspectionUtc": "2026-10-16T16:29:47.210Z",
+  "productionLedger": {
+    "expectedCount": 52,
+    "actualCount": 49,
+    "missing": [
+      "0042_private_application_tables",
+      "0049_fcm_session_binding",
+      "0050_restore_private_table_rls"
+    ],
+    "mismatched": [],
+    "unexpected": [],
+    "duplicateTimes": [],
+    "lineEndingOnly": [
+      "0000_oval_wolverine",
+      "0001_group_chats",
+      "0002_message_requests",
+      "0003_temporary_status",
+      "0004_status_interactions",
+      "0005_notification_preferences",
+      "0006_chat_backgrounds",
+      "0008_google_oauth",
+      "0009_password_reset",
+      "0010_vercel_realtime",
+      "0011_postgres_api_hardening",
+      "0012_web_push_subscriptions",
+      "0013_auth_identity_uniqueness",
+      "0008_search_index",
+      "0009_message_forwarded",
+      "0011_group_invite_links",
+      "0012_scheduled_messages",
+      "0013_admin_roles_suspension",
+      "0014_group_settings",
+      "0015_communities_e2ee_transcripts",
+      "0016_e2ee_messages",
+      "0023_message_performance",
+      "0024_distributed_rate_limits",
+      "0025_email_verification",
+      "0026_signal_device_prekeys",
+      "0027_signal_prekey_kind_unique",
+      "0028_signal_device_envelopes",
+      "0029_signal_kyber_prekeys",
+      "0030_signal_envelope_sender",
+      "0031_signal_protocol_device_id",
+      "0035_upload_retention",
+      "0036_device_sessions",
+      "0037_realtime_and_admin_guards",
+      "0038_realtime_expiry_index",
+      "0039_signal_prekey_uint32",
+      "0040_device_link_requests",
+      "0041_device_identity",
+      "0042_user_device_identity",
+      "0046_contacts_audio_calls"
+    ],
+    "historicalEquivalent": [
+      "0033_account_security"
+    ],
+    "note": "LF-equivalent historical hashes are distinguished from actual content mismatches. No normalization or ledger mutation is performed."
+  },
+  "runtimeRole": [
+    {
+      "rolname": "circlo_runtime",
+      "rolsuper": false,
+      "rolcreatedb": false,
+      "rolcreaterole": false,
+      "rolinherit": false,
+      "rolbypassrls": false,
+      "rolcanlogin": true,
+      "memberships": 0
+    }
+  ],
+  "locks": [],
+  "productionModified": false,
+  "backupTls": "verify-full explicitly enforced in the child connection URL",
+  "isolatedClusterStopped": true,
+  "productionConfigurationModified": false
+}

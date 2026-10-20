@@ -1,0 +1,6 @@
+-- Group chat settings
+ALTER TABLE conversations ADD COLUMN IF NOT EXISTS admin_only_messaging BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE conversations ADD COLUMN IF NOT EXISTS rules TEXT;
+ALTER TABLE conversations ADD COLUMN IF NOT EXISTS announcements TEXT;
+ALTER TABLE conversations ADD COLUMN IF NOT EXISTS slow_mode_seconds INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE conversations ADD COLUMN IF NOT EXISTS last_message_by UUID REFERENCES users(id) ON DELETE SET NULL;

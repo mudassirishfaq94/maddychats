@@ -1,0 +1,57 @@
+import { NextRequest, NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
+import { getSessionUser } from "@/server/session";
+import { createCommunity, listUserCommunities, listPublicCommunities, PUBLIC_COMMUNITIES_CACHE_TAG } from "@/server/communities";
+import { guardSameOrigin, jsonError, readJson } from "@/server/http";
+import { rateLimit } from "@/server/rate-limit";
+
+export const dynamic = "force-dynamic";
+
+/** List communities (user's + public) */
+export async function GET(req: NextRequest) {
+  const blocked = guardSameOrigin(req);
+  if (blocked) return blocked;
+
+  const user = await getSessionUser();
+  if (!user) return jsonError(401, "Not authenticated.");
+
+  const myCommunities = await listUserCommunities(user.id);
+  const publicCommunities = await listPublicCommunities();
+
+  return NextResponse.json({ myCommunities, publicCommunities }, {
+    headers: { "Cache-Control": "private, no-store" },
+  });
+}
+
+/** Create a new community */
+export async function POST(req: NextRequest) {
+  const blocked = guardSameOrigin(req);
+  if (blocked) return blocked;
+
+  const user = await getSessionUser();
+  if (!user) return jsonError(401, "Not authenticated.");
+
+  const limit = await rateLimit(`community-create:${user.id}`, 20, 60 * 60 * 1000);
+  if (!limit.allowed) {
+    const response = jsonError(429, "Too many community creations. Please try again later.");
+    response.headers.set("Retry-After", String(limit.retryAfterSeconds));
+    return response;
+  }
+
+  const body = await readJson(req);
+  const data = (body ?? {}) as Record<string, unknown>;
+
+  const name = data.name ? String(data.name).trim() : "";
+  if (!name || name.length < 2) return jsonError(422, "Community name is required (min 2 characters).");
+  if (name.length > 100) return jsonError(422, "Community name is too long.");
+
+  const community = await createCommunity({
+    name,
+    description: data.description ? String(data.description).slice(0, 500) : undefined,
+    createdBy: user.id,
+    isPublic: data.isPublic !== false,
+  });
+
+  revalidateTag(PUBLIC_COMMUNITIES_CACHE_TAG, { expire: 0 });
+  return NextResponse.json({ community }, { status: 201, headers: { "Cache-Control": "private, no-store" } });
+}

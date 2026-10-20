@@ -1,0 +1,61 @@
+import { safeError } from "@/server/safe-error";
+import { NextRequest, NextResponse } from "next/server";
+import { processScheduledMessages } from "@/server/scheduled-messages";
+import { clientIp, jsonError } from "@/server/http";
+import { cleanupUploads } from "@/server/upload-retention";
+import { cleanupRateLimits, rateLimit } from "@/server/rate-limit";
+import { cleanupRealtimeEvents } from "@/server/realtime";
+import { cleanupTemporaryRooms } from "@/server/temporary-rooms";
+import { matchesBearer } from "@/server/secret-token";
+
+export const dynamic = "force-dynamic";
+
+/**
+ * GET /api/cron/process-scheduled
+ *
+ * Processes all due scheduled messages. Can be called by:
+ * - The independent Docker scheduled-worker service
+ * - External cron services (cron-job.org, etc.)
+ * - Any HTTP client with the CRON_SECRET
+ *
+ * For security, requires CRON_SECRET header in production.
+ */
+export async function GET(req: NextRequest) {
+  // A missing production secret must fail closed.  Treating it as optional
+  // would leave this state-changing endpoint publicly callable after a
+  // deployment configuration mistake.
+  const cronSecret = process.env.CRON_SECRET;
+  if (process.env.NODE_ENV === "production" && !cronSecret) {
+    console.error("[cron] CRON_SECRET is not configured in production.");
+    return jsonError(503, "Scheduled processing is unavailable.");
+  }
+  if (cronSecret) {
+    if (!(await rateLimit(`cron-auth:${clientIp(req)}`, 20, 60_000)).allowed) {
+      return jsonError(429, "Too many requests.");
+    }
+    if (!matchesBearer(req.headers.get("authorization"), cronSecret)) {
+      return jsonError(401, "Unauthorized.");
+    }
+  }
+
+  try {
+    const result = await processScheduledMessages();
+    const retention = await cleanupUploads();
+    const expiredRateLimits = await cleanupRateLimits();
+    const expiredRealtimeEvents = await cleanupRealtimeEvents();
+    const expiredTemporaryRooms = await cleanupTemporaryRooms();
+    return NextResponse.json({
+      success: true,
+      processed: result.processed,
+      failed: result.failed + retention.failed,
+      retention,
+      expiredRateLimits,
+      expiredRealtimeEvents,
+      expiredTemporaryRooms,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.error("[cron] Failed to process scheduled messages:", safeError(err));
+    return jsonError(500, "Failed to process scheduled messages.");
+  }
+}

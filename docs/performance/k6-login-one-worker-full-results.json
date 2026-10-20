@@ -1,0 +1,4738 @@
+{
+  "timestamp": "2026-10-11T12:34:51.105Z",
+  "profile": "full",
+  "target": "http://127.0.0.1:3190",
+  "environment": "local production standalone build; generator and database on same machine",
+  "hardware": {
+    "platform": "win32",
+    "logicalCpus": 12,
+    "totalMemoryMiB": 16109.1796875
+  },
+  "fixture": {
+    "users": 200,
+    "conversations": 1000,
+    "messages": 50000,
+    "publicCommunities": 1000,
+    "bcryptCost": 12,
+    "appPoolMax": 5
+  },
+  "thirdPartyConnectionsBlocked": true,
+  "k6Version": "k6.exe v2.2.0 (commit/00a9a1b7f5, go1.26.5, windows/amd64)",
+  "passwordConcurrency": 1,
+  "threadpoolSize": 4,
+  "loginTimings": [
+    {
+      "status": 200,
+      "totalMs": 366.27459999999996,
+      "stages": {
+        "rate_limit": 61.27559999999994,
+        "lookup": 3.024800000000141,
+        "password_queue": 0.005400000000008731,
+        "password_work": 281.71950000000015,
+        "eligibility": 1.379399999999805,
+        "session_persist": 7.230099999999993,
+        "jwt": 4.163199999999961,
+        "session_setup": 14.926899999999932
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 526.5131000000001,
+      "stages": {
+        "rate_limit": 7.714800000000196,
+        "lookup": 1.1621000000000095,
+        "password_queue": 0.0039999999999054126,
+        "password_work": 503.3571999999999,
+        "eligibility": 1.305199999999786,
+        "session_persist": 7.351700000000164,
+        "jwt": 1.6028999999998632,
+        "session_setup": 12.197699999999713
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 503.4449999999997,
+      "stages": {
+        "rate_limit": 3.4512000000004264,
+        "lookup": 1.3895000000002256,
+        "password_queue": 0.0037999999995008693,
+        "password_work": 484.60080000000016,
+        "eligibility": 1.1213999999999942,
+        "session_persist": 8.862299999999777,
+        "jwt": 1.1491000000005442,
+        "session_setup": 12.775900000000547
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 501.2397000000001,
+      "stages": {
+        "rate_limit": 2.710399999999936,
+        "lookup": 1.3906999999999243,
+        "password_queue": 0.0036000000000058208,
+        "password_work": 471.2492000000002,
+        "eligibility": 2.8110999999998967,
+        "session_persist": 17.567300000000614,
+        "jwt": 1.3698999999996886,
+        "session_setup": 24.059699999999793
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 527.6365000000005,
+      "stages": {
+        "rate_limit": 11.619299999998475,
+        "lookup": 5.206299999999828,
+        "password_queue": 0.005600000000413274,
+        "password_work": 499.15370000000075,
+        "eligibility": 1.3585999999995693,
+        "session_persist": 6.941499999998996,
+        "jwt": 0.8768000000000029,
+        "session_setup": 10.436000000001513
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 536.0793000000012,
+      "stages": {
+        "rate_limit": 6.803099999999176,
+        "lookup": 1.9572000000007392,
+        "password_queue": 0.0059000000001105946,
+        "password_work": 518.5600000000013,
+        "eligibility": 1.1695999999992637,
+        "session_persist": 4.844099999998434,
+        "jwt": 0.7600000000002183,
+        "session_setup": 7.702100000000428
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 540.3213999999989,
+      "stages": {
+        "rate_limit": 6.290600000000268,
+        "lookup": 1.7605000000003201,
+        "password_queue": 0.009900000000925502,
+        "password_work": 518.2091,
+        "eligibility": 1.5864000000001397,
+        "session_persist": 8.917699999999968,
+        "jwt": 1.1401999999998225,
+        "session_setup": 13.00799999999981
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 498.36149999999907,
+      "stages": {
+        "rate_limit": 6.757300000001123,
+        "lookup": 2.2951999999986583,
+        "password_queue": 0.006199999999807915,
+        "password_work": 482.91090000000077,
+        "eligibility": 1.0496000000002823,
+        "session_persist": 2.2467000000015105,
+        "jwt": 0.9031999999988329,
+        "session_setup": 5.4113000000015745
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 394.7628000000004,
+      "stages": {
+        "rate_limit": 6.5723999999991065,
+        "lookup": 1.3372999999992317,
+        "password_queue": 0.004800000000614091,
+        "password_work": 376.95910000000003,
+        "eligibility": 0.9020000000000437,
+        "session_persist": 6.089900000000853,
+        "jwt": 0.9974000000001979,
+        "session_setup": 8.751500000000306
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 455.0076000000008,
+      "stages": {
+        "rate_limit": 4.355499999999665,
+        "lookup": 6.47729999999865,
+        "password_queue": 0.01089999999931024,
+        "password_work": 437.9983000000011,
+        "eligibility": 0.8663999999989755,
+        "session_persist": 3.238100000002305,
+        "jwt": 0.4860000000007858,
+        "session_setup": 5.198500000002241
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 420.9594999999972,
+      "stages": {
+        "rate_limit": 1.8708000000005995,
+        "lookup": 1.141700000000128,
+        "password_queue": 0.0011000000013154931,
+        "password_work": 412.91249999999854,
+        "eligibility": 1.0864000000001397,
+        "session_persist": 2.156299999998737,
+        "jwt": 0.5220999999983178,
+        "session_setup": 4.512699999999313
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 494.89120000000185,
+      "stages": {
+        "rate_limit": 2.0116999999991094,
+        "lookup": 1.2579999999979918,
+        "password_queue": 0.0011999999987892807,
+        "password_work": 482.69390000000203,
+        "eligibility": 0.969199999999546,
+        "session_persist": 6.013200000001234,
+        "jwt": 0.6032999999988533,
+        "session_setup": 8.350899999997637
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 423.2356,
+      "stages": {
+        "rate_limit": 3.2947000000021944,
+        "lookup": 1.9637000000002445,
+        "password_queue": 0.002099999997881241,
+        "password_work": 409.08250000000044,
+        "eligibility": 0.8153999999994994,
+        "session_persist": 5.302100000000792,
+        "jwt": 0.8747999999977765,
+        "session_setup": 7.95679999999993
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 439.51090000000113,
+      "stages": {
+        "rate_limit": 1.8071000000018103,
+        "lookup": 0.9186999999983527,
+        "password_queue": 0.0011000000013154931,
+        "password_work": 426.0159999999996,
+        "eligibility": 0.9042999999983294,
+        "session_persist": 7.098200000000361,
+        "jwt": 1.0205999999998312,
+        "session_setup": 10.119900000001508
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 418.12079999999696,
+      "stages": {
+        "rate_limit": 2.730100000000675,
+        "lookup": 1.4063000000023749,
+        "password_queue": 0.003899999999703141,
+        "password_work": 409.29019999999946,
+        "eligibility": 0.7950999999993655,
+        "session_persist": 2.068600000002334,
+        "jwt": 0.43260000000009313,
+        "session_setup": 3.883399999998801
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 470.0938000000024,
+      "stages": {
+        "rate_limit": 12.814599999997881,
+        "lookup": 1.3598000000019965,
+        "password_queue": 0.001299999999901047,
+        "password_work": 447.13890000000174,
+        "eligibility": 0.9085999999988417,
+        "session_persist": 2.0063999999983935,
+        "jwt": 0.5388000000020838,
+        "session_setup": 4.191100000000006
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 388.1150999999991,
+      "stages": {
+        "rate_limit": 2.0165999999990163,
+        "lookup": 0.895700000000943,
+        "password_queue": 0.0006999999968684278,
+        "password_work": 376.58870000000024,
+        "eligibility": 0.7258999999976368,
+        "session_persist": 6.268599999999424,
+        "jwt": 0.5692999999992026,
+        "session_setup": 8.200300000000425
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 475.83820000000196,
+      "stages": {
+        "rate_limit": 5.935900000000402,
+        "lookup": 1.2659000000021479,
+        "password_queue": 0.0011999999987892807,
+        "password_work": 462.8729999999996,
+        "eligibility": 1.09769999999844,
+        "session_persist": 2.290000000000873,
+        "jwt": 0.6951000000008207,
+        "session_setup": 4.986700000001292
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 491.3711000000003,
+      "stages": {
+        "rate_limit": 8.312099999999191,
+        "lookup": 0.9948000000003958,
+        "password_queue": 0.0011999999987892807,
+        "password_work": 469.9092000000019,
+        "eligibility": 0.9673000000002503,
+        "session_persist": 9.012299999998504,
+        "jwt": 0.8695999999981723,
+        "session_setup": 11.628000000000611
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 424.67869999999675,
+      "stages": {
+        "rate_limit": 6.3708000000005995,
+        "lookup": 1.8625000000029104,
+        "password_queue": 0.0015999999995983671,
+        "password_work": 404.36169999999765,
+        "eligibility": 0.9251000000003842,
+        "session_persist": 9.087800000001153,
+        "jwt": 0.6002000000007683,
+        "session_setup": 11.377199999998993
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 421.1932000000015,
+      "stages": {
+        "rate_limit": 2.0835000000006403,
+        "lookup": 1.1983000000000175,
+        "password_queue": 0.0018000000018218998,
+        "password_work": 413.1915999999983,
+        "eligibility": 0.9544000000023516,
+        "session_persist": 2.08810000000085,
+        "jwt": 0.48369999999704305,
+        "session_setup": 4.1564999999973224
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 419.5181000000157,
+      "stages": {
+        "rate_limit": 3.5283000000054017,
+        "lookup": 0.8243000000074971,
+        "password_queue": 0.0013000000035390258,
+        "password_work": 410.5421999999962,
+        "eligibility": 0.7704000000085216,
+        "session_persist": 2.080900000000838,
+        "jwt": 0.5328999999910593,
+        "session_setup": 4.081100000010338
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 461.80259999999544,
+      "stages": {
+        "rate_limit": 1.9641999999876134,
+        "lookup": 1.1837999999988824,
+        "password_queue": 0.0017000000225380063,
+        "password_work": 449.9814999999944,
+        "eligibility": 0.7895999999891501,
+        "session_persist": 5.6859999999869615,
+        "jwt": 0.9323000000149477,
+        "session_setup": 8.10429999997723
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 434.80849999998463,
+      "stages": {
+        "rate_limit": 2.526400000002468,
+        "lookup": 1.4038999999756925,
+        "password_queue": 0.001500000013038516,
+        "password_work": 423.2008999999962,
+        "eligibility": 0.7011000000056811,
+        "session_persist": 5.257599999982631,
+        "jwt": 0.5215000000025611,
+        "session_setup": 7.075600000011036
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 383.8953999999794,
+      "stages": {
+        "rate_limit": 2.401400000002468,
+        "lookup": 0.9371999999857508,
+        "password_queue": 0.0010999999940395355,
+        "password_work": 375.66889999998966,
+        "eligibility": 0.7302000000199769,
+        "session_persist": 2.554199999984121,
+        "jwt": 0.458199999993667,
+        "session_setup": 4.378699999972014
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 438.44820000001346,
+      "stages": {
+        "rate_limit": 5.7331000000122,
+        "lookup": 1.0687999999790918,
+        "password_queue": 0.0016000000177882612,
+        "password_work": 427.5076999999874,
+        "eligibility": 0.7497999999905005,
+        "session_persist": 1.8453999999910593,
+        "jwt": 0.4531000000133645,
+        "session_setup": 3.6172000000078697
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 468.75189999997383,
+      "stages": {
+        "rate_limit": 3.7890000000188593,
+        "lookup": 2.011900000012247,
+        "password_queue": 0.002099999983329326,
+        "password_work": 458.0350000000035,
+        "eligibility": 0.6869000000006054,
+        "session_persist": 2.1005000000004657,
+        "jwt": 0.5493999999889638,
+        "session_setup": 4.0217999999877065
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 428.7983999999997,
+      "stages": {
+        "rate_limit": 2.4593000000168104,
+        "lookup": 1.139100000000326,
+        "password_queue": 0.0014999999839346856,
+        "password_work": 421.17089999999735,
+        "eligibility": 0.6926000000094064,
+        "session_persist": 1.8219000000099186,
+        "jwt": 0.42610000001150183,
+        "session_setup": 3.532099999982165
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 467.5798000000068,
+      "stages": {
+        "rate_limit": 8.445200000016484,
+        "lookup": 1.2367000000085682,
+        "password_queue": 0.0011999999987892807,
+        "password_work": 452.74770000000717,
+        "eligibility": 0.8064000000013039,
+        "session_persist": 1.903200000000652,
+        "jwt": 0.9809999999997672,
+        "session_setup": 4.5829999999841675
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 492.84249999999884,
+      "stages": {
+        "rate_limit": 2.8822999999974854,
+        "lookup": 0.9922999999835156,
+        "password_queue": 0.0021000000124331564,
+        "password_work": 480.3399999999965,
+        "eligibility": 0.7717999999877065,
+        "session_persist": 6.0125999999872874,
+        "jwt": 0.5707999999867752,
+        "session_setup": 8.10889999999199
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 431.2331000000122,
+      "stages": {
+        "rate_limit": 2.9341000000131316,
+        "lookup": 3.915500000002794,
+        "password_queue": 0.0011999999987892807,
+        "password_work": 419.3078000000096,
+        "eligibility": 0.8826000000117347,
+        "session_persist": 2.293199999985518,
+        "jwt": 0.5732000000134576,
+        "session_setup": 4.511100000003353
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 478.68820000000414,
+      "stages": {
+        "rate_limit": 1.8734000000113156,
+        "lookup": 2.779500000004191,
+        "password_queue": 0.0008000000088941306,
+        "password_work": 469.7841999999946,
+        "eligibility": 0.7515000000130385,
+        "session_persist": 1.8849000000045635,
+        "jwt": 0.5278000000107568,
+        "session_setup": 3.7810999999928754
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 440.331199999986,
+      "stages": {
+        "rate_limit": 2.1790000000037253,
+        "lookup": 1.2844000000040978,
+        "password_queue": 0.0013000000035390258,
+        "password_work": 429.007500000007,
+        "eligibility": 0.7364999999990687,
+        "session_persist": 5.183699999994133,
+        "jwt": 0.4255999999877531,
+        "session_setup": 6.9029000000155065
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 468.7441000000108,
+      "stages": {
+        "rate_limit": 5.573600000003353,
+        "lookup": 2.374500000005355,
+        "password_queue": 0.0031000000017229468,
+        "password_work": 451.13000000000466,
+        "eligibility": 0.6705000000074506,
+        "session_persist": 2.9213999999919906,
+        "jwt": 4.231599999999162,
+        "session_setup": 8.420199999993201
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 510.0448000000033,
+      "stages": {
+        "rate_limit": 1.773300000000745,
+        "lookup": 1.0696000000170898,
+        "password_queue": 0.0009999999892897904,
+        "password_work": 499.3219000000099,
+        "eligibility": 0.5084000000206288,
+        "session_persist": 5.415100000012899,
+        "jwt": 0.6860999999917112,
+        "session_setup": 7.2805999999982305
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 458.91400000001886,
+      "stages": {
+        "rate_limit": 1.8275000000139698,
+        "lookup": 0.9960999999893829,
+        "password_queue": 0.0011999999987892807,
+        "password_work": 449.445000000007,
+        "eligibility": 1.8445999999821652,
+        "session_persist": 3.0399999999790452,
+        "jwt": 0.5375000000058208,
+        "session_setup": 6.032899999991059
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 498.0028999999922,
+      "stages": {
+        "rate_limit": 2.1943000000028405,
+        "lookup": 0.9011000000173226,
+        "password_queue": 0.0012999999744351953,
+        "password_work": 477.72769999998854,
+        "eligibility": 7.059399999998277,
+        "session_persist": 3.842899999988731,
+        "jwt": 4.67180000001099,
+        "session_setup": 16.575700000015786
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 447.08090000000084,
+      "stages": {
+        "rate_limit": 2.7265000000188593,
+        "lookup": 0.9033000000054017,
+        "password_queue": 0.0010000000183936208,
+        "password_work": 439.67599999997765,
+        "eligibility": 0.7183999999833759,
+        "session_persist": 1.5412999999825843,
+        "jwt": 0.39250000001629815,
+        "session_setup": 3.1744000000180677
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 464.2387999999919,
+      "stages": {
+        "rate_limit": 2.6054999999760184,
+        "lookup": 1.638200000015786,
+        "password_queue": 0.0020000000076834112,
+        "password_work": 454.92579999999725,
+        "eligibility": 0.7840000000142027,
+        "session_persist": 2.1607999999832828,
+        "jwt": 0.5789999999979045,
+        "session_setup": 4.259200000000419
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 475.21689999999944,
+      "stages": {
+        "rate_limit": 6.1247999999905005,
+        "lookup": 1.3796000000147615,
+        "password_queue": 0.0025000000023283064,
+        "password_work": 453.4308000000019,
+        "eligibility": 1.5504000000073574,
+        "session_persist": 6.778800000000047,
+        "jwt": 1.3562000000092667,
+        "session_setup": 12.279999999998836
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 491.2694999999949,
+      "stages": {
+        "rate_limit": 3.101699999999255,
+        "lookup": 3.5166000000026543,
+        "password_queue": 0.002199999988079071,
+        "password_work": 474.106300000014,
+        "eligibility": 2.946200000005774,
+        "session_persist": 2.0412000000069384,
+        "jwt": 3.26490000000922,
+        "session_setup": 9.208400000003166
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 464.4137000000046,
+      "stages": {
+        "rate_limit": 1.5278000000107568,
+        "lookup": 0.8887999999860767,
+        "password_queue": 0.0007999999797903001,
+        "password_work": 451.71830000000773,
+        "eligibility": 1.0434000000241213,
+        "session_persist": 7.519299999985378,
+        "jwt": 0.6818999999959487,
+        "session_setup": 9.869900000019697
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 512.4200999999885,
+      "stages": {
+        "rate_limit": 2.0614999999816064,
+        "lookup": 3.4882999999972526,
+        "password_queue": 0.0007999999797903001,
+        "password_work": 500.38610000000335,
+        "eligibility": 2.3418000000237953,
+        "session_persist": 2.5979999999981374,
+        "jwt": 0.4549999999871943,
+        "session_setup": 6.002600000007078
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 516.5276000000013,
+      "stages": {
+        "rate_limit": 5.068900000012945,
+        "lookup": 9.278200000000652,
+        "password_queue": 0.0008000000088941306,
+        "password_work": 495.37710000001243,
+        "eligibility": 1.068700000003446,
+        "session_persist": 3.027300000016112,
+        "jwt": 1.0507999999972526,
+        "session_setup": 6.035700000007637
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 483.6889000000083,
+      "stages": {
+        "rate_limit": 2.060800000006566,
+        "lookup": 7.474900000001071,
+        "password_queue": 0.0013000000035390258,
+        "password_work": 467.52820000000065,
+        "eligibility": 0.844600000011269,
+        "session_persist": 3.7947999999742024,
+        "jwt": 0.8772000000171829,
+        "session_setup": 6.1657000000122935
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 515.6613999999827,
+      "stages": {
+        "rate_limit": 4.544300000008661,
+        "lookup": 4.602100000018254,
+        "password_queue": 0.0031000000017229468,
+        "password_work": 498.9825000000128,
+        "eligibility": 0.5568999999959487,
+        "session_persist": 1.8669999999983702,
+        "jwt": 3.697599999984959,
+        "session_setup": 6.769800000009127
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 441.89670000001206,
+      "stages": {
+        "rate_limit": 2.654999999998836,
+        "lookup": 1.1757000000216067,
+        "password_queue": 0.0012000000278931111,
+        "password_work": 433.668399999995,
+        "eligibility": 0.7133000000030734,
+        "session_persist": 2.2096999999776017,
+        "jwt": 0.41719999999622814,
+        "session_setup": 3.856100000004517
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 457.65299999999115,
+      "stages": {
+        "rate_limit": 1.6396000000240747,
+        "lookup": 1.1569000000017695,
+        "password_queue": 0.0011999999987892807,
+        "password_work": 450.39749999999185,
+        "eligibility": 0.8443999999726657,
+        "session_persist": 1.839399999997113,
+        "jwt": 0.5228000000061002,
+        "session_setup": 3.933500000013737
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 452.01900000000023,
+      "stages": {
+        "rate_limit": 1.5628999999898952,
+        "lookup": 0.800199999997858,
+        "password_queue": 0.0011999999987892807,
+        "password_work": 439.3160000000207,
+        "eligibility": 1.7005000000062864,
+        "session_persist": 4.282399999996414,
+        "jwt": 3.3634999999776483,
+        "session_setup": 9.948399999993853
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 476.60940000001574,
+      "stages": {
+        "rate_limit": 1.8836000000010245,
+        "lookup": 0.865300000004936,
+        "password_queue": 0.0010999999940395355,
+        "password_work": 445.053899999999,
+        "eligibility": 11.733700000011595,
+        "session_persist": 12.44539999999688,
+        "jwt": 3.5182999999960884,
+        "session_setup": 28.37260000000242
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 594.7846000000136,
+      "stages": {
+        "rate_limit": 2.599900000001071,
+        "lookup": 1.7093999999924563,
+        "password_queue": 0.0022000000171829015,
+        "password_work": 585.8172999999952,
+        "eligibility": 0.7810000000172295,
+        "session_persist": 1.8089000000036322,
+        "jwt": 0.49090000000433065,
+        "session_setup": 3.6622999999963213
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 761.1996999999974,
+      "stages": {
+        "rate_limit": 5.5086000000010245,
+        "lookup": 1.5430000000051223,
+        "password_queue": 0.002099999983329326,
+        "password_work": 731.2335999999777,
+        "eligibility": 6.696600000024773,
+        "session_persist": 7.564599999983329,
+        "jwt": 5.689799999992829,
+        "session_setup": 20.783800000033807
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 674.2541999999667,
+      "stages": {
+        "rate_limit": 5.336900000052992,
+        "lookup": 1.5724999999511056,
+        "password_queue": 133.4780000000028,
+        "password_work": 523.2976999999955,
+        "eligibility": 1.6867000000202097,
+        "session_persist": 5.483699999982491,
+        "jwt": 0.7347000000299886,
+        "session_setup": 9.174600000027567
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 612.516799999983,
+      "stages": {
+        "rate_limit": 2.044999999983702,
+        "lookup": 0.856900000013411,
+        "password_queue": 69.87510000000475,
+        "password_work": 535.7964999999967,
+        "eligibility": 0.6835999999893829,
+        "session_persist": 1.7260000000242144,
+        "jwt": 0.4369999999762513,
+        "session_setup": 3.400000000023283
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 458.64929999999003,
+      "stages": {
+        "rate_limit": 1.496099999989383,
+        "lookup": 1.1197000000393018,
+        "password_queue": 5.899900000018533,
+        "password_work": 445.8841000000248,
+        "eligibility": 0.8536000000312924,
+        "session_persist": 1.8253999999724329,
+        "jwt": 0.4517999999807216,
+        "session_setup": 3.7603000000235625
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 512.1000999999815,
+      "stages": {
+        "rate_limit": 2.1667999999481253,
+        "lookup": 1.0555000000167638,
+        "password_queue": 0.0011999999987892807,
+        "password_work": 496.4985999999917,
+        "eligibility": 0.7646999999997206,
+        "session_persist": 9.449900000006892,
+        "jwt": 0.7341000000014901,
+        "session_setup": 11.822500000009313
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 487.5966999999946,
+      "stages": {
+        "rate_limit": 9.76490000000922,
+        "lookup": 8.021600000036415,
+        "password_queue": 0.001500000013038516,
+        "password_work": 462.0713000000105,
+        "eligibility": 0.9753999999957159,
+        "session_persist": 3.2149000000208616,
+        "jwt": 1.98230000003241,
+        "session_setup": 7.1353000000235625
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 528.6254999999655,
+      "stages": {
+        "rate_limit": 2.027200000011362,
+        "lookup": 1.4402000000118278,
+        "password_queue": 0.001999999978579581,
+        "password_work": 510.12529999995604,
+        "eligibility": 0.8771999999880791,
+        "session_persist": 4.5592999999644235,
+        "jwt": 8.230900000024121,
+        "session_setup": 14.388500000000931
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 526.452500000014,
+      "stages": {
+        "rate_limit": 5.972399999969639,
+        "lookup": 1.4972999999881722,
+        "password_queue": 0.002199999988079071,
+        "password_work": 513.3401000000304,
+        "eligibility": 0.8141999999643303,
+        "session_persist": 3.0736000000033528,
+        "jwt": 0.5252999999793246,
+        "session_setup": 5.002100000041537
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 523.8422000000137,
+      "stages": {
+        "rate_limit": 4.0335999999661,
+        "lookup": 1.205599999986589,
+        "password_queue": 0.0016000000177882612,
+        "password_work": 512.4917999999598,
+        "eligibility": 0.7160999999614432,
+        "session_persist": 3.8313999999663793,
+        "jwt": 0.5059999999939464,
+        "session_setup": 5.554000000003725
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 467.866399999999,
+      "stages": {
+        "rate_limit": 1.7697000000043772,
+        "lookup": 1.1768999999621883,
+        "password_queue": 0.0015999999595806003,
+        "password_work": 460.92420000000857,
+        "eligibility": 0.4815999999991618,
+        "session_persist": 1.8403999999864027,
+        "jwt": 0.5468999999575317,
+        "session_setup": 3.488000000012107
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 476.6453999999794,
+      "stages": {
+        "rate_limit": 2.673700000043027,
+        "lookup": 2.5478999999468215,
+        "password_queue": 0.001500000013038516,
+        "password_work": 466.8535999999731,
+        "eligibility": 0.788399999961257,
+        "session_persist": 2.0746999999973923,
+        "jwt": 0.5535999999847263,
+        "session_setup": 4.008399999991525
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 531.4652999999817,
+      "stages": {
+        "rate_limit": 2.132800000021234,
+        "lookup": 1.8647000000346452,
+        "password_queue": 0.0013000000035390258,
+        "password_work": 517.9241000000038,
+        "eligibility": 3.350299999990966,
+        "session_persist": 3.547199999971781,
+        "jwt": 1.4421999999904074,
+        "session_setup": 8.972000000008848
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 510.29859999998007,
+      "stages": {
+        "rate_limit": 4.134700000053272,
+        "lookup": 1.3945999999996275,
+        "password_queue": 0.002299999992828816,
+        "password_work": 497.41600000002654,
+        "eligibility": 2.243900000001304,
+        "session_persist": 2.931799999962095,
+        "jwt": 0.7096000000019558,
+        "session_setup": 6.722699999983888
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 488.84350000001723,
+      "stages": {
+        "rate_limit": 3.5375999999814667,
+        "lookup": 1.5305999999982305,
+        "password_queue": 0.001400000008288771,
+        "password_work": 475.0798000000068,
+        "eligibility": 0.727599999983795,
+        "session_persist": 5.899399999994785,
+        "jwt": 0.6654000000562519,
+        "session_setup": 8.18929999996908
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 471.37429999996675,
+      "stages": {
+        "rate_limit": 6.347100000013597,
+        "lookup": 12.839900000020862,
+        "password_queue": 0.0017000000225380063,
+        "password_work": 448.227200000023,
+        "eligibility": 0.7362999999895692,
+        "session_persist": 1.6732000000192784,
+        "jwt": 0.4349999999976717,
+        "session_setup": 3.3889000000199303
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 579.8289000000223,
+      "stages": {
+        "rate_limit": 2.545299999997951,
+        "lookup": 1.1876000000047497,
+        "password_queue": 0.001500000013038516,
+        "password_work": 564.6579999999958,
+        "eligibility": 3.6317999999737367,
+        "session_persist": 3.5216000000364147,
+        "jwt": 2.6349000000045635,
+        "session_setup": 10.901499999978114
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 506.60309999994934,
+      "stages": {
+        "rate_limit": 2.374299999966752,
+        "lookup": 1.3266000000294298,
+        "password_queue": 0.001500000013038516,
+        "password_work": 494.6875,
+        "eligibility": 0.8452999999863096,
+        "session_persist": 5.816300000005867,
+        "jwt": 0.4213999999919906,
+        "session_setup": 7.619799999985844
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 483.844299999997,
+      "stages": {
+        "rate_limit": 2.0402999999932945,
+        "lookup": 3.194000000017695,
+        "password_queue": 0.0011999999987892807,
+        "password_work": 472.5213999999687,
+        "eligibility": 0.9556999999913387,
+        "session_persist": 2.937900000018999,
+        "jwt": 0.6978000000235625,
+        "session_setup": 5.585199999972247
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 530.9286999999895,
+      "stages": {
+        "rate_limit": 2.0714000000152737,
+        "lookup": 1.282100000011269,
+        "password_queue": 0.0016999999643303454,
+        "password_work": 523.1410000000033,
+        "eligibility": 0.7509999999892898,
+        "session_persist": 1.7533999999868684,
+        "jwt": 0.6219000000273809,
+        "session_setup": 3.862200000032317
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 559.8430999999982,
+      "stages": {
+        "rate_limit": 5.420099999988452,
+        "lookup": 3.493799999996554,
+        "password_queue": 0.0011999999987892807,
+        "password_work": 542.4069000000018,
+        "eligibility": 0.9651999999769032,
+        "session_persist": 4.114500000025146,
+        "jwt": 1.2805999999982305,
+        "session_setup": 7.780499999993481
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 569.9284000000334,
+      "stages": {
+        "rate_limit": 2.6233999999822117,
+        "lookup": 2.6111999999848194,
+        "password_queue": 0.002099999983329326,
+        "password_work": 555.9498000000021,
+        "eligibility": 0.6414999999688007,
+        "session_persist": 5.256699999968987,
+        "jwt": 1.0451999999932013,
+        "session_setup": 7.817699999955948
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 483.90889999998035,
+      "stages": {
+        "rate_limit": 3.404399999999441,
+        "lookup": 2.7516000000177883,
+        "password_queue": 0.001400000008288771,
+        "password_work": 468.1275000000023,
+        "eligibility": 0.8374999999650754,
+        "session_persist": 6.756300000008196,
+        "jwt": 0.6647000000230037,
+        "session_setup": 9.049200000008568
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 508.39140000002226,
+      "stages": {
+        "rate_limit": 1.7330000000074506,
+        "lookup": 2.147800000035204,
+        "password_queue": 0.0010999999940395355,
+        "password_work": 500.0339999999851,
+        "eligibility": 0.7885999999707565,
+        "session_persist": 2.0152999999700114,
+        "jwt": 0.563800000003539,
+        "session_setup": 4.005999999993946
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 526.3595000000205,
+      "stages": {
+        "rate_limit": 6.508800000010524,
+        "lookup": 6.332299999950919,
+        "password_queue": 0.0011999999987892807,
+        "password_work": 502.5447999999742,
+        "eligibility": 3.7716000000364147,
+        "session_persist": 2.908400000014808,
+        "jwt": 2.8348999999579974,
+        "session_setup": 10.461499999975786
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 520.5587999999989,
+      "stages": {
+        "rate_limit": 2.3993999999947846,
+        "lookup": 1.2255000000004657,
+        "password_queue": 0.0023999999975785613,
+        "password_work": 510.9965000000084,
+        "eligibility": 1.1802000000025146,
+        "session_persist": 2.7604999999748543,
+        "jwt": 0.6165999999502674,
+        "session_setup": 5.308399999979883
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 514.6184000000358,
+      "stages": {
+        "rate_limit": 6.503999999957159,
+        "lookup": 8.956899999990128,
+        "password_queue": 0.0013000000035390258,
+        "password_work": 488.9802999999956,
+        "eligibility": 0.9857000000192784,
+        "session_persist": 6.645300000032876,
+        "jwt": 0.8833000000449829,
+        "session_setup": 9.332800000032876
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 501.7160000000149,
+      "stages": {
+        "rate_limit": 3.0732000000425614,
+        "lookup": 3.0984000000171363,
+        "password_queue": 0.0011999999987892807,
+        "password_work": 490.9836999999825,
+        "eligibility": 0.8686999999918044,
+        "session_persist": 2.0848999999579974,
+        "jwt": 0.45329999999376014,
+        "session_setup": 4.0301999999792315
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 462.00170000002254,
+      "stages": {
+        "rate_limit": 3.954599999997299,
+        "lookup": 1.1806000000215136,
+        "password_queue": 0.001400000008288771,
+        "password_work": 450.19250000000466,
+        "eligibility": 0.8385000000125729,
+        "session_persist": 2.536599999992177,
+        "jwt": 1.9223999999812804,
+        "session_setup": 6.064099999959581
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 509.08740000001853,
+      "stages": {
+        "rate_limit": 4.88990000000922,
+        "lookup": 1.571300000010524,
+        "password_queue": 0.0025000000023283064,
+        "password_work": 497.1962999999523,
+        "eligibility": 0.731900000013411,
+        "session_persist": 2.587200000009034,
+        "jwt": 0.5568999999668449,
+        "session_setup": 4.582200000004377
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 534.9961999999941,
+      "stages": {
+        "rate_limit": 2.561900000029709,
+        "lookup": 6.4267000000108965,
+        "password_queue": 0.002099999983329326,
+        "password_work": 519.3866999999736,
+        "eligibility": 1.3109999999869615,
+        "session_persist": 2.5881999999983236,
+        "jwt": 0.8137000000569969,
+        "session_setup": 5.702099999994971
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 534.28820000001,
+      "stages": {
+        "rate_limit": 2.5284000000101514,
+        "lookup": 3.2515000000130385,
+        "password_queue": 0.0010999999940395355,
+        "password_work": 515.3207999999868,
+        "eligibility": 2.023400000005495,
+        "session_persist": 6.494899999990594,
+        "jwt": 3.355100000044331,
+        "session_setup": 12.545999999972992
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 543.0916000000434,
+      "stages": {
+        "rate_limit": 4.785799999954179,
+        "lookup": 10.994999999995343,
+        "password_queue": 0.0011999999987892807,
+        "password_work": 514.7576999999583,
+        "eligibility": 3.354799999971874,
+        "session_persist": 6.4461000000010245,
+        "jwt": 1.5749000000068918,
+        "session_setup": 11.997899999958463
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 516.6316000000224,
+      "stages": {
+        "rate_limit": 12.659600000013597,
+        "lookup": 7.138199999986682,
+        "password_queue": 0.0016999999643303454,
+        "password_work": 484.61530000000494,
+        "eligibility": 0.7974999999860302,
+        "session_persist": 8.09419999999227,
+        "jwt": 2.032199999957811,
+        "session_setup": 11.661000000021886
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 506.75479999999516,
+      "stages": {
+        "rate_limit": 1.9394999999785796,
+        "lookup": 1.1673999999766238,
+        "password_queue": 0.001500000013038516,
+        "password_work": 493.8733999999822,
+        "eligibility": 3.0890000000363216,
+        "session_persist": 1.57740000000922,
+        "jwt": 3.5010000000474975,
+        "session_setup": 9.176999999966938
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 459.0820999999996,
+      "stages": {
+        "rate_limit": 3.164000000047963,
+        "lookup": 1.1058000000193715,
+        "password_queue": 0.001400000008288771,
+        "password_work": 448.5198000000091,
+        "eligibility": 2.0113000000128523,
+        "session_persist": 2.3813000000081956,
+        "jwt": 0.6292999999714084,
+        "session_setup": 5.755999999993946
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 496.4564000000246,
+      "stages": {
+        "rate_limit": 3.1644000000087544,
+        "lookup": 6.5851000000257045,
+        "password_queue": 0.001500000013038516,
+        "password_work": 481.2760999999591,
+        "eligibility": 0.8894999999902211,
+        "session_persist": 2.738599999982398,
+        "jwt": 0.6150999999954365,
+        "session_setup": 4.943900000012945
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 513.5323999999673,
+      "stages": {
+        "rate_limit": 1.8847999999998137,
+        "lookup": 1.1529999999911524,
+        "password_queue": 0.0010999999940395355,
+        "password_work": 501.99909999995725,
+        "eligibility": 0.7145999999484047,
+        "session_persist": 3.0848000000114553,
+        "jwt": 3.6224999999976717,
+        "session_setup": 8.019300000043586
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 582.8474999999744,
+      "stages": {
+        "rate_limit": 4.871100000047591,
+        "lookup": 9.863699999987148,
+        "password_queue": 0.0010999999940395355,
+        "password_work": 562.3564999999944,
+        "eligibility": 1.0381000000052154,
+        "session_persist": 2.16890000004787,
+        "jwt": 0.9900999999954365,
+        "session_setup": 5.250700000033248
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 605.6031000000075,
+      "stages": {
+        "rate_limit": 3.662000000011176,
+        "lookup": 10.929299999959767,
+        "password_queue": 0.0025000000023283064,
+        "password_work": 584.7821000000113,
+        "eligibility": 1.370699999970384,
+        "session_persist": 3.129899999999907,
+        "jwt": 0.34479999996256083,
+        "session_setup": 5.454600000055507
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 262.15559999999823,
+      "stages": {
+        "rate_limit": 5.3056000000215136,
+        "lookup": 1.6992999999783933,
+        "password_queue": 0.000800000037997961,
+        "password_work": 252.02859999996144,
+        "eligibility": 0.8018999999621883,
+        "session_persist": 1.2593999999808148,
+        "jwt": 0.3680000000167638,
+        "session_setup": 2.8073999999905936
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 600.5331000000006,
+      "stages": {
+        "rate_limit": 7.576200000010431,
+        "lookup": 12.069699999992736,
+        "password_queue": 0.0011999999987892807,
+        "password_work": 568.4245999999694,
+        "eligibility": 1.278200000000652,
+        "session_persist": 3.5666000000201166,
+        "jwt": 5.881799999973737,
+        "session_setup": 11.744100000010803
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 522.5072999999975,
+      "stages": {
+        "rate_limit": 7.045299999997951,
+        "lookup": 7.378700000001118,
+        "password_queue": 0.0018000000272877514,
+        "password_work": 502.64119999995455,
+        "eligibility": 0.9029999999911524,
+        "session_persist": 2.5996000000159256,
+        "jwt": 0.7224999999743886,
+        "session_setup": 4.89079999999376
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 499.7577000000165,
+      "stages": {
+        "rate_limit": 2.481599999999162,
+        "lookup": 2.1116000000038184,
+        "password_queue": 0.0016000000177882612,
+        "password_work": 483.8660999999847,
+        "eligibility": 0.9109999999636784,
+        "session_persist": 4.539400000008754,
+        "jwt": 4.508099999977276,
+        "session_setup": 10.725500000000466
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 586.8559000000241,
+      "stages": {
+        "rate_limit": 5.006099999998696,
+        "lookup": 1.6953999999677762,
+        "password_queue": 0.0015999999595806003,
+        "password_work": 571.6836999999941,
+        "eligibility": 0.8714000000036322,
+        "session_persist": 5.87589999998454,
+        "jwt": 0.5533999999752268,
+        "session_setup": 7.934100000013132
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 482.64029999997,
+      "stages": {
+        "rate_limit": 4.495699999970384,
+        "lookup": 1.7018999999854714,
+        "password_queue": 0.0018999999738298357,
+        "password_work": 463.508199999982,
+        "eligibility": 2.017999999981839,
+        "session_persist": 7.674100000003818,
+        "jwt": 1.9567999999853782,
+        "session_setup": 12.317300000053365
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 564.3107999999775,
+      "stages": {
+        "rate_limit": 9.376500000013039,
+        "lookup": 12.023099999991246,
+        "password_queue": 0.0020000000367872417,
+        "password_work": 531.7454000000143,
+        "eligibility": 1.917200000025332,
+        "session_persist": 2.4109000000171363,
+        "jwt": 5.636999999987893,
+        "session_setup": 10.588600000017323
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 575.5889999999781,
+      "stages": {
+        "rate_limit": 3.9294000000227243,
+        "lookup": 7.264500000048429,
+        "password_queue": 0.0013000000035390258,
+        "password_work": 560.0871999999508,
+        "eligibility": 0.9363000000012107,
+        "session_persist": 1.6811000000452623,
+        "jwt": 0.5104999999748543,
+        "session_setup": 3.757400000002235
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 466.7337000000407,
+      "stages": {
+        "rate_limit": 9.563100000028498,
+        "lookup": 11.8127000000095,
+        "password_queue": 0.0023999999975785613,
+        "password_work": 437.69819999998435,
+        "eligibility": 0.8927000000257976,
+        "session_persist": 2.689600000041537,
+        "jwt": 2.582799999974668,
+        "session_setup": 6.755500000028405
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 626.9782000000123,
+      "stages": {
+        "rate_limit": 5.820000000006985,
+        "lookup": 8.632299999997485,
+        "password_queue": 0.0024999999441206455,
+        "password_work": 555.9587000000174,
+        "eligibility": 20.519000000029337,
+        "session_persist": 23.35980000003474,
+        "jwt": 11.445000000006985,
+        "session_setup": 56.034100000048056
+      }
+    },
+    {
+      "status": 200,
+      "totalMs": 600.7167999999947,
+      "stages": {
+        "rate_limit": 14.514499999990221,
+        "lookup": 21.213500000012573,
+        "password_queue": 0.001500000013038516,
+        "password_work": 519.7905000000028,
+        "eligibility": 19.442399999999907,
+        "session_persist": 13.489799999981187,
+        "jwt": 11.085100000025705,
+        "session_setup": 44.75940000003902
+      }
+    }
+  ],
+  "thresholdsPassed": false,
+  "exitCode": 99,
+  "measurements": [
+    {
+      "stage": "preflight",
+      "action": "preflight",
+      "requests": 1,
+      "p95Ms": 4.8133,
+      "p99Ms": 4.8133,
+      "failureRate": 0,
+      "statuses": {
+        "204": 1
+      },
+      "semanticFailures": 0,
+      "passes": true
+    },
+    {
+      "stage": "preflight",
+      "action": "all",
+      "requests": 1,
+      "p95Ms": 4.8133,
+      "p99Ms": 4.8133,
+      "failureRate": 0,
+      "statuses": {
+        "204": 1
+      },
+      "semanticFailures": 0,
+      "passes": true
+    },
+    {
+      "stage": "ramp_20",
+      "action": "login",
+      "requests": 19,
+      "p95Ms": 557.1784,
+      "p99Ms": 557.1784,
+      "failureRate": 0,
+      "statuses": {
+        "200": 19
+      },
+      "semanticFailures": 0,
+      "passes": false
+    },
+    {
+      "stage": "ramp_20",
+      "action": "all",
+      "requests": 179,
+      "p95Ms": 500.1615,
+      "p99Ms": 554.8327,
+      "failureRate": 0,
+      "statuses": {
+        "200": 154,
+        "201": 25
+      },
+      "semanticFailures": 0,
+      "passes": false
+    },
+    {
+      "stage": "ramp_20",
+      "action": "main_screen",
+      "requests": 30,
+      "p95Ms": 81.2114,
+      "p99Ms": 111.5941,
+      "failureRate": 0,
+      "statuses": {
+        "200": 30
+      },
+      "semanticFailures": 0,
+      "passes": true
+    },
+    {
+      "stage": "ramp_20",
+      "action": "chat_list",
+      "requests": 30,
+      "p95Ms": 42.111,
+      "p99Ms": 48.8325,
+      "failureRate": 0,
+      "statuses": {
+        "200": 30
+      },
+      "semanticFailures": 0,
+      "passes": true
+    },
+    {
+      "stage": "ramp_20",
+      "action": "history",
+      "requests": 28,
+      "p95Ms": 46.4009,
+      "p99Ms": 70.608,
+      "failureRate": 0,
+      "statuses": {
+        "200": 28
+      },
+      "semanticFailures": 0,
+      "passes": true
+    },
+    {
+      "stage": "ramp_20",
+      "action": "send_message",
+      "requests": 25,
+      "p95Ms": 50.1871,
+      "p99Ms": 52.1586,
+      "failureRate": 0,
+      "statuses": {
+        "201": 25
+      },
+      "semanticFailures": 0,
+      "passes": true
+    },
+    {
+      "stage": "ramp_20",
+      "action": "confirm_message",
+      "requests": 24,
+      "p95Ms": 44.0355,
+      "p99Ms": 44.6162,
+      "failureRate": 0,
+      "statuses": {
+        "200": 24
+      },
+      "semanticFailures": 0,
+      "passes": true
+    },
+    {
+      "stage": "ramp_20",
+      "action": "communities",
+      "requests": 23,
+      "p95Ms": 41.6904,
+      "p99Ms": 54.0726,
+      "failureRate": 0,
+      "statuses": {
+        "200": 23
+      },
+      "semanticFailures": 0,
+      "passes": true
+    },
+    {
+      "stage": "hold_20",
+      "action": "history",
+      "requests": 195,
+      "p95Ms": 36.4869,
+      "p99Ms": 76.579,
+      "failureRate": 0,
+      "statuses": {
+        "200": 195
+      },
+      "semanticFailures": 0,
+      "passes": true
+    },
+    {
+      "stage": "hold_20",
+      "action": "all",
+      "requests": 1162,
+      "p95Ms": 45.9,
+      "p99Ms": 68.4689,
+      "failureRate": 0,
+      "statuses": {
+        "200": 969,
+        "201": 193
+      },
+      "semanticFailures": 0,
+      "passes": true
+    },
+    {
+      "stage": "hold_20",
+      "action": "main_screen",
+      "requests": 194,
+      "p95Ms": 64.9502,
+      "p99Ms": 95.2111,
+      "failureRate": 0,
+      "statuses": {
+        "200": 194
+      },
+      "semanticFailures": 0,
+      "passes": true
+    },
+    {
+      "stage": "hold_20",
+      "action": "chat_list",
+      "requests": 194,
+      "p95Ms": 36.3076,
+      "p99Ms": 54.5957,
+      "failureRate": 0,
+      "statuses": {
+        "200": 194
+      },
+      "semanticFailures": 0,
+      "passes": true
+    },
+    {
+      "stage": "hold_20",
+      "action": "send_message",
+      "requests": 193,
+      "p95Ms": 45.5885,
+      "p99Ms": 66.7149,
+      "failureRate": 0,
+      "statuses": {
+        "201": 193
+      },
+      "semanticFailures": 0,
+      "passes": true
+    },
+    {
+      "stage": "hold_20",
+      "action": "login",
+      "requests": 1,
+      "p95Ms": 428.2883,
+      "p99Ms": 428.2883,
+      "failureRate": 0,
+      "statuses": {
+        "200": 1
+      },
+      "semanticFailures": 0,
+      "passes": true
+    },
+    {
+      "stage": "hold_20",
+      "action": "confirm_message",
+      "requests": 193,
+      "p95Ms": 37.5586,
+      "p99Ms": 50.8995,
+      "failureRate": 0,
+      "statuses": {
+        "200": 193
+      },
+      "semanticFailures": 0,
+      "passes": true
+    },
+    {
+      "stage": "hold_20",
+      "action": "communities",
+      "requests": 192,
+      "p95Ms": 26.154,
+      "p99Ms": 42.2288,
+      "failureRate": 0,
+      "statuses": {
+        "200": 192
+      },
+      "semanticFailures": 0,
+      "passes": true
+    },
+    {
+      "stage": "ramp_50",
+      "action": "send_message",
+      "requests": 87,
+      "p95Ms": 40.8609,
+      "p99Ms": 59.7104,
+      "failureRate": 0,
+      "statuses": {
+        "201": 87
+      },
+      "semanticFailures": 0,
+      "passes": true
+    },
+    {
+      "stage": "ramp_50",
+      "action": "all",
+      "requests": 557,
+      "p95Ms": 425.5847,
+      "p99Ms": 504.8538,
+      "failureRate": 0,
+      "statuses": {
+        "200": 470,
+        "201": 87
+      },
+      "semanticFailures": 0,
+      "passes": true
+    },
+    {
+      "stage": "ramp_50",
+      "action": "confirm_message",
+      "requests": 85,
+      "p95Ms": 52.2031,
+      "p99Ms": 74.1392,
+      "failureRate": 0,
+      "statuses": {
+        "200": 85
+      },
+      "semanticFailures": 0,
+      "passes": true
+    },
+    {
+      "stage": "ramp_50",
+      "action": "history",
+      "requests": 87,
+      "p95Ms": 51.2978,
+      "p99Ms": 77.0303,
+      "failureRate": 0,
+      "statuses": {
+        "200": 87
+      },
+      "semanticFailures": 0,
+      "passes": true
+    },
+    {
+      "stage": "ramp_50",
+      "action": "communities",
+      "requests": 83,
+      "p95Ms": 34.1217,
+      "p99Ms": 52.5306,
+      "failureRate": 0,
+      "statuses": {
+        "200": 83
+      },
+      "semanticFailures": 0,
+      "passes": true
+    },
+    {
+      "stage": "ramp_50",
+      "action": "login",
+      "requests": 29,
+      "p95Ms": 526.9709,
+      "p99Ms": 534.3049,
+      "failureRate": 0,
+      "statuses": {
+        "200": 29
+      },
+      "semanticFailures": 0,
+      "passes": false
+    },
+    {
+      "stage": "ramp_50",
+      "action": "main_screen",
+      "requests": 93,
+      "p95Ms": 65.0919,
+      "p99Ms": 102.8199,
+      "failureRate": 0,
+      "statuses": {
+        "200": 93
+      },
+      "semanticFailures": 0,
+      "passes": true
+    },
+    {
+      "stage": "ramp_50",
+      "action": "chat_list",
+      "requests": 93,
+      "p95Ms": 46.0612,
+      "p99Ms": 58.1659,
+      "failureRate": 0,
+      "statuses": {
+        "200": 93
+      },
+      "semanticFailures": 0,
+      "passes": true
+    },
+    {
+      "stage": "hold_50",
+      "action": "confirm_message",
+      "requests": 481,
+      "p95Ms": 63.0347,
+      "p99Ms": 104.0777,
+      "failureRate": 0,
+      "statuses": {
+        "200": 481
+      },
+      "semanticFailures": 0,
+      "passes": true
+    },
+    {
+      "stage": "hold_50",
+      "action": "all",
+      "requests": 2881,
+      "p95Ms": 65.9703,
+      "p99Ms": 109.841,
+      "failureRate": 0,
+      "statuses": {
+        "200": 2401,
+        "201": 480
+      },
+      "semanticFailures": 0,
+      "passes": true
+    },
+    {
+      "stage": "hold_50",
+      "action": "main_screen",
+      "requests": 480,
+      "p95Ms": 94.7051,
+      "p99Ms": 165.1469,
+      "failureRate": 0,
+      "statuses": {
+        "200": 480
+      },
+      "semanticFailures": 0,
+      "passes": true
+    },
+    {
+      "stage": "hold_50",
+      "action": "chat_list",
+      "requests": 479,
+      "p95Ms": 52.8776,
+      "p99Ms": 83.8149,
+      "failureRate": 0,
+      "statuses": {
+        "200": 479
+      },
+      "semanticFailures": 0,
+      "passes": true
+    },
+    {
+      "stage": "hold_50",
+      "action": "send_message",
+      "requests": 480,
+      "p95Ms": 50.9524,
+      "p99Ms": 77.5115,
+      "failureRate": 0,
+      "statuses": {
+        "201": 480
+      },
+      "semanticFailures": 0,
+      "passes": true
+    },
+    {
+      "stage": "hold_50",
+      "action": "communities",
+      "requests": 481,
+      "p95Ms": 47.5335,
+      "p99Ms": 93.5584,
+      "failureRate": 0,
+      "statuses": {
+        "200": 481
+      },
+      "semanticFailures": 0,
+      "passes": true
+    },
+    {
+      "stage": "hold_50",
+      "action": "history",
+      "requests": 479,
+      "p95Ms": 58.3022,
+      "p99Ms": 111.5809,
+      "failureRate": 0,
+      "statuses": {
+        "200": 479
+      },
+      "semanticFailures": 0,
+      "passes": true
+    },
+    {
+      "stage": "hold_50",
+      "action": "login",
+      "requests": 1,
+      "p95Ms": 601.1564,
+      "p99Ms": 601.1564,
+      "failureRate": 0,
+      "statuses": {
+        "200": 1
+      },
+      "semanticFailures": 0,
+      "passes": false
+    },
+    {
+      "stage": "ramp_100",
+      "action": "all",
+      "requests": 1189,
+      "p95Ms": 105.6203,
+      "p99Ms": 573.9019,
+      "failureRate": 0,
+      "statuses": {
+        "200": 1002,
+        "201": 187
+      },
+      "semanticFailures": 0,
+      "passes": true
+    },
+    {
+      "stage": "ramp_100",
+      "action": "communities",
+      "requests": 176,
+      "p95Ms": 56.3621,
+      "p99Ms": 88.4534,
+      "failureRate": 0,
+      "statuses": {
+        "200": 176
+      },
+      "semanticFailures": 0,
+      "passes": true
+    },
+    {
+      "stage": "ramp_100",
+      "action": "chat_list",
+      "requests": 196,
+      "p95Ms": 56.9523,
+      "p99Ms": 79.7975,
+      "failureRate": 0,
+      "statuses": {
+        "200": 196
+      },
+      "semanticFailures": 0,
+      "passes": true
+    },
+    {
+      "stage": "ramp_100",
+      "action": "history",
+      "requests": 197,
+      "p95Ms": 81.4722,
+      "p99Ms": 131.681,
+      "failureRate": 0,
+      "statuses": {
+        "200": 197
+      },
+      "semanticFailures": 0,
+      "passes": true
+    },
+    {
+      "stage": "ramp_100",
+      "action": "confirm_message",
+      "requests": 186,
+      "p95Ms": 69.1531,
+      "p99Ms": 88.4816,
+      "failureRate": 0,
+      "statuses": {
+        "200": 186
+      },
+      "semanticFailures": 0,
+      "passes": true
+    },
+    {
+      "stage": "ramp_100",
+      "action": "main_screen",
+      "requests": 198,
+      "p95Ms": 104.1741,
+      "p99Ms": 131.5456,
+      "failureRate": 0,
+      "statuses": {
+        "200": 198
+      },
+      "semanticFailures": 0,
+      "passes": true
+    },
+    {
+      "stage": "ramp_100",
+      "action": "send_message",
+      "requests": 187,
+      "p95Ms": 75.4491,
+      "p99Ms": 97.1693,
+      "failureRate": 0,
+      "statuses": {
+        "201": 187
+      },
+      "semanticFailures": 0,
+      "passes": true
+    },
+    {
+      "stage": "ramp_100",
+      "action": "login",
+      "requests": 49,
+      "p95Ms": 634.0935,
+      "p99Ms": 773.1517,
+      "failureRate": 0,
+      "statuses": {
+        "200": 49
+      },
+      "semanticFailures": 0,
+      "passes": false
+    },
+    {
+      "stage": "hold_100",
+      "action": "all",
+      "requests": 8560,
+      "p95Ms": 151.6566,
+      "p99Ms": 234.1214,
+      "failureRate": 0,
+      "statuses": {
+        "200": 7133,
+        "201": 1427
+      },
+      "semanticFailures": 0,
+      "passes": true
+    },
+    {
+      "stage": "hold_100",
+      "action": "send_message",
+      "requests": 1427,
+      "p95Ms": 120.9425,
+      "p99Ms": 183.3373,
+      "failureRate": 0,
+      "statuses": {
+        "201": 1427
+      },
+      "semanticFailures": 0,
+      "passes": true
+    },
+    {
+      "stage": "hold_100",
+      "action": "chat_list",
+      "requests": 1427,
+      "p95Ms": 133.6376,
+      "p99Ms": 188.8354,
+      "failureRate": 0,
+      "statuses": {
+        "200": 1427
+      },
+      "semanticFailures": 0,
+      "passes": true
+    },
+    {
+      "stage": "hold_100",
+      "action": "main_screen",
+      "requests": 1425,
+      "p95Ms": 188.2962,
+      "p99Ms": 260.3198,
+      "failureRate": 0,
+      "statuses": {
+        "200": 1425
+      },
+      "semanticFailures": 0,
+      "passes": true
+    },
+    {
+      "stage": "hold_100",
+      "action": "communities",
+      "requests": 1427,
+      "p95Ms": 103.3597,
+      "p99Ms": 185.3395,
+      "failureRate": 0,
+      "statuses": {
+        "200": 1427
+      },
+      "semanticFailures": 0,
+      "passes": true
+    },
+    {
+      "stage": "hold_100",
+      "action": "history",
+      "requests": 1427,
+      "p95Ms": 150.6198,
+      "p99Ms": 275.002,
+      "failureRate": 0,
+      "statuses": {
+        "200": 1427
+      },
+      "semanticFailures": 0,
+      "passes": true
+    },
+    {
+      "stage": "hold_100",
+      "action": "confirm_message",
+      "requests": 1426,
+      "p95Ms": 170.6085,
+      "p99Ms": 248.768,
+      "failureRate": 0,
+      "statuses": {
+        "200": 1426
+      },
+      "semanticFailures": 0,
+      "passes": true
+    },
+    {
+      "stage": "hold_100",
+      "action": "login",
+      "requests": 1,
+      "p95Ms": 626.4297,
+      "p99Ms": 626.4297,
+      "failureRate": 0,
+      "statuses": {
+        "200": 1
+      },
+      "semanticFailures": 0,
+      "passes": false
+    },
+    {
+      "stage": "ramp_0",
+      "action": "all",
+      "requests": 859,
+      "p95Ms": 63.9279,
+      "p99Ms": 94.3753,
+      "failureRate": 0,
+      "statuses": {
+        "200": 710,
+        "201": 149
+      },
+      "semanticFailures": 0,
+      "passes": true
+    },
+    {
+      "stage": "ramp_0",
+      "action": "communities",
+      "requests": 165,
+      "p95Ms": 35.4548,
+      "p99Ms": 68.8219,
+      "failureRate": 0,
+      "statuses": {
+        "200": 165
+      },
+      "semanticFailures": 0,
+      "passes": true
+    },
+    {
+      "stage": "ramp_0",
+      "action": "chat_list",
+      "requests": 129,
+      "p95Ms": 44.5645,
+      "p99Ms": 72.311,
+      "failureRate": 0,
+      "statuses": {
+        "200": 129
+      },
+      "semanticFailures": 0,
+      "passes": true
+    },
+    {
+      "stage": "ramp_0",
+      "action": "confirm_message",
+      "requests": 153,
+      "p95Ms": 62.5923,
+      "p99Ms": 95.663,
+      "failureRate": 0,
+      "statuses": {
+        "200": 153
+      },
+      "semanticFailures": 0,
+      "passes": true
+    },
+    {
+      "stage": "ramp_0",
+      "action": "history",
+      "requests": 135,
+      "p95Ms": 75.7577,
+      "p99Ms": 93.3987,
+      "failureRate": 0,
+      "statuses": {
+        "200": 135
+      },
+      "semanticFailures": 0,
+      "passes": true
+    },
+    {
+      "stage": "ramp_0",
+      "action": "send_message",
+      "requests": 149,
+      "p95Ms": 47.1654,
+      "p99Ms": 57.6677,
+      "failureRate": 0,
+      "statuses": {
+        "201": 149
+      },
+      "semanticFailures": 0,
+      "passes": true
+    },
+    {
+      "stage": "ramp_0",
+      "action": "main_screen",
+      "requests": 128,
+      "p95Ms": 92.9632,
+      "p99Ms": 118.6819,
+      "failureRate": 0,
+      "statuses": {
+        "200": 128
+      },
+      "semanticFailures": 0,
+      "passes": true
+    },
+    {
+      "stage": "ramp_down",
+      "action": "communities",
+      "requests": 1,
+      "p95Ms": 9.7906,
+      "p99Ms": 9.7906,
+      "failureRate": 0,
+      "statuses": {
+        "200": 1
+      },
+      "semanticFailures": 0,
+      "passes": true
+    },
+    {
+      "stage": "ramp_down",
+      "action": "all",
+      "requests": 1,
+      "p95Ms": 9.7906,
+      "p99Ms": 9.7906,
+      "failureRate": 0,
+      "statuses": {
+        "200": 1
+      },
+      "semanticFailures": 0,
+      "passes": true
+    }
+  ],
+  "summary": {
+    "root_group": {
+      "name": "",
+      "path": "",
+      "id": "d41d8cd98f00b204e9800998ecf8427e",
+      "groups": [],
+      "checks": []
+    },
+    "options": {
+      "summaryTimeUnit": "",
+      "noColor": true,
+      "summaryTrendStats": [
+        "avg",
+        "med",
+        "p(90)",
+        "p(95)",
+        "p(99)",
+        "max"
+      ]
+    },
+    "state": {
+      "isStdErrTTY": false,
+      "testRunDurationMs": 547822.5966,
+      "isStdOutTTY": false
+    },
+    "metrics": {
+      "iterations": {
+        "type": "counter",
+        "contains": "default",
+        "values": {
+          "rate": 4.651140744857694,
+          "count": 2548
+        }
+      },
+      "http_req_failed{action:history}": {
+        "type": "rate",
+        "contains": "default",
+        "values": {
+          "rate": 0,
+          "passes": 0,
+          "fails": 2548
+        },
+        "thresholds": {
+          "rate<0.01": {
+            "ok": true
+          }
+        }
+      },
+      "http_req_duration{action:chat_list}": {
+        "type": "trend",
+        "contains": "time",
+        "values": {
+          "avg": 35.81309427001581,
+          "med": 23.51325,
+          "p(90)": 71.56173000000003,
+          "p(95)": 105.39076500000002,
+          "p(99)": 165.3275730000001,
+          "max": 291.0454
+        },
+        "thresholds": {
+          "p(95)<500": {
+            "ok": true
+          }
+        }
+      },
+      "data_received": {
+        "contains": "data",
+        "values": {
+          "rate": 620684.6251146407,
+          "count": 340025063
+        },
+        "type": "counter"
+      },
+      "journey_failed": {
+        "thresholds": {
+          "rate<0.01": {
+            "ok": true
+          }
+        },
+        "type": "rate",
+        "contains": "default",
+        "values": {
+          "rate": 0,
+          "passes": 0,
+          "fails": 15388
+        }
+      },
+      "http_req_waiting": {
+        "type": "trend",
+        "contains": "time",
+        "values": {
+          "avg": 44.2973138865425,
+          "med": 27.7314,
+          "p(90)": 86.25414,
+          "p(95)": 128.0725999999997,
+          "p(99)": 257.31943199999984,
+          "max": 772.4791
+        }
+      },
+      "http_req_failed{action:communities}": {
+        "values": {
+          "passes": 0,
+          "fails": 2548,
+          "rate": 0
+        },
+        "thresholds": {
+          "rate<0.01": {
+            "ok": true
+          }
+        },
+        "type": "rate",
+        "contains": "default"
+      },
+      "http_req_failed{stage:hold_100}": {
+        "type": "rate",
+        "contains": "default",
+        "values": {
+          "rate": 0,
+          "passes": 0,
+          "fails": 8560
+        },
+        "thresholds": {
+          "rate<0.01": {
+            "ok": true
+          }
+        }
+      },
+      "http_req_duration{action:main_screen}": {
+        "type": "trend",
+        "contains": "time",
+        "values": {
+          "med": 47.45765,
+          "p(90)": 124.38839,
+          "p(95)": 164.29418,
+          "p(99)": 239.4453860000002,
+          "max": 317.1103,
+          "avg": 63.602979160125614
+        },
+        "thresholds": {
+          "p(95)<500": {
+            "ok": true
+          }
+        }
+      },
+      "http_req_failed{action:send_message}": {
+        "type": "rate",
+        "contains": "default",
+        "values": {
+          "passes": 0,
+          "fails": 2548,
+          "rate": 0
+        },
+        "thresholds": {
+          "rate<0.01": {
+            "ok": true
+          }
+        }
+      },
+      "iteration_duration": {
+        "type": "trend",
+        "contains": "time",
+        "values": {
+          "max": 17350.076,
+          "avg": 12612.50973956043,
+          "med": 12610.3887,
+          "p(90)": 14286.8208,
+          "p(95)": 14640.91264,
+          "p(99)": 15298.368898
+        }
+      },
+      "http_req_failed{action:login}": {
+        "type": "rate",
+        "contains": "default",
+        "values": {
+          "rate": 0,
+          "passes": 0,
+          "fails": 100
+        },
+        "thresholds": {
+          "rate<0.01": {
+            "ok": true
+          }
+        }
+      },
+      "http_req_duration": {
+        "thresholds": {
+          "p(95)<500": {
+            "ok": true
+          }
+        },
+        "type": "trend",
+        "contains": "time",
+        "values": {
+          "med": 28.2666,
+          "p(90)": 86.79694000000006,
+          "p(95)": 128.54143999999997,
+          "p(99)": 258.0968559999999,
+          "max": 773.1517,
+          "avg": 44.76970105919842
+        }
+      },
+      "http_req_duration{expected_response:true}": {
+        "type": "trend",
+        "contains": "time",
+        "values": {
+          "p(99)": 258.0968559999999,
+          "max": 773.1517,
+          "avg": 44.76970105919842,
+          "med": 28.2666,
+          "p(90)": 86.79694000000006,
+          "p(95)": 128.54143999999997
+        }
+      },
+      "http_req_duration{stage:hold_50}": {
+        "type": "trend",
+        "contains": "time",
+        "values": {
+          "avg": 29.00190784449843,
+          "med": 22.8901,
+          "p(90)": 51.1094,
+          "p(95)": 65.9703,
+          "p(99)": 109.14443999999983,
+          "max": 601.1564
+        },
+        "thresholds": {
+          "p(95)<500": {
+            "ok": true
+          }
+        }
+      },
+      "http_req_failed": {
+        "type": "rate",
+        "contains": "default",
+        "values": {
+          "rate": 0,
+          "passes": 0,
+          "fails": 15389
+        },
+        "thresholds": {
+          "rate<0.01": {
+            "ok": true
+          }
+        }
+      },
+      "http_req_failed{action:chat_list}": {
+        "contains": "default",
+        "values": {
+          "rate": 0,
+          "passes": 0,
+          "fails": 2548
+        },
+        "thresholds": {
+          "rate<0.01": {
+            "ok": true
+          }
+        },
+        "type": "rate"
+      },
+      "http_req_duration{stage:hold_100}": {
+        "type": "trend",
+        "contains": "time",
+        "values": {
+          "p(95)": 151.66129999999993,
+          "p(99)": 233.86929299999994,
+          "max": 626.4297,
+          "avg": 52.56883717289715,
+          "med": 36.2351,
+          "p(90)": 111.22163000000008
+        },
+        "thresholds": {
+          "p(95)<500": {
+            "ok": true
+          }
+        }
+      },
+      "checks": {
+        "values": {
+          "rate": 1,
+          "passes": 15388,
+          "fails": 0
+        },
+        "type": "rate",
+        "contains": "default"
+      },
+      "http_req_duration{action:login}": {
+        "type": "trend",
+        "contains": "time",
+        "values": {
+          "p(99)": 687.3630520000004,
+          "max": 773.1517,
+          "avg": 507.60817800000024,
+          "med": 504.10844999999995,
+          "p(90)": 586.73181,
+          "p(95)": 613.0047
+        },
+        "thresholds": {
+          "p(95)<500": {
+            "ok": false
+          }
+        }
+      },
+      "http_req_tls_handshaking": {
+        "contains": "time",
+        "values": {
+          "p(95)": 0,
+          "p(99)": 0,
+          "max": 0,
+          "avg": 0,
+          "med": 0,
+          "p(90)": 0
+        },
+        "type": "trend"
+      },
+      "http_req_receiving": {
+        "values": {
+          "avg": 0.42161404899603644,
+          "med": 0.3986,
+          "p(90)": 0.9992,
+          "p(95)": 1.050659999999999,
+          "p(99)": 1.557931999999999,
+          "max": 12.7896
+        },
+        "type": "trend",
+        "contains": "time"
+      },
+      "http_req_failed{action:main_screen}": {
+        "thresholds": {
+          "rate<0.01": {
+            "ok": true
+          }
+        },
+        "type": "rate",
+        "contains": "default",
+        "values": {
+          "passes": 0,
+          "fails": 2548,
+          "rate": 0
+        }
+      },
+      "data_sent": {
+        "type": "counter",
+        "contains": "data",
+        "values": {
+          "rate": 21478.741609104338,
+          "count": 11766540
+        }
+      },
+      "http_reqs": {
+        "contains": "default",
+        "values": {
+          "count": 15389,
+          "rate": 28.091210723161325
+        },
+        "type": "counter"
+      },
+      "http_req_failed{stage:hold_20}": {
+        "type": "rate",
+        "contains": "default",
+        "values": {
+          "rate": 0,
+          "passes": 0,
+          "fails": 1162
+        },
+        "thresholds": {
+          "rate<0.01": {
+            "ok": true
+          }
+        }
+      },
+      "vus_max": {
+        "type": "gauge",
+        "contains": "default",
+        "values": {
+          "value": 100,
+          "min": 100,
+          "max": 100
+        }
+      },
+      "http_req_duration{action:confirm_message}": {
+        "contains": "time",
+        "values": {
+          "p(99)": 223.59887500000028,
+          "max": 419.1895,
+          "avg": 43.03880525902673,
+          "med": 27.76725,
+          "p(90)": 81.93236,
+          "p(95)": 132.086375
+        },
+        "thresholds": {
+          "p(95)<500": {
+            "ok": true
+          }
+        },
+        "type": "trend"
+      },
+      "http_req_failed{stage:hold_50}": {
+        "type": "rate",
+        "contains": "default",
+        "values": {
+          "passes": 0,
+          "fails": 2881,
+          "rate": 0
+        },
+        "thresholds": {
+          "rate<0.01": {
+            "ok": true
+          }
+        }
+      },
+      "http_req_duration{stage:hold_20}": {
+        "thresholds": {
+          "p(95)<500": {
+            "ok": true
+          }
+        },
+        "type": "trend",
+        "contains": "time",
+        "values": {
+          "max": 428.2883,
+          "avg": 23.85067521514631,
+          "med": 20.7838,
+          "p(90)": 35.8404,
+          "p(95)": 45.884425000000014,
+          "p(99)": 68.06788600000006
+        }
+      },
+      "http_req_failed{action:confirm_message}": {
+        "type": "rate",
+        "contains": "default",
+        "values": {
+          "rate": 0,
+          "passes": 0,
+          "fails": 2548
+        },
+        "thresholds": {
+          "rate<0.01": {
+            "ok": true
+          }
+        }
+      },
+      "http_req_connecting": {
+        "type": "trend",
+        "contains": "time",
+        "values": {
+          "med": 0,
+          "p(90)": 1.0294400000000001,
+          "p(95)": 1.3607,
+          "p(99)": 2.016859999999997,
+          "max": 11.0289,
+          "avg": 0.19692039118851126
+        }
+      },
+      "http_req_sending": {
+        "type": "trend",
+        "contains": "time",
+        "values": {
+          "p(99)": 0.7579079999999991,
+          "max": 4.2411,
+          "avg": 0.050773123659757,
+          "med": 0,
+          "p(90)": 0,
+          "p(95)": 0.5560399999999986
+        }
+      },
+      "vus": {
+        "type": "gauge",
+        "contains": "default",
+        "values": {
+          "value": 2,
+          "min": 0,
+          "max": 100
+        }
+      },
+      "http_req_duration{action:history}": {
+        "thresholds": {
+          "p(95)<500": {
+            "ok": true
+          }
+        },
+        "type": "trend",
+        "contains": "time",
+        "values": {
+          "max": 418.29,
+          "avg": 41.859888971742556,
+          "med": 27.192549999999997,
+          "p(90)": 80.77813000000002,
+          "p(95)": 122.70745000000001,
+          "p(99)": 216.75988200000154
+        }
+      },
+      "http_req_duration{action:send_message}": {
+        "values": {
+          "p(99)": 164.4272690000007,
+          "max": 287.9668,
+          "avg": 37.03652221350085,
+          "med": 27.33635,
+          "p(90)": 67.04444000000002,
+          "p(95)": 93.47446000000005
+        },
+        "thresholds": {
+          "p(95)<500": {
+            "ok": true
+          }
+        },
+        "type": "trend",
+        "contains": "time"
+      },
+      "http_req_duration{action:communities}": {
+        "type": "trend",
+        "contains": "time",
+        "values": {
+          "p(90)": 58.12955000000001,
+          "p(95)": 80.96406500000002,
+          "p(99)": 154.31472500000012,
+          "max": 287.4052,
+          "avg": 29.117822566719045,
+          "med": 18.551949999999998
+        },
+        "thresholds": {
+          "p(95)<500": {
+            "ok": true
+          }
+        }
+      },
+      "http_req_blocked": {
+        "type": "trend",
+        "contains": "time",
+        "values": {
+          "p(95)": 1.4632799999999988,
+          "p(99)": 2.157319999999994,
+          "max": 11.6421,
+          "avg": 0.2241682565468845,
+          "med": 0,
+          "p(90)": 1.13084
+        }
+      }
+    }
+  },
+  "databaseSamples": [
+    {
+      "seconds": 5.015,
+      "freeMemoryMiB": 5119.2578125,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 10.022,
+      "freeMemoryMiB": 5163.515625,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 15.033,
+      "freeMemoryMiB": 5213.90625,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 20.047,
+      "freeMemoryMiB": 5282.484375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 25.061,
+      "freeMemoryMiB": 5197.66796875,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 30.067,
+      "freeMemoryMiB": 5115.77734375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 35.074,
+      "freeMemoryMiB": 5065.3359375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 40.079,
+      "freeMemoryMiB": 5103.3203125,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 45.09,
+      "freeMemoryMiB": 5017.3359375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 50.092,
+      "freeMemoryMiB": 5006.53125,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 55.102,
+      "freeMemoryMiB": 5019.2578125,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 60.112,
+      "freeMemoryMiB": 5047.5,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 65.122,
+      "freeMemoryMiB": 5071.34375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 70.13,
+      "freeMemoryMiB": 5055.109375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 75.137,
+      "freeMemoryMiB": 5055.6796875,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 80.136,
+      "freeMemoryMiB": 5129.18359375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 85.145,
+      "freeMemoryMiB": 5161.75390625,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 90.154,
+      "freeMemoryMiB": 5188.2109375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 95.156,
+      "freeMemoryMiB": 5101.21875,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 100.157,
+      "freeMemoryMiB": 4976.15234375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 105.167,
+      "freeMemoryMiB": 4918.50390625,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 110.167,
+      "freeMemoryMiB": 5022.4765625,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 115.173,
+      "freeMemoryMiB": 5095.2890625,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 120.179,
+      "freeMemoryMiB": 5104.01953125,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 125.176,
+      "freeMemoryMiB": 5081.74609375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 130.189,
+      "freeMemoryMiB": 5099.9609375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 135.19,
+      "freeMemoryMiB": 5143.3515625,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 140.193,
+      "freeMemoryMiB": 5137.05859375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 145.203,
+      "freeMemoryMiB": 5242.1875,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 150.213,
+      "freeMemoryMiB": 5190.4921875,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 155.225,
+      "freeMemoryMiB": 5221.03125,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 160.223,
+      "freeMemoryMiB": 5303.4375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 2
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 4
+        }
+      ]
+    },
+    {
+      "seconds": 165.23,
+      "freeMemoryMiB": 5313.734375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 170.233,
+      "freeMemoryMiB": 4950.37890625,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 175.233,
+      "freeMemoryMiB": 4958.08203125,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 180.232,
+      "freeMemoryMiB": 5076.52734375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 185.241,
+      "freeMemoryMiB": 5050.8828125,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 190.246,
+      "freeMemoryMiB": 5050.7578125,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 195.262,
+      "freeMemoryMiB": 4964.69921875,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 200.277,
+      "freeMemoryMiB": 4977.48046875,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 2
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 4
+        }
+      ]
+    },
+    {
+      "seconds": 205.273,
+      "freeMemoryMiB": 5043.05078125,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 2
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 4
+        }
+      ]
+    },
+    {
+      "seconds": 210.28,
+      "freeMemoryMiB": 5041.41796875,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 4
+        },
+        {
+          "state": "idle",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        }
+      ]
+    },
+    {
+      "seconds": 215.288,
+      "freeMemoryMiB": 4877.80078125,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": "IO",
+          "wait_event": "WalWrite",
+          "count": 1
+        },
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 4
+        }
+      ]
+    },
+    {
+      "seconds": 220.296,
+      "freeMemoryMiB": 4806.4609375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 225.307,
+      "freeMemoryMiB": 4916.109375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 230.307,
+      "freeMemoryMiB": 4956.85546875,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 235.312,
+      "freeMemoryMiB": 4961.421875,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 240.317,
+      "freeMemoryMiB": 4861.125,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 245.329,
+      "freeMemoryMiB": 4699.58984375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 250.33,
+      "freeMemoryMiB": 4759.515625,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 255.333,
+      "freeMemoryMiB": 4911.13671875,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 260.34,
+      "freeMemoryMiB": 4874.91015625,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 265.342,
+      "freeMemoryMiB": 4954.90234375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 270.344,
+      "freeMemoryMiB": 4959.3125,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 275.357,
+      "freeMemoryMiB": 4892.0078125,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 280.358,
+      "freeMemoryMiB": 4768.53515625,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 285.364,
+      "freeMemoryMiB": 4606.71484375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 290.372,
+      "freeMemoryMiB": 4761.578125,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 295.376,
+      "freeMemoryMiB": 4863.45703125,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 300.378,
+      "freeMemoryMiB": 4784.61328125,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 305.389,
+      "freeMemoryMiB": 4796.859375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 310.392,
+      "freeMemoryMiB": 4744.4140625,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 315.393,
+      "freeMemoryMiB": 4737.1171875,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 320.397,
+      "freeMemoryMiB": 4843.58203125,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 325.401,
+      "freeMemoryMiB": 4687.62109375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 2
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 4
+        }
+      ]
+    },
+    {
+      "seconds": 330.409,
+      "freeMemoryMiB": 4721.36328125,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": "IO",
+          "wait_event": "WalWrite",
+          "count": 1
+        },
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 2
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 3
+        }
+      ]
+    },
+    {
+      "seconds": 335.419,
+      "freeMemoryMiB": 4788.32421875,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 3
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 3
+        }
+      ]
+    },
+    {
+      "seconds": 340.42,
+      "freeMemoryMiB": 4720.87890625,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 2
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 4
+        }
+      ]
+    },
+    {
+      "seconds": 345.423,
+      "freeMemoryMiB": 4663.9375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 350.426,
+      "freeMemoryMiB": 4636.54296875,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 355.434,
+      "freeMemoryMiB": 4643.34375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 360.446,
+      "freeMemoryMiB": 4666.9765625,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 2
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 4
+        }
+      ]
+    },
+    {
+      "seconds": 365.453,
+      "freeMemoryMiB": 4738.8046875,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 370.468,
+      "freeMemoryMiB": 4809.3515625,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 375.473,
+      "freeMemoryMiB": 4808.76171875,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 3
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 3
+        }
+      ]
+    },
+    {
+      "seconds": 380.48,
+      "freeMemoryMiB": 4804.640625,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 2
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 4
+        }
+      ]
+    },
+    {
+      "seconds": 385.482,
+      "freeMemoryMiB": 4807.76953125,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 390.487,
+      "freeMemoryMiB": 4811.33984375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 395.496,
+      "freeMemoryMiB": 4811.33984375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 400.496,
+      "freeMemoryMiB": 4819.421875,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 405.5,
+      "freeMemoryMiB": 4834.02734375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 410.503,
+      "freeMemoryMiB": 4765.09765625,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 3
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 3
+        }
+      ]
+    },
+    {
+      "seconds": 415.508,
+      "freeMemoryMiB": 4798.0234375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 420.521,
+      "freeMemoryMiB": 4789.73828125,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 425.526,
+      "freeMemoryMiB": 4778.4453125,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 2
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 4
+        }
+      ]
+    },
+    {
+      "seconds": 430.527,
+      "freeMemoryMiB": 4792.1015625,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 2
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 4
+        }
+      ]
+    },
+    {
+      "seconds": 435.532,
+      "freeMemoryMiB": 4683.22265625,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 440.537,
+      "freeMemoryMiB": 4702.796875,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 445.54,
+      "freeMemoryMiB": 4692.6484375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 450.54,
+      "freeMemoryMiB": 4716.05078125,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 455.55,
+      "freeMemoryMiB": 4789.91015625,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 460.549,
+      "freeMemoryMiB": 4854.41015625,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 465.55,
+      "freeMemoryMiB": 4850.58203125,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 470.557,
+      "freeMemoryMiB": 4860.58984375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 475.562,
+      "freeMemoryMiB": 4860.2265625,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 480.567,
+      "freeMemoryMiB": 4858.1953125,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 485.568,
+      "freeMemoryMiB": 4876.2109375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 490.572,
+      "freeMemoryMiB": 4910.6328125,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 495.577,
+      "freeMemoryMiB": 4853.6484375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 500.588,
+      "freeMemoryMiB": 4727.953125,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 505.593,
+      "freeMemoryMiB": 4804.63671875,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 510.595,
+      "freeMemoryMiB": 4840.078125,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 515.602,
+      "freeMemoryMiB": 4863.73046875,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 520.608,
+      "freeMemoryMiB": 4772.4296875,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 2
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 4
+        }
+      ]
+    },
+    {
+      "seconds": 525.614,
+      "freeMemoryMiB": 4740.8203125,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 530.615,
+      "freeMemoryMiB": 4773.7890625,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 535.623,
+      "freeMemoryMiB": 4922.6484375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 540.633,
+      "freeMemoryMiB": 4833.71484375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    },
+    {
+      "seconds": 545.642,
+      "freeMemoryMiB": 4838.421875,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 5
+        }
+      ]
+    }
+  ],
+  "serverErrorLines": []
+}

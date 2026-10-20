@@ -1,0 +1,34 @@
+# Android acceptance matrix —16 October 2026
+
+The owner explicitly reports an APK installed on a physical Android phone and core real-time messaging tested with friends. This is **informal user testing**, accepted as reported history. It is not an automated run, Play closed test or proof that this task's newly built artifact passed on those phones. Which exact artifact SHA is installed remains NOT VERIFIED. No replacement Android project was generated.
+
+Statuses: PASS = scoped reproducible local evidence; FAIL = observed defect; BLOCKED = prerequisite/device/approval missing; NOT VERIFIED = no adequate evidence. For physical rows below, NOT VERIFIED also means **NOT TESTED by this agent**. ADB listed no connected devices; no emulator test was performed.
+
+| Area | Local automated/artifact evidence | Updated APK physical-device status / steps |
+|---|---|---|
+| Existing artifact identification | PASS: two original APKs have identical SHA256; package app.ziptalks.android, version12/0.9.3, debug cert verified; hosted WebView MainActivity inspected | NOT VERIFIED exact hash installed; record version/hash of each tester's file |
+| Android build | PASS only after recorded Gradle success; origin-policy JUnit and release artifact inspection recorded in Phase 2 results | BLOCKED installation run: connect an authorized phone and install with `adb install -r <debug-apk>`; do not uninstall/clear storage merely to update |
+| Initial launch/branding | Circlo label and canonical origin inspected; existing layout retained | NOT VERIFIED cold/warm start, launcher icon/splash and first-frame appearance |
+| Password/signup/Google/MFA | PASS local web auth regressions, mocked Google tokens and server-side validation | NOT VERIFIED Credential Manager/account restrictions. Test cancel, denial, policy consent, MFA, existing/new account, wrong credentials; do not use real reviewer credentials in logs |
+| Device trust/session persistence | Local session/cookie checks pass; no E2EE/auth bypass added | NOT VERIFIED update/restart/process kill, trusted browser linking, lost-device email recovery and expired/revoked sessions. Old-origin keys cannot be magically migrated into a new origin |
+|1:1 messages | Existing authorization/integration regressions pass; owner reports informal physical success | NOT VERIFIED on updated APK: two users send/read/receive while alternating Wi-Fi/carrier; check duplicates/order/read state |
+| Groups | Existing membership/admin authorization regressions pass | NOT VERIFIED create/edit name/photo/description, add/remove member, rekey and notification taps. Account-owner departure/remaining group management needs explicit acceptance |
+| E2EE text/media | No cryptography changed; encrypted payload enforcement remains | NOT VERIFIED two real devices, old-message recovery, key change/revocation and group rotation. No independent cryptographic audit is claimed |
+| Typing | PASS local authenticated API: recipient targeting,5 s expiry, sender privacy opt-out and stop. Blocked sender rejected. Frontend throttle/display exists | NOT VERIFIED visible indicator with two phones, long drafts, keyboard dismiss, network loss and clock skew. No duplicate typing implementation added |
+| Microphone | PASS pure Java URL policy adversarial cases and compile; code checks request origin plus current top-level origin at immediate/deferred grant | NOT VERIFIED allow/deny/permanently deny, switch app, interruption and hostile external-page request. JUnit is not a mic hardware test |
+| Attachments | Local file-bound/scanner/media tests pass; native uses system document picker, broad library permissions removed | NOT VERIFIED file/photo/video selection, cancellation,10MiB limits, upload/retry/download and Android provider behavior; camera permission removal must be checked against actual user flows |
+| Push notifications | Web push unit checks pass; existing native channel/service inspected | **BLOCKED release acceptance:** hosted ComponentActivity has no confirmed live Capacitor bridge/FCM subscription path. Test real native permission prompt, token-to-session binding, app foreground/background/closed and exact-chat taps. Do not claim an ordinary WebView supports Capacitor plugins because a dependency exists |
+| Background/calls | Existing source uses WebRTC and STUN; no new paid infrastructure | NOT VERIFIED Android suspension/audio focus/lock screen, restrictive NAT and network switching. No guaranteed background telephony or TURN connectivity |
+| Offline Retry | PASS actual web worker/HTML under enforced CSP in360px loopback browser, current route preserved | NOT VERIFIED native offline UI. The hosted WebView intentionally skips the PWA worker, so the web test does not prove a native offline screen |
+| Back/keyboard/rotation | Existing WebView back handler retained | NOT VERIFIED Android back with menus/image previews/keyboard, draft retention, gestures, large fonts and edge-to-edge on Android16 |
+| Logout/deletion | PASS local fresh-auth failures, CSRF, cookie invalidation, cascades, orphan purge/shared-file preservation and mobile report retry | NOT VERIFIED physical logout/recovery; production schedule, backups, historical untracked media and all-device local caches. Deleting an account must not be described as erasing recipients' downloaded copies |
+|16KB/signature/SDK | Static APK alignment/ELF and signed-debug/unsigned-AAB checks in results | NOT VERIFIED16KB physical runtime, OEM/browser variations, Play-delivered splits and final Play signing |
+| Crashes/performance | Build/type/lint/local tests recorded; no production load test | NOT VERIFIED long session/memory stress, low-memory resume, poor networks, battery saver and before/after mobile latency. Capture real failures rather than assuming install success covers them |
+
+## Tester procedure
+
+1. Preserve current app data and recovery backup. Record old artifact/version and new artifact SHA, device/Android/WebView version and network. Do not replace a working signing key or uninstall as a shortcut.
+2. Use two fake accounts and exercise each row above; record steps, expected/actual result, timestamp and screenshots without private messages/secrets.
+3. Test notifications with app visible, background, closed and force-stopped; OS force-stop/background restrictions must be distinguished from app bugs. Enable/disable Android channel settings intentionally.
+4. Capture sanitized crash/ANR evidence (`adb logcat` filtered to the app) only with consent. Never attach cookies, email codes, private keys, native API credentials or whole unrestricted device logs to Git.
+5. Send findings through an owner-confirmed feedback channel; keep local test results separate from Console tester opt-in history. Formal closed testing starts only after an authorized Play upload and tester opt-in.

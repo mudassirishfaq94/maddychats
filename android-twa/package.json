@@ -1,0 +1,16 @@
+{
+  "name": "circlo-twa-release-tools",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "bubblewrap": "node scripts/bubblewrap.mjs",
+    "configure": "node scripts/configure.mjs",
+    "preflight": "node scripts/preflight.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "test:dependencies": "node --test security-tests/*.test.mjs"
+  },
+  "devDependencies": { "@bubblewrap/cli": "1.27.0" },
+  "overrides": { "googleapis-common": { "uuid": "11.1.1" } }
+}

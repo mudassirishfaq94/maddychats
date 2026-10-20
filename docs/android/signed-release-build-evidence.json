@@ -1,0 +1,124 @@
+{
+  "package": "chat.circlo.app",
+  "versionCode": 13,
+  "versionName": "0.9.4",
+  "aabFileName": "circlo-0.9.4-13-release.aab",
+  "sha256": "448c68e276a915710525275a3865e82817b789043b6eb8814681b07bbfb083e6",
+  "bytes": 8970797,
+  "signed": true,
+  "signatureVerified": true,
+  "signerMatchesApprovedUploadCertificate": true,
+  "uploadCertificateSha256": "a1fda879f4ff03035d27ba941a7d4f3dec040897c61faa205529b10907a099bf",
+  "bundletoolValidated": true,
+  "targetSdk": 36,
+  "debuggable": false,
+  "permissions": [
+    "android.permission.INTERNET",
+    "android.permission.ACCESS_NETWORK_STATE",
+    "android.permission.RECORD_AUDIO",
+    "android.permission.POST_NOTIFICATIONS",
+    "android.permission.VIBRATE",
+    "android.permission.WAKE_LOCK",
+    "com.google.android.c2dm.permission.RECEIVE",
+    "chat.circlo.app.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+  ],
+  "nativeLibraries": [
+    {
+      "path": "base/lib/arm64-v8a/libandroidx.graphics.path.so",
+      "loadAlignments": [
+        16384,
+        16384,
+        16384
+      ]
+    },
+    {
+      "path": "base/lib/armeabi-v7a/libandroidx.graphics.path.so",
+      "loadAlignments": [
+        16384,
+        16384,
+        16384
+      ]
+    },
+    {
+      "path": "base/lib/x86/libandroidx.graphics.path.so",
+      "loadAlignments": [
+        16384,
+        16384,
+        16384
+      ]
+    },
+    {
+      "path": "base/lib/x86_64/libandroidx.graphics.path.so",
+      "loadAlignments": [
+        16384,
+        16384,
+        16384
+      ]
+    }
+  ],
+  "timestampAuthorityUsed": false,
+  "physicalDeviceVerified": false,
+  "playSubmissionApproved": false,
+  "note": "Cryptographic/build verification only; compliance and live configuration gates are separate.",
+  "apk": {
+    "fileName": "circlo-0.9.4-13-release.apk",
+    "sha256": "70e0041f174faaa7f697f6b7d2556d10de4558386bbf81bfd845ae9aec875774",
+    "bytes": 9487627,
+    "signatureVerified": true,
+    "signatureSchemes": [
+      "v2",
+      "v3"
+    ],
+    "uploadCertificateSha256": "a1fda879f4ff03035d27ba941a7d4f3dec040897c61faa205529b10907a099bf",
+    "package": "chat.circlo.app",
+    "versionCode": 13,
+    "versionName": "0.9.4",
+    "targetSdk": 36,
+    "debuggable": false,
+    "zipAlignment16KB": true,
+    "nativeLibraries": [
+      {
+        "path": "lib/arm64-v8a/libandroidx.graphics.path.so",
+        "loadAlignments": [
+          16384,
+          16384,
+          16384
+        ]
+      },
+      {
+        "path": "lib/armeabi-v7a/libandroidx.graphics.path.so",
+        "loadAlignments": [
+          16384,
+          16384,
+          16384
+        ]
+      },
+      {
+        "path": "lib/x86/libandroidx.graphics.path.so",
+        "loadAlignments": [
+          16384,
+          16384,
+          16384
+        ]
+      },
+      {
+        "path": "lib/x86_64/libandroidx.graphics.path.so",
+        "loadAlignments": [
+          16384,
+          16384,
+          16384
+        ]
+      }
+    ],
+    "firebaseResourcesMatchSuppliedClient": true,
+    "launcherAndMessagingServiceClassesVerified": true
+  },
+  "firebase": {
+    "projectId": "ziptalks-5b402",
+    "androidPackage": "chat.circlo.app",
+    "matchingConfigurationVerified": true,
+    "androidOAuthClientListedInConfig": false,
+    "realGoogleSignInVerified": false,
+    "realFCMDeliveryVerified": false
+  }
+}

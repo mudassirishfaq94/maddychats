@@ -1,0 +1,39 @@
+{
+  "package": "chat.circlo.app",
+  "versionCode": "13",
+  "versionName": "0.9.4",
+  "targetSdk": "36",
+  "debuggable": "true",
+  "applicationClass": "app.ziptalks.android.CircloApplication",
+  "defaultChannel": "maddychats-messages",
+  "permissions": [
+    "android.permission.INTERNET",
+    "android.permission.ACCESS_NETWORK_STATE",
+    "android.permission.RECORD_AUDIO",
+    "android.permission.POST_NOTIFICATIONS",
+    "android.permission.VIBRATE",
+    "android.permission.WAKE_LOCK",
+    "com.google.android.c2dm.permission.RECEIVE",
+    "chat.circlo.app.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+  ],
+  "apkSha256": "7a9d843d090d5fdca12ca813be31a3c14213c8d4c51eff1f5cfbf1c04220808f",
+  "apkBytes": 13706147,
+  "debugCertificateSha256": "b6768469e3c75b0403ebd1239085a0628105b55cdf2ad81afe3b7d72579648a4",
+  "webUnitTests": {
+    "passed": 73,
+    "failed": 0
+  },
+  "androidJvmTests": {
+    "passed": 4,
+    "failed": 0
+  },
+  "instrumentationTestsCompiled": 2,
+  "instrumentationTestsExecuted": false,
+  "physicalHeadsUpVerified": false,
+  "productionModified": false,
+  "webUiDeployed": false,
+  "androidLint": {
+    "errors": 0,
+    "warnings": 44
+  }
+}

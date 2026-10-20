@@ -1,0 +1,47 @@
+/* Kept separate from the base stylesheet to ensure deployed clients receive
+   the current Circlo palette as a fresh immutable CSS asset. */
+:root {
+  --bg: #f3f5f1;
+  --surface: #ffffff;
+  --surface-2: #f5f7f4;
+  --text: #17211d;
+  --muted: #718078;
+  --border: #e1e7e0;
+  --border-strong: #cbd6cb;
+  --input-bg: #f1f4f0;
+  --action: #148d68;
+  --action-fg: #ffffff;
+  --accent: #148d68;
+  --accent-soft: rgba(20, 141, 104, 0.13);
+  --accent-fg: #087657;
+  --ring: rgba(20, 141, 104, 0.22);
+  --success: #148d68;
+  --bubble-other-bg: #ffffff;
+  --bubble-own-bg: #d9f6e8;
+  --bubble-own-fg: #17211d;
+  --bubble-own-sub: #5a7b6d;
+  --grad-send: #148d68;
+}
+
+html:not(.light) {
+  --bg: #101815;
+  --surface: #16211d;
+  --surface-2: #1d2924;
+  --text: #edf7f1;
+  --muted: #9daca4;
+  --border: #2a3932;
+  --border-strong: #405249;
+  --input-bg: #1d2924;
+  --action: #45d29c;
+  --action-fg: #0d1914;
+  --accent: #45d29c;
+  --accent-soft: rgba(69, 210, 156, 0.14);
+  --accent-fg: #65e6b1;
+  --ring: rgba(69, 210, 156, 0.24);
+  --success: #45d29c;
+  --bubble-other-bg: #1d2924;
+  --bubble-own-bg: #1a5743;
+  --bubble-own-fg: #f2fbf6;
+  --bubble-own-sub: #b0cfc1;
+  --grad-send: #45d29c;
+}

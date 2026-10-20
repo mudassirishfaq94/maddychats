@@ -1,0 +1,9 @@
+# Open chats at the latest message
+
+The chat previously scrolled to the bottom on mount, then a separate effect centered the first unread message. Ordinary entry now opens at the latest message while retaining the unread separator. Initial layout positioning happens before paint; a coalesced ResizeObserver follows message and viewport size changes while the user remains at the bottom, covering decryption, loaded images, intrinsic history sizing and composer/window resizing.
+
+Wheel/touch/keyboard scrolling and explicit message jumps release bottom following. Returning to the bottom or using Latest messages resumes it. Specific-message links and pinned/reply jumps retain their destination; notification latest links scroll once rather than resetting the position for every history update. Native browser anchoring and existing older-page offset restoration are retained.
+
+The browser regression uses only disposable owned accounts/conversations: a real encrypted wrapped send and controlled unread fixture history, delayed decryption, 320px/390px/landscape/desktop entry, intentional older-history scrolling through resize and older-page loading, Latest messages and explicit older-message links. Exact fixture IDs are removed afterward. No shared cache, database migration, authentication or encryption changes are required.
+
+Initial history is distinguished from new outgoing messages, so pending mount work cannot force an older reader back down. Native touch regression covers a flick at the bottom, dragging toward older history, resize and return-to-latest. Test pagination now waits for actual loaded rows instead of racing the auto-loader button; the draft-decryption delay applies to one restoration only, and legacy migration fixtures are prepared before mounting with no encrypted draft. These fixture changes retain encryption and storage assertions.

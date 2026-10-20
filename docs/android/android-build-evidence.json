@@ -1,0 +1,158 @@
+{
+  "package": "app.ziptalks.android",
+  "versionCode": 12,
+  "versionName": "0.9.3",
+  "apk": {
+    "path": "D:\\downloads\\maddy chats\\.freebuff\\device-release\\android\\app\\build\\outputs\\apk\\debug\\app-debug.apk",
+    "sha256": "3229a7744bc17c7733bb839e0021b8084eceec41984e37542521e3207acbfe95",
+    "bytes": 13615159,
+    "signatureVerified": true,
+    "certificateSha256": "b6768469e3c75b0403ebd1239085a0628105b55cdf2ad81afe3b7d72579648a4",
+    "debuggable": true,
+    "zipAlignment16KB": true
+  },
+  "aab": {
+    "path": "D:\\downloads\\maddy chats\\.freebuff\\device-release\\android\\app\\build\\outputs\\bundle\\release\\app-release.aab",
+    "sha256": "c75eddbda91c4d5b3eee3ccd1699550c63bdc6624dd4168fb09796a5cce33ef8",
+    "bytes": 8838820,
+    "bundletoolValidation": true,
+    "targetSdk": 36,
+    "debuggable": false,
+    "signed": false,
+    "permissions": [
+      "android.permission.INTERNET",
+      "android.permission.ACCESS_NETWORK_STATE",
+      "android.permission.RECORD_AUDIO",
+      "android.permission.POST_NOTIFICATIONS",
+      "android.permission.VIBRATE",
+      "android.permission.WAKE_LOCK",
+      "com.google.android.c2dm.permission.RECEIVE",
+      "app.ziptalks.android.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+    ],
+    "bundleConfig": {
+      "bundletool": {
+        "version": "1.18.1"
+      },
+      "optimizations": {
+        "splitsConfig": {},
+        "uncompressNativeLibraries": {
+          "enabled": true,
+          "alignment": "PAGE_ALIGNMENT_16K"
+        },
+        "storeArchive": {
+          "enabled": true
+        }
+      },
+      "compression": {
+        "uncompressedGlob": [
+          "**.3[gG]2",
+          "**.3[gG][pP]",
+          "**.3[gG][pP][pP]",
+          "**.3[gG][pP][pP]2",
+          "**.[aA][aA][cC]",
+          "**.[aA][mM][rR]",
+          "**.[aA][wW][bB]",
+          "**.[gG][iI][fF]",
+          "**.[iI][mM][yY]",
+          "**.[jJ][eE][tT]",
+          "**.[jJ][pP][eE][gG]",
+          "**.[jJ][pP][gG]",
+          "**.[mM]4[aA]",
+          "**.[mM]4[vV]",
+          "**.[mM][iI][dD]",
+          "**.[mM][iI][dD][iI]",
+          "**.[mM][kK][vV]",
+          "**.[mM][pP]2",
+          "**.[mM][pP]3",
+          "**.[mM][pP]4",
+          "**.[mM][pP][eE][gG]",
+          "**.[mM][pP][gG]",
+          "**.[oO][gG][gG]",
+          "**.[oO][pP][uU][sS]",
+          "**.[pP][nN][gG]",
+          "**.[rR][tT][tT][tT][lL]",
+          "**.[sS][mM][fF]",
+          "**.[tT][fF][lL][iI][tT][eE]",
+          "**.[wW][aA][vV]",
+          "**.[wW][eE][bB][mM]",
+          "**.[wW][eE][bB][pP]",
+          "**.[wW][mM][aA]",
+          "**.[wW][mM][vV]",
+          "**.[xX][mM][fF]"
+        ]
+      }
+    }
+  },
+  "nativeLibraries": {
+    "apk": [
+      {
+        "path": "lib/arm64-v8a/libandroidx.graphics.path.so",
+        "loadAlignments": [
+          16384,
+          16384,
+          16384
+        ]
+      },
+      {
+        "path": "lib/armeabi-v7a/libandroidx.graphics.path.so",
+        "loadAlignments": [
+          16384,
+          16384,
+          16384
+        ]
+      },
+      {
+        "path": "lib/x86/libandroidx.graphics.path.so",
+        "loadAlignments": [
+          16384,
+          16384,
+          16384
+        ]
+      },
+      {
+        "path": "lib/x86_64/libandroidx.graphics.path.so",
+        "loadAlignments": [
+          16384,
+          16384,
+          16384
+        ]
+      }
+    ],
+    "aab": [
+      {
+        "path": "base/lib/arm64-v8a/libandroidx.graphics.path.so",
+        "loadAlignments": [
+          16384,
+          16384,
+          16384
+        ]
+      },
+      {
+        "path": "base/lib/armeabi-v7a/libandroidx.graphics.path.so",
+        "loadAlignments": [
+          16384,
+          16384,
+          16384
+        ]
+      },
+      {
+        "path": "base/lib/x86/libandroidx.graphics.path.so",
+        "loadAlignments": [
+          16384,
+          16384,
+          16384
+        ]
+      },
+      {
+        "path": "base/lib/x86_64/libandroidx.graphics.path.so",
+        "loadAlignments": [
+          16384,
+          16384,
+          16384
+        ]
+      }
+    ]
+  },
+  "physicalDeviceTestedByAgent": false,
+  "playUploadReady": false
+}

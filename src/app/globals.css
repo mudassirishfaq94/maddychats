@@ -1,0 +1,523 @@
+@import "tailwindcss";
+
+.installed-launch { display: none; position: fixed; inset: 0; z-index: 250; background: #151719; color: #ECEAE6; align-items: center; justify-content: center; flex-direction: column; padding: max(24px, env(safe-area-inset-top)) 24px max(24px, env(safe-area-inset-bottom)); text-align: center; --brand-mark: #fff; }
+@media (display-mode: standalone) { .installed-launch { display: flex; } }
+html[data-installed-app="true"] .installed-launch { display: flex; }
+.installed-launch-brand { display: flex; flex-direction: column; align-items: center; gap: 22px; }
+.installed-launch-brand > span { font-size: 42px; font-weight: 700; letter-spacing: -2px; }
+.installed-launch > p { margin-top: 20px; font-size: 16px; line-height: 1.6; color: #C9A77B; }
+.installed-launch-caption { position: absolute; bottom: max(36px, env(safe-area-inset-bottom)); left: 24px; right: 24px; font-size: 12px; line-height: 1.5; color: #A9A8B3; }
+
+/* ==========================================================================
+   Circlo â€” a private circle in ink and mint.
+   ========================================================================== */
+
+:root {
+  --bg: #F5F2ED; --surface: #FFFDFA; --surface-2: #ECE7E1;
+  --text: #242329; --muted: #625D68; --border: #D9D2CA; --border-strong: #8F8493;
+  --input-bg: #ECE7E1; --action: #C9A77B; --action-fg: #17191D;
+  --accent: #74543A; --accent-soft: rgba(116, 84, 58, 0.09); --accent-fg: #74543A;
+  --brand-mark: #000000; --brand-key: #000000; --ring: rgba(116, 84, 58, 0.25);
+  --success: #496A5A; --danger: #A63E49; --warning: #795A22;
+  --shadow-lg: 0 18px 50px -25px rgba(36, 35, 41, 0.18);
+  --bubble-other-bg: #FFFDFA; --bubble-own-bg: #E4DDE9; --voice-own-bg: #E4DDE9;
+  --bubble-own-fg: #242329; --bubble-own-sub: #625D68; --grad-send: #C9A77B;
+  color-scheme: light;
+}
+html:not(.light) {
+  --bg: #151719; --surface: #1E2126; --surface-2: #24272D;
+  --text: #ECEAE6; --muted: #A9A8B3; --border: #41434B; --border-strong: #74717F;
+  --input-bg: #24272D; --action: #C9A77B; --action-fg: #17191D;
+  --accent: #C9A77B; --accent-soft: rgba(201, 167, 123, 0.09); --accent-fg: #C9A77B;
+  --brand-mark: #FFFFFF; --brand-key: #FFFFFF; --ring: rgba(201, 167, 123, 0.25);
+  --success: #8DB5A2; --danger: #D87878; --warning: #D2B784;
+  --shadow-lg: 0 24px 60px -25px rgba(0, 0, 0, 0.4);
+  --bubble-other-bg: #24272D; --bubble-own-bg: #343042; --voice-own-bg: #343042;
+  --bubble-own-fg: #ECEAE6; --bubble-own-sub: #A9A8B3; --grad-send: #C9A77B;
+  color-scheme: dark;
+}
+
+/* ---------- base ---------- */
+
+* {
+  border-color: var(--border);
+}
+
+.btn:focus-visible,
+.field-input:focus-visible,
+[role="menuitemradio"]:focus-visible,
+[role="menuitem"]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.skip-link {
+  position: fixed;
+  left: 1rem;
+  top: -3rem;
+  z-index: 200;
+  border-radius: 0.75rem;
+  background: var(--action);
+  color: var(--action-fg);
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0.55rem 1rem;
+  transition: top 0.2s ease;
+}
+.skip-link:focus {
+  top: 1rem;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.95rem;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow-x: clip;
+  transition: background-color 0.25s ease, color 0.25s ease;
+}
+
+html,
+body {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: clip;
+}
+
+.font-display {
+  font-family: var(--font-display), var(--font-sans), ui-sans-serif, sans-serif;
+  letter-spacing: -0.02em;
+}
+
+.break-anywhere {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* Conversation pattern stays scoped to the message canvas. */
+.chat-message-area {
+  background-color: var(--chat-canvas);
+  background-image: var(--chat-signature);
+  background-repeat: repeat;
+  background-position: center top;
+  background-size: clamp(290px, 34vw, 360px) auto;
+  /* The pattern stays anchored to the canvas while its messages scroll. */
+  background-attachment: scroll;
+}
+
+/* Quiet linked orbits echo the Circlo mark. One tiny static SVG tile: no
+   animation, extra dependency, network request or per-message rendering. */
+:root {
+  --chat-canvas: #F0EDE8;
+  --chat-signature: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='320' viewBox='0 0 320 320'%3E%3Cg fill='none' stroke='%2374543A' stroke-opacity='.09' stroke-width='1.2' stroke-linecap='round'%3E%3Cpath d='M90 65a26 26 0 1 0-16 46m4-35a26 26 0 1 1-16 46M250 225a26 26 0 1 0-16 46m4-35a26 26 0 1 1-16 46'/%3E%3Ccircle cx='180' cy='56' r='3'/%3E%3Ccircle cx='30' cy='230' r='3'/%3E%3Cpath d='M155 166h10m-5-5v10M284 116h6'/%3E%3C/g%3E%3C/svg%3E");
+}
+html:not(.light) {
+  --chat-canvas: #1B1E24;
+  --chat-signature: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='320' viewBox='0 0 320 320'%3E%3Cg fill='none' stroke='%23B9A7C7' stroke-opacity='.11' stroke-width='1.2' stroke-linecap='round'%3E%3Cpath d='M90 65a26 26 0 1 0-16 46m4-35a26 26 0 1 1-16 46M250 225a26 26 0 1 0-16 46m4-35a26 26 0 1 1-16 46'/%3E%3Ccircle cx='180' cy='56' r='3'/%3E%3Ccircle cx='30' cy='230' r='3'/%3E%3Cpath d='M155 166h10m-5-5v10M284 116h6'/%3E%3C/g%3E%3C/svg%3E");
+}
+.chat-bubble { box-shadow: var(--chat-bubble-shadow, 0 1px 2px rgb(0 0 0 / 8%)); }
+
+::selection {
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--muted) 30%, transparent);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* ---------- buttons ---------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  font-weight: 600;
+  font-size: 0.9rem;
+  line-height: 1.35;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 44px;
+  text-align: center;
+  overflow-wrap: anywhere;
+  border-radius: 0.7rem;
+  padding: 0.7rem 1.15rem;
+  cursor: pointer;
+  user-select: none;
+  white-space: normal;
+  transition:
+    transform 0.14s ease,
+    background-color 0.18s ease,
+    color 0.18s ease,
+    border-color 0.18s ease,
+    opacity 0.18s ease;
+}
+
+.btn > svg { flex-shrink: 0; }
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+.btn-primary {
+  background: var(--action);
+  color: var(--action-fg);
+  border: none;
+}
+.btn-primary:hover:not(:disabled) {
+  transform: translateY(-1px);
+  opacity: 0.88;
+}
+.btn-primary:active:not(:disabled) {
+  transform: translateY(0) scale(0.99);
+}
+
+.btn-secondary {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+}
+.btn-secondary:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--muted);
+}
+.btn-ghost:hover:not(:disabled) {
+  color: var(--text);
+  background: color-mix(in srgb, var(--muted) 10%, transparent);
+}
+
+/* Intrinsic input widths and unbroken names must not widen nested mobile cards. */
+input, textarea, select { min-width: 0; max-width: 100%; }
+.card-flat, .card-glass { min-width: 0; overflow-wrap: anywhere; }
+
+/* ---------- form fields ---------- */
+
+.field-label {
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--muted);
+  margin-bottom: 0.4rem;
+}
+
+.field-input {
+  min-width: 0;
+  max-width: 100%;
+  width: 100%;
+  background: var(--input-bg);
+  border: 1px solid transparent;
+  border-radius: 0.7rem;
+  padding: 0.72rem 0.95rem;
+  font-size: 0.92rem;
+  color: var(--text);
+  transition:
+    border-color 0.16s ease,
+    box-shadow 0.16s ease,
+    background-color 0.16s ease;
+}
+
+.field-input::placeholder {
+  color: color-mix(in srgb, var(--muted) 65%, transparent);
+}
+
+.field-input:hover {
+  border-color: var(--border-strong);
+}
+
+.field-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--ring);
+}
+
+.field-input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.field-input--icon {
+  padding-left: 2.65rem;
+}
+.field-input--trailing {
+  padding-right: 3.5rem;
+}
+
+.field-error {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-top: 0.4rem;
+  font-size: 0.76rem;
+  color: var(--danger);
+}
+
+.field-hint {
+  margin-top: 0.4rem;
+  font-size: 0.74rem;
+  color: var(--muted);
+}
+
+/* ---------- surfaces ---------- */
+
+.card-glass {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-lg);
+}
+
+.card-flat {
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  padding: 0.24rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  color: var(--muted);
+  background: var(--surface);
+}
+
+.badge-accent {
+  color: var(--accent-fg);
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  background: var(--accent-soft);
+}
+
+.text-accent {
+  color: var(--accent-fg);
+}
+
+/* ---------- dialogs ---------- */
+
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.5);
+  overflow-y: auto;
+}
+
+.dialog-card {
+  width: 100%;
+  min-width: 0;
+  max-height: min(85dvh, 44rem);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* ---------- motion ---------- */
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-up {
+  animation: fade-up 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: var(--d, 0ms);
+}
+
+@keyframes circlo-drift {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(0, -10px, 0) scale(1.025); }
+}
+
+.circlo-drift { animation: circlo-drift 6s ease-in-out infinite; }
+
+.circlo-shell {
+  position: fixed;
+  inset: 0;
+  height: 100dvh;
+  background: radial-gradient(circle at 14% 0%, color-mix(in srgb, var(--accent) 9%, transparent), transparent 20rem), var(--bg);
+}
+html[data-keyboard-open="true"] nav[aria-label="Mobile navigation"],
+html[data-keyboard-open="true"] #recovery-status { display: none; }
+
+@keyframes slide-up {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+.animate-slide-up {
+  animation: slide-up 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes msg-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-msg-in {
+  animation: msg-in 0.22s ease-out both;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 45%, transparent); }
+  60% { box-shadow: 0 0 0 5px transparent; }
+}
+
+.pulse-dot {
+  animation: pulse-dot 2.4s ease-out infinite;
+}
+
+/* Large conversation lists keep their scroll path responsive. */
+.chat-list-row {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 78px;
+}
+
+/* A light, expressive reaction bounce using transform-only animation. */
+@keyframes emoji-pop {
+  0% { transform: scale(1) rotate(0); }
+  42% { transform: scale(1.28) rotate(-9deg); }
+  70% { transform: scale(1.12) rotate(6deg); }
+  100% { transform: scale(1) rotate(0); }
+}
+
+.emoji-button:hover,
+.emoji-button:focus-visible {
+  animation: emoji-pop 420ms cubic-bezier(0.2, 0.9, 0.25, 1.35) both;
+}
+
+@keyframes emoji-message-in {
+  0% { transform: scale(0.45) rotate(-12deg); opacity: 0; }
+  65% { transform: scale(1.22) rotate(5deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0); }
+}
+.emoji-message { animation: emoji-message-in 520ms cubic-bezier(.2, 1.3, .35, 1) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Landscape mode optimizations */
+@media (orientation: landscape) and (max-height: 500px) {
+  /* Reduce header height in landscape */
+  .chat-header {
+    height: 3rem;
+  }
+
+  /* Reduce composer padding in landscape */
+  .chat-composer {
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
+  }
+
+  /* Smaller avatars in landscape */
+  .chat-avatar {
+    width: 2rem;
+    height: 2rem;
+  }
+}
+
+/* AppShell reserves the navigation safe area. Do not add it to textarea height. */
+
+/* Typing indicator bounce animation */
+@keyframes typingBounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+  30% { transform: translateY(-6px); opacity: 1; }
+}
+.typing-dot {
+  animation: typingBounce 1.2s ease-in-out infinite;
+}
+
+/* Composer uses its existing surface; no extra focus rectangle. */
+.chat-composer:focus, .chat-composer:focus-visible { outline: none !important; box-shadow: none !important; border: 0 !important; }
+.composer-row .composer-icon { width: 44px; height: 44px; min-width: 44px; max-width: 44px; min-height: 44px; max-height: 44px; flex: 0 0 44px; align-self: flex-end; }
+
+/* Keep icon geometry consistent without adding animation to the chat canvas. */
+svg.lucide { stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.brand-panel {
+  background: radial-gradient(ellipse at 0% 90%, var(--accent-soft), transparent 65%), var(--surface);
+}
+.landing-grid {
+  background-image: linear-gradient(var(--border) 1px, transparent 1px), linear-gradient(90deg, var(--border) 1px, transparent 1px);
+  background-size: 64px 64px;
+  mask-image: linear-gradient(to bottom, black, transparent);
+  opacity: .22;
+}
+.brand-orbit { border: 1px solid var(--border); border-radius: 50%; }
+.brand-orbit::after {
+  content: ""; position: absolute; width: 9px; height: 9px; border-radius: 50%;
+  background: var(--action); top: 14%; right: 14%; box-shadow: 0 0 20px var(--accent-soft);
+}
+
+/* Retain searchable history while skipping offscreen layout and paint. */
+.message-history-row { content-visibility: auto; }
+@media (pointer: coarse) {
+  /* The hit area grows without shrinking icons or requiring precision taps. */
+  button { min-height: 44px; min-width: 44px; }
+  .chat-composer, .field-input, input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), textarea, select { font-size: 16px; }
+  .dialog-backdrop { padding: .5rem; }
+}
+
+/* Touch users use the existing long-press action sheet on compact chats.
+   Wider touch screens reserve the full width of the enlarged hover controls. */
+@media (pointer: coarse) and (max-width: 639px) {
+  .message-action-cluster { display: none; }
+}
+@media (pointer: coarse) and (min-width: 640px) {
+  .message-action-cluster[data-align="right"] { left: -8.75rem; }
+  .message-action-cluster[data-align="left"] { right: -8.75rem; }
+}

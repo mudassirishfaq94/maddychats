@@ -1,0 +1,352 @@
+/**
+ * End-to-End Encryption (E2EE) using Web Crypto API.
+ *
+ * - Each device generates an RSA-OAEP-2048/SHA-256 key pair
+ * - Private key backups are encrypted with a browser-held recovery secret
+ * - Public key is shared with other users
+ * - Per-conversation AES-GCM symmetric keys are shared via key exchange
+ * - Messages are encrypted client-side before sending
+ */
+
+const ALGORITHM = "AES-GCM";
+const KEY_LENGTH = 256;
+const IV_LENGTH = 12;
+
+/** Generate a unique device ID */
+export function generateDeviceId(): string {
+  const stored = typeof localStorage !== "undefined" && localStorage.getItem("e2ee_device_id");
+  if (stored) return stored;
+  const id = crypto.randomUUID();
+  if (typeof localStorage !== "undefined") localStorage.setItem("e2ee_device_id", id);
+  return id;
+}
+
+/** Generate an RSA-OAEP key pair for key exchange */
+export async function generateKeyPair(): Promise<CryptoKeyPair> {
+  return crypto.subtle.generateKey(
+    {
+      name: "RSA-OAEP",
+      modulusLength: 2048,
+      publicExponent: new Uint8Array([1, 0, 1]),
+      hash: "SHA-256",
+    },
+    true, // extractable for export
+    ["encrypt", "decrypt"],
+  );
+}
+
+/** Export a public key to base64 */
+export async function exportPublicKey(key: CryptoKey): Promise<string> {
+  const raw = await crypto.subtle.exportKey("spki", key);
+  return bufferToBase64(raw);
+}
+
+/** Export a private key to base64 (JWK format for storage) */
+export async function exportPrivateKey(key: CryptoKey): Promise<string> {
+  const jwk = await crypto.subtle.exportKey("jwk", key);
+  return JSON.stringify(jwk);
+}
+
+/** Import a public key from base64 */
+export async function importPublicKey(base64: string): Promise<CryptoKey> {
+  const buffer = base64ToBuffer(base64);
+  return crypto.subtle.importKey(
+    "spki",
+    buffer,
+    { name: "RSA-OAEP", hash: "SHA-256" },
+    false,
+    ["encrypt"],
+  );
+}
+
+/** Import a private key from JWK */
+export async function importPrivateKey(jwkJson: string): Promise<CryptoKey> {
+  const jwk = JSON.parse(jwkJson);
+  return crypto.subtle.importKey(
+    "jwk",
+    jwk,
+    { name: "RSA-OAEP", hash: "SHA-256" },
+    false,
+    ["decrypt"],
+  );
+}
+
+/** Generate a symmetric AES-GCM key for a conversation */
+export async function generateConversationKey(): Promise<CryptoKey> {
+  return crypto.subtle.generateKey(
+    { name: ALGORITHM, length: KEY_LENGTH },
+    true,
+    ["encrypt", "decrypt"],
+  );
+}
+
+/** Export a symmetric key to base64 */
+export async function exportSymmetricKey(key: CryptoKey): Promise<string> {
+  const raw = await crypto.subtle.exportKey("raw", key);
+  return bufferToBase64(raw);
+}
+
+/** Import a symmetric key from base64 (extractable so fingerprints work). */
+export async function importSymmetricKey(base64: string): Promise<CryptoKey> {
+  const buffer = base64ToBuffer(base64);
+  return crypto.subtle.importKey(
+    "raw",
+    buffer,
+    { name: ALGORITHM, length: KEY_LENGTH },
+    true,
+    ["encrypt", "decrypt"],
+  );
+}
+
+/** Encrypt the symmetric key with a user's public key (for key sharing) */
+export async function encryptKeyForUser(
+  symmetricKey: CryptoKey,
+  recipientPublicKey: CryptoKey,
+): Promise<string> {
+  const exported = await exportSymmetricKey(symmetricKey);
+  const encrypted = await crypto.subtle.encrypt(
+    { name: "RSA-OAEP" },
+    recipientPublicKey,
+    new TextEncoder().encode(exported),
+  );
+  return bufferToBase64(encrypted);
+}
+
+/** Decrypt a symmetric key with the user's private key */
+export async function decryptKeyFromSender(
+  encryptedKeyBase64: string,
+  privateKey: CryptoKey,
+): Promise<CryptoKey> {
+  const encrypted = base64ToBuffer(encryptedKeyBase64);
+  const decrypted = await crypto.subtle.decrypt(
+    { name: "RSA-OAEP" },
+    privateKey,
+    encrypted,
+  );
+  const keyBase64 = new TextDecoder().decode(decrypted);
+  return importSymmetricKey(keyBase64);
+}
+
+/** Encrypt a message with the conversation's symmetric key */
+export async function encryptMessage(
+  plaintext: string,
+  key: CryptoKey,
+): Promise<string> {
+  const iv = crypto.getRandomValues(new Uint8Array(IV_LENGTH));
+  const encoded = new TextEncoder().encode(plaintext);
+  const encrypted = await crypto.subtle.encrypt(
+    { name: ALGORITHM, iv },
+    key,
+    encoded,
+  );
+  // Prepend IV to ciphertext
+  const encBytes = new Uint8Array(encrypted);
+  const combined = new Uint8Array(iv.length + encBytes.byteLength);
+  combined.set(iv);
+  combined.set(encBytes, iv.length);
+  return bufferToBase64(combined.buffer);
+}
+
+/** Decrypt a message with the conversation's symmetric key */
+export async function decryptMessage(
+  ciphertextBase64: string,
+  key: CryptoKey,
+): Promise<string> {
+  const decrypted = await decryptBytes(ciphertextBase64, key);
+  return new TextDecoder().decode(decrypted);
+}
+
+/** Encrypt arbitrary bytes (media files) with a symmetric key; IV is prepended. */
+export async function encryptBytes(
+  data: ArrayBuffer | Uint8Array,
+  key: CryptoKey,
+): Promise<string> {
+  const iv = crypto.getRandomValues(new Uint8Array(IV_LENGTH));
+  const input: ArrayBuffer =
+    data instanceof Uint8Array
+      ? (data.buffer.slice(
+          data.byteOffset,
+          data.byteOffset + data.byteLength,
+        ) as ArrayBuffer)
+      : data;
+  const encrypted = await crypto.subtle.encrypt(
+    { name: ALGORITHM, iv },
+    key,
+    input,
+  );
+  const encBytes = new Uint8Array(encrypted);
+  const combined = new Uint8Array(iv.length + encBytes.byteLength);
+  combined.set(iv);
+  combined.set(encBytes, iv.length);
+  return bufferToBase64(combined.buffer);
+}
+
+/** Decrypt bytes previously produced by encryptBytes. */
+export async function decryptBytes(
+  ciphertextBase64: string | ArrayBuffer,
+  key: CryptoKey,
+): Promise<ArrayBuffer> {
+  const combined = new Uint8Array(typeof ciphertextBase64 === "string" ? base64ToBuffer(ciphertextBase64) : ciphertextBase64);
+  if (combined.byteLength <= IV_LENGTH) throw new Error("bad_ciphertext");
+  const iv = combined.subarray(0, IV_LENGTH);
+  const ciphertext = combined.subarray(IV_LENGTH);
+  const decrypted = await crypto.subtle.decrypt(
+    { name: ALGORITHM, iv },
+    key,
+    ciphertext,
+  );
+  return decrypted;
+}
+
+/**
+ * Human-verifiable fingerprint for a conversation key: 30 digits in six
+ * groups of five (SHA-256 of the raw key). Both participants can compare it
+ * out-of-band to confirm they share the same key.
+ */
+export async function conversationFingerprint(key: CryptoKey): Promise<string> {
+  const raw = await crypto.subtle.exportKey("raw", key);
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", raw));
+  const digits: number[] = [];
+  for (let i = 0; i < 30; i++) digits.push(digest[i] % 10);
+  const s = digits.join("");
+  return `${s.slice(0, 5)} ${s.slice(5, 10)} ${s.slice(10, 15)} ${s.slice(15, 20)} ${s.slice(20, 25)} ${s.slice(25, 30)}`;
+}
+
+/** Encrypt the private key with a passphrase for server storage */
+export async function encryptPrivateKeyForStorage(
+  privateKeyJwk: string,
+  passphrase: string,
+): Promise<string> {
+  // Derive a key from the passphrase
+  const keyMaterial = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(passphrase),
+    { name: "PBKDF2" },
+    false,
+    ["deriveKey"],
+  );
+
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const derivedKey = await crypto.subtle.deriveKey(
+    { name: "PBKDF2", salt, iterations: 100000, hash: "SHA-256" },
+    keyMaterial,
+    { name: ALGORITHM, length: KEY_LENGTH },
+    false,
+    ["encrypt"],
+  );
+
+  const iv = crypto.getRandomValues(new Uint8Array(IV_LENGTH));
+  const encrypted = await crypto.subtle.encrypt(
+    { name: ALGORITHM, iv },
+    derivedKey,
+    new TextEncoder().encode(privateKeyJwk),
+  );
+
+  // Combine salt + iv + ciphertext
+  const combined = new Uint8Array(salt.length + iv.length + encrypted.byteLength);
+  combined.set(salt);
+  combined.set(iv, salt.length);
+  combined.set(new Uint8Array(encrypted), salt.length + iv.length);
+  return bufferToBase64(combined.buffer);
+}
+
+/** Decrypt the private key from server storage */
+export async function decryptPrivateKeyFromStorage(
+  encryptedBase64: string,
+  passphrase: string,
+): Promise<string> {
+  const combined = base64ToBuffer(encryptedBase64);
+  const salt = combined.slice(0, 16);
+  const iv = combined.slice(16, 16 + IV_LENGTH);
+  const ciphertext = combined.slice(16 + IV_LENGTH);
+
+  const keyMaterial = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(passphrase),
+    { name: "PBKDF2" },
+    false,
+    ["deriveKey"],
+  );
+
+  const derivedKey = await crypto.subtle.deriveKey(
+    { name: "PBKDF2", salt, iterations: 100000, hash: "SHA-256" },
+    keyMaterial,
+    { name: ALGORITHM, length: KEY_LENGTH },
+    false,
+    ["decrypt"],
+  );
+
+  const decrypted = await crypto.subtle.decrypt(
+    { name: ALGORITHM, iv },
+    derivedKey,
+    ciphertext,
+  );
+
+  return new TextDecoder().decode(decrypted);
+}
+
+/* ──────── Helpers ──────── */
+
+function bufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+
+function base64ToBuffer(base64: string): ArrayBuffer {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes.buffer;
+}
+
+/* ──────── Key Rotation Constants ──────── */
+
+/** Rotate key every 7 days (milliseconds) */
+export const KEY_ROTATION_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** Rotate key every 100 messages */
+export const KEY_ROTATION_MESSAGE_THRESHOLD = 100;
+
+/** Maximum number of old keys to keep for decryption */
+export const MAX_KEY_HISTORY = 10;
+
+/** Check if a key should be rotated based on time */
+export function shouldRotateKey(rotatedAt: Date, messageCount?: number): {
+  shouldRotate: boolean;
+  reason: string | null;
+} {
+  const now = new Date();
+  const timeSinceRotation = now.getTime() - rotatedAt.getTime();
+  
+  if (timeSinceRotation >= KEY_ROTATION_INTERVAL_MS) {
+    return {
+      shouldRotate: true,
+      reason: `Key is ${Math.floor(timeSinceRotation / (24 * 60 * 60 * 1000))} days old (threshold: 7 days)`,
+    };
+  }
+  
+  if (messageCount !== undefined && messageCount >= KEY_ROTATION_MESSAGE_THRESHOLD) {
+    return {
+      shouldRotate: true,
+      reason: `Key has been used for ${messageCount} messages (threshold: ${KEY_ROTATION_MESSAGE_THRESHOLD})`,
+    };
+  }
+  
+  return { shouldRotate: false, reason: null };
+}
+
+/** Generate a key fingerprint for verification */
+export async function generateKeyFingerprint(key: CryptoKey): Promise<string> {
+  const raw = await crypto.subtle.exportKey("raw", key);
+  const hash = await crypto.subtle.digest("SHA-256", raw);
+  const hashArray = new Uint8Array(hash);
+  
+  // Take first 20 bytes and format as 4 groups of 5 hex digits
+  const hex = Array.from(hashArray.slice(0, 20))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
+  
+  return hex.match(/.{1,5}/g)?.join(' ') ?? hex;
+}

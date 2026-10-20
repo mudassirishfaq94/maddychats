@@ -1,0 +1,13 @@
+{
+  "appName": "Circlo",
+  "origin": "https://circlo.chat",
+  "candidatePackageId": "chat.circlo.app",
+  "status": "approved-new-play-listing-existing-webview",
+  "legacyPackageId": "app.ziptalks.android",
+  "legacySourceVersionCode": 12,
+  "productionSigningAuthorized": true,
+  "approvedPackageId": "chat.circlo.app",
+  "approvedVersionCode": 13,
+  "approvedVersionName": "0.9.4",
+  "note": "Owner explicitly approved new package and new upload key on 2026-10-16. No Play upload or deployment authorized. Existing hosted WebView reused; no TWA generated."
+}

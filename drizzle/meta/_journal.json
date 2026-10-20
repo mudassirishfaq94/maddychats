@@ -1,0 +1,406 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1788248652022,
+      "tag": "0000_oval_wolverine",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1788283000000,
+      "tag": "0001_group_chats",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1788285000000,
+      "tag": "0002_message_requests",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1788287000000,
+      "tag": "0003_temporary_status",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1788289000000,
+      "tag": "0004_status_interactions",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1788291000000,
+      "tag": "0005_notification_preferences",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1788292000000,
+      "tag": "0006_chat_backgrounds",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1788293000000,
+      "tag": "0007_background_opacity",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1788370000000,
+      "tag": "0008_google_oauth",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1788372000000,
+      "tag": "0009_password_reset",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1788374000000,
+      "tag": "0010_vercel_realtime",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1788376000000,
+      "tag": "0011_postgres_api_hardening",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1788400000000,
+      "tag": "0012_web_push_subscriptions",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1788465600000,
+      "tag": "0013_auth_identity_uniqueness",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1788552000000,
+      "tag": "0008_search_index",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1788640000000,
+      "tag": "0009_message_forwarded",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1788700000000,
+      "tag": "0010_privacy_safety",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1788720000000,
+      "tag": "0011_group_invite_links",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1788750000000,
+      "tag": "0012_scheduled_messages",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1788800000000,
+      "tag": "0013_admin_roles_suspension",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1788850000000,
+      "tag": "0014_group_settings",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1788900000000,
+      "tag": "0015_communities_e2ee_transcripts",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1789000000000,
+      "tag": "0016_e2ee_messages",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1789171200000,
+      "tag": "0023_message_performance",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1789257600000,
+      "tag": "0024_distributed_rate_limits",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1789344000000,
+      "tag": "0025_email_verification",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1789440000000,
+      "tag": "0026_signal_device_prekeys",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1789526400000,
+      "tag": "0027_signal_prekey_kind_unique",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1789612800000,
+      "tag": "0028_signal_device_envelopes",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1789699200000,
+      "tag": "0029_signal_kyber_prekeys",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1789785600000,
+      "tag": "0030_signal_envelope_sender",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1789872000000,
+      "tag": "0031_signal_protocol_device_id",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1791417600000,
+      "tag": "0033_account_security",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1791504000000,
+      "tag": "0032_e2ee_trusted_devices",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1791590400000,
+      "tag": "0034_deployment_schema_repair",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1791676800000,
+      "tag": "0035_upload_retention",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1791763200000,
+      "tag": "0036_device_sessions",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1791849600000,
+      "tag": "0037_realtime_and_admin_guards",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1791936000000,
+      "tag": "0038_realtime_expiry_index",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1792022400000,
+      "tag": "0039_signal_prekey_uint32",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1792108800000,
+      "tag": "0040_device_link_requests",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1792108800001,
+      "tag": "0042_private_application_tables",
+      "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1792195200000,
+      "tag": "0041_device_identity",
+      "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1792281600000,
+      "tag": "0042_user_device_identity",
+      "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1792281600001,
+      "tag": "0043_device_recovery_email_codes",
+      "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1792281600002,
+      "tag": "0044_runtime_audit_privileges",
+      "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1792281600003,
+      "tag": "0045_policy_consent",
+      "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1792281600004,
+      "tag": "0046_contacts_audio_calls",
+      "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1792281600005,
+      "tag": "0047_contact_phone",
+      "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1792281600006,
+      "tag": "0048_device_signin_gate",
+      "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1792281600007,
+      "tag": "0049_fcm_session_binding",
+      "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1792281600008,
+      "tag": "0050_restore_private_table_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "7",
+      "when": 1792281600009,
+      "tag": "0051_notification_details_preference",
+      "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1792281600010,
+      "tag": "0052_group_permissions",
+      "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1792281600011,
+      "tag": "0053_message_lifetime",
+      "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "7",
+      "when": 1792281600012,
+      "tag": "0054_encrypted_recovery_backups",
+      "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1792281600013,
+      "tag": "0055_presence_privacy",
+      "breakpoints": true
+    },
+    {"idx":57,"version":"7","when":1792281600014,"tag":"0056_temporary_rooms","breakpoints":true}
+  ]
+}

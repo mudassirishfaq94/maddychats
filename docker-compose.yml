@@ -1,0 +1,68 @@
+services:
+  migrate:
+    build:
+      context: .
+      target: migrator
+    env_file: .env
+    restart: "no"
+  web:
+    build:
+      context: .
+      target: runner
+      args:
+        NEXT_PUBLIC_FIREBASE_API_KEY: ${NEXT_PUBLIC_FIREBASE_API_KEY:-}
+        NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: ${NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN:-}
+        NEXT_PUBLIC_FIREBASE_PROJECT_ID: ${NEXT_PUBLIC_FIREBASE_PROJECT_ID:-}
+        NEXT_PUBLIC_FIREBASE_APP_ID: ${NEXT_PUBLIC_FIREBASE_APP_ID:-}
+        NEXT_PUBLIC_VAPID_PUBLIC_KEY: ${NEXT_PUBLIC_VAPID_PUBLIC_KEY:-}
+        APP_VERSION: ${APP_VERSION:-development}
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      clamav:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      CLAMAV_HOST: clamav
+      CLAMAV_PORT: "3310"
+    healthcheck:
+      test: ["CMD", "node", "scripts/readiness.mjs"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+  clamav:
+    image: clamav/clamav:1.4
+    restart: unless-stopped
+    volumes:
+      - clamav-signatures:/var/lib/clamav
+    healthcheck:
+      test: ["CMD", "clamdcheck.sh"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 300s
+  scheduled-worker:
+    build:
+      context: .
+      target: worker
+    restart: unless-stopped
+    init: true
+    environment:
+      CRON_SECRET: ${CRON_SECRET:?Set CRON_SECRET in .env}
+      SCHEDULED_BASE_URL: http://web:3000
+      SCHEDULED_INTERVAL_MS: ${SCHEDULED_INTERVAL_MS:-15000}
+    depends_on:
+      web:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "scripts/scheduled-worker.mjs", "--healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+volumes:
+  clamav-signatures:

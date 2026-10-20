@@ -1,0 +1,302 @@
+{
+  "baselineWarnings": 40,
+  "current": {
+    "Warning": 42
+  },
+  "issues": [
+    {
+      "id": "SetJavaScriptEnabled",
+      "severity": "Warning",
+      "file": "android/app/src/main/java/app/ziptalks/android/MainActivity.kt",
+      "line": 364,
+      "message": "Using `setJavaScriptEnabled` can introduce XSS vulnerabilities into your application, review carefully"
+    },
+    {
+      "id": "SetJavaScriptEnabled",
+      "severity": "Warning",
+      "file": "android/app/src/main/java/app/ziptalks/android/MainActivity.kt",
+      "line": 454,
+      "message": "Using `setJavaScriptEnabled` can introduce XSS vulnerabilities into your application, review carefully"
+    },
+    {
+      "id": "ObsoleteSdkInt",
+      "severity": "Warning",
+      "file": "android/app/src/main/res/drawable-v24",
+      "line": 0,
+      "message": "This folder configuration (`v24`) is unnecessary; `minSdkVersion` is 24. Merge all the resources in this folder into `drawable`."
+    },
+    {
+      "id": "UnusedResources",
+      "severity": "Warning",
+      "file": "android/app/src/main/res/values/colors.xml",
+      "line": 3,
+      "message": "The resource `R.color.colorPrimary` appears to be unused"
+    },
+    {
+      "id": "UnusedResources",
+      "severity": "Warning",
+      "file": "android/app/src/main/res/values/colors.xml",
+      "line": 4,
+      "message": "The resource `R.color.colorPrimaryDark` appears to be unused"
+    },
+    {
+      "id": "UnusedResources",
+      "severity": "Warning",
+      "file": "android/app/src/main/res/values/colors.xml",
+      "line": 5,
+      "message": "The resource `R.color.colorAccent` appears to be unused"
+    },
+    {
+      "id": "UnusedResources",
+      "severity": "Warning",
+      "file": "android/app/src/main/res/values/colors.xml",
+      "line": 7,
+      "message": "The resource `R.color.white` appears to be unused"
+    },
+    {
+      "id": "UnusedResources",
+      "severity": "Warning",
+      "file": "android/app/src/main/res/values/colors.xml",
+      "line": 8,
+      "message": "The resource `R.color.black` appears to be unused"
+    },
+    {
+      "id": "UnusedResources",
+      "severity": "Warning",
+      "file": "android/app/src/main/res/drawable/ic_launcher_background.xml",
+      "line": 1,
+      "message": "The resource `R.drawable.ic_launcher_background` appears to be unused"
+    },
+    {
+      "id": "UnusedResources",
+      "severity": "Warning",
+      "file": "android/app/src/main/res/mipmap-hdpi/ic_launcher_foreground.png",
+      "line": 0,
+      "message": "The resource `R.mipmap.ic_launcher_foreground` appears to be unused"
+    },
+    {
+      "id": "UnusedResources",
+      "severity": "Warning",
+      "file": "android/app/src/main/res/values/strings.xml",
+      "line": 5,
+      "message": "The resource `R.string.package_name` appears to be unused"
+    },
+    {
+      "id": "UnusedResources",
+      "severity": "Warning",
+      "file": "android/app/src/main/res/values/strings.xml",
+      "line": 6,
+      "message": "The resource `R.string.custom_url_scheme` appears to be unused"
+    },
+    {
+      "id": "UnusedResources",
+      "severity": "Warning",
+      "file": "android/app/src/main/res/values/styles.xml",
+      "line": 18,
+      "message": "The resource `R.style.AppTheme_NoActionBar` appears to be unused"
+    },
+    {
+      "id": "IconLauncherShape",
+      "severity": "Warning",
+      "file": "android/app/src/main/res/mipmap-hdpi/ic_launcher.png",
+      "line": 0,
+      "message": "Launcher icons should not fill every pixel of their square region; see the design guide for details"
+    },
+    {
+      "id": "IconLauncherShape",
+      "severity": "Warning",
+      "file": "android/app/src/main/res/mipmap-mdpi/ic_launcher.png",
+      "line": 0,
+      "message": "Launcher icons should not fill every pixel of their square region; see the design guide for details"
+    },
+    {
+      "id": "IconLauncherShape",
+      "severity": "Warning",
+      "file": "android/app/src/main/res/mipmap-xhdpi/ic_launcher.png",
+      "line": 0,
+      "message": "Launcher icons should not fill every pixel of their square region; see the design guide for details"
+    },
+    {
+      "id": "IconLauncherShape",
+      "severity": "Warning",
+      "file": "android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png",
+      "line": 0,
+      "message": "Launcher icons should not fill every pixel of their square region; see the design guide for details"
+    },
+    {
+      "id": "IconLauncherShape",
+      "severity": "Warning",
+      "file": "android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png",
+      "line": 0,
+      "message": "Launcher icons should not fill every pixel of their square region; see the design guide for details"
+    },
+    {
+      "id": "IconLauncherShape",
+      "severity": "Warning",
+      "file": "android/app/src/main/res/mipmap-hdpi/ic_launcher_round.png",
+      "line": 0,
+      "message": "Launcher icon used as round icon did not have a circular shape"
+    },
+    {
+      "id": "IconLauncherShape",
+      "severity": "Warning",
+      "file": "android/app/src/main/res/mipmap-mdpi/ic_launcher_round.png",
+      "line": 0,
+      "message": "Launcher icon used as round icon did not have a circular shape"
+    },
+    {
+      "id": "IconLauncherShape",
+      "severity": "Warning",
+      "file": "android/app/src/main/res/mipmap-xhdpi/ic_launcher_round.png",
+      "line": 0,
+      "message": "Launcher icon used as round icon did not have a circular shape"
+    },
+    {
+      "id": "IconLauncherShape",
+      "severity": "Warning",
+      "file": "android/app/src/main/res/mipmap-xxhdpi/ic_launcher_round.png",
+      "line": 0,
+      "message": "Launcher icon used as round icon did not have a circular shape"
+    },
+    {
+      "id": "IconLauncherShape",
+      "severity": "Warning",
+      "file": "android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.png",
+      "line": 0,
+      "message": "Launcher icon used as round icon did not have a circular shape"
+    },
+    {
+      "id": "MonochromeLauncherIcon",
+      "severity": "Warning",
+      "file": "android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml",
+      "line": 2,
+      "message": "The application adaptive icon is missing a monochrome tag"
+    },
+    {
+      "id": "MonochromeLauncherIcon",
+      "severity": "Warning",
+      "file": "android/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml",
+      "line": 2,
+      "message": "The application adaptive roundIcon is missing a monochrome tag"
+    },
+    {
+      "id": "IconDipSize",
+      "severity": "Warning",
+      "file": "android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png",
+      "line": 0,
+      "message": "The image `ic_launcher.png` varies significantly in its density-independent (dip) size across the various density versions: mipmap-hdpi/ic_launcher.png: 128x128 dp (192x192 px), mipmap-mdpi/ic_launcher.png: 192x192 dp (192x192 px), mipmap-xhdpi/ic_launcher.png: 96x96 dp (192x192 px), mipmap-xxhdpi/ic_launcher.png: 64x64 dp (192x192 px), mipmap-xxxhdpi/ic_launcher.png: 48x48 dp (192x192 px)"
+    },
+    {
+      "id": "IconDipSize",
+      "severity": "Warning",
+      "file": "android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.png",
+      "line": 0,
+      "message": "The image `ic_launcher_round.png` varies significantly in its density-independent (dip) size across the various density versions: mipmap-hdpi/ic_launcher_round.png: 128x128 dp (192x192 px), mipmap-mdpi/ic_launcher_round.png: 192x192 dp (192x192 px), mipmap-xhdpi/ic_launcher_round.png: 96x96 dp (192x192 px), mipmap-xxhdpi/ic_launcher_round.png: 64x64 dp (192x192 px), mipmap-xxxhdpi/ic_launcher_round.png: 48x48 dp (192x192 px)"
+    },
+    {
+      "id": "IconDipSize",
+      "severity": "Warning",
+      "file": "android/app/src/main/res/drawable-land-xxxhdpi/splash.png",
+      "line": 0,
+      "message": "The image `splash.png` varies significantly in its density-independent (dip) size across the various density versions: drawable-land-hdpi/splash.png: 533x320 dp (800x480 px), drawable-land-mdpi/splash.png: 480x320 dp (480x320 px), drawable-land-xhdpi/splash.png: 640x360 dp (1280x720 px), drawable-land-xxhdpi/splash.png: 533x320 dp (1600x960 px), drawable-land-xxxhdpi/splash.png: 480x320 dp (1920x1280 px)"
+    },
+    {
+      "id": "IconDuplicatesConfig",
+      "severity": "Warning",
+      "file": "android/app/src/main/res/drawable/ic_launcher_foreground.png",
+      "line": 0,
+      "message": "The `ic_launcher_foreground.png` icon has identical contents in the following configuration folders: drawable-v24, drawable"
+    },
+    {
+      "id": "IconLocation",
+      "severity": "Warning",
+      "file": "android/app/src/main/res/drawable/ic_launcher_foreground.png",
+      "line": 0,
+      "message": "Found bitmap drawable `res/drawable/ic_launcher_foreground.png` in densityless folder"
+    },
+    {
+      "id": "IconDuplicates",
+      "severity": "Warning",
+      "file": "android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.png",
+      "line": 0,
+      "message": "The following unrelated icon files have identical contents: ic_launcher.png, ic_launcher_round.png, ic_launcher.png, ic_launcher_round.png, ic_launcher.png, ic_launcher_round.png, ic_launcher.png, ic_launcher_round.png, ic_launcher.png, ic_launcher_round.png"
+    },
+    {
+      "id": "UseKtx",
+      "severity": "Warning",
+      "file": "android/app/src/main/java/app/ziptalks/android/MainActivity.kt",
+      "line": 84,
+      "message": "Use the KTX extension function `SharedPreferences.edit` instead?"
+    },
+    {
+      "id": "UseKtx",
+      "severity": "Warning",
+      "file": "android/app/src/main/java/app/ziptalks/android/MainActivity.kt",
+      "line": 268,
+      "message": "Use the KTX extension function `String.toUri` instead?"
+    },
+    {
+      "id": "UseKtx",
+      "severity": "Warning",
+      "file": "android/app/src/main/java/app/ziptalks/android/MainActivity.kt",
+      "line": 269,
+      "message": "Use the KTX extension function `String.toUri` instead?"
+    },
+    {
+      "id": "UseKtx",
+      "severity": "Warning",
+      "file": "android/app/src/main/java/app/ziptalks/android/MainActivity.kt",
+      "line": 391,
+      "message": "Use the KTX extension function `String.toUri` instead?"
+    },
+    {
+      "id": "UseKtx",
+      "severity": "Warning",
+      "file": "android/app/src/main/java/app/ziptalks/android/MainActivity.kt",
+      "line": 392,
+      "message": "Use the KTX extension function `String.toUri` instead?"
+    },
+    {
+      "id": "UseKtx",
+      "severity": "Warning",
+      "file": "android/app/src/main/java/app/ziptalks/android/MainActivity.kt",
+      "line": 409,
+      "message": "Use the KTX extension function `String.toUri` instead?"
+    },
+    {
+      "id": "UseKtx",
+      "severity": "Warning",
+      "file": "android/app/src/main/java/app/ziptalks/android/MyFirebaseMessagingService.kt",
+      "line": 34,
+      "message": "Use the KTX extension function `String.toUri` instead?"
+    },
+    {
+      "id": "UseKtx",
+      "severity": "Warning",
+      "file": "android/app/src/main/java/app/ziptalks/android/MyFirebaseMessagingService.kt",
+      "line": 34,
+      "message": "Use the KTX extension function `String.toUri` instead?"
+    },
+    {
+      "id": "UseKtx",
+      "severity": "Warning",
+      "file": "android/app/src/main/java/app/ziptalks/android/NativePushState.kt",
+      "line": 10,
+      "message": "Use the KTX extension function `SharedPreferences.edit` instead?"
+    },
+    {
+      "id": "UseKtx",
+      "severity": "Warning",
+      "file": "android/app/src/main/java/app/ziptalks/android/NativePushState.kt",
+      "line": 14,
+      "message": "Use the KTX extension function `SharedPreferences.edit` instead?"
+    },
+    {
+      "id": "UseKtx",
+      "severity": "Warning",
+      "file": "android/app/src/main/java/app/ziptalks/android/NativePushState.kt",
+      "line": 22,
+      "message": "Use the KTX extension function `SharedPreferences.edit` instead?"
+    }
+  ]
+}

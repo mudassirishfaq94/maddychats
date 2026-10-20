@@ -1,0 +1,82 @@
+{
+  "checkedAt": "2026-10-16T14:37:56.825559+00:00",
+  "archiveTimestampUtc": "2026-10-09T10:25:21.199283+00:00",
+  "scope": "historical 9 October public/drizzle archive, NOT current production backup",
+  "sha256": "910818f8329f49f02f41b0faccae1b9c4bff28122792ef5f52cde7d2027d889d",
+  "archiveBytes": 179004111,
+  "checksumMatchesRecordedManifest": true,
+  "restoreSeconds": 30.99,
+  "totalSeconds": 46.97,
+  "tableCountsMatchArchive": true,
+  "productionContacted": false,
+  "checks": {
+    "counts": {
+      "drizzle.__drizzle_migrations": 14,
+      "public.admin_audit_log": 84,
+      "public.blocks": 0,
+      "public.channels": 2,
+      "public.communities": 1,
+      "public.community_members": 2,
+      "public.conversation_members": 50,
+      "public.conversations": 77,
+      "public.e2ee_conversation_keys": 1350,
+      "public.e2ee_key_history": 548650,
+      "public.e2ee_keys": 61,
+      "public.fcm_tokens": 0,
+      "public.group_invite_links": 3,
+      "public.login_history": 41,
+      "public.message_attachments": 22,
+      "public.message_deletions": 1,
+      "public.message_mentions": 0,
+      "public.message_reactions": 8,
+      "public.message_reads": 545,
+      "public.message_stars": 2,
+      "public.messages": 581,
+      "public.notification_preferences": 42,
+      "public.notifications": 640,
+      "public.oauth_accounts": 6,
+      "public.password_reset_tokens": 0,
+      "public.pinned_messages": 0,
+      "public.playing_with_neon": 30,
+      "public.privacy_settings": 2,
+      "public.push_subscriptions": 6,
+      "public.realtime_events": 151,
+      "public.reports": 1,
+      "public.scheduled_messages": 8,
+      "public.status_reactions": 2,
+      "public.status_recipients": 0,
+      "public.status_views": 3,
+      "public.statuses": 2,
+      "public.user_2fa": 1,
+      "public.users": 42
+    },
+    "extensions": [
+      {
+        "extname": "pg_trgm",
+        "extversion": "1.6"
+      },
+      {
+        "extname": "plpgsql",
+        "extversion": "1.0"
+      }
+    ],
+    "foreignKeysChecked": 66,
+    "danglingReferences": 0,
+    "unvalidatedForeignKeys": 0,
+    "invalidIndexes": 0,
+    "objects": [
+      {
+        "relkind": "S",
+        "count": 2
+      },
+      {
+        "relkind": "i",
+        "count": 122
+      },
+      {
+        "relkind": "r",
+        "count": 38
+      }
+    ]
+  }
+}

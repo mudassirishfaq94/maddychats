@@ -1,0 +1,20 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { generateKeyPair, exportPublicKey, exportPrivateKey, encryptPrivateKeyForStorage } from "../src/lib/crypto";
+import { newRecoveryCode, sealRecovery, openRecovery } from "../src/lib/cloud-key-recovery";
+import type { RecoveryBundle } from "../src/lib/device-recovery-file";
+test("cloud recovery round-trips original identity and rejects wrong code, weak password, tampering and account substitution",async()=>{
+ const pair=await generateKeyPair(),secret="f".repeat(64),identity={id:"backup-id",userId:"owner",deviceId:"device-a"};
+ const privateKey=await exportPrivateKey(pair.privateKey);
+ const bundle:RecoveryBundle={version:1,userId:"owner",deviceId:"device-a",secret,keypair:JSON.stringify({publicKey:await exportPublicKey(pair.publicKey),encryptedPrivateKey:`v2:${await encryptPrivateKeyForStorage(privateKey,secret)}`}),keys:{}};
+ const code=newRecoveryCode();assert.equal(code.length,43);
+ const envelope=await sealRecovery(bundle,code,identity);
+ assert.equal(JSON.stringify(envelope).includes(privateKey),false);assert.equal(JSON.stringify(envelope).includes(code),false);assert.equal(JSON.stringify(envelope).includes(secret),false);
+ assert.deepEqual(await openRecovery(envelope,code,identity),bundle);
+ await assert.rejects(openRecovery(envelope,newRecoveryCode(),identity));
+ await assert.rejects(sealRecovery(bundle,"password123",identity));
+ await assert.rejects(openRecovery(envelope,code,{...identity,userId:"other"}));
+ await assert.rejects(openRecovery(envelope,code,{...identity,deviceId:"other"}));
+ await assert.rejects(openRecovery(envelope,code,{...identity,id:"other"}));
+ await assert.rejects(openRecovery({...envelope,ciphertext:(envelope.ciphertext[0]==="A"?"B":"A")+envelope.ciphertext.slice(1)},code,identity));
+});

@@ -1,0 +1,1852 @@
+import { messageExpired } from "@/lib/message-expiration";
+import { groupAllows } from "@/lib/group-permissions";
+import { and, desc, eq, inArray, isNull, lt, lte, ne, or, sql } from "drizzle-orm";
+import { db } from "@/db";
+import {
+  blocks,
+  conversationMembers,
+  conversations,
+  messageAttachments,
+  messageDeletions,
+  messageReactions,
+  messageReads,
+  privacySettings,
+  messageStars,
+  messages,
+  messageMentions,
+  pinnedMessages,
+  realtimeEvents,
+  users,
+  type ConversationRow,
+  type MessageRow,
+  type UserRow,
+} from "@/db/schema";
+import { toPublicUser, toSafeUser } from "./users";
+import { ilikeContains } from "./sql-like";
+import type {
+  AttachmentDTO,
+  ConversationDetail,
+  ConversationSummary,
+  MessageDTO,
+  MessagePage,
+  ReactionGroup,
+  ReadReceipt,
+  ReplyPreview,
+  SearchHit,
+} from "@/lib/types";
+
+/** Page size for message history. */
+export const MESSAGE_PAGE_SIZE = 30;
+const MAX_PAGE_SIZE = 50;
+
+// Reuse compiled SQL, not results. All IDs, viewer identity and timestamps
+// remain request parameters; empty names work without pooler statement state.
+const membershipQuery = db.select().from(conversationMembers).where(and(
+  eq(conversationMembers.conversationId, sql.placeholder("conversationId")),
+  eq(conversationMembers.userId, sql.placeholder("userId")),
+)).limit(1).prepare("");
+const reactionQuery = db.select({ messageId: messageReactions.messageId,
+  userId: messageReactions.userId, emoji: messageReactions.emoji }).from(messageReactions)
+  .where(sql`${messageReactions.messageId}=any(${sql.placeholder("ids")}::uuid[])`).prepare("");
+const readQuery = db.select({ messageId: messageReads.messageId,
+  userId: messageReads.userId, readAt: messageReads.readAt }).from(messageReads)
+  .leftJoin(privacySettings, eq(privacySettings.userId, messageReads.userId))
+  .where(and(sql`${messageReads.messageId}=any(${sql.placeholder("ids")}::uuid[])`,
+    sql`coalesce(${privacySettings.readReceipts}, true)`)).prepare("");
+const attachmentQuery = db.select().from(messageAttachments)
+  .where(sql`${messageAttachments.messageId}=any(${sql.placeholder("ids")}::uuid[])`).prepare("");
+const parentQuery = db.select({ message: messages, sender: users }).from(messages)
+  .innerJoin(users, eq(messages.senderId, users.id))
+  .where(sql`${messages.id}=any(${sql.placeholder("ids")}::uuid[])`).prepare("");
+const viewerQuery = db.select({ id: messages.id, star: messageStars.id,
+  deletion: messageDeletions.id, pin: pinnedMessages.id }).from(messages)
+  .leftJoin(messageStars, and(eq(messageStars.messageId, messages.id), eq(messageStars.userId, sql.placeholder("viewerId"))))
+  .leftJoin(messageDeletions, and(eq(messageDeletions.messageId, messages.id), eq(messageDeletions.userId, sql.placeholder("viewerId"))))
+  .leftJoin(pinnedMessages, and(eq(pinnedMessages.messageId, messages.id), eq(pinnedMessages.conversationId, messages.conversationId)))
+  .where(sql`${messages.id}=any(${sql.placeholder("ids")}::uuid[])`).prepare("");
+const expireQuery = db.update(messages).set({ deletedAt: sql`${sql.placeholder("now")}::timestamptz`, updatedAt: sql`${sql.placeholder("now")}::timestamptz` })
+  .where(and(eq(messages.conversationId, sql.placeholder("conversationId")), isNull(messages.deletedAt), lte(messages.expiresAt, sql.placeholder("now")))).prepare("");
+const cursorTimestamp = sql<string>`to_char(${messages.createdAt} at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`;
+const newestQuery = db.select({ message: messages, sender: users, cursorTimestamp }).from(messages)
+  .innerJoin(users, eq(messages.senderId, users.id)).where(eq(messages.conversationId, sql.placeholder("conversationId")))
+  .orderBy(desc(messages.createdAt), desc(messages.id)).limit(sql.placeholder("limit")).prepare("");
+const olderQuery = db.select({ message: messages, sender: users, cursorTimestamp }).from(messages)
+  .innerJoin(users, eq(messages.senderId, users.id)).where(and(eq(messages.conversationId, sql.placeholder("conversationId")),
+    or(lt(messages.createdAt, sql.placeholder("createdAt")), and(eq(messages.createdAt, sql.placeholder("createdAt")), lt(messages.id, sql.placeholder("id"))))))
+  .orderBy(desc(messages.createdAt), desc(messages.id)).limit(sql.placeholder("limit")).prepare("");
+const membershipsQuery = db.select().from(conversationMembers)
+  .where(eq(conversationMembers.userId, sql.placeholder("userId"))).prepare("");
+const conversationListQuery = db.select().from(conversations)
+  .where(and(sql`${conversations.id}=any(${sql.placeholder("ids")}::uuid[])`, isNull(conversations.deletedAt))).prepare("");
+const conversationMembersQuery = db.select({ member: conversationMembers, user: users }).from(conversationMembers)
+  .innerJoin(users, eq(conversationMembers.userId, users.id))
+  .where(sql`${conversationMembers.conversationId}=any(${sql.placeholder("ids")}::uuid[])`).prepare("");
+const pinnedConversationsQuery = db.selectDistinct({ conversationId: pinnedMessages.conversationId }).from(pinnedMessages)
+  .where(sql`${pinnedMessages.conversationId}=any(${sql.placeholder("ids")}::uuid[])`).prepare("");
+const blocksQuery = db.select({ blockerId: blocks.blockerId, blockedId: blocks.blockedId }).from(blocks)
+  .where(or(eq(blocks.blockerId, sql.placeholder("userId")), eq(blocks.blockedId, sql.placeholder("userId")))).prepare("");
+
+/* ------------------------------- membership ------------------------------- */
+
+export async function getMembership(conversationId: string, userId: string) {
+  const rows = await membershipQuery.execute({ conversationId, userId });
+  return rows[0] ?? null;
+}
+
+export async function memberIdsOf(conversationId: string): Promise<string[]> {
+  const rows = await db
+    .select({ userId: conversationMembers.userId })
+    .from(conversationMembers)
+    .where(eq(conversationMembers.conversationId, conversationId));
+  return rows.map((r) => r.userId);
+}
+
+/* ------------------------------ DTO hydration ----------------------------- */
+
+export function baseDTO(row: MessageRow, sender: UserRow, viewerId = row.senderId): MessageDTO {
+  const expired = messageExpired(row);
+  const deleted = row.deletedAt !== null || expired;
+  const hidden = row.selfDestruct && !row.revealedAt && viewerId !== row.senderId;
+  return {
+    id: row.id,
+    clientMessageId: row.clientMessageId,
+    conversationId: row.conversationId,
+    text: deleted || hidden ? "" : row.text,
+    type: row.type,
+    senderId: row.senderId,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+    editedAt: row.editedAt ? row.editedAt.toISOString() : null,
+    deletedAt: row.deletedAt ? row.deletedAt.toISOString() : expired ? row.expiresAt!.toISOString() : null,
+    selfDestruct: row.selfDestruct, revealedAt: row.revealedAt?.toISOString() ?? null,
+    expiresAt: row.expiresAt ? row.expiresAt.toISOString() : null,
+    deliveredAt: row.deliveredAt ? row.deliveredAt.toISOString() : null,
+    replyToMessageId: row.replyToMessageId,
+    replyTo: null,
+    reactions: [],
+    readBy: [],
+    attachments: [],
+    sender: toPublicUser(sender),
+    starred: false,
+    deletedForMe: false,
+    pinned: false,
+    forwarded: Boolean(row.forwarded),
+    encrypted: Boolean(row.encrypted),
+  };
+}
+
+function toAttachmentDTO(
+  a: {
+    id: string;
+    originalName: string;
+    mimeType: string;
+    size: number;
+    kind: string | null;
+    encrypted: boolean | null;
+    encKey: string | null;
+  },
+): AttachmentDTO {
+  const kind =
+    a.kind === "image"
+      ? "image"
+      : a.kind === "video"
+        ? "video"
+        : a.kind === "audio"
+          ? "audio"
+          : "file";
+  return {
+    id: a.id,
+    originalName: a.originalName,
+    mimeType: a.mimeType,
+    size: a.size,
+    kind,
+    url: `/api/media/${a.id}`,
+    encrypted: Boolean(a.encrypted),
+    encKey: a.encKey ?? null,
+  };
+}
+
+function groupReactions(
+  rows: { messageId: string; userId: string; emoji: string }[],
+  viewerId: string,
+): Map<string, ReactionGroup[]> {
+  const byMessage = new Map<string, Map<string, ReactionGroup>>();
+  for (const r of rows) {
+    let group = byMessage.get(r.messageId);
+    if (!group) {
+      group = new Map();
+      byMessage.set(r.messageId, group);
+    }
+    const existing = group.get(r.emoji) ?? {
+      emoji: r.emoji,
+      count: 0,
+      mine: false,
+      userIds: [] as string[],
+    };
+    existing.count += 1;
+    existing.userIds.push(r.userId);
+    if (r.userId === viewerId) existing.mine = true;
+    group.set(r.emoji, existing);
+  }
+  const out = new Map<string, ReactionGroup[]>();
+  for (const [messageId, group] of byMessage) {
+    out.set(
+      messageId,
+      [...group.values()].sort(
+        (a, b) => b.count - a.count || a.emoji.localeCompare(b.emoji),
+      ),
+    );
+  }
+  return out;
+}
+
+/**
+ * Attaches reactions, read receipts and reply previews to a set of messages
+ * in a fixed number of queries (no N+1).
+ */
+export async function hydrateMessages(
+  rows: { message: MessageRow; sender: UserRow }[],
+  viewerId: string,
+): Promise<MessageDTO[]> {
+  const dtos = rows.map((r) => baseDTO(r.message, r.sender, viewerId));
+  if (dtos.length === 0) return dtos;
+
+  const ids = dtos.map((d) => d.id);
+  const replyIds = [...new Set(dtos.map((d) => d.replyToMessageId).filter((v): v is string => typeof v === "string"))];
+  const [reactionRows, readRows, attachmentRows, parents, viewerRows] = await Promise.all([
+    reactionQuery.execute({ ids }),
+    readQuery.execute({ ids }),
+    attachmentQuery.execute({ ids }),
+    replyIds.length > 0
+      ? parentQuery.execute({ ids: replyIds })
+      : Promise.resolve([]),
+    // Unique constraints make each join at most one row per message. Read
+    // viewer flags together instead of taking three more pool connections.
+    viewerQuery.execute({ ids, viewerId }),
+  ]);
+
+  const replyMap = new Map<string, ReplyPreview>();
+  for (const p of parents) {
+    replyMap.set(p.message.id, {
+      id: p.message.id,
+      expiresAt: p.message.expiresAt?.toISOString() ?? null,
+      text: p.message.deletedAt || messageExpired(p.message) || p.message.selfDestruct ? "" : p.message.text,
+      senderId: p.message.senderId,
+      senderName: p.sender.displayName,
+      deleted: p.message.deletedAt !== null || messageExpired(p.message) || p.message.selfDestruct,
+      encrypted: Boolean(p.message.encrypted),
+    });
+  }
+
+  const reactionsByMessage = groupReactions(reactionRows, viewerId);
+  const readsByMessage = new Map<string, ReadReceipt[]>();
+  for (const r of readRows) {
+    const list = readsByMessage.get(r.messageId) ?? [];
+    list.push({ userId: r.userId, readAt: r.readAt.toISOString() });
+    readsByMessage.set(r.messageId, list);
+  }
+
+  const attachmentsByMessage = new Map<string, AttachmentDTO[]>();
+  for (const a of attachmentRows) {
+    const list = attachmentsByMessage.get(a.messageId) ?? [];
+    list.push({
+      id: a.id,
+      originalName: a.originalName,
+      mimeType: a.mimeType,
+      size: a.size,
+      kind:
+        a.kind === "image"
+          ? "image"
+          : a.kind === "video"
+            ? "video"
+            : a.kind === "audio"
+              ? "audio"
+              : "file",
+      url: `/api/media/${a.id}`,
+      encrypted: Boolean(a.encrypted),
+      encKey: a.encKey ?? null,
+    });
+    attachmentsByMessage.set(a.messageId, list);
+  }
+
+  const flags = new Map(viewerRows.map(row => [row.id, row]));
+
+  for (const dto of dtos) {
+    dto.reactions = reactionsByMessage.get(dto.id) ?? [];
+    // Only OTHER members' reads matter for the sender's receipt UI.
+    dto.readBy = (readsByMessage.get(dto.id) ?? []).filter(
+      (r) => r.userId !== dto.senderId,
+    );
+    dto.replyTo = dto.replyToMessageId
+      ? replyMap.get(dto.replyToMessageId) ?? null
+      : null;
+    // Deleted messages never expose their attachments.
+    dto.attachments = dto.deletedAt || (dto.selfDestruct && !dto.revealedAt && dto.senderId !== viewerId)
+      ? []
+      : (attachmentsByMessage.get(dto.id) ?? []).map(attachment=>({...attachment,expiresAt:dto.expiresAt}));
+    // Per-viewer per-message state.
+    dto.starred = Boolean(flags.get(dto.id)?.star);
+    dto.deletedForMe = Boolean(flags.get(dto.id)?.deletion);
+    dto.pinned = Boolean(flags.get(dto.id)?.pin);
+  }
+  return dtos;
+}
+
+/** Loads a single message as a fully hydrated DTO. */
+export async function getMessageDTO(
+  messageId: string,
+  viewerId: string,
+): Promise<MessageDTO | null> {
+  const rows = await db
+    .select({ message: messages, sender: users })
+    .from(messages)
+    .innerJoin(users, eq(messages.senderId, users.id))
+    .where(eq(messages.id, messageId))
+    .limit(1);
+  if (!rows[0]) return null;
+  const [dto] = await hydrateMessages(rows, viewerId);
+  return dto ?? null;
+}
+
+/* ------------------------------ conversations ----------------------------- */
+
+export function directKey(a: string, b: string): string {
+  return a < b ? `dm:${a}:${b}` : `dm:${b}:${a}`;
+}
+
+export async function findDirectConversation(
+  a: string,
+  b: string,
+): Promise<ConversationRow | null> {
+  const rows = await db
+    .select()
+    .from(conversations)
+    .where(eq(conversations.dmKey, directKey(a, b)))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+export async function listConversationsFor(
+  userId: string,
+): Promise<ConversationSummary[]> {
+  const memberships = await membershipsQuery.execute({ userId });
+  if (memberships.length === 0) return [];
+
+  const convIds = memberships.map((m) => m.conversationId);
+  // Once ids are known these reads are independent. Batch them so hosted
+  // database latency does not delay the chat shell by several round-trips.
+  const [convs, allMembers, latest, unread, pinnedConvs, blockRows] = await Promise.all([
+    conversationListQuery.execute({ ids: convIds }),
+    conversationMembersQuery.execute({ ids: convIds }),
+    db.execute<{ id: string; conversation_id: string; sender_id: string; text: string; type: string; created_at: string; deleted_at: string | null; expires_at: string | null; encrypted: boolean }>(sql`
+      SELECT DISTINCT ON (conversation_id) id, conversation_id, sender_id, CASE WHEN self_destruct THEN '' ELSE text END as text, type, created_at, deleted_at, expires_at, encrypted
+      FROM messages WHERE conversation_id = any(${sql.param(convIds)}::uuid[]) AND (expires_at IS NULL OR expires_at>now())
+      ORDER BY conversation_id, created_at DESC
+    `),
+    db.execute<{ conversation_id: string; count: string }>(sql`
+      SELECT m.conversation_id, count(*)::text AS count FROM messages m
+      LEFT JOIN message_reads r ON r.message_id = m.id AND r.user_id = ${userId}
+      WHERE m.conversation_id = any(${sql.param(convIds)}::uuid[])
+        AND (m.expires_at IS NULL OR m.expires_at>now()) AND m.sender_id <> ${userId} AND m.deleted_at IS NULL AND r.id IS NULL
+      GROUP BY m.conversation_id
+    `),
+    pinnedConversationsQuery.execute({ ids: convIds }),
+    blocksQuery.execute({ userId }),
+  ]);
+  if (convs.length === 0) return [];
+  const lastByConv = new Map(latest.rows.map((m) => [m.conversation_id, m]));
+
+  const unreadByConv = new Map(
+    unread.rows.map((r) => [r.conversation_id, Number(r.count)]),
+  );
+
+  const hasPinned = new Set(pinnedConvs.map((r) => r.conversationId));
+  const isBlocked = (otherId: string) =>
+    blockRows.some(
+      (b) =>
+        (b.blockerId === userId && b.blockedId === otherId) ||
+        (b.blockerId === otherId && b.blockedId === userId),
+    );
+
+  const myMembership = new Map(memberships.map((m) => [m.conversationId, m]));
+  const membersByConversation = new Map<string, typeof allMembers>();
+  for (const member of allMembers) {
+    const group = membersByConversation.get(member.member.conversationId) ?? [];
+    group.push(member);
+    membersByConversation.set(member.member.conversationId, group);
+  }
+
+  return convs
+    .map((conv) => {
+      const others = membersByConversation.get(conv.id) ?? [];
+      const other = others.find((am) => am.user.id !== userId)?.user ?? null;
+      const last = lastByConv.get(conv.id);
+      const mine = myMembership.get(conv.id);
+      return {
+        id: conv.id,
+        type: conv.type,
+        name: conv.name,
+        description: conv.description,
+        avatarUrl: conv.avatarUrl,
+        memberCount: others.length,
+        requestPending: conv.type === "dm" && !mine?.acceptedAt,
+        createdAt: conv.createdAt.toISOString(),
+        updatedAt: conv.updatedAt.toISOString(),
+        lastMessageAt: conv.lastMessageAt
+          ? conv.lastMessageAt.toISOString()
+          : null,
+        otherMember: other ? toPublicUser(other) : null,
+        unreadCount: unreadByConv.get(conv.id) ?? 0,
+        pinned: Boolean(mine?.pinnedAt),
+        favorited: Boolean(mine?.favoritedAt),
+        muted: Boolean(mine?.mutedAt),
+        archived: Boolean(mine?.archivedAt),
+        markedUnread: Boolean(mine?.markedUnreadAt),
+        blocked: conv.type === "dm" && other ? isBlocked(other.id) : false,
+        hasPinnedMessages: hasPinned.has(conv.id),
+        lastMessage: last
+          ? {
+              id: last.id,
+              expiresAt: last.expires_at ? new Date(last.expires_at).toISOString() : null,
+              text: last.deleted_at ? "" : last.text,
+              type: last.type,
+              senderId: last.sender_id,
+              createdAt: new Date(last.created_at).toISOString(),
+              deletedAt: last.deleted_at
+                ? new Date(last.deleted_at).toISOString()
+                : null,
+              encrypted: Boolean(last.encrypted),
+            }
+          : null,
+      } satisfies ConversationSummary;
+    })
+    .sort((a, b) => {
+      // Pinned conversations always float to the top.
+      if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+      const ta = a.lastMessageAt ?? a.createdAt;
+      const tb = b.lastMessageAt ?? b.createdAt;
+      return tb.localeCompare(ta);
+    });
+}
+
+export async function getConversationForUser(
+  conversationId: string,
+  userId: string,
+): Promise<ConversationDetail | null> {
+  const [membership, rows, memberRows] = await Promise.all([
+    getMembership(conversationId, userId),
+    db.select().from(conversations).where(eq(conversations.id, conversationId)).limit(1),
+    db.select({ user: users, member: conversationMembers }).from(conversationMembers)
+      .innerJoin(users, eq(conversationMembers.userId, users.id))
+      .where(eq(conversationMembers.conversationId, conversationId)),
+  ]);
+  if (!membership) return null;
+  const conv = rows[0];
+  if (!conv || conv.deletedAt) return null;
+  const other = conv.type === "dm" ? memberRows.find((row) => row.user.id !== userId)?.user : null;
+
+  return {
+    id: conv.id,
+    type: conv.type,
+    name: conv.name,
+    description: conv.description,
+    avatarUrl: conv.avatarUrl,
+    createdById: conv.createdById,
+    myRole: membership.role as "owner" | "admin" | "member",
+    muted: Boolean(membership.mutedAt),
+    favorited: Boolean(membership.favoritedAt),
+    blocked: other ? await isBlockedBetween(userId, other.id) : false,
+    requestPending: conv.type === "dm" && !membership.acceptedAt,
+    requestInitiatorId: conv.type === "dm" ? conv.createdById : null,
+    awaitingApproval: conv.type === "dm" && conv.createdById === userId && memberRows.some((row) => row.user.id !== userId && !row.member.acceptedAt),
+    introductionSent: conv.lastMessageAt !== null,
+    createdAt: conv.createdAt.toISOString(),
+    updatedAt: conv.updatedAt.toISOString(),
+    lastMessageAt: conv.lastMessageAt ? conv.lastMessageAt.toISOString() : null,
+    backgroundStyle: conv.backgroundStyle ?? null,
+    backgroundOpacity: conv.backgroundOpacity ?? 100,
+    backgroundPositionX: conv.backgroundPositionX ?? 50,
+    backgroundPositionY: conv.backgroundPositionY ?? 50,
+    adminOnlyAddingMembers: conv.adminOnlyAddingMembers,
+    adminOnlyEditingInfo: conv.adminOnlyEditingInfo,
+    adminOnlyMessaging: Boolean(conv.adminOnlyMessaging),
+    rules: conv.rules ?? null,
+    announcements: conv.announcements ?? null,
+    slowModeSeconds: conv.slowModeSeconds ?? 0,
+    disappearingSeconds: conv.disappearingSeconds ?? 0,
+    members: memberRows.map((m) => ({
+      ...toPublicUser(m.user),
+      role: m.member.role as "owner" | "admin" | "member",
+      joinedAt: m.member.joinedAt.toISOString(),
+    })),
+  };
+}
+
+export async function createGroupConversation(input: {
+  creatorId: string;
+  name: string;
+  description?: string;
+  memberIds: string[];
+}): Promise<ConversationRow> {
+  const memberIds = [...new Set(input.memberIds)].filter((id) => id !== input.creatorId);
+  if (memberIds.length === 0) throw new Error("group_requires_member");
+  const existing = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(inArray(users.id, memberIds));
+  if (existing.length !== memberIds.length) throw new Error("invalid_group_members");
+
+  return db.transaction(async (tx) => {
+    const [conversation] = await tx
+      .insert(conversations)
+      .values({
+        type: "group",
+        name: input.name.trim(),
+        description: input.description?.trim() || null,
+        createdById: input.creatorId,
+      })
+      .returning();
+    await tx.insert(conversationMembers).values([
+      { conversationId: conversation.id, userId: input.creatorId, role: "owner" },
+      ...memberIds.map((userId) => ({ conversationId: conversation.id, userId, role: "member" })),
+    ]);
+    return conversation;
+  });
+}
+
+export async function getGroupWithActor(conversationId: string, actorId: string) {
+  const membership = await getMembership(conversationId, actorId);
+  if (!membership) return null;
+  const [conversation] = await db.select().from(conversations).where(eq(conversations.id, conversationId)).limit(1);
+  if (!conversation || conversation.type !== "group" || conversation.deletedAt) return null;
+  return { conversation, membership };
+}
+
+type GroupTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+export async function lockGroupActor(tx: GroupTransaction, conversationId: string, actorId: string) {
+  const [conversation]=await tx.select().from(conversations).where(eq(conversations.id,conversationId)).for("update");
+  if(!conversation || conversation.type!=="group" || conversation.deletedAt)return null;
+  const [membership]=await tx.select().from(conversationMembers).where(and(eq(conversationMembers.conversationId,conversationId),eq(conversationMembers.userId,actorId))).for("update");
+  return membership?{conversation,membership}:null;
+}
+export type GroupSettingsPatch = Partial<Pick<ConversationRow,"name"|"description"|"avatarUrl"|"rules"|"announcements"|"adminOnlyAddingMembers"|"adminOnlyEditingInfo"|"adminOnlyMessaging"|"slowModeSeconds">>;
+export async function saveGroupSettings(conversationId:string,actorId:string,patch:GroupSettingsPatch) {
+  return db.transaction(async tx=>{
+    const context=await lockGroupActor(tx,conversationId,actorId);if(!context)return null;
+    const policy=["rules","announcements","adminOnlyAddingMembers","adminOnlyEditingInfo","adminOnlyMessaging","slowModeSeconds"].some(key=>key in patch);
+    if(!groupAllows(context.membership.role,context.conversation,policy?"managePermissions":"editInfo"))return null;
+    return (await tx.update(conversations).set({...patch,updatedAt:new Date()}).where(eq(conversations.id,conversationId)).returning({updatedAt:conversations.updatedAt}))[0];
+  });
+}
+
+export async function addGroupMember(conversationId: string, actorId: string, userId: string) {
+  return db.transaction(async tx => {
+    const [conversation] = await tx.select().from(conversations).where(eq(conversations.id, conversationId)).for("update");
+    if (!conversation || conversation.type !== "group" || conversation.deletedAt) return "not_found" as const;
+    const [actor] = await tx.select().from(conversationMembers).where(and(eq(conversationMembers.conversationId, conversationId), eq(conversationMembers.userId, actorId))).for("share");
+    if (!actor) return "not_found" as const;
+    if (!groupAllows(actor.role, conversation, "addMembers")) return "forbidden" as const;
+    const [user] = await tx.select({ id: users.id }).from(users).where(eq(users.id, userId));
+    if (!user) return "user_not_found" as const;
+    const added = await tx.insert(conversationMembers).values({ conversationId, userId, role: "member", acceptedAt: new Date() }).onConflictDoNothing().returning({ id: conversationMembers.id });
+    return added.length ? "ok" as const : "already_member" as const;
+  });
+}
+
+export async function removeGroupMember(conversationId:string,actorId:string,userId:string) {
+  return db.transaction(async tx=>{
+    const ctx=await lockGroupActor(tx,conversationId,actorId);if(!ctx)return "not_found" as const;
+    if(actorId===userId)return "use_leave" as const;
+    if(!groupAllows(ctx.membership.role,ctx.conversation,"managePermissions"))return "forbidden" as const;
+    const [target]=await tx.select().from(conversationMembers).where(and(eq(conversationMembers.conversationId,conversationId),eq(conversationMembers.userId,userId))).for("update");
+    if(!target)return "member_not_found" as const;
+    if(target.role==="owner" || (ctx.membership.role==="admin" && target.role!=="member"))return "forbidden" as const;
+    await tx.delete(conversationMembers).where(eq(conversationMembers.id,target.id));return "ok" as const;
+  });
+}
+export async function changeGroupRole(conversationId:string,actorId:string,userId:string,role:"admin"|"member") {
+  return db.transaction(async tx=>{
+    const ctx=await lockGroupActor(tx,conversationId,actorId);if(!ctx)return "not_found" as const;
+    if(ctx.membership.role!=="owner")return "forbidden" as const;
+    const [target]=await tx.select().from(conversationMembers).where(and(eq(conversationMembers.conversationId,conversationId),eq(conversationMembers.userId,userId))).for("update");
+    if(!target)return "member_not_found" as const;if(target.role==="owner")return "forbidden" as const;
+    await tx.update(conversationMembers).set({role}).where(eq(conversationMembers.id,target.id));return "ok" as const;
+  });
+}
+export async function transferGroupOwnership(conversationId:string,actorId:string,userId:string) {
+  return db.transaction(async tx=>{
+    const ctx=await lockGroupActor(tx,conversationId,actorId);if(!ctx)return "not_found" as const;
+    if(ctx.membership.role!=="owner")return "forbidden" as const;
+    const [target]=await tx.select().from(conversationMembers).where(and(eq(conversationMembers.conversationId,conversationId),eq(conversationMembers.userId,userId))).for("update");
+    if(!target || userId===actorId)return "member_not_found" as const;
+    await tx.update(conversationMembers).set({role:"admin"}).where(eq(conversationMembers.id,ctx.membership.id));
+    await tx.update(conversationMembers).set({role:"owner"}).where(eq(conversationMembers.id,target.id));
+    await tx.update(conversations).set({createdById:userId,updatedAt:new Date()}).where(eq(conversations.id,conversationId));return "ok" as const;
+  });
+}
+export async function leaveGroup(conversationId:string,userId:string) {
+  return db.transaction(async tx=>{
+    const ctx=await lockGroupActor(tx,conversationId,userId);if(!ctx)return "not_found" as const;
+    if(ctx.membership.role==="owner")return "owner_must_transfer" as const;
+    await tx.delete(conversationMembers).where(eq(conversationMembers.id,ctx.membership.id));return "ok" as const;
+  });
+}
+export async function deleteGroup(conversationId:string,userId:string) {
+  return db.transaction(async tx=>{
+    const ctx=await lockGroupActor(tx,conversationId,userId);if(!ctx)return "not_found" as const;
+    if(ctx.membership.role!=="owner")return "forbidden" as const;
+    await tx.update(conversations).set({deletedAt:new Date(),updatedAt:new Date()}).where(eq(conversations.id,conversationId));return "ok" as const;
+  });
+}
+
+export async function storeMessageMentions(messageId: string, conversationId: string, text: string, actorId: string) {
+  const usernames = [...new Set([...text.matchAll(/(^|\s)@([a-zA-Z0-9_]{3,20})\b/g)].map((m) => m[2].toLowerCase()))];
+  if (usernames.length === 0) return [];
+  const rows = await db.select({ id: users.id, username: users.username }).from(users)
+    .innerJoin(conversationMembers, and(eq(conversationMembers.userId, users.id), eq(conversationMembers.conversationId, conversationId)))
+    .where(sql`lower(${users.username}) in (${sql.join(usernames.map((name) => sql`${name}`), sql`, `)})`);
+  const mentioned = rows.filter((row) => row.id !== actorId);
+  if (mentioned.length) await db.insert(messageMentions).values(mentioned.map((row) => ({ messageId, userId: row.id }))).onConflictDoNothing();
+  return mentioned;
+}
+
+export async function createDirectConversation(
+  me: string,
+  other: string,
+): Promise<{ conversation: ConversationRow; created: boolean }> {
+  const existing = await findDirectConversation(me, other);
+  if (existing) return { conversation: existing, created: false };
+
+  try {
+    const conv = await db.transaction(async (tx) => {
+      const inserted = await tx
+        .insert(conversations)
+        .values({ type: "dm", dmKey: directKey(me, other), createdById: me })
+        .returning();
+      await tx.insert(conversationMembers).values([
+        { conversationId: inserted[0].id, userId: me, role: "owner", acceptedAt: new Date() },
+        { conversationId: inserted[0].id, userId: other, role: "member", acceptedAt: null },
+      ]);
+      return inserted[0];
+    });
+    return { conversation: conv, created: true };
+  } catch (err) {
+    if ((err as { code?: string })?.code === "23505") {
+      const winner = await findDirectConversation(me, other);
+      if (winner) return { conversation: winner, created: false };
+    }
+    throw err;
+  }
+}
+
+export async function acceptDirectConversation(conversationId: string, userId: string) {
+  const membership = await getMembership(conversationId, userId);
+  if (!membership) return "not_found" as const;
+  const [conversation] = await db.select().from(conversations).where(eq(conversations.id, conversationId)).limit(1);
+  if (!conversation || conversation.type !== "dm" || conversation.deletedAt) return "not_found" as const;
+  if (conversation.createdById === userId) return "already_accepted" as const;
+  if (membership.acceptedAt) return "already_accepted" as const;
+  await db.update(conversationMembers).set({ acceptedAt: new Date() }).where(eq(conversationMembers.id, membership.id));
+  return "ok" as const;
+}
+
+export async function deleteConversation(
+  conversationId: string,
+  userId: string,
+): Promise<boolean> {
+  const membership = await getMembership(conversationId, userId);
+  if (!membership) return false;
+  await db.delete(conversations).where(eq(conversations.id, conversationId));
+  return true;
+}
+
+/* --------------------------------- messages -------------------------------- */
+
+interface Cursor {
+  createdAt: Date;
+  createdAtExact?: string;
+  id: string;
+}
+
+export function encodeCursor(c: Cursor): string {
+  return `${c.createdAtExact ?? c.createdAt.toISOString()}|${c.id}`;
+}
+
+export function decodeCursor(raw: string | null): Cursor | null {
+  if (!raw) return null;
+  const idx = raw.lastIndexOf("|");
+  if (idx <= 0) return null;
+  const ts = new Date(raw.slice(0, idx));
+  const id = raw.slice(idx + 1);
+  if (Number.isNaN(ts.getTime()) || !id) return null;
+  return { createdAt: ts, createdAtExact: raw.slice(0, idx), id };
+}
+
+export async function listMessages(
+  conversationId: string,
+  cursor: Cursor | null,
+  limit = MESSAGE_PAGE_SIZE,
+  viewerId = "",
+): Promise<MessagePage> {
+  // Expiry is enforced server-side, including for inactive clients returning
+  // long after the selected duration elapsed.
+  await expireQuery.execute({ conversationId, now: new Date() });
+  const pageSize = Math.min(Math.max(1, limit), MAX_PAGE_SIZE);
+
+  const parameters = { conversationId, limit: pageSize + 1 };
+  const rows = cursor
+    ? await olderQuery.execute({ ...parameters, createdAt: cursor.createdAtExact ?? cursor.createdAt.toISOString(), id: cursor.id })
+    : await newestQuery.execute(parameters);
+
+  const hasMore = rows.length > pageSize;
+  const page = rows.slice(0, pageSize);
+  const oldest = page[page.length - 1];
+  const chronological = page.slice().reverse();
+
+  return {
+    messages: await hydrateMessages(chronological, viewerId),
+    serverNow: new Date().toISOString(),
+    nextCursor:
+      hasMore && oldest
+        ? encodeCursor({
+            createdAt: oldest.message.createdAt,
+            createdAtExact: oldest.cursorTimestamp,
+            id: oldest.message.id,
+          })
+        : null,
+    hasMore,
+  };
+}
+
+export async function createMessage(
+  conversationId: string,
+  senderId: string,
+  text: string,
+  replyToMessageId?: string | null,
+  forwarded = false,
+  encrypted = false,
+  options?: {
+    clientMessageId?: string;
+    disappearingSeconds?: number;
+    selfDestruct?: boolean;
+    deliveredAt?: Date | null;
+    sender?: import("@/lib/types").SafeUser;
+    enforceMessageRequest?: boolean;
+    realtimeRecipients?: string[];
+  },
+  executor: Pick<typeof db, "select" | "execute"> = db,
+): Promise<{ message: MessageDTO; created: boolean }> {
+  if (options?.enforceMessageRequest) {
+    if (!options.sender) {
+      const [sender] = await db.select().from(users).where(eq(users.id, senderId)).limit(1);
+      if (!sender) throw new Error("MESSAGE_REQUEST_SENDER_NOT_FOUND");
+      options = { ...options, sender: toSafeUser(sender) };
+    }
+    const requestOptions = options;
+    return db.transaction(async (tx) => {
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`message-request:${conversationId}`}, 0))`);
+      const result = await tx.execute<{ pending: boolean; initiator: string; has_message: boolean; retry: boolean }>(sql`
+        select c.created_by_id as initiator,
+          exists(select 1 from conversation_members p where p.conversation_id=c.id and p.user_id<>c.created_by_id and p.accepted_at is null) as pending,
+          exists(select 1 from messages m where m.conversation_id=c.id) as has_message,
+          exists(select 1 from messages m where m.conversation_id=c.id and m.sender_id=${senderId} and m.client_message_id=${requestOptions.clientMessageId ?? null}) as retry
+        from conversations c where c.id=${conversationId} and c.type='dm' and c.deleted_at is null`);
+      const gate = result.rows[0];
+      if (gate?.pending && !gate.retry) {
+        if (gate.initiator !== senderId) throw new Error("MESSAGE_REQUEST_ACCEPT_REQUIRED");
+        if (gate.has_message) throw new Error("MESSAGE_REQUEST_APPROVAL_PENDING");
+      }
+      const resultMessage = await createMessage(conversationId, senderId, text, replyToMessageId, forwarded, encrypted, { ...requestOptions, enforceMessageRequest: false }, tx);
+      if (resultMessage.created) {
+        // Persist the approval notification atomically with the introduction.
+        // A restart or failed push must never lose it or duplicate it on retry.
+        // Acceptance can race this transaction after the route read pending;
+        // still persist the notification expected by that request's fan-out.
+        await tx.execute(sql`
+          insert into notifications(user_id,actor_id,type,data)
+          select m.user_id, ${senderId}, 'message', jsonb_build_object(
+            'conversationId', ${conversationId}::text, 'messageId', ${resultMessage.message.id}::text,
+            'actorName', u.display_name, 'preview', 'Message request — accept to continue the conversation')
+          from conversation_members m join users u on u.id=${senderId}
+          left join notification_preferences p on p.user_id=m.user_id
+          where m.conversation_id=${conversationId} and m.user_id<>${senderId}
+            and m.muted_at is null and m.archived_at is null
+            and coalesce(p.message_notifications,true)`);
+      }
+      return resultMessage;
+    });
+  }
+  // A reply target must belong to the same conversation.
+  let replyId: string | null = null;
+  let replyPreview: ReplyPreview | null = null;
+  if (replyToMessageId) {
+    const parent = await executor
+      .select({
+        id: messages.id,
+        text: messages.text,
+        senderId: messages.senderId,
+        senderName: users.displayName,
+        deletedAt: messages.deletedAt, expiresAt: messages.expiresAt, selfDestruct: messages.selfDestruct,
+        encrypted: messages.encrypted,
+      })
+      .from(messages)
+      .innerJoin(users, eq(messages.senderId, users.id))
+      .where(
+        and(
+          eq(messages.id, replyToMessageId),
+          eq(messages.conversationId, conversationId),
+        ),
+      )
+      .limit(1);
+    replyId = parent[0]?.id ?? null;
+    if (parent[0]) {
+      replyPreview = {
+        id: parent[0].id,
+        expiresAt: parent[0].expiresAt?.toISOString() ?? null,
+        text: parent[0].deletedAt || messageExpired(parent[0]) || parent[0].selfDestruct ? "" : parent[0].text,
+        senderId: parent[0].senderId,
+        senderName: parent[0].senderName,
+        deleted: Boolean(parent[0].deletedAt) || messageExpired(parent[0]) || parent[0].selfDestruct,
+        encrypted: Boolean(parent[0].encrypted),
+      };
+    }
+  }
+
+  const now = new Date();
+  const seconds = options?.selfDestruct ? 0 : options?.disappearingSeconds ?? 0;
+  const expiresAt = seconds > 0 ? new Date(now.getTime() + seconds * 1000) : null;
+  const eventDefaults = options?.sender ? {
+    sender: {id:options.sender.id,username:options.sender.username,displayName:options.sender.displayName,avatarUrl:options.sender.avatarUrl,bio:options.sender.bio,createdAt:options.sender.createdAt,lastSeenAt:null},
+    replyTo:replyPreview,reactions:[],readBy:[],attachments:[],starred:false,deletedForMe:false,pinned:false,
+  } : null;
+  if (options?.realtimeRecipients?.length && !eventDefaults) throw new Error("Realtime message sender required.");
+  type PersistedResult = MessageRow & { wasCreated: boolean };
+  // Insert/idempotency lookup and conversation bump are one atomic statement.
+  // On a remote database this removes transaction setup plus a second network
+  // round trip from the acknowledgement path.
+  const persisted = await executor.execute<PersistedResult>(sql`
+    with inserted as (
+      insert into messages (
+        conversation_id, sender_id, client_message_id, text, type,
+        reply_to_message_id, forwarded, encrypted, delivered_at, expires_at, self_destruct
+      ) select
+        ${conversationId}, ${senderId}, ${options?.clientMessageId ?? null}, ${text}, 'text',
+        ${replyId}, ${forwarded}, ${encrypted}, ${options?.deliveredAt ?? null}, ${expiresAt}, ${options?.selfDestruct ?? false}
+      from conversations c join conversation_members actor on actor.conversation_id=c.id and actor.user_id=${senderId}
+      where c.id=${conversationId} and c.deleted_at is null and (c.type<>'group' or not c.admin_only_messaging or actor.role in ('owner','admin'))
+      on conflict (sender_id, client_message_id) do nothing
+      returning id, conversation_id as "conversationId", sender_id as "senderId",
+        client_message_id as "clientMessageId", text, type,
+        reply_to_message_id as "replyToMessageId", forwarded, encrypted,
+        delivered_at as "deliveredAt", created_at as "createdAt",
+        updated_at as "updatedAt", edited_at as "editedAt",
+        deleted_at as "deletedAt", expires_at as "expiresAt", self_destruct as "selfDestruct", revealed_at as "revealedAt"
+    ), bumped as (
+      update conversations set last_message_at = ${now}, updated_at = ${now}
+      where id = ${conversationId} and exists (select 1 from inserted)
+      returning id
+    ), published as (
+      insert into realtime_events(user_id,payload)
+      select recipient::uuid, jsonb_build_object(
+        'type','message:new','conversationId',${conversationId}::text,
+        'message',to_jsonb(inserted) || ${JSON.stringify(eventDefaults)}::jsonb || case when inserted."selfDestruct" and recipient::uuid<>${senderId} then jsonb_build_object('text','') else '{}'::jsonb end
+      )
+      from inserted cross join jsonb_array_elements_text(${JSON.stringify([...new Set(options?.realtimeRecipients ?? [])])}::jsonb) as recipients(recipient)
+      returning id
+    )
+    select inserted.*, true as "wasCreated" from inserted
+    union all
+    select m.id, m.conversation_id, m.sender_id, m.client_message_id,
+      m.text, m.type, m.reply_to_message_id, m.forwarded, m.encrypted,
+      m.delivered_at, m.created_at, m.updated_at, m.edited_at,
+      m.deleted_at, m.expires_at, m.self_destruct, m.revealed_at, false as "wasCreated"
+    from messages m
+    where m.sender_id = ${senderId}
+      and m.client_message_id = ${options?.clientMessageId ?? null}
+      and not exists (select 1 from inserted)
+    limit 1
+  `);
+  let row = persisted.rows[0];
+  // Concurrent inserts can wait for a unique conflict whose winner is not
+  // visible in the statement snapshot. Read the committed winner once.
+  if (!row && options?.clientMessageId) {
+    const [winner] = await executor.select().from(messages).where(and(eq(messages.senderId,senderId),eq(messages.clientMessageId,options.clientMessageId))).limit(1);
+    if (winner) row = {...winner, wasCreated:false};
+  }
+  if (!row) throw new Error("Message insert failed.");
+  if (row.conversationId !== conversationId) throw new Error("Client message ID belongs to another conversation.");
+  // Retry responses retain actual read/delivery/edit state rather than
+  // synthesizing a fresh-message DTO that erases acknowledged receipts.
+  if (!row.wasCreated) return {created:false,message:(await getMessageDTO(row.id,senderId))!};
+
+  // New plain text messages have no reactions, reads, attachments, stars,
+  // deletions or pins. Avoid the seven-query generic hydration path.
+  if (options?.sender && !row.deletedAt && !messageExpired(row)) {
+    const sender = options.sender;
+    return { created: row.wasCreated, message: {
+      id: row.id,
+      clientMessageId: row.clientMessageId,
+      conversationId: row.conversationId,
+      text: row.text,
+      type: row.type,
+      senderId: row.senderId,
+      createdAt: new Date(row.createdAt).toISOString(),
+      updatedAt: new Date(row.updatedAt).toISOString(),
+      editedAt: null,
+      deletedAt: null,
+      expiresAt: row.expiresAt ? new Date(row.expiresAt).toISOString() : null,
+      selfDestruct: row.selfDestruct, revealedAt: row.revealedAt ? new Date(row.revealedAt).toISOString() : null,
+      deliveredAt: row.deliveredAt ? new Date(row.deliveredAt).toISOString() : null,
+      replyToMessageId: row.replyToMessageId,
+      replyTo: replyPreview,
+      reactions: [],
+      readBy: [],
+      attachments: [],
+      sender: {
+        id: sender.id,
+        username: sender.username,
+        displayName: sender.displayName,
+        avatarUrl: sender.avatarUrl,
+        bio: sender.bio,
+        createdAt: sender.createdAt,
+        lastSeenAt: null,
+      },
+      starred: false,
+      deletedForMe: false,
+      pinned: false,
+      forwarded: Boolean(row.forwarded),
+      encrypted: Boolean(row.encrypted),
+    } };
+  }
+  return { created: row.wasCreated, message: (await getMessageDTO(row.id, senderId))! };
+}
+
+export async function editMessage(
+  messageId: string,
+  userId: string,
+  text: string,
+  encrypted = false,
+): Promise<MessageRow | "not_found" | "forbidden" | "deleted"> {
+  return db.transaction(async tx => {
+    const [found] = await tx.select({ message: messages, membership: conversationMembers }).from(messages)
+      .innerJoin(conversationMembers, and(eq(conversationMembers.conversationId, messages.conversationId), eq(conversationMembers.userId, userId)))
+      .where(eq(messages.id, messageId)).limit(1).for("update", { of: conversationMembers });
+    if (!found) return "not_found";
+    const msg = found.message;
+    if (msg.senderId !== userId || msg.type === "system") return "forbidden";
+    if (msg.deletedAt) return "deleted";
+    if (msg.selfDestruct) return "not_found";
+    if ((msg.expiresAt && msg.expiresAt <= new Date()) || (found.membership.clearedAt && msg.createdAt <= found.membership.clearedAt)) return "not_found";
+    const now = new Date();
+    const [updated] = await tx.update(messages).set({ text, editedAt: now, updatedAt: now, encrypted })
+      .where(and(eq(messages.id, messageId), eq(messages.senderId, userId), isNull(messages.deletedAt))).returning();
+    return updated ?? "deleted";
+  });
+}
+
+export async function softDeleteMessage(
+  messageId: string,
+  userId: string,
+): Promise<MessageRow | "not_found" | "forbidden"> {
+  return db.transaction(async tx => {
+    const [found] = await tx.select({ message: messages, membership: conversationMembers }).from(messages)
+      .innerJoin(conversationMembers, and(eq(conversationMembers.conversationId, messages.conversationId), eq(conversationMembers.userId, userId)))
+      .where(eq(messages.id, messageId)).limit(1).for("update", { of: conversationMembers });
+    if (!found) return "not_found";
+    const msg = found.message;
+    if (msg.senderId !== userId || msg.type === "system") return "forbidden";
+    if ((msg.expiresAt && msg.expiresAt <= new Date()) || (found.membership.clearedAt && msg.createdAt <= found.membership.clearedAt)) return "not_found";
+    if (msg.deletedAt) return msg;
+    const now = new Date();
+    const [updated] = await tx.update(messages).set({ deletedAt: now, updatedAt: now })
+      .where(and(eq(messages.id, messageId), eq(messages.senderId, userId))).returning();
+    return updated ?? "not_found";
+  });
+}
+
+/* ------------------------------ read receipts ------------------------------ */
+
+/**
+ * Marks every unread message from OTHER members as read for this user.
+ * Returns the affected message ids (empty when already up to date).
+ */
+export async function markConversationRead(
+  conversationId: string,
+  userId: string,
+): Promise<{ messageIds: string[]; readAt: Date }> {
+  const readAt = new Date();
+  const unread = await db
+    .select({ id: messages.id })
+    .from(messages)
+    .leftJoin(
+      messageReads,
+      and(
+        eq(messageReads.messageId, messages.id),
+        eq(messageReads.userId, userId),
+      ),
+    )
+    .where(
+      and(
+        eq(messages.conversationId, conversationId),
+        ne(messages.senderId, userId),
+        isNull(messages.deletedAt),
+        isNull(messageReads.id),
+      ),
+    );
+
+  const ids = unread.map((r) => r.id);
+  if (ids.length === 0) return { messageIds: [], readAt };
+
+  await db
+    .insert(messageReads)
+    .values(ids.map((messageId) => ({ messageId, userId, readAt })))
+    .onConflictDoNothing();
+
+  return { messageIds: ids, readAt };
+}
+
+/* -------------------------------- reactions -------------------------------- */
+
+export async function addReaction(
+  messageId: string,
+  userId: string,
+  emoji: string,
+): Promise<void> {
+  await db
+    .insert(messageReactions)
+    .values({ messageId, userId, emoji })
+    .onConflictDoNothing();
+}
+
+export async function removeReaction(
+  messageId: string,
+  userId: string,
+  emoji: string,
+): Promise<void> {
+  await db
+    .delete(messageReactions)
+    .where(
+      and(
+        eq(messageReactions.messageId, messageId),
+        eq(messageReactions.userId, userId),
+        eq(messageReactions.emoji, emoji),
+      ),
+    );
+}
+
+/** Conversation id for a message (membership checks). */
+export async function conversationIdOfMessage(
+  messageId: string,
+): Promise<string | null> {
+  const rows = await db
+    .select({ conversationId: messages.conversationId })
+    .from(messages)
+    .where(eq(messages.id, messageId))
+    .limit(1);
+  return rows[0]?.conversationId ?? null;
+}
+
+/* --------------------------------- blocking -------------------------------- */
+
+/** True when either user has blocked the other (symmetric enforcement). */
+export async function isBlockedBetween(
+  a: string,
+  b: string,
+): Promise<boolean> {
+  const rows = await db
+    .select({ id: blocks.id })
+    .from(blocks)
+    .where(
+      or(
+        and(eq(blocks.blockerId, a), eq(blocks.blockedId, b)),
+        and(eq(blocks.blockerId, b), eq(blocks.blockedId, a)),
+      ),
+    )
+    .limit(1);
+  return rows.length > 0;
+}
+
+export async function blockUser(
+  blockerId: string,
+  blockedId: string,
+): Promise<void> {
+  await db
+    .insert(blocks)
+    .values({ blockerId, blockedId })
+    .onConflictDoNothing();
+}
+
+export async function unblockUser(
+  blockerId: string,
+  blockedId: string,
+): Promise<void> {
+  await db
+    .delete(blocks)
+    .where(
+      and(eq(blocks.blockerId, blockerId), eq(blocks.blockedId, blockedId)),
+    );
+}
+
+/** Users the viewer has blocked (for profile/UI state). */
+export async function listBlockedIds(userId: string): Promise<string[]> {
+  const rows = await db
+    .select({ blockedId: blocks.blockedId })
+    .from(blocks)
+    .where(eq(blocks.blockerId, userId));
+  return rows.map((r) => r.blockedId);
+}
+
+/* ------------------------ per-user conversation state ---------------------- */
+
+export type ConversationControl =
+  | "pin"
+  | "unpin"
+  | "mute"
+  | "unmute"
+  | "archive"
+  | "unarchive"
+  | "markUnread"
+  | "markRead"
+  | "setDisappearing"
+  | "favorite"
+  | "unfavorite";
+
+export async function setDisappearingMessages(
+  conversationId: string,
+  userId: string,
+  seconds: number,
+): Promise<boolean> {
+  if (![0,86400,604800,2592000].includes(seconds)) return false;
+  return db.transaction(async tx=>{
+    const [conversation]=await tx.select().from(conversations).where(eq(conversations.id,conversationId)).for("update");
+    if(!conversation||conversation.deletedAt)return false;
+    const members=await tx.select().from(conversationMembers).where(eq(conversationMembers.conversationId,conversationId)).for("share");
+    const actor=members.find(member=>member.userId===userId);
+    if(!actor || (conversation.type==="group"&&!groupAllows(actor.role,conversation,"editInfo")) || (conversation.type==="dm"&&members.some(member=>!member.acceptedAt)))return false;
+    if(conversation.type==="dm") {const peer=members.find(member=>member.userId!==userId);if(peer){const blocked=await tx.select({id:blocks.id}).from(blocks).where(or(and(eq(blocks.blockerId,userId),eq(blocks.blockedId,peer.userId)),and(eq(blocks.blockerId,peer.userId),eq(blocks.blockedId,userId)))).limit(1);if(blocked.length)return false;}}
+    if(conversation.disappearingSeconds===seconds)return true;
+    const now=new Date();
+    await tx.update(conversations).set({disappearingSeconds:seconds,updatedAt:now,lastMessageAt:now}).where(eq(conversations.id,conversationId));
+    const text=seconds===0?"Disappearing messages turned off for new messages.":`New messages disappear after ${seconds===86400?"24 hours":seconds===604800?"7 days":"30 days"}.`;
+    const [notice]=await tx.insert(messages).values({conversationId,senderId:userId,text,type:"system",encrypted:false}).returning();
+    const [sender]=await tx.select().from(users).where(eq(users.id,userId));
+    const message=baseDTO(notice,sender);
+    await tx.insert(realtimeEvents).values(members.flatMap(member=>[
+      {userId:member.userId,payload:{type:"message:new" as const,conversationId,message}},
+      {userId:member.userId,payload:{type:"group:updated" as const,conversationId}},
+    ]));
+    return true;
+  });
+}
+
+export async function applyConversationControl(
+  conversationId: string,
+  userId: string,
+  action: ConversationControl,
+): Promise<boolean> {
+  const membership = await getMembership(conversationId, userId);
+  if (!membership) return false;
+
+  const now = new Date();
+  const patch: Partial<typeof conversationMembers.$inferInsert> = {};
+  switch (action) {
+    case "pin":
+      patch.pinnedAt = now;
+      break;
+    case "unpin":
+      patch.pinnedAt = null;
+      break;
+    case "mute":
+      patch.mutedAt = now;
+      break;
+    case "unmute":
+      patch.mutedAt = null;
+      break;
+    case "archive":
+      patch.archivedAt = now;
+      break;
+    case "unarchive":
+      patch.archivedAt = null;
+      break;
+    case "markUnread":
+      patch.markedUnreadAt = now;
+      break;
+    case "markRead":
+      patch.markedUnreadAt = null;
+      break;
+    case "setDisappearing":
+      break;
+    case "favorite":
+      patch.favoritedAt = now;
+      break;
+    case "unfavorite":
+      patch.favoritedAt = null;
+      break;
+  }
+
+  await db
+    .update(conversationMembers)
+    .set(patch)
+    .where(
+      and(
+        eq(conversationMembers.conversationId, conversationId),
+        eq(conversationMembers.userId, userId),
+      ),
+    );
+  return true;
+}
+
+/**
+ * "Delete for me" on a 1:1 chat: hides existing history for this user only
+ * and archives it. The row — and the other participant's copy — survive.
+ * Only when EVERY member has cleared it is the conversation really removed.
+ */
+export async function clearConversationForUser(
+  conversationId: string,
+  userId: string,
+): Promise<"cleared" | "removed" | null> {
+  const membership = await getMembership(conversationId, userId);
+  if (!membership) return null;
+
+  const now = new Date();
+  await db
+    .update(conversationMembers)
+    .set({ clearedAt: now, archivedAt: now, markedUnreadAt: null })
+    .where(
+      and(
+        eq(conversationMembers.conversationId, conversationId),
+        eq(conversationMembers.userId, userId),
+      ),
+    );
+
+  const remaining = await db
+    .select({ clearedAt: conversationMembers.clearedAt })
+    .from(conversationMembers)
+    .where(eq(conversationMembers.conversationId, conversationId));
+
+  if (remaining.length > 0 && remaining.every((m) => m.clearedAt !== null)) {
+    await db.delete(conversations).where(eq(conversations.id, conversationId));
+    return "removed";
+  }
+  return "cleared";
+}
+
+/** The viewer's `clearedAt` watermark for a conversation, if any. */
+export async function clearedAtFor(
+  conversationId: string,
+  userId: string,
+): Promise<Date | null> {
+  const membership = await getMembership(conversationId, userId);
+  return membership?.clearedAt ?? null;
+}
+
+/* ------------------------------ message search ----------------------------- */
+
+/**
+ * Full-text-ish search across every conversation the user belongs to.
+ * Authorization is enforced by the membership join — results can never
+ * include messages from conversations the user is not part of, and content
+ * hidden by their `clearedAt` watermark is excluded.
+ */
+export async function searchMessages(
+  userId: string,
+  query: string,
+  limit = 25,
+): Promise<SearchHit[]> {
+  const q = query.trim();
+  if (q.length < 2) return [];
+
+  const rows = await db
+    .select({
+      message: messages,
+      sender: users,
+      conversation: conversations,
+      clearedAt: conversationMembers.clearedAt,
+    })
+    .from(messages)
+    .innerJoin(
+      conversationMembers,
+      and(
+        eq(conversationMembers.conversationId, messages.conversationId),
+        eq(conversationMembers.userId, userId),
+      ),
+    )
+    .innerJoin(users, eq(users.id, messages.senderId))
+    .innerJoin(conversations, eq(conversations.id, messages.conversationId))
+    .where(
+      and(
+        isNull(messages.deletedAt), eq(messages.selfDestruct, false), eq(messages.encrypted, false), sql`(${messages.expiresAt} is null or ${messages.expiresAt}>now())`,
+        ilikeContains(messages.text, q),
+      ),
+    )
+    .orderBy(desc(messages.createdAt))
+    .limit(Math.min(Math.max(1, limit), 50));
+
+  return rows
+    .filter(
+      (r) => !r.clearedAt || r.message.createdAt > r.clearedAt,
+    )
+    .map((r) => ({
+      message: {
+        id: r.message.id,
+        text: r.message.text,
+        createdAt: r.message.createdAt.toISOString(),
+        conversationId: r.message.conversationId,
+      },
+      conversation: { id: r.conversation.id, name: r.conversation.name },
+      sender: toPublicUser(r.sender),
+    }));
+}
+
+/* =================================== stars ================================= */
+
+export async function starMessage(
+  messageId: string,
+  userId: string,
+): Promise<"ok" | "not_found" | "already_starred" | "no_membership"> {
+  const msgRows = await db
+    .select({ id: messages.id, conversationId: messages.conversationId })
+    .from(messages)
+    .where(eq(messages.id, messageId))
+    .limit(1);
+  if (!msgRows[0]) return "not_found";
+
+  const membership = await getMembership(msgRows[0].conversationId, userId);
+  if (!membership) return "no_membership";
+
+  try {
+    await db.insert(messageStars).values({ messageId, userId });
+    return "ok";
+  } catch (err) {
+    if ((err as { code?: string })?.code === "23505") return "already_starred";
+    throw err;
+  }
+}
+
+export async function unstarMessage(
+  messageId: string,
+  userId: string,
+): Promise<"ok" | "not_found" | "not_starred"> {
+  const deleted = await db
+    .delete(messageStars)
+    .where(
+      and(
+        eq(messageStars.messageId, messageId),
+        eq(messageStars.userId, userId),
+      ),
+    )
+    .returning();
+  return deleted.length > 0 ? "ok" : "not_starred";
+}
+
+/** Check if a user has starred a specific message. */
+export async function isStarred(
+  messageId: string,
+  userId: string,
+): Promise<boolean> {
+  const rows = await db
+    .select({ id: messageStars.id })
+    .from(messageStars)
+    .where(
+      and(
+        eq(messageStars.messageId, messageId),
+        eq(messageStars.userId, userId),
+      ),
+    )
+    .limit(1);
+  return rows.length > 0;
+}
+
+/** All messages a user has starred, newest first. */
+export async function listStarredMessages(
+  userId: string,
+): Promise<StarredMessageDTO[]> {
+  const rows = await db
+    .select({
+      star: messageStars,
+      message: messages,
+      sender: users,
+      conversation: conversations,
+    })
+    .from(messageStars)
+    .innerJoin(messages, eq(messageStars.messageId, messages.id))
+    .innerJoin(users, eq(messages.senderId, users.id))
+    .innerJoin(conversations, eq(messages.conversationId, conversations.id))
+    .where(eq(messageStars.userId, userId))
+    .orderBy(desc(messageStars.createdAt));
+
+  if (rows.length === 0) return [];
+
+  // Fetch attachments for all messages in one batch.
+  const msgIds = rows.map((r) => r.message.id);
+  const attachmentRows = await db
+    .select()
+    .from(messageAttachments)
+    .where(inArray(messageAttachments.messageId, msgIds));
+  const attachmentsByMsg = new Map<string, AttachmentDTO[]>();
+  for (const a of attachmentRows) {
+    if (a.messageId) {
+      const list = attachmentsByMsg.get(a.messageId) ?? [];
+      list.push(toAttachmentDTO(a));
+      attachmentsByMsg.set(a.messageId, list);
+    }
+  }
+
+  return rows.map((r) => ({
+    id: r.star.id,
+    messageId: r.message.id,
+    text: r.message.deletedAt || messageExpired(r.message) || r.message.selfDestruct ? "" : r.message.text,
+    type: r.message.type,
+    createdAt: r.star.createdAt.toISOString(),
+    starredAt: r.star.createdAt.toISOString(),
+    deletedAt: r.message.deletedAt
+      ? r.message.deletedAt.toISOString()
+      : null,
+    sender: toPublicUser(r.sender),
+    conversation: {
+      id: r.conversation.id,
+      name: r.conversation.name,
+    },
+    attachments: r.message.deletedAt || messageExpired(r.message) || r.message.selfDestruct
+      ? []
+      : attachmentsByMsg.get(r.message.id) ?? [],
+  }));
+}
+
+export interface StarredMessageDTO {
+  id: string;
+  messageId: string;
+  text: string;
+  type: string;
+  createdAt: string;
+  starredAt: string;
+  deletedAt: string | null;
+  sender: ReturnType<typeof toPublicUser>;
+  conversation: { id: string; name: string | null };
+  attachments: AttachmentDTO[];
+}
+
+/* =================================== pins ================================= */
+
+/** Check whether the viewer can pin/unpin in this conversation. */
+export async function canPin(
+  conversationId: string,
+  userId: string,
+): Promise<boolean> {
+  const membership = await getMembership(conversationId, userId);
+  if (!membership) return false;
+  // DM: any participant. Group: owner or admin.
+  const convRows = await db
+    .select({ type: conversations.type })
+    .from(conversations)
+    .where(eq(conversations.id, conversationId))
+    .limit(1);
+  if (!convRows[0]) return false;
+  if (convRows[0].type === "dm") return true;
+  return membership.role === "owner" || membership.role === "admin";
+}
+
+export async function pinMessage(
+  conversationId: string,
+  messageId: string,
+  userId: string,
+): Promise<"ok" | "not_found" | "already_pinned" | "forbidden"> {
+  // Verify message belongs to conversation.
+  const msgRows = await db
+    .select({ id: messages.id })
+    .from(messages)
+    .where(
+      and(
+        eq(messages.id, messageId),
+        eq(messages.conversationId, conversationId),
+      ),
+    )
+    .limit(1);
+  if (!msgRows[0]) return "not_found";
+
+  if (!(await canPin(conversationId, userId))) return "forbidden";
+
+  try {
+    await db
+      .insert(pinnedMessages)
+      .values({ conversationId, messageId, pinnedBy: userId });
+    return "ok";
+  } catch (err) {
+    if ((err as { code?: string })?.code === "23505") return "already_pinned";
+    throw err;
+  }
+}
+
+export async function unpinMessage(
+  conversationId: string,
+  messageId: string,
+  userId: string,
+): Promise<"ok" | "not_found" | "forbidden"> {
+  if (!(await canPin(conversationId, userId))) return "forbidden";
+  const deleted = await db
+    .delete(pinnedMessages)
+    .where(
+      and(
+        eq(pinnedMessages.conversationId, conversationId),
+        eq(pinnedMessages.messageId, messageId),
+      ),
+    )
+    .returning();
+  return deleted.length > 0 ? "ok" : "not_found";
+}
+
+/** Check if a message is pinned in a conversation. */
+export async function isPinned(
+  conversationId: string,
+  messageId: string,
+): Promise<boolean> {
+  const rows = await db
+    .select({ id: pinnedMessages.id })
+    .from(pinnedMessages)
+    .where(
+      and(
+        eq(pinnedMessages.conversationId, conversationId),
+        eq(pinnedMessages.messageId, messageId),
+      ),
+    )
+    .limit(1);
+  return rows.length > 0;
+}
+
+/** Whether the conversation has any pinned messages. */
+export async function hasPinnedMessages(
+  conversationId: string,
+): Promise<boolean> {
+  const rows = await db
+    .select({ id: pinnedMessages.id })
+    .from(pinnedMessages)
+    .where(eq(pinnedMessages.conversationId, conversationId))
+    .limit(1);
+  return rows.length > 0;
+}
+
+/** All pinned messages for a conversation. */
+export async function listPinnedMessages(
+  conversationId: string,
+  viewerId: string,
+): Promise<PinnedMessageDTO[]> {
+  const rows = await db
+    .select({
+      pin: pinnedMessages,
+      message: messages,
+      sender: users,
+    })
+    .from(pinnedMessages)
+    .innerJoin(messages, eq(pinnedMessages.messageId, messages.id))
+    .innerJoin(users, eq(messages.senderId, users.id))
+    .where(eq(pinnedMessages.conversationId, conversationId))
+    .orderBy(desc(pinnedMessages.createdAt));
+  return rows.map((r) => ({
+    id: r.pin.id,
+    messageId: r.message.id,
+    conversationId,
+    text: r.message.deletedAt || messageExpired(r.message) || r.message.selfDestruct ? "" : r.message.text,
+    type: r.message.type,
+    pinnedAt: r.pin.createdAt.toISOString(),
+    pinnedBy: r.pin.pinnedBy,
+    deletedAt: r.message.deletedAt
+      ? r.message.deletedAt.toISOString()
+      : null,
+    sender: toPublicUser(r.sender),
+  }));
+}
+
+export interface PinnedMessageDTO {
+  id: string;
+  messageId: string;
+  conversationId: string;
+  text: string;
+  type: string;
+  pinnedAt: string;
+  pinnedBy: string;
+  deletedAt: string | null;
+  sender: ReturnType<typeof toPublicUser>;
+}
+
+/* ================================ deletion ================================ */
+
+/**
+ * "Delete for me" — hides message for the specified user only.
+ * Creates a per-user deletion record; the message stays visible to others.
+ */
+export async function deleteForMe(
+  messageId: string,
+  userId: string,
+): Promise<"ok" | "not_found" | "already_deleted"> {
+  const msgRows = await db
+    .select({ id: messages.id, conversationId: messages.conversationId })
+    .from(messages)
+    .where(eq(messages.id, messageId))
+    .limit(1);
+  if (!msgRows[0]) return "not_found";
+
+  const membership = await getMembership(msgRows[0].conversationId, userId);
+  if (!membership) return "not_found";
+
+  const inserted = await db.insert(messageDeletions)
+    .values({ messageId, userId })
+    .onConflictDoNothing({ target: [messageDeletions.messageId, messageDeletions.userId] })
+    .returning({ id: messageDeletions.id });
+  return inserted.length ? "ok" : "already_deleted";
+}
+
+/** Check if a user has soft-deleted a specific message for themselves. */
+export async function isDeletedForMe(
+  messageId: string,
+  userId: string): Promise<boolean> {
+  const rows = await db
+    .select({ id: messageDeletions.id })
+    .from(messageDeletions)
+    .where(
+      and(
+        eq(messageDeletions.messageId, messageId),
+        eq(messageDeletions.userId, userId),
+      ),
+    )
+    .limit(1);
+  return rows.length > 0;
+}
+
+/**
+ * "Delete for everyone" — soft-deletes the message for all conversation
+ * members. Only the message sender can do this.
+ *
+ * Sets the global `deletedAt` on the message row, which hides content
+ * from all members and prevents attachment access.
+ */
+export async function deleteForEveryone(
+  messageId: string,
+  userId: string,
+): Promise<MessageRow | "not_found" | "forbidden" | "already_deleted"> {
+  const rows = await db
+    .select()
+    .from(messages)
+    .where(eq(messages.id, messageId))
+    .limit(1);
+  const msg = rows[0];
+  if (!msg) return "not_found";
+  if (msg.senderId !== userId) return "forbidden";
+  if (msg.deletedAt) return "already_deleted";
+
+  const now = new Date();
+  const updated = await db
+    .update(messages)
+    .set({ deletedAt: now, updatedAt: now })
+    .where(eq(messages.id, messageId))
+    .returning();
+  return updated[0];
+}
+
+/** Which messages in a list the viewer has deleted for themselves. */
+export async function getMyDeletions(
+  messageIds: string[],
+  userId: string,
+): Promise<Set<string>> {
+  if (messageIds.length === 0) return new Set();
+  const rows = await db
+    .select({ messageId: messageDeletions.messageId })
+    .from(messageDeletions)
+    .where(
+      and(
+        inArray(messageDeletions.messageId, messageIds),
+        eq(messageDeletions.userId, userId),
+      ),
+    );
+  return new Set(rows.map((r) => r.messageId));
+}
+
+/** Which messages in a list are starred by the viewer. */
+export async function getMyStars(
+  messageIds: string[],
+  userId: string,
+): Promise<Set<string>> {
+  if (messageIds.length === 0) return new Set();
+  const rows = await db
+    .select({ messageId: messageStars.messageId })
+    .from(messageStars)
+    .where(
+      and(
+        inArray(messageStars.messageId, messageIds),
+        eq(messageStars.userId, userId),
+      ),
+    );
+  return new Set(rows.map((r) => r.messageId));
+}
+
+/** Which messages in a list are pinned in the given conversation. */
+export async function getPinnedIds(
+  messageIds: string[],
+  conversationId: string,
+): Promise<Set<string>> {
+  if (messageIds.length === 0) return new Set();
+  const rows = await db
+    .select({ messageId: pinnedMessages.messageId })
+    .from(pinnedMessages)
+    .where(
+      and(
+        inArray(pinnedMessages.messageId, messageIds),
+        eq(pinnedMessages.conversationId, conversationId),
+      ),
+    );
+  return new Set(rows.map((r) => r.messageId));
+}
+
+/* ============================= media gallery ============================== */
+
+/** Shared link detected in message text. */
+export interface SharedLinkItem {
+  messageId: string;
+  url: string;
+  text: string;
+  createdAt: string;
+  sender: ReturnType<typeof toPublicUser>;
+}
+
+/**
+ * List image/video attachments for a conversation.
+ * Excludes deleted-for-everyone messages and deleted-for-me messages.
+ */
+export async function listConversationMedia(
+  conversationId: string,
+  viewerId: string,
+): Promise<AttachmentDTO[]> {
+  // Get messages deleted for this viewer.
+  const myDelRows = await db
+    .select({ messageId: messageDeletions.messageId })
+    .from(messageDeletions)
+    .innerJoin(messages, eq(messages.id, messageDeletions.messageId))
+    .where(
+      and(
+        eq(messageDeletions.userId, viewerId),
+        eq(messages.conversationId, conversationId),
+      ),
+    );
+  const myDeletedIds = new Set(myDelRows.map((r) => r.messageId));
+
+  const rows = await db
+    .select({
+      attachment: messageAttachments,
+      message: messages,
+    })
+    .from(messageAttachments)
+    .innerJoin(messages, eq(messages.id, messageAttachments.messageId))
+    .where(
+      and(
+        eq(messages.conversationId, conversationId),
+        isNull(messages.deletedAt), eq(messages.selfDestruct, false), sql`(${messages.expiresAt} is null or ${messages.expiresAt}>now())`,
+        inArray(messageAttachments.kind, ["image", "video"]),
+      ),
+    )
+    .orderBy(desc(messages.createdAt));
+
+  return rows
+    .filter((r) => !myDeletedIds.has(r.message.id))
+    .map((r) => ({...toAttachmentDTO(r.attachment),expiresAt:r.message.expiresAt?.toISOString() ?? null}));
+}
+
+/**
+ * List file (non-image) attachments for a conversation.
+ * Excludes deleted-for-everyone and deleted-for-me messages.
+ */
+export async function listConversationFiles(
+  conversationId: string,
+  viewerId: string,
+): Promise<(AttachmentDTO & { createdAt: string })[]> {
+  const myDelRows = await db
+    .select({ messageId: messageDeletions.messageId })
+    .from(messageDeletions)
+    .innerJoin(messages, eq(messages.id, messageDeletions.messageId))
+    .where(
+      and(
+        eq(messageDeletions.userId, viewerId),
+        eq(messages.conversationId, conversationId),
+      ),
+    );
+  const myDeletedIds = new Set(myDelRows.map((r) => r.messageId));
+
+  const rows = await db
+    .select({
+      attachment: messageAttachments,
+      message: messages,
+    })
+    .from(messageAttachments)
+    .innerJoin(messages, eq(messages.id, messageAttachments.messageId))
+    .where(
+      and(
+        eq(messages.conversationId, conversationId),
+        isNull(messages.deletedAt), eq(messages.selfDestruct, false), sql`(${messages.expiresAt} is null or ${messages.expiresAt}>now())`,
+        eq(messageAttachments.kind, "file"),
+      ),
+    )
+    .orderBy(desc(messages.createdAt));
+
+  return rows
+    .filter((r) => !myDeletedIds.has(r.message.id))
+    .map((r) => ({
+      ...toAttachmentDTO(r.attachment),
+      expiresAt:r.message.expiresAt?.toISOString() ?? null,
+      createdAt: r.message.createdAt.toISOString(),
+    }));
+}
+
+/**
+ * Extract shared links from message text in a conversation.
+ * Only non-deleted messages are scanned.
+ */
+export async function listConversationLinks(
+  conversationId: string,
+  viewerId: string,
+): Promise<SharedLinkItem[]> {
+  const myDelRows = await db
+    .select({ messageId: messageDeletions.messageId })
+    .from(messageDeletions)
+    .innerJoin(messages, eq(messages.id, messageDeletions.messageId))
+    .where(
+      and(
+        eq(messageDeletions.userId, viewerId),
+        eq(messages.conversationId, conversationId),
+      ),
+    );
+  const myDeletedIds = new Set(myDelRows.map((r) => r.messageId));
+
+  const rows = await db
+    .select({ message: messages, sender: users })
+    .from(messages)
+    .innerJoin(users, eq(messages.senderId, users.id))
+    .where(
+      and(
+        eq(messages.conversationId, conversationId),
+        isNull(messages.deletedAt), eq(messages.selfDestruct, false), sql`(${messages.expiresAt} is null or ${messages.expiresAt}>now())`,
+        sql`${messages.text} ~* ${'https?://[^\s]+'}`,
+      ),
+    )
+    .orderBy(desc(messages.createdAt))
+    .limit(200);
+
+  const urlRegex = /https?:\/\/[^\s]+/gi;
+  const results: SharedLinkItem[] = [];
+
+  for (const row of rows) {
+    if (myDeletedIds.has(row.message.id)) continue;
+    const text = row.message.text;
+    const matches = text.match(urlRegex);
+    if (!matches) continue;
+    for (const url of matches) {
+      results.push({
+        messageId: row.message.id,
+        url,
+        text: text.slice(0, 100),
+        createdAt: row.message.createdAt.toISOString(),
+        sender: toPublicUser(row.sender),
+      });
+    }
+    if (results.length >= 100) break;
+  }
+
+  return results;
+}

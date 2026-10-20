@@ -1,0 +1,8 @@
+{
+  "packageId": "CONFIRM_EXISTING_OR_NEW_PACKAGE_FIRST",
+  "appVersion": "CONFIRM_VERSION_NAME",
+  "appVersionCode": 0,
+  "signingKeyPath": "ABSOLUTE_PATH_OUTSIDE_REPOSITORY",
+  "signingKeyAlias": "CONFIRM_ALIAS",
+  "appSigningSha256": "PLAY_APP_SIGNING_CERTIFICATE_SHA256_NOT_UPLOAD_KEY"
+}

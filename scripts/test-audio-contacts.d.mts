@@ -1,0 +1,1 @@
+export function testAudioContacts(base: string, pool: import("pg").Pool, owner: {id: string; username: string}, peer: {id: string; username: string}, password: string, conversationId: string): Promise<void>;

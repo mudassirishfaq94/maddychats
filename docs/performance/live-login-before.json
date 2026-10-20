@@ -1,0 +1,20 @@
+{
+  "version": "c95bd87f23c0235dde28ac141fa574a57bb4f047",
+  "scope": "Three sequential logins of temporary owned accounts; no production load test",
+  "samples": [
+    {
+      "elapsedMs": 2166.2644999999993,
+      "serverTiming": null
+    },
+    {
+      "elapsedMs": 4952.340499999999,
+      "serverTiming": null
+    },
+    {
+      "elapsedMs": 3503.944099999999,
+      "serverTiming": null
+    }
+  ],
+  "fixtureCleanup": true,
+  "bcryptCost": 12
+}

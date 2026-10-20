@@ -1,0 +1,3359 @@
+{
+  "timestamp": "2026-10-11T09:21:11.793Z",
+  "profile": "full",
+  "target": "http://127.0.0.1:3190",
+  "environment": "local production standalone build; generator and database on same machine",
+  "hardware": {
+    "platform": "win32",
+    "logicalCpus": 12,
+    "totalMemoryMiB": 16109.1796875
+  },
+  "fixture": {
+    "users": 200,
+    "conversations": 1000,
+    "messages": 50000,
+    "publicCommunities": 1000,
+    "bcryptCost": 12,
+    "appPoolMax": 5
+  },
+  "thirdPartyConnectionsBlocked": true,
+  "k6Version": "k6.exe v2.2.0 (commit/00a9a1b7f5, go1.26.5, windows/amd64)",
+  "thresholdsPassed": false,
+  "exitCode": 99,
+  "measurements": [
+    {
+      "stage": "preflight",
+      "action": "preflight",
+      "requests": 1,
+      "p95Ms": 16.3474,
+      "p99Ms": 16.3474,
+      "failureRate": 0,
+      "statuses": {
+        "204": 1
+      },
+      "semanticFailures": 0,
+      "passes": true
+    },
+    {
+      "stage": "preflight",
+      "action": "all",
+      "requests": 1,
+      "p95Ms": 16.3474,
+      "p99Ms": 16.3474,
+      "failureRate": 0,
+      "statuses": {
+        "204": 1
+      },
+      "semanticFailures": 0,
+      "passes": true
+    },
+    {
+      "stage": "ramp_20",
+      "action": "login",
+      "requests": 19,
+      "p95Ms": 1369.0811,
+      "p99Ms": 1369.0811,
+      "failureRate": 0,
+      "statuses": {
+        "200": 19
+      },
+      "semanticFailures": 0,
+      "passes": false
+    },
+    {
+      "stage": "ramp_20",
+      "action": "all",
+      "requests": 161,
+      "p95Ms": 1019.7714,
+      "p99Ms": 1205.6578,
+      "failureRate": 0,
+      "statuses": {
+        "200": 137,
+        "201": 24
+      },
+      "semanticFailures": 0,
+      "passes": false
+    },
+    {
+      "stage": "ramp_20",
+      "action": "main_screen",
+      "requests": 27,
+      "p95Ms": 913.7853,
+      "p99Ms": 1044.8866,
+      "failureRate": 0,
+      "statuses": {
+        "200": 27
+      },
+      "semanticFailures": 0,
+      "passes": false
+    },
+    {
+      "stage": "ramp_20",
+      "action": "chat_list",
+      "requests": 27,
+      "p95Ms": 181.3552,
+      "p99Ms": 205.2758,
+      "failureRate": 0,
+      "statuses": {
+        "200": 27
+      },
+      "semanticFailures": 0,
+      "passes": true
+    },
+    {
+      "stage": "ramp_20",
+      "action": "history",
+      "requests": 25,
+      "p95Ms": 716.0308,
+      "p99Ms": 921.5252,
+      "failureRate": 0,
+      "statuses": {
+        "200": 25
+      },
+      "semanticFailures": 0,
+      "passes": false
+    },
+    {
+      "stage": "ramp_20",
+      "action": "send_message",
+      "requests": 24,
+      "p95Ms": 691.5013,
+      "p99Ms": 702.4652,
+      "failureRate": 0,
+      "statuses": {
+        "201": 24
+      },
+      "semanticFailures": 0,
+      "passes": false
+    },
+    {
+      "stage": "ramp_20",
+      "action": "confirm_message",
+      "requests": 21,
+      "p95Ms": 924.8448,
+      "p99Ms": 1107.5943,
+      "failureRate": 0,
+      "statuses": {
+        "200": 21
+      },
+      "semanticFailures": 0,
+      "passes": false
+    },
+    {
+      "stage": "ramp_20",
+      "action": "communities",
+      "requests": 18,
+      "p95Ms": 676.6713,
+      "p99Ms": 676.6713,
+      "failureRate": 0,
+      "statuses": {
+        "200": 18
+      },
+      "semanticFailures": 0,
+      "passes": false
+    },
+    {
+      "stage": "hold_20",
+      "action": "all",
+      "requests": 1137,
+      "p95Ms": 69.8508,
+      "p99Ms": 167.5811,
+      "failureRate": 0,
+      "statuses": {
+        "200": 950,
+        "201": 187
+      },
+      "semanticFailures": 0,
+      "passes": true
+    },
+    {
+      "stage": "hold_20",
+      "action": "confirm_message",
+      "requests": 190,
+      "p95Ms": 69.9894,
+      "p99Ms": 825.1136,
+      "failureRate": 0,
+      "statuses": {
+        "200": 190
+      },
+      "semanticFailures": 0,
+      "passes": true
+    },
+    {
+      "stage": "hold_20",
+      "action": "main_screen",
+      "requests": 189,
+      "p95Ms": 93.4526,
+      "p99Ms": 123.6703,
+      "failureRate": 0,
+      "statuses": {
+        "200": 189
+      },
+      "semanticFailures": 0,
+      "passes": true
+    },
+    {
+      "stage": "hold_20",
+      "action": "communities",
+      "requests": 192,
+      "p95Ms": 35.6323,
+      "p99Ms": 374.6244,
+      "failureRate": 0,
+      "statuses": {
+        "200": 192
+      },
+      "semanticFailures": 0,
+      "passes": true
+    },
+    {
+      "stage": "hold_20",
+      "action": "history",
+      "requests": 189,
+      "p95Ms": 82.3798,
+      "p99Ms": 309.1342,
+      "failureRate": 0,
+      "statuses": {
+        "200": 189
+      },
+      "semanticFailures": 0,
+      "passes": true
+    },
+    {
+      "stage": "hold_20",
+      "action": "login",
+      "requests": 1,
+      "p95Ms": 1076.4814,
+      "p99Ms": 1076.4814,
+      "failureRate": 0,
+      "statuses": {
+        "200": 1
+      },
+      "semanticFailures": 0,
+      "passes": false
+    },
+    {
+      "stage": "hold_20",
+      "action": "chat_list",
+      "requests": 189,
+      "p95Ms": 45.735,
+      "p99Ms": 95.7251,
+      "failureRate": 0,
+      "statuses": {
+        "200": 189
+      },
+      "semanticFailures": 0,
+      "passes": true
+    },
+    {
+      "stage": "hold_20",
+      "action": "send_message",
+      "requests": 187,
+      "p95Ms": 51.8103,
+      "p99Ms": 179.4479,
+      "failureRate": 0,
+      "statuses": {
+        "201": 187
+      },
+      "semanticFailures": 0,
+      "passes": true
+    },
+    {
+      "stage": "ramp_50",
+      "action": "all",
+      "requests": 261,
+      "p95Ms": 6444.5311,
+      "p99Ms": 8123.4037,
+      "failureRate": 0,
+      "statuses": {
+        "200": 225,
+        "201": 36
+      },
+      "semanticFailures": 0,
+      "passes": false
+    },
+    {
+      "stage": "ramp_50",
+      "action": "send_message",
+      "requests": 36,
+      "p95Ms": 3024.6718,
+      "p99Ms": 3170.9466,
+      "failureRate": 0,
+      "statuses": {
+        "201": 36
+      },
+      "semanticFailures": 0,
+      "passes": false
+    },
+    {
+      "stage": "ramp_50",
+      "action": "history",
+      "requests": 42,
+      "p95Ms": 5018.9631,
+      "p99Ms": 5175.2002,
+      "failureRate": 0,
+      "statuses": {
+        "200": 42
+      },
+      "semanticFailures": 0,
+      "passes": false
+    },
+    {
+      "stage": "ramp_50",
+      "action": "confirm_message",
+      "requests": 34,
+      "p95Ms": 4957.398,
+      "p99Ms": 5036.9937,
+      "failureRate": 0,
+      "statuses": {
+        "200": 34
+      },
+      "semanticFailures": 0,
+      "passes": false
+    },
+    {
+      "stage": "ramp_50",
+      "action": "communities",
+      "requests": 27,
+      "p95Ms": 3888.5727,
+      "p99Ms": 4004.5197,
+      "failureRate": 0,
+      "statuses": {
+        "200": 27
+      },
+      "semanticFailures": 0,
+      "passes": false
+    },
+    {
+      "stage": "ramp_50",
+      "action": "main_screen",
+      "requests": 47,
+      "p95Ms": 1740.145,
+      "p99Ms": 1840.8347,
+      "failureRate": 0,
+      "statuses": {
+        "200": 47
+      },
+      "semanticFailures": 0,
+      "passes": false
+    },
+    {
+      "stage": "ramp_50",
+      "action": "login",
+      "requests": 29,
+      "p95Ms": 8172.3317,
+      "p99Ms": 8252.4139,
+      "failureRate": 0,
+      "statuses": {
+        "200": 29
+      },
+      "semanticFailures": 0,
+      "passes": false
+    },
+    {
+      "stage": "ramp_50",
+      "action": "chat_list",
+      "requests": 46,
+      "p95Ms": 3246.889,
+      "p99Ms": 3617.6891,
+      "failureRate": 0,
+      "statuses": {
+        "200": 46
+      },
+      "semanticFailures": 0,
+      "passes": false
+    },
+    {
+      "stage": "hold_50",
+      "action": "all",
+      "requests": 2775,
+      "p95Ms": 182.5782,
+      "p99Ms": 426.621,
+      "failureRate": 0,
+      "statuses": {
+        "200": 2313,
+        "201": 462
+      },
+      "semanticFailures": 0,
+      "passes": true
+    },
+    {
+      "stage": "hold_50",
+      "action": "main_screen",
+      "requests": 461,
+      "p95Ms": 217.9339,
+      "p99Ms": 426.621,
+      "failureRate": 0,
+      "statuses": {
+        "200": 461
+      },
+      "semanticFailures": 0,
+      "passes": true
+    },
+    {
+      "stage": "hold_50",
+      "action": "chat_list",
+      "requests": 462,
+      "p95Ms": 204.6752,
+      "p99Ms": 1286.688,
+      "failureRate": 0,
+      "statuses": {
+        "200": 462
+      },
+      "semanticFailures": 0,
+      "passes": true
+    },
+    {
+      "stage": "hold_50",
+      "action": "send_message",
+      "requests": 462,
+      "p95Ms": 129.8474,
+      "p99Ms": 359.6125,
+      "failureRate": 0,
+      "statuses": {
+        "201": 462
+      },
+      "semanticFailures": 0,
+      "passes": true
+    },
+    {
+      "stage": "hold_50",
+      "action": "communities",
+      "requests": 464,
+      "p95Ms": 99.0501,
+      "p99Ms": 412.0155,
+      "failureRate": 0,
+      "statuses": {
+        "200": 464
+      },
+      "semanticFailures": 0,
+      "passes": true
+    },
+    {
+      "stage": "hold_50",
+      "action": "history",
+      "requests": 463,
+      "p95Ms": 193.608,
+      "p99Ms": 501.2019,
+      "failureRate": 0,
+      "statuses": {
+        "200": 463
+      },
+      "semanticFailures": 0,
+      "passes": true
+    },
+    {
+      "stage": "hold_50",
+      "action": "confirm_message",
+      "requests": 462,
+      "p95Ms": 158.6348,
+      "p99Ms": 407.4903,
+      "failureRate": 0,
+      "statuses": {
+        "200": 462
+      },
+      "semanticFailures": 0,
+      "passes": true
+    },
+    {
+      "stage": "hold_50",
+      "action": "login",
+      "requests": 1,
+      "p95Ms": 3355.6144,
+      "p99Ms": 3355.6144,
+      "failureRate": 0,
+      "statuses": {
+        "200": 1
+      },
+      "semanticFailures": 0,
+      "passes": false
+    },
+    {
+      "stage": "ramp_100",
+      "action": "history",
+      "requests": 41,
+      "p95Ms": 10001.1273,
+      "p99Ms": 10001.3764,
+      "failureRate": 0.8048780487804879,
+      "statuses": {
+        "0": 33,
+        "200": 8
+      },
+      "semanticFailures": 0,
+      "passes": false
+    },
+    {
+      "stage": "ramp_100",
+      "action": "all",
+      "requests": 276,
+      "p95Ms": 10000.9734,
+      "p99Ms": 10001.615,
+      "failureRate": 0.6413043478260869,
+      "statuses": {
+        "0": 177,
+        "200": 83,
+        "201": 16
+      },
+      "semanticFailures": 104,
+      "passes": false
+    },
+    {
+      "stage": "ramp_100",
+      "action": "main_screen",
+      "requests": 40,
+      "p95Ms": 2688.3227,
+      "p99Ms": 2815.308,
+      "failureRate": 0,
+      "statuses": {
+        "200": 40
+      },
+      "semanticFailures": 0,
+      "passes": false
+    },
+    {
+      "stage": "ramp_100",
+      "action": "chat_list",
+      "requests": 40,
+      "p95Ms": 10001.4237,
+      "p99Ms": 10001.6195,
+      "failureRate": 0.6,
+      "statuses": {
+        "0": 24,
+        "200": 16
+      },
+      "semanticFailures": 0,
+      "passes": false
+    },
+    {
+      "stage": "ramp_100",
+      "action": "send_message",
+      "requests": 35,
+      "p95Ms": 10000.513,
+      "p99Ms": 10000.8879,
+      "failureRate": 0.5428571428571428,
+      "statuses": {
+        "0": 19,
+        "201": 16
+      },
+      "semanticFailures": 0,
+      "passes": false
+    },
+    {
+      "stage": "ramp_100",
+      "action": "confirm_message",
+      "requests": 18,
+      "p95Ms": 10001.172,
+      "p99Ms": 10001.172,
+      "failureRate": 0.5555555555555556,
+      "statuses": {
+        "0": 10,
+        "200": 8
+      },
+      "semanticFailures": 0,
+      "passes": false
+    },
+    {
+      "stage": "ramp_100",
+      "action": "communities",
+      "requests": 30,
+      "p95Ms": 10000.9669,
+      "p99Ms": 10002.0038,
+      "failureRate": 0.6666666666666666,
+      "statuses": {
+        "0": 20,
+        "200": 10
+      },
+      "semanticFailures": 0,
+      "passes": false
+    },
+    {
+      "stage": "ramp_100",
+      "action": "login",
+      "requests": 72,
+      "p95Ms": 10000.6751,
+      "p99Ms": 10001.3645,
+      "failureRate": 0.9861111111111112,
+      "statuses": {
+        "0": 71,
+        "200": 1
+      },
+      "semanticFailures": 0,
+      "passes": false
+    },
+    {
+      "stage": "hold_100",
+      "action": "all",
+      "requests": 1352,
+      "p95Ms": 10000.6412,
+      "p99Ms": 10001.1632,
+      "failureRate": 0.9460059171597633,
+      "statuses": {
+        "0": 1279,
+        "200": 73
+      },
+      "semanticFailures": 1280,
+      "passes": false
+    },
+    {
+      "stage": "hold_100",
+      "action": "main_screen",
+      "requests": 155,
+      "p95Ms": 10000.1997,
+      "p99Ms": 10000.4861,
+      "failureRate": 0.5290322580645161,
+      "statuses": {
+        "0": 82,
+        "200": 73
+      },
+      "semanticFailures": 0,
+      "passes": false
+    },
+    {
+      "stage": "hold_100",
+      "action": "login",
+      "requests": 588,
+      "p95Ms": 10000.5319,
+      "p99Ms": 10000.9622,
+      "failureRate": 1,
+      "statuses": {
+        "0": 588
+      },
+      "semanticFailures": 0,
+      "passes": false
+    },
+    {
+      "stage": "hold_100",
+      "action": "send_message",
+      "requests": 150,
+      "p95Ms": 10000.4283,
+      "p99Ms": 10001.1128,
+      "failureRate": 1,
+      "statuses": {
+        "0": 150
+      },
+      "semanticFailures": 0,
+      "passes": false
+    },
+    {
+      "stage": "hold_100",
+      "action": "communities",
+      "requests": 155,
+      "p95Ms": 10000.5017,
+      "p99Ms": 10001.299,
+      "failureRate": 1,
+      "statuses": {
+        "0": 155
+      },
+      "semanticFailures": 0,
+      "passes": false
+    },
+    {
+      "stage": "hold_100",
+      "action": "history",
+      "requests": 150,
+      "p95Ms": 10000.2464,
+      "p99Ms": 10000.5258,
+      "failureRate": 1,
+      "statuses": {
+        "0": 150
+      },
+      "semanticFailures": 0,
+      "passes": false
+    },
+    {
+      "stage": "hold_100",
+      "action": "chat_list",
+      "requests": 154,
+      "p95Ms": 10001.152,
+      "p99Ms": 10001.495,
+      "failureRate": 1,
+      "statuses": {
+        "0": 154
+      },
+      "semanticFailures": 0,
+      "passes": false
+    },
+    {
+      "stage": "ramp_0",
+      "action": "all",
+      "requests": 204,
+      "p95Ms": 10000.5875,
+      "p99Ms": 10001.1805,
+      "failureRate": 0.4019607843137255,
+      "statuses": {
+        "0": 82,
+        "200": 98,
+        "201": 24
+      },
+      "semanticFailures": 154,
+      "passes": false
+    },
+    {
+      "stage": "ramp_0",
+      "action": "main_screen",
+      "requests": 20,
+      "p95Ms": 6394.0733,
+      "p99Ms": 6855.3853,
+      "failureRate": 0,
+      "statuses": {
+        "200": 20
+      },
+      "semanticFailures": 0,
+      "passes": false
+    },
+    {
+      "stage": "ramp_0",
+      "action": "login",
+      "requests": 25,
+      "p95Ms": 10000.0555,
+      "p99Ms": 10000.1641,
+      "failureRate": 1,
+      "statuses": {
+        "0": 25
+      },
+      "semanticFailures": 0,
+      "passes": false
+    },
+    {
+      "stage": "ramp_0",
+      "action": "history",
+      "requests": 29,
+      "p95Ms": 10000.2965,
+      "p99Ms": 10000.3959,
+      "failureRate": 0.27586206896551724,
+      "statuses": {
+        "0": 8,
+        "200": 21
+      },
+      "semanticFailures": 0,
+      "passes": false
+    },
+    {
+      "stage": "ramp_0",
+      "action": "communities",
+      "requests": 41,
+      "p95Ms": 9999.9258,
+      "p99Ms": 10000.2087,
+      "failureRate": 0.2926829268292683,
+      "statuses": {
+        "0": 12,
+        "200": 29
+      },
+      "semanticFailures": 0,
+      "passes": false
+    },
+    {
+      "stage": "ramp_0",
+      "action": "send_message",
+      "requests": 45,
+      "p95Ms": 9999.98,
+      "p99Ms": 10000.1671,
+      "failureRate": 0.4666666666666667,
+      "statuses": {
+        "0": 21,
+        "201": 24
+      },
+      "semanticFailures": 0,
+      "passes": false
+    },
+    {
+      "stage": "ramp_0",
+      "action": "chat_list",
+      "requests": 21,
+      "p95Ms": 10001.2414,
+      "p99Ms": 10001.2924,
+      "failureRate": 0.7619047619047619,
+      "statuses": {
+        "0": 16,
+        "200": 5
+      },
+      "semanticFailures": 0,
+      "passes": false
+    },
+    {
+      "stage": "ramp_0",
+      "action": "confirm_message",
+      "requests": 23,
+      "p95Ms": 89.6958,
+      "p99Ms": 109.131,
+      "failureRate": 0,
+      "statuses": {
+        "200": 23
+      },
+      "semanticFailures": 0,
+      "passes": true
+    },
+    {
+      "stage": "ramp_down",
+      "action": "communities",
+      "requests": 12,
+      "p95Ms": 32.6351,
+      "p99Ms": 32.6351,
+      "failureRate": 0,
+      "statuses": {
+        "200": 12
+      },
+      "semanticFailures": 0,
+      "passes": true
+    },
+    {
+      "stage": "ramp_down",
+      "action": "all",
+      "requests": 13,
+      "p95Ms": 32.6351,
+      "p99Ms": 32.6351,
+      "failureRate": 0,
+      "statuses": {
+        "200": 13
+      },
+      "semanticFailures": 0,
+      "passes": true
+    },
+    {
+      "stage": "ramp_down",
+      "action": "confirm_message",
+      "requests": 1,
+      "p95Ms": 23.4506,
+      "p99Ms": 23.4506,
+      "failureRate": 0,
+      "statuses": {
+        "200": 1
+      },
+      "semanticFailures": 0,
+      "passes": true
+    }
+  ],
+  "summary": {
+    "options": {
+      "summaryTrendStats": [
+        "avg",
+        "med",
+        "p(90)",
+        "p(95)",
+        "p(99)",
+        "max"
+      ],
+      "summaryTimeUnit": "",
+      "noColor": true
+    },
+    "state": {
+      "isStdOutTTY": false,
+      "isStdErrTTY": false,
+      "testRunDurationMs": 550114.8085
+    },
+    "metrics": {
+      "http_req_failed": {
+        "contains": "default",
+        "values": {
+          "rate": 0.24886731391585762,
+          "passes": 1538,
+          "fails": 4642
+        },
+        "thresholds": {
+          "rate<0.01": {
+            "ok": false
+          }
+        },
+        "type": "rate"
+      },
+      "http_req_failed{action:communities}": {
+        "values": {
+          "rate": 0.19914802981895632,
+          "passes": 187,
+          "fails": 752
+        },
+        "thresholds": {
+          "rate<0.01": {
+            "ok": false
+          }
+        },
+        "type": "rate",
+        "contains": "default"
+      },
+      "http_req_failed{stage:hold_100}": {
+        "type": "rate",
+        "contains": "default",
+        "values": {
+          "fails": 73,
+          "rate": 0.9460059171597633,
+          "passes": 1279
+        },
+        "thresholds": {
+          "rate<0.01": {
+            "ok": false
+          }
+        }
+      },
+      "iteration_duration": {
+        "type": "trend",
+        "contains": "time",
+        "values": {
+          "p(99)": 62572.105414,
+          "max": 64142.8697,
+          "avg": 19959.945908276728,
+          "med": 15001.644,
+          "p(90)": 52907.94854,
+          "p(95)": 60038.86469
+        }
+      },
+      "http_req_duration{expected_response:true}": {
+        "type": "trend",
+        "contains": "time",
+        "values": {
+          "med": 36.614000000000004,
+          "p(90)": 910.991010000001,
+          "p(95)": 3054.367999999997,
+          "p(99)": 8015.975268000005,
+          "max": 9962.7824,
+          "avg": 456.6665252692802
+        }
+      },
+      "http_req_duration{stage:hold_100}": {
+        "type": "trend",
+        "contains": "time",
+        "values": {
+          "avg": 9824.3691991864,
+          "med": 9999.5689,
+          "p(90)": 10000.42736,
+          "p(95)": 10000.635865,
+          "p(99)": 10001.157488,
+          "max": 10003.17
+        },
+        "thresholds": {
+          "p(95)<500": {
+            "ok": false
+          }
+        }
+      },
+      "http_req_failed{action:confirm_message}": {
+        "type": "rate",
+        "contains": "default",
+        "values": {
+          "rate": 0.01335113484646195,
+          "passes": 10,
+          "fails": 739
+        },
+        "thresholds": {
+          "rate<0.01": {
+            "ok": false
+          }
+        }
+      },
+      "iterations": {
+        "type": "counter",
+        "contains": "default",
+        "values": {
+          "count": 1619,
+          "rate": 2.9430220291915665
+        }
+      },
+      "http_req_duration{action:login}": {
+        "type": "trend",
+        "contains": "time",
+        "values": {
+          "avg": 9583.625837006808,
+          "med": 9999.5473,
+          "p(90)": 10000.27832,
+          "p(95)": 10000.52325,
+          "p(99)": 10000.847172,
+          "max": 10001.3645
+        },
+        "thresholds": {
+          "p(95)<500": {
+            "ok": false
+          }
+        }
+      },
+      "http_req_waiting": {
+        "contains": "time",
+        "values": {
+          "p(99)": 10000.793845999999,
+          "max": 10003.17,
+          "avg": 2831.109396812302,
+          "med": 53.0486,
+          "p(90)": 9999.66827,
+          "p(95)": 10000.04066
+        },
+        "type": "trend"
+      },
+      "http_req_tls_handshaking": {
+        "type": "trend",
+        "contains": "time",
+        "values": {
+          "p(95)": 0,
+          "p(99)": 0,
+          "max": 0,
+          "avg": 0,
+          "med": 0,
+          "p(90)": 0
+        }
+      },
+      "http_req_duration": {
+        "type": "trend",
+        "contains": "time",
+        "values": {
+          "avg": 2831.607672411008,
+          "med": 53.71325,
+          "p(90)": 9999.76424,
+          "p(95)": 10000.175335,
+          "p(99)": 10000.859892999999,
+          "max": 10003.17
+        },
+        "thresholds": {
+          "p(95)<500": {
+            "ok": false
+          }
+        }
+      },
+      "http_req_failed{action:send_message}": {
+        "type": "rate",
+        "contains": "default",
+        "values": {
+          "rate": 0.20234291799787008,
+          "passes": 190,
+          "fails": 749
+        },
+        "thresholds": {
+          "rate<0.01": {
+            "ok": false
+          }
+        }
+      },
+      "http_req_failed{action:chat_list}": {
+        "type": "rate",
+        "contains": "default",
+        "values": {
+          "rate": 0.2066027689030884,
+          "passes": 194,
+          "fails": 745
+        },
+        "thresholds": {
+          "rate<0.01": {
+            "ok": false
+          }
+        }
+      },
+      "http_req_connecting": {
+        "type": "trend",
+        "contains": "time",
+        "values": {
+          "max": 10.7922,
+          "avg": 0.4406811003236244,
+          "med": 0,
+          "p(90)": 1.4460300000000001,
+          "p(95)": 1.6653199999999984,
+          "p(99)": 2.0862970000000005
+        }
+      },
+      "data_received": {
+        "type": "counter",
+        "contains": "data",
+        "values": {
+          "count": 106754573,
+          "rate": 194058.71529088277
+        }
+      },
+      "http_reqs": {
+        "type": "counter",
+        "contains": "default",
+        "values": {
+          "count": 6180,
+          "rate": 11.234018616679359
+        }
+      },
+      "http_req_failed{stage:hold_50}": {
+        "type": "rate",
+        "contains": "default",
+        "values": {
+          "rate": 0,
+          "passes": 0,
+          "fails": 2775
+        },
+        "thresholds": {
+          "rate<0.01": {
+            "ok": true
+          }
+        }
+      },
+      "http_req_failed{action:main_screen}": {
+        "type": "rate",
+        "contains": "default",
+        "values": {
+          "rate": 0.08732694355697551,
+          "passes": 82,
+          "fails": 857
+        },
+        "thresholds": {
+          "rate<0.01": {
+            "ok": false
+          }
+        }
+      },
+      "http_req_failed{action:history}": {
+        "type": "rate",
+        "contains": "default",
+        "values": {
+          "rate": 0.20340788072417465,
+          "passes": 191,
+          "fails": 748
+        },
+        "thresholds": {
+          "rate<0.01": {
+            "ok": false
+          }
+        }
+      },
+      "http_req_blocked": {
+        "type": "trend",
+        "contains": "time",
+        "values": {
+          "max": 11.3138,
+          "avg": 0.4870493851132682,
+          "med": 0,
+          "p(90)": 1.5280200000000002,
+          "p(95)": 1.7869749999999989,
+          "p(99)": 2.255378
+        }
+      },
+      "http_req_sending": {
+        "type": "trend",
+        "contains": "time",
+        "values": {
+          "p(95)": 0.6121049999999999,
+          "p(99)": 0.8039780000000001,
+          "max": 1.803,
+          "avg": 0.07149699029126205,
+          "med": 0,
+          "p(90)": 0.5131
+        }
+      },
+      "http_req_duration{action:communities}": {
+        "type": "trend",
+        "contains": "time",
+        "values": {
+          "avg": 2214.13555228967,
+          "med": 26.0568,
+          "p(90)": 9999.42324,
+          "p(95)": 9999.744200000001,
+          "p(99)": 10000.522132,
+          "max": 10003.17
+        },
+        "thresholds": {
+          "p(95)<500": {
+            "ok": false
+          }
+        }
+      },
+      "journey_failed": {
+        "contains": "default",
+        "values": {
+          "rate": 0.24890759022495548,
+          "passes": 1538,
+          "fails": 4641
+        },
+        "thresholds": {
+          "rate<0.01": {
+            "ok": false
+          }
+        },
+        "type": "rate"
+      },
+      "http_req_duration{action:main_screen}": {
+        "type": "trend",
+        "contains": "time",
+        "values": {
+          "med": 72.1425,
+          "p(90)": 8801.628940000006,
+          "p(95)": 9999.28282,
+          "p(99)": 10000.136392,
+          "max": 10001.1024,
+          "avg": 1679.948882534612
+        },
+        "thresholds": {
+          "p(95)<500": {
+            "ok": false
+          }
+        }
+      },
+      "http_req_duration{action:send_message}": {
+        "values": {
+          "avg": 2226.90406741214,
+          "med": 38.6998,
+          "p(90)": 9999.4244,
+          "p(95)": 9999.9025,
+          "p(99)": 10000.410972,
+          "max": 10001.2298
+        },
+        "thresholds": {
+          "p(95)<500": {
+            "ok": false
+          }
+        },
+        "type": "trend",
+        "contains": "time"
+      },
+      "checks": {
+        "contains": "default",
+        "values": {
+          "rate": 0.7510924097750445,
+          "passes": 4641,
+          "fails": 1538
+        },
+        "type": "rate"
+      },
+      "vus_max": {
+        "type": "gauge",
+        "contains": "default",
+        "values": {
+          "value": 100,
+          "min": 100,
+          "max": 100
+        }
+      },
+      "http_req_duration{stage:hold_50}": {
+        "type": "trend",
+        "contains": "time",
+        "values": {
+          "p(99)": 415.8129299999965,
+          "max": 3355.6144,
+          "avg": 65.90697340540538,
+          "med": 35.7564,
+          "p(90)": 114.53397999999999,
+          "p(95)": 182.42118999999994
+        },
+        "thresholds": {
+          "p(95)<500": {
+            "ok": true
+          }
+        }
+      },
+      "http_req_duration{action:chat_list}": {
+        "type": "trend",
+        "contains": "time",
+        "values": {
+          "avg": 2317.832758253462,
+          "med": 39.4808,
+          "p(90)": 10000.4556,
+          "p(95)": 10000.753869999999,
+          "p(99)": 10001.275756000001,
+          "max": 10001.6195
+        },
+        "thresholds": {
+          "p(95)<500": {
+            "ok": false
+          }
+        }
+      },
+      "http_req_duration{stage:hold_20}": {
+        "type": "trend",
+        "contains": "time",
+        "values": {
+          "avg": 39.15610756376432,
+          "med": 30.0075,
+          "p(90)": 53.5966,
+          "p(95)": 69.58336000000001,
+          "p(99)": 155.86220000000327,
+          "max": 1076.4814
+        },
+        "thresholds": {
+          "p(95)<500": {
+            "ok": true
+          }
+        }
+      },
+      "http_req_duration{action:confirm_message}": {
+        "type": "trend",
+        "contains": "time",
+        "values": {
+          "p(95)": 3582.248380000002,
+          "p(99)": 10000.449124,
+          "max": 10001.172,
+          "avg": 413.6331198931915,
+          "med": 36.9348,
+          "p(90)": 369.7540800000014
+        },
+        "thresholds": {
+          "p(95)<500": {
+            "ok": false
+          }
+        }
+      },
+      "http_req_failed{action:login}": {
+        "type": "rate",
+        "contains": "default",
+        "values": {
+          "rate": 0.9306122448979591,
+          "passes": 684,
+          "fails": 51
+        },
+        "thresholds": {
+          "rate<0.01": {
+            "ok": false
+          }
+        }
+      },
+      "data_sent": {
+        "type": "counter",
+        "contains": "data",
+        "values": {
+          "count": 4375539,
+          "rate": 7953.865143043136
+        }
+      },
+      "http_req_receiving": {
+        "type": "trend",
+        "contains": "time",
+        "values": {
+          "p(95)": 1.0932,
+          "p(99)": 1.6033410000000001,
+          "max": 17.2437,
+          "avg": 0.42677860841424115,
+          "med": 0.3821,
+          "p(90)": 0.9985
+        }
+      },
+      "http_req_failed{stage:hold_20}": {
+        "type": "rate",
+        "contains": "default",
+        "values": {
+          "passes": 0,
+          "fails": 1137,
+          "rate": 0
+        },
+        "thresholds": {
+          "rate<0.01": {
+            "ok": true
+          }
+        }
+      },
+      "http_req_duration{action:history}": {
+        "contains": "time",
+        "values": {
+          "avg": 2365.8037353567615,
+          "med": 53.8951,
+          "p(90)": 9999.609059999999,
+          "p(95)": 9999.96433,
+          "p(99)": 10000.620554,
+          "max": 10001.3764
+        },
+        "thresholds": {
+          "p(95)<500": {
+            "ok": false
+          }
+        },
+        "type": "trend"
+      },
+      "vus": {
+        "type": "gauge",
+        "contains": "default",
+        "values": {
+          "max": 100,
+          "value": 2,
+          "min": 0
+        }
+      }
+    },
+    "root_group": {
+      "path": "",
+      "id": "d41d8cd98f00b204e9800998ecf8427e",
+      "groups": [],
+      "checks": [],
+      "name": ""
+    }
+  },
+  "databaseSamples": [
+    {
+      "seconds": 5.139,
+      "freeMemoryMiB": 5745.5703125,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 12
+        }
+      ]
+    },
+    {
+      "seconds": 10.014,
+      "freeMemoryMiB": 5738.0625,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 15.027,
+      "freeMemoryMiB": 5724.84375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 20.029,
+      "freeMemoryMiB": 5706.77734375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 25.04,
+      "freeMemoryMiB": 5696.8671875,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 30.051,
+      "freeMemoryMiB": 5707.73046875,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 35.054,
+      "freeMemoryMiB": 5714.3515625,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 40.054,
+      "freeMemoryMiB": 5725.02734375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 45.054,
+      "freeMemoryMiB": 5715.19140625,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 50.058,
+      "freeMemoryMiB": 5714.97265625,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 55.059,
+      "freeMemoryMiB": 5752.06640625,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 60.07,
+      "freeMemoryMiB": 5749.91015625,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 65.073,
+      "freeMemoryMiB": 5818.3203125,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 70.073,
+      "freeMemoryMiB": 5789.09375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 75.08,
+      "freeMemoryMiB": 5698.328125,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 80.096,
+      "freeMemoryMiB": 5598.66796875,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 85.107,
+      "freeMemoryMiB": 5804.78515625,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 90.118,
+      "freeMemoryMiB": 5716.6875,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 3
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 9
+        }
+      ]
+    },
+    {
+      "seconds": 95.122,
+      "freeMemoryMiB": 5727.97265625,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 100.122,
+      "freeMemoryMiB": 5739.55859375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 105.133,
+      "freeMemoryMiB": 5743.94921875,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 110.134,
+      "freeMemoryMiB": 5738.36328125,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 115.146,
+      "freeMemoryMiB": 5742.21484375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 120.148,
+      "freeMemoryMiB": 5782.359375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 125.16,
+      "freeMemoryMiB": 5785.11328125,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 130.162,
+      "freeMemoryMiB": 5766.12109375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 135.175,
+      "freeMemoryMiB": 5771.94921875,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 140.19,
+      "freeMemoryMiB": 5826.05078125,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 145.191,
+      "freeMemoryMiB": 5820.96875,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 150.199,
+      "freeMemoryMiB": 5717.88671875,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 155.2,
+      "freeMemoryMiB": 5715.11328125,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 160.203,
+      "freeMemoryMiB": 5711.53125,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 165.215,
+      "freeMemoryMiB": 5701.82421875,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 170.222,
+      "freeMemoryMiB": 5714.05859375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 175.234,
+      "freeMemoryMiB": 5716.86328125,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 2
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 10
+        }
+      ]
+    },
+    {
+      "seconds": 180.237,
+      "freeMemoryMiB": 5726.05859375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 185.246,
+      "freeMemoryMiB": 5726.24609375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 190.255,
+      "freeMemoryMiB": 5727.91015625,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 195.261,
+      "freeMemoryMiB": 5663.359375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 200.261,
+      "freeMemoryMiB": 5656.58984375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 2
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 10
+        }
+      ]
+    },
+    {
+      "seconds": 205.261,
+      "freeMemoryMiB": 5653.01953125,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 2
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 10
+        }
+      ]
+    },
+    {
+      "seconds": 210.262,
+      "freeMemoryMiB": 5653.32421875,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 215.275,
+      "freeMemoryMiB": 5646.8984375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 220.279,
+      "freeMemoryMiB": 5656.06640625,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 225.292,
+      "freeMemoryMiB": 5695.03125,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 2
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 10
+        }
+      ]
+    },
+    {
+      "seconds": 230.293,
+      "freeMemoryMiB": 5670.140625,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 235.294,
+      "freeMemoryMiB": 5611.64453125,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 240.306,
+      "freeMemoryMiB": 5683.42578125,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 245.306,
+      "freeMemoryMiB": 5692.86328125,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 250.306,
+      "freeMemoryMiB": 5676.453125,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 255.317,
+      "freeMemoryMiB": 5731.11328125,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 260.318,
+      "freeMemoryMiB": 5723.1796875,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 265.32,
+      "freeMemoryMiB": 5688.01171875,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 270.32,
+      "freeMemoryMiB": 5563.37109375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 275.328,
+      "freeMemoryMiB": 5568.3203125,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 280.335,
+      "freeMemoryMiB": 5582.27734375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 285.337,
+      "freeMemoryMiB": 5591.859375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 290.353,
+      "freeMemoryMiB": 5582.96875,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 295.357,
+      "freeMemoryMiB": 5579.58203125,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 300.363,
+      "freeMemoryMiB": 5589.33984375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 305.373,
+      "freeMemoryMiB": 5553.828125,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 310.384,
+      "freeMemoryMiB": 5571.23828125,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 315.384,
+      "freeMemoryMiB": 5570.2890625,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 320.398,
+      "freeMemoryMiB": 5566.25,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 325.4,
+      "freeMemoryMiB": 5569.07421875,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 330.4,
+      "freeMemoryMiB": 5613.48828125,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 335.411,
+      "freeMemoryMiB": 5608.22265625,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 340.424,
+      "freeMemoryMiB": 5614.66796875,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 345.427,
+      "freeMemoryMiB": 5618.5234375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 350.44,
+      "freeMemoryMiB": 5614.61328125,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 355.453,
+      "freeMemoryMiB": 5616.8828125,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 360.458,
+      "freeMemoryMiB": 5611.25,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 365.464,
+      "freeMemoryMiB": 5613.47265625,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 370.465,
+      "freeMemoryMiB": 5617,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 375.473,
+      "freeMemoryMiB": 5620.21484375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 380.48,
+      "freeMemoryMiB": 5635.390625,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 385.482,
+      "freeMemoryMiB": 5629.77734375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 390.483,
+      "freeMemoryMiB": 5632.98046875,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 395.488,
+      "freeMemoryMiB": 5632.21484375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 400.488,
+      "freeMemoryMiB": 5656.46484375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 405.501,
+      "freeMemoryMiB": 5661.3125,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 410.505,
+      "freeMemoryMiB": 5655.671875,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 415.512,
+      "freeMemoryMiB": 5652.15625,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 420.515,
+      "freeMemoryMiB": 5714.38671875,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 425.521,
+      "freeMemoryMiB": 5716.1796875,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 430.522,
+      "freeMemoryMiB": 5714.03125,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 435.529,
+      "freeMemoryMiB": 5707.375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 440.529,
+      "freeMemoryMiB": 5711.53125,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 445.531,
+      "freeMemoryMiB": 5709.046875,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 450.538,
+      "freeMemoryMiB": 5625.83203125,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 455.548,
+      "freeMemoryMiB": 5633.90234375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 460.549,
+      "freeMemoryMiB": 5635.64453125,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 465.549,
+      "freeMemoryMiB": 5642.00390625,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 470.558,
+      "freeMemoryMiB": 5635.9765625,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 475.559,
+      "freeMemoryMiB": 5640.921875,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 480.558,
+      "freeMemoryMiB": 5657.80078125,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 485.562,
+      "freeMemoryMiB": 5656.2421875,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 490.576,
+      "freeMemoryMiB": 5653.8984375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 495.592,
+      "freeMemoryMiB": 5661.58984375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 500.598,
+      "freeMemoryMiB": 5666.1875,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 505.599,
+      "freeMemoryMiB": 5730.2734375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 510.599,
+      "freeMemoryMiB": 5635.9453125,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 515.601,
+      "freeMemoryMiB": 5632.92578125,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 520.603,
+      "freeMemoryMiB": 5627.984375,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 525.612,
+      "freeMemoryMiB": 5633.66796875,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 530.612,
+      "freeMemoryMiB": 5635.73828125,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 535.614,
+      "freeMemoryMiB": 5624.55078125,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 540.622,
+      "freeMemoryMiB": 5705.6875,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 11
+        }
+      ]
+    },
+    {
+      "seconds": 545.624,
+      "freeMemoryMiB": 5724.5625,
+      "activity": [
+        {
+          "state": "active",
+          "wait_event_type": null,
+          "wait_event": null,
+          "count": 1
+        },
+        {
+          "state": "idle",
+          "wait_event_type": "Client",
+          "wait_event": "ClientRead",
+          "count": 6
+        }
+      ]
+    }
+  ],
+  "serverErrorLines": [
+    "⨯ Error: Failed query: ",
+    "  [cause]: Error: timeout exceeded when trying to connect",
+    "⨯ Error: Failed query: select \"enabled\" from \"user_2fa\" where \"user_2fa\".\"user_id\" = $1",
+    "  [cause]: Error: timeout exceeded when trying to connect",
+    "⨯ Error: Failed query: select \"id\", \"username\", \"display_name\", \"email\", \"email_verified_at\", \"password_hash\", \"avatar_url\", \"bio\", \"role\", \"suspended_at\", \"suspended_until\", \"suspension_reason\", \"suspended_by\", \"created_at\", \"updated_at\", \"last_seen_at\", \"token_invalid_before_at\" from \"users\" where lower(\"users\".\"username\") = $1 limit $2",
+    "  [cause]: Error: timeout exceeded when trying to connect",
+    "⨯ Error: Failed query: select \"id\", \"username\", \"display_name\", \"email\", \"email_verified_at\", \"password_hash\", \"avatar_url\", \"bio\", \"role\", \"suspended_at\", \"suspended_until\", \"suspension_reason\", \"suspended_by\", \"created_at\", \"updated_at\", \"last_seen_at\", \"token_invalid_before_at\" from \"users\" where lower(\"users\".\"username\") = $1 limit $2",
+    "  [cause]: Error: timeout exceeded when trying to connect",
+    "⨯ Error: Failed query: select \"id\", \"name\", \"description\", \"avatar_url\", \"created_by\", \"is_public\", \"created_at\", \"updated_at\" from \"communities\" where \"communities\".\"id\" in ($1)",
+    "  [cause]: Error: timeout exceeded when trying to connect",
+    "⨯ unhandledRejection: Error: Failed query: select \"id\", \"sender_id\", \"conversation_id\", \"text\", \"encrypted\", \"reply_to_message_id\", \"scheduled_for\", \"sent\", \"sent_message_id\", \"created_at\" from \"scheduled_messages\" where (\"scheduled_messages\".\"sent\" = $1 and \"scheduled_messages\".\"scheduled_for\" <= $2 and exists(select 1 from conversations c join conversation_members cm on cm.conversation_id=c.id",
+    "              on (b.blocker_id=\"scheduled_messages\".\"sender_id\" and b.blocked_id=peer.user_id)",
+    "                or (b.blocked_id=\"scheduled_messages\".\"sender_id\" and b.blocker_id=peer.user_id)",
+    "    '              on (b.blocker_id=\"scheduled_messages\".\"sender_id\" and b.blocked_id=peer.user_id)\\n' +",
+    "    '                or (b.blocked_id=\"scheduled_messages\".\"sender_id\" and b.blocker_id=peer.user_id)\\n' +",
+    "  [cause]: Error: timeout exceeded when trying to connect",
+    "⨯ Error: Failed query: update \"messages\" set \"updated_at\" = $1, \"deleted_at\" = $2 where (\"messages\".\"conversation_id\" = $3 and \"messages\".\"deleted_at\" is null and \"messages\".\"expires_at\" <= $4)",
+    "  [cause]: Error: timeout exceeded when trying to connect",
+    "⨯ Error: Failed query: select \"id\", \"conversation_id\", \"user_id\", \"role\", \"joined_at\", \"accepted_at\", \"pinned_at\", \"favorited_at\", \"muted_at\", \"archived_at\", \"cleared_at\", \"marked_unread_at\" from \"conversation_members\" where (\"conversation_members\".\"conversation_id\" = $1 and \"conversation_members\".\"user_id\" = $2) limit $3",
+    "  [cause]: Error: timeout exceeded when trying to connect",
+    "⨯ Error: Failed query: select \"enabled\" from \"user_2fa\" where \"user_2fa\".\"user_id\" = $1",
+    "  [cause]: Error: timeout exceeded when trying to connect",
+    "⨯ Error: Failed query: select \"id\", \"type\", \"name\", \"description\", \"avatar_url\", \"dm_key\", \"created_by_id\", \"last_message_at\", \"background_style\", \"background_opacity\", \"background_position_x\", \"background_position_y\", \"created_at\", \"updated_at\", \"deleted_at\", \"admin_only_messaging\", \"rules\", \"announcements\", \"slow_mode_seconds\", \"disappearing_seconds\", \"last_message_by\" from \"conversations\" where (\"conversations\".\"id\" in ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) and \"conversations\".\"deleted_at\" is null)",
+    "  [cause]: Error: timeout exceeded when trying to connect",
+    "⨯ Error: Failed query: select \"id\", \"name\", \"description\", \"avatar_url\", \"created_by\", \"is_public\", \"created_at\", \"updated_at\" from \"communities\" where \"communities\".\"id\" in ($1)",
+    "  [cause]: Error: timeout exceeded when trying to connect",
+    "⨯ Error: Failed query: select \"id\" from \"device_sessions\" where (\"device_sessions\".\"id\" = $1 and \"device_sessions\".\"user_id\" = $2 and \"device_sessions\".\"revoked_at\" is null and \"device_sessions\".\"expires_at\" > $3)",
+    "  [cause]: Error: timeout exceeded when trying to connect",
+    "⨯ Error: Failed query: select \"messages\".\"id\", \"messages\".\"conversation_id\", \"messages\".\"sender_id\", \"messages\".\"client_message_id\", \"messages\".\"text\", \"messages\".\"type\", \"messages\".\"reply_to_message_id\", \"messages\".\"forwarded\", \"messages\".\"encrypted\", \"messages\".\"delivered_at\", \"messages\".\"created_at\", \"messages\".\"updated_at\", \"messages\".\"edited_at\", \"messages\".\"deleted_at\", \"messages\".\"expires_at\", \"users\".\"id\", \"users\".\"username\", \"users\".\"display_name\", \"users\".\"email\", \"users\".\"email_verified_at\", \"users\".\"password_hash\", \"users\".\"avatar_url\", \"users\".\"bio\", \"users\".\"role\", \"users\".\"suspended_at\", \"users\".\"suspended_until\", \"users\".\"suspension_reason\", \"users\".\"suspended_by\", \"users\".\"created_at\", \"users\".\"updated_at\", \"users\".\"last_seen_at\", \"users\".\"token_invalid_before_at\" from \"messages\" inner join \"users\" on \"messages\".\"sender_id\" = \"users\".\"id\" where \"messages\".\"conversation_id\" = $1 order by \"messages\".\"created_at\" desc, \"messages\".\"id\" desc limit $2",
+    "  [cause]: Error: timeout exceeded when trying to connect"
+  ]
+}

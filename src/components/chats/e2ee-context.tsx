@@ -1,0 +1,197 @@
+"use client";
+
+/**
+ * E2EE media plumbing.
+ *
+ * Attachments sent while a conversation is E2EE-active are stored as opaque
+ * AES-GCM ciphertext. This context gives every media consumer (inline images,
+ * lightbox, file chips, voice players) a way to download + decrypt an
+ * attachment into a usable object URL — all inside the browser, so the
+ * server never sees plaintext bytes.
+ */
+
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
+import type { AttachmentDTO } from "@/lib/types";
+import {useExpiredAt} from "@/hooks/use-expired-at";
+import { registerLocalAudio, forgetLocalAudio } from "@/lib/audio-analysis";
+
+type DecryptFn = (
+  encryptedBytesB64: string | ArrayBuffer,
+  wrappedKeyB64: string,
+  conversationId: string,
+) => Promise<ArrayBuffer>;
+
+interface E2EEMediaContextValue {
+  conversationId: string;
+  decryptMedia: DecryptFn;
+  initialized: boolean;
+  initializationError: string | null;
+}
+
+const E2EEMediaContext = createContext<E2EEMediaContextValue | null>(null);
+
+export function E2EEMediaProvider({
+  conversationId,
+  decryptMedia,
+  initialized,
+  initializationError,
+  children,
+}: {
+  conversationId: string;
+  decryptMedia: DecryptFn;
+  initialized: boolean;
+  initializationError: string | null;
+  children: ReactNode;
+}) {
+  const value = useMemo(
+    () => ({ conversationId, decryptMedia, initialized, initializationError }),
+    [conversationId, decryptMedia, initialized, initializationError],
+  );
+  return (
+    <E2EEMediaContext.Provider value={value}>
+      {children}
+    </E2EEMediaContext.Provider>
+  );
+}
+
+function useE2EEMediaContext(): E2EEMediaContextValue | null {
+  return useContext(E2EEMediaContext);
+}
+
+/* Module-level cache of decrypted object URLs (one per attachment). */
+const objectUrlCache = new Map<string, string>();
+const expiredAttachmentIds = new Set<string>();
+export function forgetDecryptedAttachments(ids: string[]) {
+  for(const id of ids) {
+    expiredAttachmentIds.add(id);
+    const url=objectUrlCache.get(id); if(url) {URL.revokeObjectURL(url);forgetLocalAudio(url);}
+    objectUrlCache.delete(id);
+  }
+}
+
+
+/**
+ * Resolves an attachment to a renderable URL. Plaintext attachments pass
+ * straight through to the authenticated media endpoint; encrypted ones are
+ * fetched as a blob, decrypted with the conversation key, and served from an
+ * object URL. Returns null while decrypting / on failure.
+ */
+export function useEncryptedAttachmentUrl(
+  attachment?: AttachmentDTO | null,
+): { url: string | null; failed: boolean } {
+  const ctx = useE2EEMediaContext();
+  const { id, url, encrypted, encKey, mimeType, expiresAt } = attachment ?? {};
+  const expired=useExpiredAt(expiresAt);
+  useEffect(()=>{if(expired && id)forgetDecryptedAttachments([id]);},[expired,id]);
+  const request = useMemo(
+    () => ({ id, url, encrypted, encKey, mimeType, ctx, expired }),
+    [id, url, encrypted, encKey, mimeType, ctx, expired],
+  );
+  const [state, setState] = useState<{
+    request: typeof request | null; url: string | null; failed: boolean;
+  }>({ request: null, url: null, failed: false });
+
+  useEffect(() => {
+    const { id, url, encrypted, encKey, mimeType, ctx, expired } = request;
+
+    if (!id || !url || !encrypted || !encKey || expired) {
+      return;
+    }
+
+    if (!ctx?.initialized || ctx.initializationError || objectUrlCache.has(id)) return;
+
+    const attachment = { id, url, encKey, mimeType };
+    let cancelled = false;
+    const controller = new AbortController();
+
+    const timeoutId = typeof window !== "undefined"
+      ? window.setTimeout(() => controller.abort(), mimeType?.startsWith("video/") ? 900000 : 180000)
+      : null;
+
+    (async () => {
+      try {
+        let plain: ArrayBuffer | undefined;
+        let lastError: Error | undefined;
+
+        for (let attempt = 0; attempt < 3; attempt++) {
+          if (cancelled) return;
+
+          try {
+            const res = await fetch(attachment.url, {
+              cache: "no-store",
+              signal: controller.signal,
+            });
+
+            if (!res.ok) {
+              throw new Error(`fetch_failed: ${res.status} ${res.statusText}`);
+            }
+
+            const ciphertext = await res.arrayBuffer();
+            if (ciphertext.byteLength < 28) {
+              throw new Error(`media_download_incomplete: received ${ciphertext.byteLength} bytes`);
+            }
+            plain = await ctx.decryptMedia(
+              ciphertext, attachment.encKey!, ctx.conversationId,
+            );
+            break;
+          } catch (error) {
+            lastError = error as Error;
+            if (cancelled) return;
+
+            if (attempt < 2) {
+              await new Promise((resolve) => setTimeout(resolve, 1500));
+            }
+          }
+        }
+
+        if (cancelled) return;
+
+        if (!plain) {
+          console.error("[E2EE] Decryption failed: no plaintext result after retries", lastError);
+          setState({ request, url: null, failed: true });
+          return;
+        }
+
+        if (expiredAttachmentIds.has(attachment.id)) return;
+        const blob = new Blob([plain], { type: attachment.mimeType || "application/octet-stream" });
+        const objectUrl = URL.createObjectURL(blob);
+        if (attachment.mimeType?.startsWith("audio/")) registerLocalAudio(objectUrl, blob);
+        objectUrlCache.set(attachment.id, objectUrl);
+        setState({ request, url: objectUrl, failed: false });
+      } catch (error) {
+        console.error("[E2EE] Decryption error:", error);
+        if (!cancelled) setState({ request, url: null, failed: true });
+      } finally {
+        if (timeoutId) window.clearTimeout(timeoutId);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+      if (timeoutId) window.clearTimeout(timeoutId);
+    };
+  }, [request]);
+
+  if (!id) return { url: null, failed: false };
+  if (expired || expiredAttachmentIds.has(id)) return { url: null, failed: true };
+  if (!encrypted) return { url: url ?? null, failed: false };
+  if (!ctx || !encKey || ctx.initializationError) return { url: null, failed: true };
+  if (!ctx.initialized) return { url: null, failed: false };
+  const cached = objectUrlCache.get(id);
+  if (cached) return { url: cached, failed: false };
+  return state.request === request ? state : { url: null, failed: false };
+}
+
+/** Picks a context-provided decrypt function from any provider above. */
+export function useDecryptMedia(): DecryptFn | null {
+  const ctx = useE2EEMediaContext();
+  return ctx?.decryptMedia ?? null;
+}

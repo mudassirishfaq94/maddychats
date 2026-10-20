@@ -1,0 +1,171 @@
+"use client";
+
+import { AdminLoadError } from "@/components/admin/admin-load-error";
+
+import { useAdminProof } from "@/components/admin-authentication";
+
+import { useEffect, useState, useCallback } from "react";
+import {
+  Search,
+  Loader2,
+  ChevronLeft,
+  ChevronRight,
+  Trash2,
+  X,
+} from "lucide-react";
+import { Avatar } from "@/components/avatar";
+import { cn, timeAgo } from "@/lib/utils";
+
+interface AdminMessage {
+  id: string;
+  type: string;
+  encrypted: boolean;
+  deletedAt: string|null;
+  createdAt: string;
+  senderId: string;
+  senderName: string;
+  senderUsername: string;
+  conversationId: string;
+  conversationName: string;
+}
+
+export default function AdminMessagesPage() {
+  const { proof, clearProof, form } = useAdminProof();
+  const [error, setError] = useState<string | null>(null);
+  const [messages, setMessages] = useState<AdminMessage[]>([]);
+  const [pagination, setPagination] = useState({ page: 1, limit: 30, total: 0, totalPages: 1 });
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [searchInput, setSearchInput] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const fetchMessages = useCallback(async (page = 1, q = search) => {
+    setLoading(true); setError(null);
+    try {
+      const params = new URLSearchParams({ page: String(page), limit: "30" });
+      if (q) params.set("q", q);
+      const res = await fetch(`/api/admin/messages?${params}`, { cache: "no-store", signal: AbortSignal.timeout(15000) });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Could not load this admin page.");
+      setMessages(data.messages ?? []);
+      setPagination(data.pagination);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not load this admin page. Try again.");
+    } finally {
+      setLoading(false);
+    }
+  }, [search]);
+
+  /* eslint-disable react-hooks/set-state-in-effect, react-hooks/exhaustive-deps */
+  useEffect(() => { fetchMessages(); }, []);
+  /* eslint-enable react-hooks/set-state-in-effect, react-hooks/exhaustive-deps */
+
+  function handleSearch() {
+    setSearch(searchInput);
+    fetchMessages(1, searchInput);
+  }
+
+  async function deleteMessage(id: string) {
+    if (!confirm("Delete this message?")) return;
+    setBusy(true); setError(null);
+    try {
+      const response = await fetch(`/api/admin/messages/${id}`, { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify(proof) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "Message deletion failed.");
+      await fetchMessages(pagination.page);
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Message deletion failed."); }
+    finally { clearProof(); setBusy(false); }
+  }
+
+  if (error) return <AdminLoadError message={error} retry={() => void fetchMessages()} />;
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h1 className="text-xl font-bold">Messages</h1>
+        <p className="mt-0.5 text-sm text-[var(--muted)]">
+          Review message metadata and act on reports. Private message content stays private.
+        </p>
+      </div>
+
+      {form}
+      {error && <p role="alert" className="text-sm text-[var(--danger)]">{error}</p>}
+      {/* Search */}
+      <div className="flex gap-2">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted)]" />
+          <input
+            type="text"
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+            placeholder="Search sender username or message ID…"
+            className="field-input field-input--icon w-full py-2! text-sm!"
+          />
+        </div>
+        <button type="button" onClick={handleSearch} className="btn btn-primary px-4 py-2 text-sm">
+          Search
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="flex justify-center py-12">
+          <Loader2 className="h-6 w-6 animate-spin text-[var(--muted)]" />
+        </div>
+      ) : messages.length === 0 ? (
+        <div className="py-12 text-center text-sm text-[var(--muted)]">No messages found.</div>
+      ) : (
+        <div className="space-y-2">
+          {messages.map((msg) => (
+            <div key={msg.id} className="card-flat flex items-start gap-3 rounded-xl p-3">
+              <Avatar user={{ displayName: msg.senderName, username: msg.senderUsername, avatarUrl: null } as never} size={32} />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-baseline gap-2">
+                  <span className="text-sm font-semibold">{msg.senderName}</span>
+                  <span className="text-[0.65rem] text-[var(--muted)]">@{msg.senderUsername}</span>
+                  <span className="text-[0.6rem] text-[var(--muted)]">in {msg.conversationName}</span>
+                </div>
+                <p className="mt-0.5 line-clamp-2 text-sm">{msg.deletedAt ? "Deleted message" : `${msg.type} · Private content`}</p>
+                <p className="mt-1 text-[0.6rem] text-[var(--muted)]">{timeAgo(msg.createdAt)}</p>
+              </div>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => deleteMessage(msg.id)}
+                className="shrink-0 rounded-lg p-1.5 text-[var(--muted)] hover:bg-[color-mix(in_srgb,var(--danger)_8%,transparent)] hover:text-[var(--danger)]"
+                title="Delete message"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Pagination */}
+      {pagination.totalPages > 1 && (
+        <div className="flex items-center justify-center gap-2">
+          <button
+            type="button"
+            disabled={pagination.page <= 1}
+            onClick={() => fetchMessages(pagination.page - 1)}
+            className="btn btn-ghost px-3 py-1.5 text-sm disabled:opacity-40"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+          <span className="text-sm text-[var(--muted)]">
+            Page {pagination.page} of {pagination.totalPages}
+          </span>
+          <button
+            type="button"
+            disabled={pagination.page >= pagination.totalPages}
+            onClick={() => fetchMessages(pagination.page + 1)}
+            className="btn btn-ghost px-3 py-1.5 text-sm disabled:opacity-40"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}

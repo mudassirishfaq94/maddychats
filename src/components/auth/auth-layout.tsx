@@ -1,0 +1,131 @@
+import Link from "next/link";
+import type { ReactNode } from "react";
+import type * as React from "react";
+import { Lock } from "lucide-react";
+import { LogoWordmark, LogoMark } from "@/components/brand/logo";
+import { ThemeToggle } from "@/components/theme-toggle";
+
+/**
+ * Clean split for the public auth pages: restrained brand panel on the left,
+ * the form on the right. Monochrome, no decorative noise.
+ */
+export function AuthLayout({
+  title,
+  subtitle,
+  children,
+  footer,
+  entry,
+}: {
+  title: string;
+  subtitle: string;
+  children: ReactNode;
+  footer?: ReactNode;
+  entry?: ReactNode;
+}) {
+  return (
+    <main className="grid min-h-dvh bg-[var(--bg)] lg:grid-cols-[1fr_1fr]">
+      {/* ------- brand panel ------- */}
+      <section className="relative hidden flex-col justify-between border-r border-[var(--border)] brand-panel p-12 lg:flex">
+        <Link href="/" aria-label="Circlo home" className="animate-fade-up">
+          <LogoWordmark size={30} />
+        </Link>
+
+        <div className="max-w-md">
+          <h2
+            className="font-display text-[2.6rem] font-bold leading-[1.1] animate-fade-up"
+            style={{ "--d": "100ms" } as React.CSSProperties}
+          >
+            Your circle.
+            <br />
+            Your secrets. Sealed.
+          </h2>
+          <p
+            className="mt-4 text-[1rem] leading-relaxed text-[var(--muted)] animate-fade-up"
+            style={{ "--d": "180ms" } as React.CSSProperties}
+          >
+            A little closer to your people. A little further from the noise.
+          </p>
+
+          <div
+            className="mt-10 animate-fade-up"
+            style={{ "--d": "260ms" } as React.CSSProperties}
+            aria-hidden="true"
+          >
+            <div className="card-glass circlo-drift w-fit rotate-[-2deg] rounded-[1.5rem] px-4 py-3 shadow-sm">
+              <div className="flex items-center gap-2.5">
+                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[var(--surface-2)] text-[var(--muted)]">
+                  <LogoMark size={17} />
+                </span>
+                <span className="text-sm font-semibold">Circlo</span>
+                <span className="flex items-center gap-1 text-[0.68rem] text-[var(--accent-fg)]">
+                  <span className="h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />
+                  Online
+                </span>
+              </div>
+              <div className="mt-3 flex flex-col gap-2">
+                <div className="rounded-xl rounded-bl-sm border border-[var(--border)] bg-[var(--bubble-other-bg)] px-3 py-1.5 text-sm">
+                  See you in a minute!
+                </div>
+                <div className="ml-auto rounded-xl rounded-br-sm bg-[var(--bubble-own-bg)] px-3 py-1.5 text-sm text-[var(--bubble-own-fg)]">
+                  Already here.
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <p className="text-xs text-[var(--muted)]">
+          Real-time · End-to-end encrypted · Simple
+        </p>
+        <div className="mt-2 flex items-center gap-2 rounded-xl border border-[color-mix(in_srgb,var(--accent)_20%,transparent)] bg-[color-mix(in_srgb,var(--accent)_5%,transparent)] px-3 py-2">
+          <Lock className="h-3.5 w-3.5 shrink-0 text-[var(--accent-fg)]" />
+          <span className="text-[0.7rem] leading-relaxed text-[var(--muted)]">
+            Chat messages are encrypted on your device before sending. Keep your device keys safe to access your history.
+          </span>
+        </div>
+      </section>
+
+      {/* ------- form panel ------- */}
+      <section className="flex flex-col px-5 py-6 sm:px-10">
+        <div className="flex items-center justify-between">
+          <Link href="/" className="lg:hidden" aria-label="Circlo home">
+            <LogoWordmark size={26} />
+          </Link>
+          <span className="hidden lg:block" />
+          <ThemeToggle />
+        </div>
+
+        <div className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center py-6">
+          {entry}
+          <h1
+            className="font-display text-[1.9rem] font-bold leading-tight animate-fade-up"
+            style={{ "--d": "60ms" } as React.CSSProperties}
+          >
+            {title}
+          </h1>
+          <p
+            className="mt-2 text-[0.95rem] text-[var(--muted)] animate-fade-up"
+            style={{ "--d": "120ms" } as React.CSSProperties}
+          >
+            {subtitle}
+          </p>
+          <div className="mt-8 animate-fade-up" style={{ "--d": "180ms" } as React.CSSProperties}>
+            {children}
+          </div>
+          {footer ? (
+            <div
+              className="mt-8 text-center text-sm text-[var(--muted)] animate-fade-up"
+              style={{ "--d": "240ms" } as React.CSSProperties}
+            >
+              {footer}
+            </div>
+          ) : null}
+        </div>
+
+        <p className="text-center text-xs text-[var(--muted)] opacity-70">
+          <span className="inline-flex items-center gap-1"><Lock className="h-2.5 w-2.5" />End-to-end encrypted</span>
+        </p>
+      </section>
+    </main>
+  );
+}

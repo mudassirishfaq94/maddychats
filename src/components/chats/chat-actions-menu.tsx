@@ -1,0 +1,202 @@
+"use client";
+
+import { useRef, useState } from "react";
+import { MessagePopover } from "./message-popover";
+import { useRouter } from "next/navigation";
+import {
+  Archive,
+  Clock3,
+  Download,
+  Bell,
+  BellOff,
+  Ban,
+  CircleAlert,
+  Info,
+  Loader2,
+  MoreVertical,
+  Search,
+  Star,
+  Trash2,
+  XCircle,
+} from "lucide-react";
+import type { ConversationDetail, PublicUser } from "@/lib/types";
+
+type Control = "mute" | "unmute" | "archive" | "clear" | "setDisappearing" | "favorite" | "unfavorite";
+
+export function ChatActionsMenu({
+  conversationId,
+  conversation,
+  other,
+  onOpenInfo,
+  onOpenSearch,
+  onReport,
+}: {
+  conversationId: string;
+  conversation: ConversationDetail;
+  other: PublicUser | null;
+  onOpenInfo: () => void;
+  onOpenSearch: () => void;
+  onReport: () => void;
+}) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [confirmClear, setConfirmClear] = useState(false);
+  const [blocked, setBlocked] = useState(conversation.blocked);
+  const [exporting, setExporting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const anchor = useRef<HTMLButtonElement>(null);
+
+  async function control(action: Control) {
+    setBusy(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/conversations/${conversationId}/controls`, {
+        method: "POST", signal: AbortSignal.timeout(15000),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+      if (!response.ok) throw new Error(response.status === 401 ? "Sign in again, then retry." : "That action could not be completed. Please retry.");
+      setOpen(false);
+      setConfirmClear(false);
+      if (action === "clear") router.push("/app/chats");
+      router.refresh();
+      return true;
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Check your connection and retry."); return false;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function toggleBlock() {
+    if (!other) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/users/${other.id}/block`, { method: blocked ? "DELETE" : "POST", signal: AbortSignal.timeout(15000) });
+      if (!response.ok) throw new Error(response.status === 401 ? "Sign in again, then retry." : "That action could not be completed. Please retry.");
+      setBlocked((value) => !value);
+      setOpen(false);
+      router.refresh();
+      return true;
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Check your connection and retry."); return false;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function setDisappearing(seconds: number) {
+    setBusy(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/conversations/${conversationId}/controls`, {
+        method: "POST", signal: AbortSignal.timeout(15000), headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "setDisappearing", disappearingSeconds: seconds }),
+      });
+      if (!response.ok) throw new Error("The timer could not be saved. Please retry.");
+      setOpen(false); router.refresh();
+    } catch { setError("The timer could not be saved. Check your connection and retry."); } finally { setBusy(false); }
+  }
+
+  async function exportChat() {
+    setExporting(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/conversations/${conversationId}/export`, { signal: AbortSignal.timeout(15000) });
+      if (!response.ok) throw new Error(response.status === 401 ? "Sign in again, then retry." : "That action could not be completed. Please retry.");
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url; link.download = `circlo-chat-${conversationId}.json`; link.click();
+      URL.revokeObjectURL(url);
+      setOpen(false);
+    } catch { setError("The export could not be downloaded. Check your connection and retry."); } finally { setExporting(false); }
+  }
+
+  async function closeChat() {
+    if (await control("archive")) router.push("/app/chats");
+  }
+
+  const item = "flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition-colors hover:bg-[color-mix(in_srgb,var(--muted)_10%,transparent)]";
+  const openInfo = () => { setOpen(false); onOpenInfo(); };
+  const openSearch = () => { setOpen(false); onOpenSearch(); };
+  const openReport = () => { setOpen(false); onReport(); };
+
+  return (
+    <div className="relative shrink-0">
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        ref={anchor}
+        aria-label="Chat options"
+        aria-expanded={open}
+        className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full text-[var(--muted)] transition-colors hover:bg-[color-mix(in_srgb,var(--muted)_12%,transparent)] hover:text-[var(--text)]"
+      >
+        {busy ? <Loader2 className="h-5 w-5 animate-spin" /> : <MoreVertical className="h-5 w-5" />}
+      </button>
+
+      {open ? (
+        <MessagePopover anchor={anchor} role="menu" label="Chat options" onClose={() => { setOpen(false); setConfirmClear(false); }} className="w-64">
+          {error ? <p role="alert" className="m-1 rounded-xl bg-[var(--surface-2)] p-3 text-xs text-[var(--danger)]">{error}</p> : null}
+          <fieldset disabled={busy || exporting} className="contents">
+          <button type="button" role="menuitem" className={item} onClick={openInfo}>
+            <Info className="h-4 w-4" />
+            {conversation.type === "group" ? "Group info & settings" : "Contact info"}
+          </button>
+          <button type="button" role="menuitem" className={item} onClick={openSearch}>
+            <Search className="h-4 w-4" /> Search messages
+          </button>
+          <button type="button" role="menuitem" className={item} onClick={() => void control(conversation.favorited ? "unfavorite" : "favorite")}>
+            <Star className={`h-4 w-4 ${conversation.favorited ? "fill-current text-[var(--accent-fg)]" : ""}`} /> {conversation.favorited ? "Remove from favorites" : "Add to favorites"}
+          </button>
+          <div className="my-1 border-t border-[var(--border)]" />
+          <button type="button" role="menuitem" className={item} onClick={() => void control(conversation.muted ? "unmute" : "mute")}>
+            {conversation.muted ? <Bell className="h-4 w-4" /> : <BellOff className="h-4 w-4" />}
+            {conversation.muted ? "Unmute notifications" : "Mute notifications"}
+          </button>
+          <button type="button" role="menuitem" className={item} onClick={() => void control("archive")}>
+            <Archive className="h-4 w-4" /> Archive chat
+          </button>
+          <button type="button" role="menuitem" className={item} onClick={() => void exportChat()} disabled={exporting}>
+            {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />} Export chat
+          </button>
+          <div className="my-1 border-t border-[var(--border)]" />
+          <p className="px-3 pb-1 pt-1 text-[0.68rem] font-semibold uppercase tracking-wide text-[var(--muted)]">Disappearing messages</p>
+          <div className="px-2 pb-1">
+            <select aria-label="Disappearing message duration" defaultValue={conversation.disappearingSeconds} onChange={(event) => void setDisappearing(Number(event.target.value))} className="field-input py-2! text-xs!">
+              <option value={0}>Off</option><option value={86400}>After 24 hours</option><option value={604800}>After 7 days</option><option value={2592000}>After 30 days</option>
+            </select>
+          </div>
+          <div className="my-1 border-t border-[var(--border)]" />
+          {other ? (
+            <button type="button" role="menuitem" className={`${item} text-[var(--danger)]`} onClick={() => void toggleBlock()}>
+              <Ban className="h-4 w-4" /> {blocked ? "Unblock contact" : "Block contact"}
+            </button>
+          ) : null}
+          {other ? (
+            <button type="button" role="menuitem" className={`${item} text-[var(--danger)]`} onClick={openReport}>
+              <CircleAlert className="h-4 w-4" /> Report contact
+            </button>
+          ) : null}
+          {confirmClear ? (
+            <div className="m-1 rounded-xl bg-[color-mix(in_srgb,var(--danger)_10%,transparent)] p-3">
+              <p className="text-xs leading-relaxed text-[var(--muted)]">Delete this chat for you only? The other person keeps their messages.</p>
+              <div className="mt-2 flex gap-2">
+                <button type="button" onClick={() => void control("clear")} className="rounded-lg bg-[var(--danger)] px-2.5 py-1.5 text-xs font-semibold text-white">Delete</button>
+                <button type="button" onClick={() => setConfirmClear(false)} className="rounded-lg px-2.5 py-1.5 text-xs text-[var(--muted)]">Cancel</button>
+              </div>
+            </div>
+          ) : (
+            <button type="button" role="menuitem" className={`${item} text-[var(--danger)]`} onClick={() => setConfirmClear(true)}>
+              <Trash2 className="h-4 w-4" /> Delete chat
+            </button>
+          )}
+          <button type="button" role="menuitem" className={`${item} text-[var(--muted)]`} onClick={() => void closeChat()}>
+            <XCircle className="h-4 w-4" /> Close chat
+          </button>
+          </fieldset>
+        </MessagePopover>
+      ) : null}
+    </div>
+  );
+}

@@ -1,0 +1,241 @@
+"use client";
+
+import { Mic2, Pause, Play, Captions, Loader2, Lock } from "lucide-react";
+import { useState } from "react";
+import type { AttachmentDTO, PublicUser } from "@/lib/types";
+import { Avatar } from "@/components/avatar";
+import { Waveform } from "./waveform";
+import { useVoicePlayback } from "@/hooks/use-audio-player";
+import { cn } from "@/lib/utils";
+import { useEncryptedAttachmentUrl } from "./e2ee-context";
+
+function finiteTime(value: number): number {
+  return Number.isFinite(value) && value > 0 ? value : 0;
+}
+
+function formatDuration(seconds: number): string {
+  const s = finiteTime(seconds);
+  const m = Math.floor(s / 60);
+  const sec = Math.floor(s % 60);
+  return `${m}:${sec.toString().padStart(2, "0")}`;
+}
+
+export function AudioMessage({
+  src,
+  own,
+  duration: initialDuration,
+  sender,
+  transcript: initialTranscript,
+  attachmentId,
+  attachment,
+}: {
+  src: string;
+  own: boolean;
+  duration?: number;
+  sender?: PublicUser;
+  transcript?: string | null;
+  attachmentId?: string;
+  /** When given (E2EE voice), bytes are fetched + decrypted client-side. */
+  attachment?: AttachmentDTO;
+}) {
+  const [transcript, setTranscript] = useState(attachment?.encrypted ? null : initialTranscript ?? null);
+  const [transcribing, setTranscribing] = useState(false);
+  const resolved = useEncryptedAttachmentUrl(attachment);
+  // Encrypted voice resolves to a decrypted object URL; local previews pass src.
+  const effectiveSrc = attachment?.encrypted ? (resolved.url ?? "") : src;
+  const decrypting = Boolean(attachment?.encrypted && !resolved.url && !resolved.failed);
+
+  const voiceId = `voice-${effectiveSrc || attachment?.id || src}`;
+  const {
+    playing,
+    currentTime,
+    duration,
+    loading,
+    error,
+    togglePlay,
+    seek,
+    playbackRate,
+    cyclePlaybackRate,
+  } = useVoicePlayback(voiceId, effectiveSrc);
+
+  if (decrypting) {
+    return (
+      <div
+        className={cn(
+          "flex items-center gap-3 rounded-2xl px-4 py-3",
+          own
+            ? "rounded-br-md text-[var(--bubble-own-fg)]"
+            : "rounded-bl-md border border-[var(--border)] bg-[var(--bubble-other-bg)]",
+        )}
+        style={own ? { background: "var(--voice-own-bg)" } : undefined}
+      >
+        <Loader2 className="h-4 w-4 animate-spin opacity-70" />
+        <span className="text-xs opacity-80">Loading voice message…</span>
+      </div>
+    );
+  }
+
+  const totalDuration = duration || finiteTime(initialDuration ?? 0);
+  const progress = totalDuration ? (currentTime / totalDuration) * 100 : 0;
+
+  if (error || resolved.failed) {
+    return (
+      <div
+        className={cn(
+          "flex items-center gap-3 rounded-2xl px-4 py-3",
+          own
+            ? "rounded-br-md text-[var(--bubble-own-fg)]"
+            : "rounded-bl-md border border-[var(--border)] bg-[var(--bubble-other-bg)]",
+        )}
+        style={own ? { background: "var(--voice-own-bg)" } : undefined}
+      >
+        <Mic2 className="h-4 w-4 opacity-50" />
+        <span className="text-xs opacity-70">Voice message unavailable</span>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={cn(
+        "flex min-w-0 max-w-full items-end gap-2",
+        own ? "flex-row-reverse" : "flex-row",
+      )}
+    >
+      {/* Avatar */}
+      {sender && (
+        <span className="mb-0.5 shrink-0">
+          <Avatar user={sender} size={28} />
+        </span>
+      )}
+
+      {/* Voice bubble */}
+      <div
+        className={cn(
+          "flex w-[min(300px,60vw)] min-w-0 max-w-full items-center gap-3 rounded-2xl px-3 py-2.5",
+          own
+            ? "rounded-br-md"
+            : "rounded-bl-md border border-[var(--border)] bg-[var(--bubble-other-bg)]",
+        )}
+        style={own ? { background: "var(--voice-own-bg)" } : undefined}
+      >
+        {/* Play/Pause button */}
+        <button
+          type="button"
+          onClick={() => void togglePlay()}
+          disabled={!effectiveSrc}
+          aria-label={playing ? "Pause voice message" : "Play voice message"}
+          className={cn(
+            "flex h-10 w-10 shrink-0 items-center justify-center rounded-full shadow-sm transition-all active:scale-95",
+            own
+              ? "bg-[var(--bubble-own-fg)]/10 text-[var(--bubble-own-fg)] hover:bg-[var(--bubble-own-fg)]/20"
+              : "bg-[var(--action)] text-[var(--action-fg)] hover:brightness-110",
+          )}
+        >
+          {loading ? (
+            <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+          ) : playing ? (
+            <Pause className="h-4 w-4 fill-current" />
+          ) : (
+            <Play className="ml-0.5 h-4 w-4 fill-current" />
+          )}
+        </button>
+
+        {/* Waveform + time */}
+        <div className="min-w-0 flex-1">
+          <Waveform
+            src={effectiveSrc}
+            progress={progress}
+            playing={playing}
+            own={own}
+            onSeek={totalDuration ? (fraction) => seek(fraction * totalDuration) : undefined}
+            height={28}
+            loading={loading}
+          />
+
+          <div className="mt-1 flex flex-wrap items-center justify-between gap-1">
+            <button
+              type="button"
+              onClick={cyclePlaybackRate}
+              className={cn(
+                "rounded-full px-1.5 py-0.5 text-[0.6rem] font-bold tabular-nums transition-colors",
+                own ? "bg-[var(--bubble-own-fg)]/10 text-[var(--bubble-own-fg)] hover:bg-[var(--bubble-own-fg)]/20" : "bg-[var(--accent-soft)] text-[var(--accent-fg)]",
+              )}
+              aria-label={`Playback speed ${playbackRate} times. Change speed`}
+              title="Change playback speed"
+            >
+              {playbackRate}×
+            </button>
+            <span
+              className={cn(
+                "text-[0.65rem] tabular-nums",
+                own ? "text-[var(--bubble-own-sub)]" : "text-[var(--muted)]",
+              )}
+            >
+              {playing || currentTime > 0
+                ? `${formatDuration(currentTime)} / ${formatDuration(totalDuration)}`
+                : formatDuration(totalDuration)}
+            </span>
+            <span
+              className={cn(
+                "flex items-center gap-1 text-[0.6rem] font-medium uppercase tracking-wide",
+                own ? "text-[var(--bubble-own-sub)]" : "text-[var(--muted)]",
+              )}
+            >
+              <Mic2 className="h-2.5 w-2.5" />
+              Voice
+            </span>
+          </div>
+          {attachment?.encrypted ? (
+            <span
+              className={cn(
+                "mt-1 flex items-center gap-1 text-[0.58rem] font-medium uppercase tracking-wide",
+                own ? "text-[var(--bubble-own-sub)]" : "text-[var(--muted)]",
+              )}
+            >
+              <Lock className="h-2.5 w-2.5" />
+              End-to-end encrypted
+            </span>
+          ) : null}
+
+          {/* Transcript */}
+          {!attachment?.encrypted && transcript ? (
+            <p className={cn(
+              "mt-2 border-t pt-2 text-[0.75rem] leading-relaxed",
+              own ? "border-[var(--bubble-own-fg)]/20 text-[var(--bubble-own-fg)]" : "border-[var(--border)] text-[var(--muted)]",
+            )}>
+              {transcript}
+            </p>
+          ) : attachmentId && !attachment?.encrypted ? (
+            <button
+              type="button"
+              onClick={async () => {
+                setTranscribing(true);
+                try {
+                  const res = await fetch(`/api/messages/transcribe`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ attachmentId, audioUrl: src }),
+                  });
+                  if (res.ok) {
+                    const data = await res.json();
+                    setTranscript(data.transcript);
+                  }
+                } catch {}
+                setTranscribing(false);
+              }}
+              disabled={transcribing}
+              className={cn(
+                "mt-2 flex items-center gap-1.5 border-t pt-2 text-[0.65rem] font-medium transition-colors",
+                own ? "border-[var(--bubble-own-fg)]/20 text-[var(--bubble-own-sub)] hover:text-[var(--bubble-own-fg)]" : "border-[var(--border)] text-[var(--muted)] hover:text-[var(--text)]",
+              )}
+            >
+              {transcribing ? <Loader2 className="h-3 w-3 animate-spin" /> : <Captions className="h-3 w-3" />}
+              {transcribing ? "Transcribing..." : "Show transcript"}
+            </button>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}

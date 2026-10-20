@@ -1,0 +1,63 @@
+import { createHash, randomBytes } from "crypto";
+import { and, eq, gt, isNull, sql } from "drizzle-orm";
+import { db } from "@/db";
+import { deviceSessions, mfaChallenges, passwordResetTokens, users } from "@/db/schema";
+import { safeError } from "./safe-error";
+import { clientUrl } from "./config";
+import { hashPassword } from "./password";
+import type { UserRow } from "@/db/schema";
+
+const RESET_TTL_MS = 60 * 60 * 1000;
+const hashToken = (token: string) => createHash("sha256").update(token).digest("hex");
+const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" })[char]!);
+
+export function emailDeliveryConfigured() {
+  return Boolean(process.env.RESEND_API_KEY && resetSender());
+}
+function resetSender() { return process.env.EMAIL_FROM_ADDRESS ? `${process.env.EMAIL_FROM_NAME?.trim() || "Circlo"} <${process.env.EMAIL_FROM_ADDRESS.trim()}>` : process.env.EMAIL_FROM; }
+
+export async function issuePasswordReset(user: UserRow): Promise<boolean> {
+  if (!emailDeliveryConfigured() || user.email.endsWith("@auth.maddychats.invalid")) return false;
+  const token = randomBytes(32).toString("base64url");
+  const resetUrl = `${clientUrl()}/reset-password?token=${encodeURIComponent(token)}`;
+  const issued = await db.transaction(async tx => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`password-reset:${user.id}`},0))`);
+    const [recent] = await tx.select({ createdAt: passwordResetTokens.createdAt }).from(passwordResetTokens).where(eq(passwordResetTokens.userId, user.id)).orderBy(sql`${passwordResetTokens.createdAt} desc`).limit(1);
+    if (recent && Date.now() - recent.createdAt.getTime() < 60_000) return null;
+    await tx.delete(passwordResetTokens).where(eq(passwordResetTokens.userId, user.id));
+    const [row] = await tx.insert(passwordResetTokens).values({ userId: user.id, tokenHash: hashToken(token), expiresAt: new Date(Date.now() + RESET_TTL_MS) }).returning({ id: passwordResetTokens.id });
+    return row;
+  });
+  if (!issued) return false;
+  const name = escapeHtml(user.displayName);
+  const html = `<!doctype html><html><body style="margin:0;background:#f4f4ff;font-family:Arial,sans-serif;color:#19182f"><div style="padding:40px 16px"><div style="max-width:560px;margin:auto;background:#fff;border:1px solid #e3e2f4;border-radius:24px;overflow:hidden"><div style="background:#1a1935;color:#fff;padding:28px 32px"><div style="font-size:22px;font-weight:800;letter-spacing:-.5px">Circlo</div><div style="margin-top:6px;color:#c8c4ee;font-size:13px">Your people, your conversations.</div></div><div style="padding:34px 32px"><h1 style="font-size:25px;margin:0 0 14px">Reset your password</h1><p style="font-size:15px;line-height:1.65;color:#52525b">Hi ${name}, we received a request to reset your Circlo password.</p><a href="${resetUrl}" style="display:inline-block;margin:18px 0 22px;background:#6255d8;color:#fff;text-decoration:none;font-weight:700;padding:14px 22px;border-radius:12px">Choose a new password</a><p style="font-size:13px;line-height:1.6;color:#71717a">This secure link expires in one hour and can only be used once. If you didn’t request this, you can safely ignore this email—your password will remain unchanged.</p><div style="margin-top:26px;padding-top:20px;border-top:1px solid #e4e4e7;font-size:12px;color:#a1a1aa">Circlo</div></div></div></div></body></html>`;
+  let response;
+  try { response = await fetch("https://api.resend.com/emails", { method: "POST", signal: AbortSignal.timeout(15000), headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, "Content-Type": "application/json", "Idempotency-Key": `password-reset-${issued.id}` }, body: JSON.stringify({ from: resetSender(), to: [user.email], subject: "Reset your Circlo password", html, text: `Hi ${user.displayName},\n\nReset your Circlo password using this secure link:\n${resetUrl}\n\nThis link expires in one hour and can only be used once. If you didn't request this, ignore this email.` }) }); }
+  catch (error) { console.error("[circlo] Reset mail unavailable", safeError(error)); }
+  if (!response?.ok) {
+    await db.update(passwordResetTokens).set({ usedAt: new Date() }).where(eq(passwordResetTokens.id, issued.id));
+    console.error("[circlo] Reset email delivery failed:", response?.status ?? "unavailable");
+    return false;
+  }
+  return true;
+}
+
+export async function consumePasswordReset(token: string, password: string): Promise<boolean> {
+  const [eligible] = await db.select({ id: passwordResetTokens.id, userId: passwordResetTokens.userId }).from(passwordResetTokens)
+    .where(and(eq(passwordResetTokens.tokenHash, hashToken(token)), isNull(passwordResetTokens.usedAt), gt(passwordResetTokens.expiresAt, new Date()))).limit(1);
+  if (!eligible) return false;
+  // CPU work must not reserve a transaction connection or token row lock.
+  // The atomic UPDATE below still rechecks expiry and single-use after hashing.
+  const passwordHash = await hashPassword(password);
+  return db.transaction(async (tx) => {
+    await tx.select({ id: users.id }).from(users).where(eq(users.id, eligible.userId)).for("update");
+    const now = new Date();
+    const consumed = await tx.update(passwordResetTokens).set({ usedAt: now }).where(and(eq(passwordResetTokens.tokenHash, hashToken(token)), isNull(passwordResetTokens.usedAt), gt(passwordResetTokens.expiresAt, now))).returning({ userId: passwordResetTokens.userId });
+    if (!consumed[0]) return false;
+    await tx.update(users).set({ passwordHash, tokenInvalidBeforeAt: now, updatedAt: now, emailVerifiedAt: sql`coalesce(${users.emailVerifiedAt}, ${now})` }).where(eq(users.id, consumed[0].userId));
+    await tx.update(deviceSessions).set({ revokedAt: now }).where(and(eq(deviceSessions.userId, consumed[0].userId), isNull(deviceSessions.revokedAt)));
+    await tx.delete(mfaChallenges).where(eq(mfaChallenges.userId, consumed[0].userId));
+    await tx.delete(passwordResetTokens).where(eq(passwordResetTokens.userId, consumed[0].userId));
+    return true;
+  });
+}
