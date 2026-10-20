@@ -50,6 +50,8 @@ try {
   },{id:account.id,deviceId:account.deviceId,secret:account.secret,publicKey:account.publicKey,encryptedPrivateKey:account.encryptedPrivateKey});
   const page=await context.newPage();page.setDefaultTimeout(30000);page.setDefaultNavigationTimeout(120000);page.on("pageerror",error=>{errors.push(error.message);console.error("Browser runtime error:",error.message);});account.page=page;
   await page.goto(`${base}/app/chats/${group}`);await page.getByRole("textbox",{name:"Message text"}).waitFor();
+  await page.waitForFunction(id=>Boolean(localStorage.getItem(`e2ee_keypair_${id}`)),account.id);
+  assert.equal(await page.evaluate(({id,envelope})=>JSON.parse(localStorage.getItem(`e2ee_keypair_${id}`)).encryptedPrivateKey===envelope,{id:account.id,envelope:account.encryptedPrivateKey}),true,"An unchanged protected key envelope is reused during startup");
  }
  if(process.env.OFFLINE_ONLY==="1"){
   await testOfflineCompose(contexts[0],base,owner,group,pool,member);

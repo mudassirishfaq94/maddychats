@@ -47,11 +47,14 @@ function AccountConversationList({ userId, children }: { userId: string; childre
   }, [userId]);
   const read = useCallback(() => pending.current ?? (current.current ? Promise.resolve(current.current) : refresh()), [refresh]);
   const seed = useCallback((conversations: ConversationSummary[]) => {
+    // A prefetched tab may carry an older server snapshot than live state.
+    // Keep current data visible and reconcile rather than overwriting it.
+    if (current.current) { void refresh().catch(() => undefined); return; }
     revision.current++;
     const data = { viewerId: userId, conversations };
     current.current = data;
     setSnapshot(data);
-  }, [userId]);
+  }, [userId, refresh]);
 
   useEffect(() => {
     active.current = true;

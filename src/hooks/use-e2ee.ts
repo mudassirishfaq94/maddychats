@@ -981,6 +981,7 @@ export function useE2EE(userId: string | undefined) {
         if (attempt < 2) {
           // Clear cached keys so the next attempt re-fetches from the server.
           decryptionKeysRef.current.delete(conversationId);
+          localKeyLoadsRef.current.delete(conversationId);
           await sleep(1500 + attempt * 1000);
         }
       }
