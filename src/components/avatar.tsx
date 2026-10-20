@@ -67,7 +67,7 @@ function ProfilePhotoViewer({ user, onClose }: { user: AvatarUser; onClose: () =
           if (event.target === event.currentTarget) onClose();
         }}
       >
-        <Image
+        <Image unoptimized
           src={user.avatarUrl}
           alt={`${user.displayName}'s profile photo`}
           width={800}
@@ -113,7 +113,7 @@ export function Avatar({
 
   if (showImage && user.avatarUrl) {
     const image = (
-      <Image
+      <Image unoptimized
         src={user.avatarUrl}
         alt={user.displayName}
         width={size}

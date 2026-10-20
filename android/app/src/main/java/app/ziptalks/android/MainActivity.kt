@@ -414,14 +414,13 @@ class MainActivity : ComponentActivity() {
         @Suppress("DEPRECATION")
         settings.databaseEnabled = true
         // Use LOAD_DEFAULT to enable caching for faster app startup.
-        // The cache is cleared on APK version bump via clearHttpCacheOnVersionBump().
+        // Hashed web assets are versioned by the server; preserve them across launches.
         settings.cacheMode = WebSettings.LOAD_DEFAULT
         settings.mediaPlaybackRequiresUserGesture = false
         settings.loadWithOverviewMode = false
         settings.useWideViewPort = false
         settings.userAgentString = "${settings.userAgentString} ZipTalkAndroid/0.8"
-        // Preserve browser-held E2EE keys while discarding stale HTTP assets.
-        clearCache(true)
+        // HTTP freshness controls updates. Never clear reusable resources on launch.
         val cookieManager = CookieManager.getInstance()
         cookieManager.setAcceptCookie(true)
         cookieManager.setAcceptThirdPartyCookies(this, false)
@@ -433,7 +432,7 @@ class MainActivity : ComponentActivity() {
         HostedPushBridge(this@MainActivity) { done -> requestNotifications(done) }.install(this)
         webChromeClient = hostedWebChromeClient()
         webViewClient = hostedWebClient()
-        loadUrl(notificationDestination(intent) ?: "${BuildConfig.API_BASE_URL}/app")
+        loadUrl(notificationDestination(intent) ?: "${BuildConfig.API_BASE_URL}/app/chats")
     }
 
     private fun showOfflineShell(view: WebView) {
