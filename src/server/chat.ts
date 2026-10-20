@@ -1,6 +1,6 @@
 import { messageExpired } from "@/lib/message-expiration";
 import { groupAllows } from "@/lib/group-permissions";
-import { and, desc, eq, inArray, isNull, lt, lte, ne, or, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   blocks,

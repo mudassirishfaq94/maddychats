@@ -63,6 +63,8 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
       - name: Full Git history secret scan
+        id: secrets
+        continue-on-error: true
         shell: bash
         run: |
           set -euo pipefail
@@ -75,7 +77,17 @@ jobs:
           grep "  ${archive}$" checksums.txt | sha256sum --check
           tar -xzf "$archive" gitleaks
           cd ../..
-          .freebuff/security-scanner/gitleaks git --log-opts='--all' --redact=100 --no-banner
+          scan_status=0
+          .freebuff/security-scanner/gitleaks git --log-opts='--all' --redact=100 --no-banner --report-format json --report-path .freebuff/security-scanner/findings.json || scan_status=$?
+          node - <<'JS'
+          const fs = require('node:fs');
+          const file = '.freebuff/security-scanner/findings.json';
+          if (fs.existsSync(file)) for (const finding of JSON.parse(fs.readFileSync(file,'utf8'))) {
+            // Report only locations and detector IDs, never match/secret values.
+            console.log(JSON.stringify({rule:finding.RuleID,file:finding.File,line:finding.StartLine,commit:finding.Commit,fingerprint:finding.Fingerprint}));
+          }
+          JS
+          exit "$scan_status"
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
@@ -154,6 +166,9 @@ jobs:
           test "${image_ready:-0}" = "1"
           test "$(docker exec ziptalk-quality-smoke id -u)" = "1001"
           docker exec ziptalk-quality-smoke node -e "const fs=require('fs'); fs.accessSync('/app/server/uploads',fs.constants.W_OK); fs.accessSync('/app/.next/cache',fs.constants.W_OK);"
+      - name: Enforce Git history secret scan result
+        if: always() && steps.secrets.outcome != 'success'
+        run: exit 1
       - name: Save local lab measurements
         if: always()
         uses: actions/upload-artifact@v4

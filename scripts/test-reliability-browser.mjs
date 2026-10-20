@@ -128,6 +128,25 @@ try {
  const image=member.page.getByRole("region",{name:"Messages",exact:true}).getByAltText("large-encrypted-preview.png",{exact:true});
  await image.evaluate(element=>new Promise((resolve,reject)=>{if(element.complete&&element.naturalWidth>0)return resolve();element.addEventListener('load',()=>resolve(),{once:true});element.addEventListener('error',()=>reject(new Error('Recipient could not decode encrypted image')),{once:true});}));
  console.log("PASS: large encrypted chunk upload and real recipient image decryption");
+ // File chips must not download ciphertext until the recipient requests it.
+ const downloads = [];
+ const observeMedia = request => { if (new URL(request.url()).pathname.startsWith("/api/media/")) downloads.push(request.url()); };
+ member.page.on("request", observeMedia);
+ await owner.page.locator('input[type="file"]').first().setInputFiles({name:"on-demand-performance.bin",mimeType:"application/octet-stream",buffer:Buffer.from("disposable performance file")});
+ const fileResponse = owner.page.waitForResponse(response=>new URL(response.url()).pathname==="/api/upload/message"&&response.request().method()==="POST");
+ await owner.page.getByRole("button",{name:"Send attachments",exact:true}).click();
+ const fileResult = await fileResponse; assert.equal(fileResult.status(),201,await fileResult.text());
+ const fileAttachment = (await fileResult.json()).message.attachments[0];
+ await member.page.getByRole("button",{name:"Download on-demand-performance.bin",exact:true}).waitFor();
+ await member.page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+ assert.equal(downloads.filter(url=>new URL(url).pathname===`/api/media/${fileAttachment.id}`).length,0,"File chips must not eagerly download encrypted bytes");
+ const download = member.page.waitForEvent("download");
+ await member.page.getByRole("button",{name:"Download on-demand-performance.bin",exact:true}).click();
+ assert.equal((await download).suggestedFilename(),"on-demand-performance.bin");
+ assert.equal(downloads.filter(url=>new URL(url).pathname===`/api/media/${fileAttachment.id}`).length,1,"Requested file downloads once");
+ member.page.off("request",observeMedia);
+ console.log("PASS: encrypted file is fetched once on recipient intent");
+
 
  await owner.page.goto(base+"/app/profile#encryption-devices");await openDeviceTools(owner.page);
  await owner.page.getByRole("button",{name:"Set up recovery code",exact:true}).click();const code=await owner.page.locator('[aria-label="New recovery code"]').textContent();assert(code);
