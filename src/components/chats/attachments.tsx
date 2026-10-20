@@ -20,6 +20,7 @@ import {
 import type { AttachmentDTO } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useExpiredAt } from "@/hooks/use-expired-at";
+import { useNearViewport } from "@/hooks/use-near-viewport";
 import { useEncryptedAttachmentUrl } from "./e2ee-context";
 
 export function humanSize(bytes: number): string {
@@ -304,9 +305,18 @@ export function AttachmentList({
 
 /** A downloadable file chip that transparently decrypts E2EE files. */
 function FileChip({ file, own }: { file: AttachmentDTO; own: boolean }) {
-  const { url, failed } = useEncryptedAttachmentUrl(file);
+  const [requested, setRequested] = useState(false);
+  const autoDownload = useRef(false);
+  const { url, failed } = useEncryptedAttachmentUrl(file, requested);
+  useEffect(() => {
+    if (!url || !autoDownload.current) return;
+    autoDownload.current = false;
+    const link = document.createElement("a");
+    link.href = url; link.download = file.originalName;
+    document.body.appendChild(link); link.click(); link.remove();
+  }, [url, file.originalName]);
   const expired = useExpiredAt(file.expiresAt);
-  const unavailable = expired || Boolean(file.encrypted && (failed || !url));
+  const unavailable = expired || Boolean(file.encrypted && failed);
   return (
     <span
       className={cn(
@@ -353,6 +363,12 @@ function FileChip({ file, own }: { file: AttachmentDTO; own: boolean }) {
             own ? "text-[var(--bubble-own-sub)]" : "text-[var(--muted)]",
           )}
         />
+      ) : !url ? (
+        <button type="button" aria-label={`Download ${file.originalName}`}
+          disabled={requested} onClick={event => { event.stopPropagation(); autoDownload.current = true; setRequested(true); }}
+          className="flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-full">
+          {requested ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+        </button>
       ) : (
         <a
           href={url ?? undefined}
@@ -374,18 +390,26 @@ function FileChip({ file, own }: { file: AttachmentDTO; own: boolean }) {
   );
 }
 
-export function InlineMedia({
+export function InlineMedia(props: { attachment: AttachmentDTO; gallery?: boolean }) {
+  const { ref, near } = useNearViewport<HTMLSpanElement>();
+  return <span ref={ref} className="relative block min-h-40 w-full"><InlineMediaPreview {...props} enabled={near} /></span>;
+}
+
+function InlineMediaPreview({
   attachment,
   gallery = false,
+  enabled,
 }: {
   attachment: AttachmentDTO;
   gallery?: boolean;
+  enabled: boolean;
 }) {
-  const { url, failed } = useEncryptedAttachmentUrl(attachment);
+  const { url, failed } = useEncryptedAttachmentUrl(attachment, enabled);
   const [loading, setLoading] = useState(true);
   const [failedRender, setFailedRender] = useState(false);
   const showFailed = failed || failedRender;
 
+  if (!enabled) return <span className="block h-40" aria-label="Media preview" />;
   if (showFailed) {
     return (
       <span className="flex h-40 w-full flex-col items-center justify-center gap-2 bg-black/10 text-xs text-[var(--muted)]">

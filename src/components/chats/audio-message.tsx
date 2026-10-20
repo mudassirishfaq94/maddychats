@@ -1,7 +1,7 @@
 "use client";
 
 import { Mic2, Pause, Play, Captions, Loader2, Lock } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { AttachmentDTO, PublicUser } from "@/lib/types";
 import { Avatar } from "@/components/avatar";
 import { Waveform } from "./waveform";
@@ -40,10 +40,12 @@ export function AudioMessage({
 }) {
   const [transcript, setTranscript] = useState(attachment?.encrypted ? null : initialTranscript ?? null);
   const [transcribing, setTranscribing] = useState(false);
-  const resolved = useEncryptedAttachmentUrl(attachment);
+  const [requested, setRequested] = useState(false);
+  const autoPlayed = useRef(false);
+  const resolved = useEncryptedAttachmentUrl(attachment, requested);
   // Encrypted voice resolves to a decrypted object URL; local previews pass src.
   const effectiveSrc = attachment?.encrypted ? (resolved.url ?? "") : src;
-  const decrypting = Boolean(attachment?.encrypted && !resolved.url && !resolved.failed);
+  const decrypting = Boolean(requested && attachment?.encrypted && !resolved.url && !resolved.failed);
 
   const voiceId = `voice-${effectiveSrc || attachment?.id || src}`;
   const {
@@ -57,6 +59,19 @@ export function AudioMessage({
     playbackRate,
     cyclePlaybackRate,
   } = useVoicePlayback(voiceId, effectiveSrc);
+
+  useEffect(() => {
+    if (!attachment?.encrypted || !requested || !effectiveSrc || autoPlayed.current) return;
+    autoPlayed.current = true;
+    void togglePlay();
+  }, [attachment?.encrypted, requested, effectiveSrc, togglePlay]);
+
+  if (attachment?.encrypted && !requested) {
+    return <button type="button" onClick={() => setRequested(true)} aria-label="Play voice message"
+      className="flex min-h-11 items-center gap-3 rounded-2xl px-4 py-3 text-left">
+      <Play className="h-5 w-5" /><span className="text-xs">Voice message · {formatDuration(initialDuration ?? 0)}</span>
+    </button>;
+  }
 
   if (decrypting) {
     return (

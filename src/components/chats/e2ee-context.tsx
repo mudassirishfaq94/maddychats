@@ -18,6 +18,8 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { useAuth } from "@/components/providers/auth-provider";
+import { createMediaResourceCache } from "@/lib/media-resource-cache";
 import type { AttachmentDTO } from "@/lib/types";
 import {useExpiredAt} from "@/hooks/use-expired-at";
 import { registerLocalAudio, forgetLocalAudio } from "@/lib/audio-analysis";
@@ -65,17 +67,18 @@ function useE2EEMediaContext(): E2EEMediaContextValue | null {
   return useContext(E2EEMediaContext);
 }
 
-/* Module-level cache of decrypted object URLs (one per attachment). */
-const objectUrlCache = new Map<string, string>();
-const expiredAttachmentIds = new Set<string>();
-export function forgetDecryptedAttachments(ids: string[]) {
-  for(const id of ids) {
-    expiredAttachmentIds.add(id);
-    const url=objectUrlCache.get(id); if(url) {URL.revokeObjectURL(url);forgetLocalAudio(url);}
-    objectUrlCache.delete(id);
-  }
-}
+class PermanentMediaError extends Error {}
 
+const mediaCache = createMediaResourceCache({
+  create: blob => {
+    const url = URL.createObjectURL(blob);
+    if (blob.type.startsWith("audio/")) registerLocalAudio(url, blob);
+    return url;
+  },
+  revoke: url => { URL.revokeObjectURL(url); forgetLocalAudio(url); },
+});
+export function clearAttachmentMediaCache() { mediaCache.clear(); }
+export function forgetDecryptedAttachments(ids: string[]) { mediaCache.forget(ids); }
 
 /**
  * Resolves an attachment to a renderable URL. Plaintext attachments pass
@@ -85,108 +88,69 @@ export function forgetDecryptedAttachments(ids: string[]) {
  */
 export function useEncryptedAttachmentUrl(
   attachment?: AttachmentDTO | null,
+  enabled = true,
 ): { url: string | null; failed: boolean } {
   const ctx = useE2EEMediaContext();
+  const { user } = useAuth();
+  const userId = user?.id;
   const { id, url, encrypted, encKey, mimeType, expiresAt } = attachment ?? {};
   const expired=useExpiredAt(expiresAt);
   useEffect(()=>{if(expired && id)forgetDecryptedAttachments([id]);},[expired,id]);
   const request = useMemo(
-    () => ({ id, url, encrypted, encKey, mimeType, ctx, expired }),
-    [id, url, encrypted, encKey, mimeType, ctx, expired],
+    () => ({ id, url, encrypted, encKey, mimeType, ctx, expired, enabled, userId }),
+    [id, url, encrypted, encKey, mimeType, ctx, expired, enabled, userId],
   );
   const [state, setState] = useState<{
     request: typeof request | null; url: string | null; failed: boolean;
   }>({ request: null, url: null, failed: false });
 
   useEffect(() => {
-    const { id, url, encrypted, encKey, mimeType, ctx, expired } = request;
-
-    if (!id || !url || !encrypted || !encKey || expired) {
-      return;
-    }
-
-    if (!ctx?.initialized || ctx.initializationError || objectUrlCache.has(id)) return;
-
-    const attachment = { id, url, encKey, mimeType };
-    let cancelled = false;
-    const controller = new AbortController();
-
-    const timeoutId = typeof window !== "undefined"
-      ? window.setTimeout(() => controller.abort(), mimeType?.startsWith("video/") ? 900000 : 180000)
-      : null;
-
-    (async () => {
-      try {
-        let plain: ArrayBuffer | undefined;
-        let lastError: Error | undefined;
-
-        for (let attempt = 0; attempt < 3; attempt++) {
-          if (cancelled) return;
-
-          try {
-            const res = await fetch(attachment.url, {
-              cache: "no-store",
-              signal: controller.signal,
-            });
-
-            if (!res.ok) {
-              throw new Error(`fetch_failed: ${res.status} ${res.statusText}`);
+    const { id, url, encrypted, encKey, mimeType, ctx, expired, enabled, userId } = request;
+    if (!id || !url || !encrypted || !encKey || expired || !enabled || !userId ||
+        !ctx?.initialized || ctx.initializationError) return;
+    let active = true;
+    const key = JSON.stringify([userId, ctx.conversationId, id, url, encKey]);
+    const resource = mediaCache.acquire(key, id, async cancel => {
+      const signal = AbortSignal.any([cancel, AbortSignal.timeout(mimeType?.startsWith("video/") ? 900000 : 180000)]);
+      let ciphertext: ArrayBuffer | undefined;
+      for (let attempt = 0; ; attempt++) {
+        signal.throwIfAborted();
+        try {
+          if (!ciphertext) {
+            const response = await fetch(url, { cache: "no-store", signal });
+            if (!response.ok) {
+              if (response.status < 500 && response.status !== 429) throw new PermanentMediaError();
+              throw new Error("Media download failed");
             }
-
-            const ciphertext = await res.arrayBuffer();
-            if (ciphertext.byteLength < 28) {
-              throw new Error(`media_download_incomplete: received ${ciphertext.byteLength} bytes`);
-            }
-            plain = await ctx.decryptMedia(
-              ciphertext, attachment.encKey!, ctx.conversationId,
-            );
-            break;
-          } catch (error) {
-            lastError = error as Error;
-            if (cancelled) return;
-
-            if (attempt < 2) {
-              await new Promise((resolve) => setTimeout(resolve, 1500));
-            }
+            ciphertext = await response.arrayBuffer();
+            if (ciphertext.byteLength < 28) throw new PermanentMediaError();
           }
+          const plain = await ctx.decryptMedia(ciphertext, encKey, ctx.conversationId);
+          signal.throwIfAborted();
+          if (expiresAt && Date.parse(expiresAt) <= Date.now()) throw new PermanentMediaError();
+          return new Blob([plain], { type: mimeType || "application/octet-stream" });
+        } catch (cause) {
+          if (signal.aborted || cause instanceof PermanentMediaError || attempt >= 2) throw cause;
+          await new Promise<void>((resolve, reject) => {
+            const abort = () => { clearTimeout(timer); reject(signal.reason); };
+            const timer = setTimeout(() => { signal.removeEventListener("abort", abort); resolve(); }, 1500);
+            signal.addEventListener("abort", abort, { once: true });
+          });
         }
-
-        if (cancelled) return;
-
-        if (!plain) {
-          console.error("[E2EE] Decryption failed: no plaintext result after retries", lastError);
-          setState({ request, url: null, failed: true });
-          return;
-        }
-
-        if (expiredAttachmentIds.has(attachment.id)) return;
-        const blob = new Blob([plain], { type: attachment.mimeType || "application/octet-stream" });
-        const objectUrl = URL.createObjectURL(blob);
-        if (attachment.mimeType?.startsWith("audio/")) registerLocalAudio(objectUrl, blob);
-        objectUrlCache.set(attachment.id, objectUrl);
-        setState({ request, url: objectUrl, failed: false });
-      } catch (error) {
-        console.error("[E2EE] Decryption error:", error);
-        if (!cancelled) setState({ request, url: null, failed: true });
-      } finally {
-        if (timeoutId) window.clearTimeout(timeoutId);
       }
-    })();
-
-    return () => {
-      cancelled = true;
-      controller.abort();
-      if (timeoutId) window.clearTimeout(timeoutId);
-    };
-  }, [request]);
+    });
+    void resource.promise.then(value => {
+      if (!active) return;
+      setState({ request, url: value, failed: false });
+    }).catch(() => { if (active) setState({ request, url: null, failed: true }); });
+    return () => { active = false; resource.release(); };
+  }, [request, expiresAt]);
 
   if (!id) return { url: null, failed: false };
-  if (expired || expiredAttachmentIds.has(id)) return { url: null, failed: true };
+  if (expired) return { url: null, failed: true };
   if (!encrypted) return { url: url ?? null, failed: false };
   if (!ctx || !encKey || ctx.initializationError) return { url: null, failed: true };
-  if (!ctx.initialized) return { url: null, failed: false };
-  const cached = objectUrlCache.get(id);
-  if (cached) return { url: cached, failed: false };
+  if (!ctx.initialized || !enabled) return { url: null, failed: false };
   return state.request === request ? state : { url: null, failed: false };
 }
 
