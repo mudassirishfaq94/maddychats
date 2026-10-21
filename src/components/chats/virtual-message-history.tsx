@@ -48,7 +48,7 @@ export function VirtualMessageHistory({ items, scrollRef, scrollElement, content
   });
   useImperativeHandle(historyRef, () => ({
     virtualized: enabled,
-    managesAnchoring: Boolean(virtualizer.scrollElement),
+    managesAnchoring: Boolean(scrollElement && virtualizer.scrollElement === scrollElement),
     scrollToMessage(id) {
       const index = indexes.get(id);
       if (index === undefined) return false;
