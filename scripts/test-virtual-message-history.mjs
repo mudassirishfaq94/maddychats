@@ -74,6 +74,7 @@ try {
   assert(await page.locator('[data-message-id]').count()<60,'Dynamic resizing must keep the DOM bounded');
   await page.goto(`http://127.0.0.1:${server.address().port}/?small=1`);
   await page.waitForFunction(()=>Boolean(window.historyFixture));
+  await page.waitForFunction(()=>{const node=document.querySelector('[data-testid="viewport"]');return node.scrollHeight-node.scrollTop-node.clientHeight<=2;},undefined,{timeout:5000});
   await page.evaluate(()=>window.historyFixture.jump('500'));
   await page.locator('[data-message-id="500"] audio').evaluate(async audio=>{window.originalAudio=audio;await audio.play();});
   await page.evaluate(()=>window.historyFixture.prepend());

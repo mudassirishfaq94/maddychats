@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type Ref, type RefObject } from "react";
-import { defaultRangeExtractor, useVirtualizer } from "@tanstack/react-virtual";
+import { defaultRangeExtractor, elementScroll, useVirtualizer } from "@tanstack/react-virtual";
 import type { MessageDTO } from "@/lib/types";
 import { HistoryRowRetention } from "./history-row-retention";
 
@@ -45,30 +45,41 @@ export function VirtualMessageHistory({ items, scrollRef, scrollElement, content
     // the visible anchor or briefly unmount an active media element.
     overscan: 8, anchorTo: "end", followOnAppend: false,
     scrollMargin: margin, rangeExtractor,
+    // Normal-flow rows already move with browser layout. Track their sizes for
+    // window activation, but let the chat's normal-flow scroll owner move them.
+    scrollToFn: (offset, options, instance) => { if (enabled) elementScroll(offset, options, instance); },
   });
   useImperativeHandle(historyRef, () => ({
     virtualized: enabled,
-    managesAnchoring: Boolean(scrollElement && virtualizer.scrollElement === scrollElement),
+    managesAnchoring: Boolean(enabled && scrollElement && virtualizer.scrollElement === scrollElement),
     scrollToMessage(id) {
       const index = indexes.get(id);
       if (index === undefined) return false;
-      if (enabled && !virtualizer.scrollElement) pendingScroll.current = { id };
+      if (!virtualizer.scrollElement) pendingScroll.current = { id };
       else if (enabled) virtualizer.scrollToIndex(index, { align: "center" });
       else contentRef.current?.querySelector<HTMLElement>(`[data-message-id="${CSS.escape(id)}"]`)?.scrollIntoView({ block: "center", behavior: "smooth" });
       return true;
     },
     scrollToEnd(smooth = false) {
-      if (enabled && !virtualizer.scrollElement) pendingScroll.current = "end";
+      if (!virtualizer.scrollElement) pendingScroll.current = "end";
       else if (enabled) virtualizer.scrollToEnd();
       else scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: smooth ? "smooth" : "auto" });
     },
   }), [enabled, indexes, virtualizer, contentRef, scrollRef, scrollElement]);
   useLayoutEffect(() => {
-    if (!scrollElement || !enabled || !pendingScroll.current) return;
+    if (!scrollElement || !pendingScroll.current) return;
     const pending = pendingScroll.current; pendingScroll.current = null;
-    if (pending === "end") virtualizer.scrollToEnd();
-    else { const index = indexes.get(pending.id); if (index !== undefined) virtualizer.scrollToIndex(index, { align: "center" }); }
-  }, [scrollElement, enabled, indexes, virtualizer]);
+    if (pending === "end") {
+      if (enabled) virtualizer.scrollToEnd();
+      else scrollElement.scrollTo({ top: scrollElement.scrollHeight, behavior: "auto" });
+    } else {
+      const index = indexes.get(pending.id);
+      if (index !== undefined) {
+        if (enabled) virtualizer.scrollToIndex(index, { align: "center" });
+        else contentRef.current?.querySelector<HTMLElement>(`[data-message-id="${CSS.escape(pending.id)}"]`)?.scrollIntoView({ block: "center", behavior: "auto" });
+      }
+    }
+  }, [scrollElement, enabled, indexes, virtualizer, contentRef]);
   useLayoutEffect(() => {
     const viewport = scrollElement, content = contentRef.current;
     if (!viewport || !content) return;
