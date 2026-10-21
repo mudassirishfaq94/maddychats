@@ -62,10 +62,11 @@ export async function testChatScroll(base, source, recipient, pool, conversation
       };
       await gesture(-150);
       await page.setViewportSize({ width: 390, height: 740 }); await latest();
-      await gesture(150);
-      await page.waitForFunction(() => { const n = document.querySelector('[aria-label="Messages"]'); return n.scrollHeight - n.scrollTop - n.clientHeight > 80; });
+      // Move beyond the 140px near-bottom region before expecting its button.
+      await gesture(300);
+      await page.waitForFunction(() => { const n = document.querySelector('[aria-label="Messages"]'); return n.scrollHeight - n.scrollTop - n.clientHeight > 200; });
       await page.setViewportSize({ width: 320, height: 740 }); await page.waitForTimeout(400);
-      assert(await page.getByRole("region", { name: "Messages", exact: true }).evaluate(n => n.scrollHeight - n.scrollTop - n.clientHeight > 80));
+      assert(await page.getByRole("region", { name: "Messages", exact: true }).evaluate(n => n.scrollHeight - n.scrollTop - n.clientHeight > 200));
       await page.getByRole("button", { name: "Scroll to latest messages", exact: true }).click(); await latest();
     } finally {
       await touch.send("Emulation.setTouchEmulationEnabled", { enabled: touchPoints > 0, maxTouchPoints: Math.max(1, touchPoints) }); await touch.detach();
