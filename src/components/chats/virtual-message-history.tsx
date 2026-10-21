@@ -8,8 +8,9 @@ import { HistoryRowRetention } from "./history-row-retention";
 export type HistoryItem = { msg: MessageDTO; showDate: boolean; sameSenderPrev: boolean };
 export type MessageHistoryHandle = {
   scrollToMessage: (id: string) => boolean;
-  scrollToEnd: () => void;
+  scrollToEnd: (smooth?: boolean) => void;
   virtualized: boolean;
+  managesAnchoring: boolean;
 };
 
 /** Small pages retain normal HTML; loaded long histories keep only a measured window mounted. */
@@ -40,11 +41,14 @@ export function VirtualMessageHistory({ items, scrollRef, scrollElement, content
   const virtualizer = useVirtualizer({
     count: items.length, getScrollElement: () => scrollElement, getItemKey,
     estimateSize: index => items[index].msg.attachments.length ? 300 : 100,
-    overscan: 8, enabled, anchorTo: "end", followOnAppend: false,
+    // Track small-page measurements too: enabling the window must not discard
+    // the visible anchor or briefly unmount an active media element.
+    overscan: 8, anchorTo: "end", followOnAppend: false,
     scrollMargin: margin, rangeExtractor,
   });
   useImperativeHandle(historyRef, () => ({
     virtualized: enabled,
+    managesAnchoring: Boolean(virtualizer.scrollElement),
     scrollToMessage(id) {
       const index = indexes.get(id);
       if (index === undefined) return false;
@@ -53,12 +57,12 @@ export function VirtualMessageHistory({ items, scrollRef, scrollElement, content
       else contentRef.current?.querySelector<HTMLElement>(`[data-message-id="${CSS.escape(id)}"]`)?.scrollIntoView({ block: "center", behavior: "smooth" });
       return true;
     },
-    scrollToEnd() {
+    scrollToEnd(smooth = false) {
       if (enabled && !virtualizer.scrollElement) pendingScroll.current = "end";
       else if (enabled) virtualizer.scrollToEnd();
-      else scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
+      else scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: smooth ? "smooth" : "auto" });
     },
-  }), [enabled, indexes, virtualizer, contentRef, scrollRef]);
+  }), [enabled, indexes, virtualizer, contentRef, scrollRef, scrollElement]);
   useLayoutEffect(() => {
     if (!scrollElement || !enabled || !pendingScroll.current) return;
     const pending = pendingScroll.current; pendingScroll.current = null;
@@ -66,7 +70,6 @@ export function VirtualMessageHistory({ items, scrollRef, scrollElement, content
     else { const index = indexes.get(pending.id); if (index !== undefined) virtualizer.scrollToIndex(index, { align: "center" }); }
   }, [scrollElement, enabled, indexes, virtualizer]);
   useLayoutEffect(() => {
-    if (!enabled) return;
     const viewport = scrollElement, content = contentRef.current;
     if (!viewport || !content) return;
     const update = () => setMargin(content.getBoundingClientRect().top - viewport.getBoundingClientRect().top + viewport.scrollTop - viewport.clientTop);
@@ -97,12 +100,12 @@ export function VirtualMessageHistory({ items, scrollRef, scrollElement, content
     return () => { for (const event of ["play", "pause", "ended"]) viewport.removeEventListener(event, media, true); };
   }, [scrollElement]);
   const setContent = useCallback((node: HTMLDivElement | null) => { contentRef.current = node; }, [contentRef]);
-  return <HistoryRowRetention.Provider value={retain}><div ref={setContent} data-virtualized={enabled ? "true" : undefined}
+  return <HistoryRowRetention.Provider value={retain}><div ref={setContent} data-history-count={items.length} data-virtualized={enabled ? "true" : undefined}
     className="relative z-10 pb-4" style={enabled ? { height: virtualizer.getTotalSize(), width: "100%", overflowAnchor: "none" } : undefined}>
     {enabled ? virtualizer.getVirtualItems().map(item => <div key={item.key} data-index={item.index}
       ref={virtualizer.measureElement} className="absolute left-0 top-0 w-full flow-root"
       style={{ transform: `translateY(${item.start - margin}px)` }}>
       {renderItem(items[item.index])}
-    </div>) : items.map(item => <div key={item.msg.id}>{renderItem(item)}</div>)}
+    </div>) : items.map((item, index) => <div key={item.msg.id} data-index={index} ref={virtualizer.measureElement} className="flow-root">{renderItem(item)}</div>)}
   </div></HistoryRowRetention.Provider>;
 }

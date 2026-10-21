@@ -27,6 +27,9 @@ Base: `1715dc73084d002b444321c5c747d6a5f5b5a04b`. The supplied report is a set o
 - Preview frame/timing preservation and actual byte reduction.
 - Real-browser component test with 1,100 messages: bounded DOM, offscreen jumps, keyed prepend anchoring, dynamic heights and active audio/open portalled viewers retained across scrolling.
 - Extended existing encrypted-chat browser workflow: multiple older-page loads must activate windowing while keeping fewer than 60 mounted message rows; existing follow-latest, touch, resize, deep-link, image, audio, encryption and account checks remain.
+- The mobile stress test measures loaded history independently from mounted rows, exhausts pagination and checks that the oldest database message is reachable. A virtualized DOM must remain below 60 rows. The history count attribute exposes only the loaded count, not message contents.
+- The browser fixture also verifies that crossing from 50 normal rows into a virtual window preserves the exact playing audio element. Browser scroll anchoring is disabled on the messages viewport so it cannot compete with the virtualizer's anchoring.
+- Participant verification waits for asynchronous fingerprints to render before comparing every value against independently generated fixture identities; no trust assertion is removed.
 
 Run `npm run lint`, `npm run typecheck`, `npm run test:unit`, `npm run test:virtual-history`, and the production reliability/Quality workflows. The browser fixture is built only by a development script; no unauthenticated product route or database fixture is shipped.
 

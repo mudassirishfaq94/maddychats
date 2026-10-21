@@ -23,7 +23,8 @@ function Row({msg,expanded}) {
   </div>;
 }
 function App() {
-  const [items, setItems] = useState(Array.from({length:1000}, (_,i)=>({msg:{id:String(i),attachments:[]},showDate:false,sameSenderPrev:false})));
+  const small = new URLSearchParams(location.search).has('small');
+  const [items, setItems] = useState(Array.from({length:small?50:1000}, (_,i)=>({msg:{id:String(i+(small?475:0)),attachments:[]},showDate:false,sameSenderPrev:false})));
   const [expanded,setExpanded]=useState(false);
   const [scrollElement,setScrollElement]=useState(null);
   const scrollRef=useRef(null),contentRef=useRef(null),historyRef=useRef(null);
@@ -71,8 +72,16 @@ try {
   await page.evaluate(()=>window.historyFixture.latest());await page.locator('[data-message-id="999"]').waitFor();
   await page.evaluate(()=>window.historyFixture.expand());await page.waitForTimeout(250);
   assert(await page.locator('[data-message-id]').count()<60,'Dynamic resizing must keep the DOM bounded');
+  await page.goto(`http://127.0.0.1:${server.address().port}/?small=1`);
+  await page.waitForFunction(()=>Boolean(window.historyFixture));
+  await page.evaluate(()=>window.historyFixture.jump('500'));
+  await page.locator('[data-message-id="500"] audio').evaluate(async audio=>{window.originalAudio=audio;await audio.play();});
+  await page.evaluate(()=>window.historyFixture.prepend());
+  await page.locator('[data-virtualized="true"]').waitFor();
+  const transition=await page.locator('[data-message-id="500"] audio').evaluate(audio=>({same:audio===window.originalAudio,paused:audio.paused,originalConnected:window.originalAudio.isConnected,originalPaused:window.originalAudio.paused}));
+  assert(transition.same&&!transition.paused,'Switching from normal HTML to a virtual window must preserve the active audio element: '+JSON.stringify(transition));
   assert.deepEqual(errors,[]);
-  console.log('PASS virtual history: bounded DOM, offscreen jumps, keyed prepend anchoring, playback/viewer retention and dynamic heights (1100 messages)');
+  console.log('PASS virtual history: bounded DOM, offscreen jumps, keyed prepend anchoring, playback/viewer retention, normal-to-window transition and dynamic heights (1100 messages)');
 } catch (error) {
   console.error({errors,layout:await page?.evaluate(()=>({html:document.getElementById('root')?.innerHTML.slice(0,1200),top:document.querySelector('[data-testid="viewport"]')?.scrollTop,height:document.querySelector('[data-testid="viewport"]')?.scrollHeight}))});
   throw error;

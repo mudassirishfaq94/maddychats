@@ -989,7 +989,7 @@ export function ChatView({
     const el = scrollRef.current;
     if (!el) return;
     followLatestRef.current = true;
-    if (historyRef.current?.virtualized) historyRef.current.scrollToEnd();
+    if (historyRef.current) historyRef.current.scrollToEnd(smooth);
     else el.scrollTo({ top: el.scrollHeight, behavior: smooth ? "smooth" : "auto" });
   }, []);
 
@@ -1102,7 +1102,7 @@ export function ChatView({
       setHasMore(data.hasMore);
       requestAnimationFrame(() => {
         const node = scrollRef.current;
-        if (node && !historyRef.current?.virtualized) node.scrollTop = node.scrollHeight - prevHeight + prevTop;
+        if (node && !historyRef.current?.managesAnchoring) node.scrollTop = node.scrollHeight - prevHeight + prevTop;
       });
     } catch {
       setError("Network error while loading older messages.");
@@ -2124,6 +2124,7 @@ export function ChatView({
         ref={attachScrollElement}
         role="region"
         aria-label="Messages"
+        style={{ overflowAnchor: "none" }}
         tabIndex={0}
         onWheel={(event) => { if (event.deltaY < 0 && event.currentTarget.scrollHeight > event.currentTarget.clientHeight) followLatestRef.current = false; }}
         onTouchStart={(event) => { touchScrollY.current = event.touches[0]?.clientY ?? 0; }}

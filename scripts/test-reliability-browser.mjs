@@ -80,6 +80,7 @@ try {
  for(const account of [owner,member]) {
   await account.page.reload();
   await account.page.getByRole("button").filter({hasText:"Encryption device keys changed."}).click();
+  await account.page.getByLabel("Participant device fingerprint").nth(accounts.length-2).waitFor();
   const fingerprints=await account.page.getByLabel("Participant device fingerprint").allTextContents();
   assert.deepEqual(fingerprints.sort(),accounts.filter(peer=>peer!==account).map(peer=>createHash("sha256").update(peer.publicKey).digest("hex")).sort());
   await account.page.getByLabel("I verified these participant device identities or confirmed the intended removal.",{exact:true}).check();
