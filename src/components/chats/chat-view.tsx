@@ -3130,6 +3130,7 @@ const MessageRow = memo(function MessageRow({msg, showDate, sameSenderPrev, me, 
                                 ) : msg.attachments.length > 0 ? (
                                   <div className={cn(text && "mb-1.5")}>
                                     <AttachmentList
+                                      messageId={msg.id}
                                       attachments={msg.attachments}
                                       own={own}
                                     />

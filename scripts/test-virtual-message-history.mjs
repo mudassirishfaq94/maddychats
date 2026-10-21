@@ -12,7 +12,16 @@ wave.writeUInt32LE(16000,28);wave.writeUInt16LE(2,32);wave.writeUInt16LE(16,34);
 const fixture = `
 import React, { useLayoutEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import { createPortal } from 'react-dom';
 import { VirtualMessageHistory } from './src/components/chats/virtual-message-history';
+import { useRetainHistoryRow } from './src/components/chats/history-row-retention';
+function Row({msg,expanded}) {
+  const [open,setOpen]=useState(false);useRetainHistoryRow(msg.id,open);
+  return <div data-message-id={msg.id} style={{height:expanded&&msg.id==='999'?400:50+Number(msg.id.replace('older-',''))%4*25,border:'1px solid black',boxSizing:'border-box'}}>Message {msg.id}
+    {msg.id==='500'?<><audio muted loop src="data:audio/wav;base64,${wave.toString('base64')}"/><button onClick={()=>setOpen(true)}>Open viewer</button></>:null}
+    {open?createPortal(<div role="dialog" aria-label="Retained viewer"><button onClick={()=>setOpen(false)}>Close viewer</button></div>,document.body):null}
+  </div>;
+}
 function App() {
   const [items, setItems] = useState(Array.from({length:1000}, (_,i)=>({msg:{id:String(i),attachments:[]},showDate:false,sameSenderPrev:false})));
   const [expanded,setExpanded]=useState(false);
@@ -25,7 +34,7 @@ function App() {
   };},[]);
   return <div ref={node=>{scrollRef.current=node;setScrollElement(node);}} data-testid="viewport" style={{height:500,width:360,overflow:'auto',position:'relative',overflowAnchor:'none'}}>
     <VirtualMessageHistory items={items} scrollRef={scrollRef} scrollElement={scrollElement} contentRef={contentRef} historyRef={historyRef} editingId={null}
-      renderItem={({msg})=><div data-message-id={msg.id} style={{height:expanded&&msg.id==='999'?400:50+Number(msg.id.replace('older-',''))%4*25,border:'1px solid black',boxSizing:'border-box'}}>Message {msg.id}{msg.id==='500'?<audio muted loop src="data:audio/wav;base64,${wave.toString('base64')}"/>:null}</div>} />
+      renderItem={({msg})=><Row msg={msg} expanded={expanded}/>} />
   </div>;
 }
 createRoot(document.getElementById('root')).render(<App/>);`;
@@ -53,12 +62,17 @@ try {
   assert.equal(await page.locator('[data-message-id="500"] audio').evaluate(audio=>audio.paused),false,'Scrolling must not interrupt voice playback');
   await page.locator('[data-message-id="500"] audio').evaluate(audio=>audio.pause());
   await page.locator('[data-message-id="500"]').waitFor({state:'detached'});
+  await page.evaluate(()=>window.historyFixture.jump('500'));await page.getByRole('button',{name:'Open viewer',exact:true}).click();
+  await page.getByRole('dialog',{name:'Retained viewer',exact:true}).waitFor();
+  await page.evaluate(()=>window.historyFixture.latest());await page.locator('[data-message-id="999"]').waitFor();
+  assert.equal(await page.getByRole('dialog',{name:'Retained viewer',exact:true}).count(),1,'A portalled media viewer must survive scrolling past its row');
+  await page.getByRole('button',{name:'Close viewer',exact:true}).click();await page.locator('[data-message-id="500"]').waitFor({state:'detached'});
   await page.evaluate(()=>window.historyFixture.jump('older-0'));await page.locator('[data-message-id="older-0"]').waitFor();
   await page.evaluate(()=>window.historyFixture.latest());await page.locator('[data-message-id="999"]').waitFor();
   await page.evaluate(()=>window.historyFixture.expand());await page.waitForTimeout(250);
   assert(await page.locator('[data-message-id]').count()<60,'Dynamic resizing must keep the DOM bounded');
   assert.deepEqual(errors,[]);
-  console.log('PASS virtual history: bounded DOM, offscreen jumps, keyed prepend anchoring, playback retention and dynamic heights (1100 messages)');
+  console.log('PASS virtual history: bounded DOM, offscreen jumps, keyed prepend anchoring, playback/viewer retention and dynamic heights (1100 messages)');
 } catch (error) {
   console.error({errors,layout:await page?.evaluate(()=>({html:document.getElementById('root')?.innerHTML.slice(0,1200),top:document.querySelector('[data-testid="viewport"]')?.scrollTop,height:document.querySelector('[data-testid="viewport"]')?.scrollHeight}))});
   throw error;

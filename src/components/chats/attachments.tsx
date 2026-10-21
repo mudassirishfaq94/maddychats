@@ -22,6 +22,7 @@ import { cn } from "@/lib/utils";
 import { useExpiredAt } from "@/hooks/use-expired-at";
 import { useNearViewport } from "@/hooks/use-near-viewport";
 import { useEncryptedAttachmentUrl } from "./e2ee-context";
+import { useRetainHistoryRow } from "./history-row-retention";
 
 export function humanSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -243,11 +244,14 @@ export function Lightbox({
 export function AttachmentList({
   attachments,
   own,
+  messageId,
 }: {
   attachments: AttachmentDTO[];
   own: boolean;
+  messageId?: string;
 }) {
   const [lightbox, setLightbox] = useState<AttachmentDTO | null>(null);
+  useRetainHistoryRow(messageId, Boolean(lightbox));
   if (attachments.length === 0) return null;
 
   const media = attachments.filter(

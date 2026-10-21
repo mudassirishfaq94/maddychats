@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type Ref, type RefObject } from "react";
 import { defaultRangeExtractor, useVirtualizer } from "@tanstack/react-virtual";
 import type { MessageDTO } from "@/lib/types";
+import { HistoryRowRetention } from "./history-row-retention";
 
 export type HistoryItem = { msg: MessageDTO; showDate: boolean; sameSenderPrev: boolean };
 export type MessageHistoryHandle = {
@@ -19,16 +20,21 @@ export function VirtualMessageHistory({ items, scrollRef, scrollElement, content
   const enabled = items.length > 60;
   const [margin, setMargin] = useState(0);
   const [playing, setPlaying] = useState<Set<string>>(() => new Set());
+  const [retained, setRetained] = useState<Set<string>>(() => new Set());
+  const retain = useCallback((id: string, active: boolean) => setRetained(current => {
+    if (current.has(id) === active) return current;
+    const next = new Set(current); if (active) next.add(id); else next.delete(id); return next;
+  }), []);
   const pendingScroll = useRef<{ id: string } | "end" | null>(null);
   const indexes = useMemo(() => new Map(items.map((item, index) => [item.msg.id, index])), [items]);
   const getItemKey = useCallback((index: number) => items[index].msg.id, [items]);
   const rangeExtractor = useCallback((range: Parameters<typeof defaultRangeExtractor>[0]) => {
     const indexesToRender = new Set(defaultRangeExtractor(range));
-    for (const id of playing) { const index = indexes.get(id); if (index !== undefined) indexesToRender.add(index); }
+    for (const id of [...playing, ...retained]) { const index = indexes.get(id); if (index !== undefined) indexesToRender.add(index); }
     const editing = editingId ? indexes.get(editingId) : undefined;
     if (editing !== undefined) indexesToRender.add(editing);
     return [...indexesToRender].sort((a, b) => a - b);
-  }, [playing, indexes, editingId]);
+  }, [playing, retained, indexes, editingId]);
   // The virtualizer owns mutable measurement state; keep it outside React Compiler memoization.
   // eslint-disable-next-line react-hooks/incompatible-library
   const virtualizer = useVirtualizer({
@@ -67,8 +73,11 @@ export function VirtualMessageHistory({ items, scrollRef, scrollElement, content
     update();
     const observer = new ResizeObserver(update);
     observer.observe(viewport);
+    observer.observe(content);
     if (content.previousElementSibling) observer.observe(content.previousElementSibling);
-    return () => observer.disconnect();
+    const siblings = new MutationObserver(update);
+    siblings.observe(viewport, { childList: true });
+    return () => { observer.disconnect(); siblings.disconnect(); };
   }, [enabled, scrollElement, contentRef]);
   useEffect(() => {
     const viewport = scrollElement;
@@ -88,12 +97,12 @@ export function VirtualMessageHistory({ items, scrollRef, scrollElement, content
     return () => { for (const event of ["play", "pause", "ended"]) viewport.removeEventListener(event, media, true); };
   }, [scrollElement]);
   const setContent = useCallback((node: HTMLDivElement | null) => { contentRef.current = node; }, [contentRef]);
-  return <div ref={setContent} data-virtualized={enabled ? "true" : undefined}
+  return <HistoryRowRetention.Provider value={retain}><div ref={setContent} data-virtualized={enabled ? "true" : undefined}
     className="relative z-10 pb-4" style={enabled ? { height: virtualizer.getTotalSize(), width: "100%", overflowAnchor: "none" } : undefined}>
     {enabled ? virtualizer.getVirtualItems().map(item => <div key={item.key} data-index={item.index}
       ref={virtualizer.measureElement} className="absolute left-0 top-0 w-full flow-root"
       style={{ transform: `translateY(${item.start - margin}px)` }}>
       {renderItem(items[item.index])}
     </div>) : items.map(item => <div key={item.msg.id}>{renderItem(item)}</div>)}
-  </div>;
+  </div></HistoryRowRetention.Provider>;
 }
