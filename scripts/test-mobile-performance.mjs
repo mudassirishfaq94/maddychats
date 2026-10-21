@@ -23,15 +23,21 @@ export async function testMobilePerformance(base, pool, source, owner, conversat
     for (let i = 0; i < 6; i++) {
       const load = page.getByRole("button", { name: /^(Load older messages|Loading…)$/ });
       if (!await load.count()) break;
-      const before = await page.locator(".message-history-row").count();
+      const before = Number(await page.locator("[data-history-count]").getAttribute("data-history-count"));
       await page.getByRole("region", { name: "Messages", exact: true }).hover();
       await page.mouse.wheel(0, -50000);
       // Scrolling triggers automatic pagination. Do not race a button that can
       // become disabled or disappear when the final older page arrives.
-      await page.waitForFunction(before => document.querySelectorAll(".message-history-row").length > before || !Array.from(document.querySelectorAll("button")).some(button => button.textContent.includes("Load older messages")), before, { timeout: 90000 });
+      await page.waitForFunction(before => Number(document.querySelector("[data-history-count]")?.getAttribute("data-history-count")) > before || !Array.from(document.querySelectorAll("button")).some(button => /^(Load older messages|Loading…)$/u.test(button.textContent.trim())), before, { timeout: 90000 });
       await page.waitForTimeout(300);
     }
-    assert(await page.locator(".message-history-row").count() >= 150, "The long-history typing check loads the seeded older pages");
+    assert(Number(await page.locator("[data-history-count]").getAttribute("data-history-count")) >= 150, "The long-history typing check loads the seeded older pages");
+    assert.equal(await page.getByRole("button", { name: /^(Load older messages|Loading…)$/ }).count(), 0, "Older history is exhausted before typing");
+    const oldest = (await pool.query("select id from messages where conversation_id=$1 order by created_at,id limit 1", [conversationId])).rows[0].id;
+    await page.getByRole("region", { name: "Messages", exact: true }).evaluate(element => { element.scrollTop = 0; });
+    await page.locator(`[data-message-id="${oldest}"]`).waitFor();
+    assert.equal(await page.locator("[data-virtualized=true]").count(), 1);
+    assert(await page.locator(".message-history-row").count() < 60, "Loaded history keeps a bounded number of mounted rows");
     for (const width of [320, 360, 390, 412]) {
       await page.setViewportSize({ width, height: 740 });
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `Chat overflow at ${width}px`);

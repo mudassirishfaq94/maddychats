@@ -15,7 +15,7 @@ import { Avatar } from "@/components/avatar";
 import { LogoMark } from "@/components/brand/logo";
 import { NewChatDialog } from "./new-chat-dialog";
 import { ConversationMenu } from "./conversation-menu";
-import { useRealtime } from "@/components/providers/realtime-provider";
+import { usePresenceMap } from "@/components/providers/realtime-provider";
 import { useConversationList } from "@/components/providers/conversation-list-provider";
 import { mapWithConcurrency } from "@/lib/async";
 import { cn, timeAgo } from "@/lib/utils";
@@ -228,7 +228,7 @@ export function ChatsLayout({
     return () => { cancelled = true; };
   }, [conversations, initialized, decrypt]);
   const pathname = usePathname();
-  const { presence } = useRealtime();
+  const presence = usePresenceMap();
   const activeId = pathname.startsWith("/app/chats/")
     ? pathname.split("/")[3]
     : null;

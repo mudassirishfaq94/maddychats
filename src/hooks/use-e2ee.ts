@@ -1,7 +1,8 @@
 "use client";
 import { restoredBundle, storedChatKeys } from "@/lib/device-recovery-file";
+import { waitForBackgroundSlot } from "@/lib/background-work";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useMemo } from "react";
 import {
   generateDeviceId,
   generateKeyPair,
@@ -262,6 +263,8 @@ export function useE2EE(userId: string | undefined) {
       if (process.env.NEXT_PUBLIC_STARTER_MODE !== "1") void registration
         .then(async (ready) => {
           if (!ready || !active) return;
+          await waitForBackgroundSlot(controller.signal);
+          if (!active) return;
           const bridge = await loadSignalBridge();
           if(!active)return;
           await ensureSignalDeviceRegistered(activeUserId, deviceId, bridge);
@@ -1038,7 +1041,7 @@ export function useE2EE(userId: string | undefined) {
     if(userId)void purgeVerifiedMessages(userId,conversationId,ids).catch(()=>{});
   },[userId]);
 
-  return {
+  return useMemo(() => ({
     ...state,
     encrypt,
     decrypt,
@@ -1060,5 +1063,5 @@ export function useE2EE(userId: string | undefined) {
     checkRotationNeeded,
     rotateConversationKey,
     getPendingPeerVerification,
-  };
+  }), [state, encrypt, decrypt, shareKey, getConversationKey, prepareConversation, syncKnownConversations, approveDevice, waitForDeviceRegistration, approvePeerKeyChange, encryptBytesForConversation, decryptBytesForConversation, decryptMedia, getCachedDecryptedMessage, cacheDecryptedMessage, loadCachedDecryptedMessages, forgetDecryptedMessages, checkRotationNeeded, rotateConversationKey, getPendingPeerVerification]);
 }

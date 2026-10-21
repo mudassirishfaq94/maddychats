@@ -53,6 +53,8 @@ jobs:
       - run: npm run test:unit
       - run: npm run test:reliability:integration
       - run: npx playwright install --with-deps chromium
+      - name: Verify measured long-history window and scroll anchoring
+        run: npm run test:virtual-history
       - run: npm run build
       - name: Run real browser workflows against the production bundle
         run: |
