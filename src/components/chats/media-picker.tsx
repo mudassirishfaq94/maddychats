@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, typ
 import { createPortal } from "react-dom";
 import { Loader2, X, Paperclip, Clock } from "lucide-react";
 import { EmojiPicker } from "./emoji-picker";
-import { animatedMediaCatalog, animatedMediaPosterUrl, animatedMediaUrl } from "@/lib/animated-media";
+import { animatedMediaCatalog, animatedMediaPosterUrl, animatedMediaPreviewUrl, animatedMediaUrl } from "@/lib/animated-media";
 const reducedQuery = "(prefers-reduced-motion: reduce)";
 const subscribeMotion = (callback: () => void) => { const query = matchMedia(reducedQuery); query.addEventListener("change", callback); return () => query.removeEventListener("change", callback); };
 const reducedMotion = () => matchMedia(reducedQuery).matches;
@@ -16,6 +16,7 @@ export function MediaPicker({ anchor, onEmoji, onFile, onClose, mediaDisabled, o
 }) {
   const [tab, setTab] = useState<"Emoji" | "Stickers" | "GIFs">("Emoji");
   const [search, setSearch] = useState("");
+  const [activePreview, setActivePreview] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [position, setPosition] = useState({ left: 8, bottom: 80, maxHeight: 320 });
@@ -65,9 +66,12 @@ export function MediaPicker({ anchor, onEmoji, onFile, onClose, mediaDisabled, o
         <input aria-label="Search animations" placeholder="Search animations…" value={search} onChange={event => setSearch(event.target.value)} className="field-input mb-3 w-full" />
         {mediaDisabled ? <p className="mb-3 text-xs text-[var(--muted)]">Animated media becomes available when secure attachments are ready.</p> : null}
         {error ? <p role="alert" className="mb-3 text-sm">{error}</p> : null}
-        <div className="grid grid-cols-3 gap-2">{items.map(item => <button key={item.id} type="button" disabled={mediaDisabled || busy !== null} onClick={() => void select(item.id)} aria-label={`Add ${item.label} ${tab === "GIFs" ? "GIF" : "sticker"}`} className="relative rounded-xl bg-[var(--surface-2)] p-1 disabled:opacity-50">
+        <div className="grid grid-cols-3 gap-2">{items.map(item => <button key={item.id} type="button" disabled={mediaDisabled || busy !== null} onClick={() => void select(item.id)}
+          onPointerEnter={() => setActivePreview(item.id)} onPointerLeave={() => setActivePreview(null)}
+          onFocus={() => setActivePreview(item.id)} onBlur={() => setActivePreview(null)}
+          aria-label={`Add ${item.label} ${tab === "GIFs" ? "GIF" : "sticker"}`} className="relative rounded-xl bg-[var(--surface-2)] p-1 disabled:opacity-50">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={reduceMotion ? animatedMediaPosterUrl(item.id, tab === "GIFs") : animatedMediaUrl(item.id, tab === "GIFs")} alt="" loading="lazy" className="aspect-square w-full object-contain" />
+          <img src={reduceMotion || activePreview !== item.id ? animatedMediaPosterUrl(item.id, tab === "GIFs") : animatedMediaPreviewUrl(item.id, tab === "GIFs")} alt="" loading="lazy" decoding="async" width={192} height={192} className="aspect-square w-full object-contain" />
           <span className="block pb-1 text-xs">{item.label}</span>{busy === item.id ? <Loader2 className="absolute left-1/2 top-1/2 h-5 w-5 animate-spin" /> : null}
         </button>)}</div>
         {!items.length ? <p className="py-4 text-sm text-[var(--muted)]">No matching animations.</p> : null}

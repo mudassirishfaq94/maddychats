@@ -1,4 +1,5 @@
 "use client";
+import { createConditionalInterval } from "@/lib/conditional-interval";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Phone, PhoneOff, Mic, MicOff, Volume2, X, Minus, ShieldCheck, Headphones } from "lucide-react";
@@ -37,8 +38,9 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const userId = user?.id;
   const { subscribe, connected } = useRealtime();
+  const refreshPolling = useRef<(() => void) | null>(null);
   const streamConnected = useRef(connected);
-  useEffect(() => { streamConnected.current = connected; }, [connected]);
+  useEffect(() => { streamConnected.current = connected; refreshPolling.current?.(); }, [connected]);
   const [phase, setPhase] = useState<Phase>("idle");
   const [answerPending, setAnswerPending] = useState(false);
   const phaseRef = useRef<Phase>("idle");
@@ -65,7 +67,7 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
   const generation = useRef(0);
   const deadline = useRef<ReturnType<typeof setTimeout> | null>(null);
   const setStatus = useCallback((value: Phase) => { phaseRef.current = value; setPhase(value); }, []);
-  const storeCall = useCallback((value: Call | null) => { callRef.current = value; setCall(value); }, []);
+  const storeCall = useCallback((value: Call | null) => { callRef.current = value; setCall(value); refreshPolling.current?.(); }, []);
   const cleanup = useCallback(() => {
     generation.current++;
     if (nativeSession.current) { void hostedCall("call-stop", nativeSession.current); nativeSession.current = null; }
@@ -233,8 +235,8 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
     void sync();
     const unsubscribe = subscribe(event => { if (event.type === "call:changed") void sync(); });
     // Poll only while a call is open; incoming calls use the existing SSE channel.
-    const timer = setInterval(() => { if (callRef.current || (!streamConnected.current && document.visibilityState === "visible")) void sync(); }, 2000);
-    const heartbeat = setInterval(() => {
+    const polling = createConditionalInterval(() => Boolean(callRef.current) || (!streamConnected.current && document.visibilityState === "visible"), () => { void sync(); }, 2000);
+    const heartbeat = createConditionalInterval(() => Boolean(callRef.current), () => {
       const current = callRef.current;
       if (current && pc.current && nativeSession.current) {
         void hostedCall("call-renew", nativeSession.current).then(active => {
@@ -242,6 +244,8 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
         });
       } else if (current?.state === "active" && pc.current) void request({ action: "heartbeat", id: current.id, clientId: client.current }).catch(() => {});
     }, 15000);
+    refreshPolling.current = () => { polling.refresh(); heartbeat.refresh(); };
+    refreshPolling.current();
     const leaving = () => {
       const current = callRef.current;
       // Leaving an unanswered recipient page is not Decline. A notification
@@ -250,9 +254,9 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
     };
     window.addEventListener("pagehide", leaving);
     window.addEventListener("online", sync);
-    const visible = () => { if (document.visibilityState === "visible") void sync(); };
+    const visible = () => { refreshPolling.current?.(); if (document.visibilityState === "visible") void sync(); };
     document.addEventListener("visibilitychange", visible);
-    return () => { disposed = true; syncRef.current = null; unsubscribe(); clearInterval(timer); clearInterval(heartbeat); window.removeEventListener("pagehide", leaving); window.removeEventListener("online", sync); document.removeEventListener("visibilitychange", visible); cleanup(); };
+    return () => { disposed = true; syncRef.current = null; refreshPolling.current = null; unsubscribe(); polling.stop(); heartbeat.stop(); window.removeEventListener("pagehide", leaving); window.removeEventListener("online", sync); document.removeEventListener("visibilitychange", visible); cleanup(); };
   }, [userId, subscribe, cleanup, storeCall, setStatus, answer, end]);
 
   useEffect(() => {

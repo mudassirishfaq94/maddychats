@@ -14,7 +14,7 @@ import {
 import type { PublicUser } from "@/lib/types";
 import { Avatar } from "@/components/avatar";
 import { StartConversationButton } from "@/components/chats/start-conversation-button";
-import { useRealtime } from "@/components/providers/realtime-provider";
+import { usePresenceMap } from "@/components/providers/realtime-provider";
 import { timeAgo } from "@/lib/utils";
 
 type Phase =
@@ -29,7 +29,7 @@ type Phase =
  * and can start direct conversations.
  */
 export function PeopleSearch() {
-  const { presence } = useRealtime();
+  const presence = usePresenceMap();
   const [contactMatches, setContactMatches] = useState<PublicUser[] | null>(null);
   const [query, setQuery] = useState("");
   const [retry, setRetry] = useState(0);

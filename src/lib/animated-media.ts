@@ -21,3 +21,5 @@ export function animatedMediaUrl(id: string, gif = false) {
   return `/${gif ? "gifs" : "stickers"}/circlo-${id}-${gif ? "v2" : "v1"}.${gif ? "gif" : "webp"}`;
 }
 export function animatedMediaPosterUrl(id: string, gif = false) { return animatedMediaUrl(id, gif).replace(/\.(gif|webp)$/, ".png"); }
+/** Smaller previews; original upload formats remain compatible with existing messages. */
+export function animatedMediaPreviewUrl(id: string, gif = false) { return animatedMediaUrl(id, gif).replace(/\.gif$/, ".webp"); }

@@ -13,10 +13,13 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type ReactNode,
 } from "react";
 import { useAuth } from "./auth-provider";
 import type { PresenceState, RealtimeEvent } from "@/lib/types";
+import { createConditionalInterval } from "@/lib/conditional-interval";
+import { createPresenceStore } from "@/lib/presence-store";
 import { isNativeApp } from "@/lib/native-platform";
 
 type Listener = (event: RealtimeEvent) => void;
@@ -54,11 +57,10 @@ interface RealtimeContextValue {
   connected: boolean;
   /** Subscribe to every realtime event; returns an unsubscribe function. */
   subscribe: (listener: Listener) => () => void;
-  /** Live presence for everyone sharing a conversation with the viewer. */
-  presence: PresenceState;
 }
 
 const RealtimeContext = createContext<RealtimeContextValue | null>(null);
+const PresenceContext = createContext<ReturnType<typeof createPresenceStore> | null>(null);
 
 function isOpenConversation(conversationId: string): boolean {
   return Boolean(
@@ -81,7 +83,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
   const { status, user } = useAuth();
   const userId = user?.id;
   const [connected, setConnected] = useState(false);
-  const [presence, setPresence] = useState<PresenceState>({});
+  const [presenceStore] = useState(createPresenceStore);
   const privacyVersion = useRef(0);
   const listeners = useRef(new Set<Listener>());
   const audioContext = useRef<AudioContext | null>(null);
@@ -316,11 +318,12 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
       }
     };
     processDue();
-    const timer = window.setInterval(processDue, 15_000);
-    document.addEventListener("visibilitychange", processDue);
+    const timer = createConditionalInterval(() => document.visibilityState === "visible", processDue, 15_000);
+    const visibility = () => { timer.refresh(); processDue(); };
+    timer.refresh(); document.addEventListener("visibilitychange", visibility);
     return () => {
-      window.clearInterval(timer);
-      document.removeEventListener("visibilitychange", processDue);
+      timer.stop();
+      document.removeEventListener("visibilitychange", visibility);
     };
   }, [status]);
 
@@ -398,13 +401,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
       if (event.type === "message:new" && event.message.senderId !== userId) acknowledge(event.message.id);
       // Presence is centrally tracked so any component can read it.
       if (event.type === "presence:update") {
-        setPresence((prev) => ({
-          ...prev,
-          [event.userId]: {
-            online: event.online,
-            lastSeenAt: event.lastSeenAt,
-          },
-        }));
+        presenceStore.update(event.userId, { online: event.online, lastSeenAt: event.lastSeenAt });
       }
       if (event.type === "notification:new" && event.notification.type === "message") {
         const preferences = notificationPreferencesSnapshot;
@@ -470,18 +467,18 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
       disposed = true;
       clearInterval(deliveryTimer); clearTimeout(ackTimer); es.close();
       setConnected(false);
-      setPresence({});
+      presenceStore.clear();
     };
-  }, [playNotificationSound, router, status, userId, decrypt]);
+  }, [playNotificationSound, router, status, userId, decrypt, presenceStore]);
 
   const value = useMemo<RealtimeContextValue>(
-    () => ({ connected, subscribe, presence }),
-    [connected, subscribe, presence],
+    () => ({ connected, subscribe }),
+    [connected, subscribe],
   );
 
   return (
     <RealtimeContext.Provider value={value}>
-      {children}
+      <PresenceContext.Provider value={presenceStore}>{children}</PresenceContext.Provider>
     </RealtimeContext.Provider>
   );
 }
@@ -490,4 +487,15 @@ export function useRealtime(): RealtimeContextValue {
   const ctx = useContext(RealtimeContext);
   if (!ctx) throw new Error("useRealtime must be used inside <RealtimeProvider>");
   return ctx;
+}
+
+export function usePresenceMap(): PresenceState {
+  const store = useContext(PresenceContext);
+  if (!store) throw new Error("PresenceProvider is missing");
+  return useSyncExternalStore(store.subscribe, store.getSnapshot, store.getServerSnapshot);
+}
+export function usePresence(userId?: string) {
+  const store = useContext(PresenceContext);
+  if (!store) throw new Error("PresenceProvider is missing");
+  return useSyncExternalStore(store.subscribe, () => userId ? store.getSnapshot()[userId] : undefined, () => undefined);
 }

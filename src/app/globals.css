@@ -505,6 +505,7 @@ svg.lucide { stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
 
 /* Retain searchable history while skipping offscreen layout and paint. */
 .message-history-row { content-visibility: auto; }
+[data-virtualized="true"] .message-history-row { content-visibility: visible; }
 @media (pointer: coarse) {
   /* The hit area grows without shrinking icons or requiring precision taps. */
   button { min-height: 44px; min-width: 44px; }

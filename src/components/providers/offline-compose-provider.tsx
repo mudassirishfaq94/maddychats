@@ -1,4 +1,5 @@
 "use client";
+import { createConditionalInterval } from "@/lib/conditional-interval";
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "./auth-provider";
 import { useSharedE2EE } from "./e2ee-provider";
@@ -42,7 +43,7 @@ export function OfflineComposeProvider() {
       } catch { /* Keep the last encrypted contact list during a network outage. */ }
     };
     const run = async () => {
-      if (running || stopped || !navigator.onLine || !current.current.encryption.initialized) return;
+      if (running || stopped || document.visibilityState !== "visible" || !navigator.onLine || !current.current.encryption.initialized) return;
       running = true;
       try {
         const entries = await queuedTexts(userId);
@@ -101,10 +102,12 @@ export function OfflineComposeProvider() {
         if(!stopped)await rememberHistory(userId,conversationId,offlineHistoryRows([message],plain,userId));
       })().catch(()=>{});
     });
-    const timer = window.setInterval(resume, 10000);
+    const timer = createConditionalInterval(() => document.visibilityState === "visible", resume, 10000);
+    const visibility = () => { timer.refresh(); if (document.visibilityState === "visible") refresh(); };
+    timer.refresh(); document.addEventListener("visibilitychange", visibility);
     window.addEventListener("online", refresh); window.addEventListener("focus", refresh);
     window.addEventListener("maddy:locked-chats", refresh); window.addEventListener("storage", refresh);
-    return () => { stopped = true; unsubscribe(); clearTimeout(listTimer); clearInterval(timer); window.removeEventListener("online", refresh); window.removeEventListener("focus", refresh); window.removeEventListener("maddy:locked-chats", refresh); window.removeEventListener("storage", refresh); };
+    return () => { stopped = true; unsubscribe(); clearTimeout(listTimer); timer.stop(); document.removeEventListener("visibilitychange", visibility); window.removeEventListener("online", refresh); window.removeEventListener("focus", refresh); window.removeEventListener("maddy:locked-chats", refresh); window.removeEventListener("storage", refresh); };
   }, [userId, encryption.initialized, subscribe, readConversations, refreshConversations]);
   return status ? <div role="status" className="fixed bottom-24 left-1/2 z-50 max-w-[90vw] -translate-x-1/2 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm shadow-lg">{status}{status !== "Queued message sent." ? <a href="/offline.html?queue=1" className="ml-3 inline-flex min-h-11 items-center font-semibold underline">Review queue</a> : null}</div> : null;
 }

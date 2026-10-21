@@ -6,6 +6,7 @@ import Image from "next/image";
 import { EncryptedMessageState } from "./encrypted-message-state";
 
 const starterMode = process.env.NEXT_PUBLIC_STARTER_MODE === "1";
+import { useCommittedRef } from "@/hooks/use-committed-ref";
 import { useHydrated } from "@/hooks/use-hydrated";
 
 import {
@@ -59,7 +60,8 @@ import {
 } from "lucide-react";
 import type { ConversationDetail, MessageDTO, MessagePage, PublicUser, SafeUser } from "@/lib/types";
 import { Avatar } from "@/components/avatar";
-import { useRealtime } from "@/components/providers/realtime-provider";
+import { useRealtime, usePresence } from "@/components/providers/realtime-provider";
+import { VirtualMessageHistory, type MessageHistoryHandle } from "./virtual-message-history";
 import { MessageActions } from "./message-actions";
 const MessageSearch = dynamic(() => import("./message-search").then(module => module.MessageSearch));
 import { ChatActionsMenu } from "./chat-actions-menu";
@@ -212,7 +214,7 @@ export function ChatView({
   const router = useRouter();
   const searchParams = useSearchParams();
   const audioCall = useAudioCall();
-  const { subscribe, presence, connected } = useRealtime();
+  const { subscribe, connected } = useRealtime();
   const e2ee = useSharedE2EE();
   const {forgetDecryptedMessages}=e2ee;
   const encryptionRef = useRef<typeof e2ee | null>(null);
@@ -469,13 +471,14 @@ export function ChatView({
     let alive = true;
     (async () => {
       let hadFailure = false;
+      const messagesById = new Map(items.map(message => [message.id, message]));
       const textBatch = new Map<string, string>();
       const replyBatch = new Map<string, string>();
       const flushText = () => {
         if (!alive || textBatch.size === 0) return;
         const ready = new Map(textBatch); textBatch.clear();
         startTransition(() => setDecryptedTexts(current => new Map([...current, ...[...ready].filter(([id])=>{
-          const message=items.find(item=>item.id===id);
+          const message=messagesById.get(id);
           return message && (!message.expiresAt || Date.parse(message.expiresAt)>Date.now()+serverClockOffset.current);
         })])));
       };
@@ -649,6 +652,9 @@ export function ChatView({
   const [scheduledTime, setScheduledTime] = useState("");
 
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [scrollElement, setScrollElement] = useState<HTMLDivElement | null>(null);
+  const attachScrollElement = useCallback((node: HTMLDivElement | null) => { scrollRef.current = node; setScrollElement(node); }, []);
+  const historyRef = useRef<MessageHistoryHandle | null>(null);
   const messageContentRef = useRef<HTMLDivElement>(null);
   const followLatestRef = useRef(true);
   const touchScrollY = useRef(0);
@@ -669,7 +675,7 @@ export function ChatView({
 
   const isGroup = conversation.type === "group";
   const otherName = isGroup ? conversation.name ?? "Group" : other?.displayName ?? "Unknown member";
-  const otherPresence = other ? presence[other.id] : undefined;
+  const otherPresence = usePresence(other?.id);
   const otherOnline = Boolean(otherPresence?.online);
   const otherLastSeen = otherPresence?.lastSeenAt ?? other?.lastSeenAt ?? null;
 
@@ -983,16 +989,17 @@ export function ChatView({
     const el = scrollRef.current;
     if (!el) return;
     followLatestRef.current = true;
-    el.scrollTo({ top: el.scrollHeight, behavior: smooth ? "smooth" : "auto" });
+    if (historyRef.current?.virtualized) historyRef.current.scrollToEnd();
+    else el.scrollTo({ top: el.scrollHeight, behavior: smooth ? "smooth" : "auto" });
   }, []);
 
   useLayoutEffect(() => {
     if (!initialScrollDone.current) {
       initialScrollDone.current = true;
-      followLatestRef.current = !searchParams.get("message") || !nodeRefs.current.has(searchParams.get("message")!);
+      followLatestRef.current = !searchParams.get("message") || !items.some(item => item.id === searchParams.get("message"));
       if (followLatestRef.current) scrollToBottom(false);
     }
-  }, [scrollToBottom, searchParams]);
+  }, [scrollToBottom, searchParams, items]);
 
   const hasMessages = items.length > 0;
   useEffect(() => {
@@ -1044,12 +1051,12 @@ export function ChatView({
 
   function jumpTo(messageId: string) {
     const node = nodeRefs.current.get(messageId);
-    if (!node) {
+    if (!node && !historyRef.current?.scrollToMessage(messageId)) {
       setError("That message is further back — load older messages to see it.");
       return;
     }
     followLatestRef.current = false;
-    node.scrollIntoView({ behavior: "smooth", block: "center" });
+    node?.scrollIntoView({ behavior: "smooth", block: "center" });
     setHighlightId(messageId);
     setTimeout(() => setHighlightId(null), 1600);
   }
@@ -1060,10 +1067,10 @@ export function ChatView({
   useEffect(() => {
     if (!targetMessageId || jumpedRef.current === targetMessageId) return;
     const node = nodeRefs.current.get(targetMessageId);
-    if (!node) return;
+    if (!node && !historyRef.current?.scrollToMessage(targetMessageId)) return;
     jumpedRef.current = targetMessageId;
     followLatestRef.current = false;
-    node.scrollIntoView({ behavior: "smooth", block: "center" });
+    node?.scrollIntoView({ behavior: "smooth", block: "center" });
     setHighlightId(targetMessageId);
     setTimeout(() => setHighlightId(null), 2200);
   }, [targetMessageId, items]);
@@ -1095,7 +1102,7 @@ export function ChatView({
       setHasMore(data.hasMore);
       requestAnimationFrame(() => {
         const node = scrollRef.current;
-        if (node) node.scrollTop = node.scrollHeight - prevHeight + prevTop;
+        if (node && !historyRef.current?.virtualized) node.scrollTop = node.scrollHeight - prevHeight + prevTop;
       });
     } catch {
       setError("Network error while loading older messages.");
@@ -1802,6 +1809,29 @@ export function ChatView({
 
   /* -------------------------------- render --------------------------------- */
 
+  // Keep handlers current after commit without changing every row's props on each keystroke.
+  const rowActions = useCommittedRef<RowActions>({
+      editDraft: setEditDraft, saveEdit: id => { void saveEdit(id); }, cancelEdit: () => setEditingId(null),
+      menu: setMobileMenuMsg, reply: message => { setReplyTo(message); composerRef.current?.focus(); }, forward: setForwardMsg,
+      jump: jumpTo, reveal: message => { void revealMessage(message); }, retryDecrypt: id => {
+        failedDecryptionRef.current.delete(id);
+        setUnavailableMessageIds(current => { const next = new Set(current); next.delete(id); return next; });
+        setDecryptRetry(value => value + 1);
+      },
+      deviceSettings: () => router.push("/app/profile#encryption-devices"), security: () => setShowEncryptionInfo(true),
+      retrySend: message => { void retryFailedMessage(message); }, cancelQueued: async message => {
+        if (!message.clientMessageId) return;
+        cancelledMessages.current.add(message.clientMessageId);
+        try { await removeQueuedMessage(me.id, conversationId, message.clientMessageId); setItems(current => current.filter(item => item.id !== message.id)); }
+        catch { cancelledMessages.current.delete(message.clientMessageId); setError("Could not cancel the saved message. Please retry."); }
+      },
+      react: (message, emoji) => { void toggleReaction(message, emoji); }, star: message => { void toggleStar(message); },
+      pin: message => { void togglePin(message); }, copy: copyText, report: setReportMsg,
+      edit: message => { if (!isPendingDecrypt(message)) { setEditingId(message.id); setEditDraft(copyableText(message)); } },
+      delete: (id, mode) => { void executeDelete(id, mode); }, cancelDelete: () => setPendingDelete(null),
+      requestDelete: id => setPendingDelete({ id, mode: "for_everyone" }),
+  });
+
   // Filter out messages deleted-for-me and compute grouped view.
   const visibleItems = useMemo(
     () => items.filter((m) => !m.deletedForMe),
@@ -2051,14 +2081,7 @@ export function ChatView({
         <button
           type="button"
           onClick={() => {
-            // Find the pinned message and scroll to it
-            const node = nodeRefs.current.get(firstPinned.id);
-            if (node) {
-              followLatestRef.current = false;
-              node.scrollIntoView({ behavior: "smooth", block: "center" });
-              setHighlightId(firstPinned.id);
-              setTimeout(() => setHighlightId(null), 1600);
-            }
+            jumpTo(firstPinned.id);
           }}
           className="flex items-center gap-2 border-b border-[var(--border)] bg-[color-mix(in_srgb,var(--accent)_6%,transparent)] px-4 py-2 text-left text-xs text-[var(--accent-fg)] transition-colors hover:bg-[color-mix(in_srgb,var(--accent)_10%,transparent)]"
         >
@@ -2098,7 +2121,7 @@ export function ChatView({
       <div className="relative isolate flex min-h-0 flex-1 flex-col overflow-hidden" style={bubbleTheme}>
       <div aria-hidden="true" className="chat-message-area pointer-events-none absolute inset-0 -z-10" style={bgStyle} />
       <div
-        ref={scrollRef}
+        ref={attachScrollElement}
         role="region"
         aria-label="Messages"
         tabIndex={0}
@@ -2178,420 +2201,19 @@ export function ChatView({
             </div>
           </div>
         ) : (
-          <div ref={messageContentRef} className="relative z-10 pb-4">
-            {grouped.map(({ msg, showDate, sameSenderPrev }) => {
-              const own = msg.senderId === me.id;
-              const deleted = msg.deletedAt !== null;
-              if (msg.type === "system") return <div key={msg.id} data-message-id={msg.id} className="my-4 flex justify-center"><p className="max-w-[90%] rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-2 text-center text-xs text-[var(--muted)]">{msg.text}</p></div>;
-              return (
-                <div
-                  key={msg.id}
-                  className="message-history-row"
-                  style={{ containIntrinsicSize: `auto ${msg.attachments.length ? 280 : 80}px` }}
-                  ref={(node) => {
-                    nodeRefs.current.set(msg.id, node);
-                  }}
-                >
-                  {msg.id === firstVisibleUnreadId ? (
-                    <div className="my-4 flex items-center gap-3" role="separator" aria-label={`${initialUnread?.count ?? 0} unread messages`}>
-                      <span className="h-px flex-1 bg-[color-mix(in_srgb,var(--accent)_45%,transparent)]" />
-                      <span className="rounded-full bg-[var(--surface)] px-3 py-1 text-[0.68rem] font-semibold text-[var(--accent-fg)] shadow-sm">
-                        {initialUnread?.count ?? 0} unread {initialUnread?.count === 1 ? "message" : "messages"}
-                      </span>
-                      <span className="h-px flex-1 bg-[color-mix(in_srgb,var(--accent)_45%,transparent)]" />
-                    </div>
-                  ) : null}
-                  {showDate ? (
-                    <div className="my-4 flex justify-center">
-                      <span className="rounded-full bg-[var(--surface)] px-3.5 py-1.5 text-[0.66rem] font-medium text-[var(--muted)] shadow-sm">
-                        {dayLabel(msg.createdAt, hydrated)}
-                      </span>
-                    </div>
-                  ) : null}
-
-                  <div
-                    className={cn(
-                      "group flex w-full",
-                      own ? "justify-end" : "justify-start",
-                      sameSenderPrev ? "mt-0.5" : "mt-2.5",
-                      highlightId === msg.id &&
-                        "rounded-xl ring-2 ring-[var(--accent)] ring-offset-2 ring-offset-[color-mix(in_srgb,var(--accent)_20%,transparent)] transition-shadow duration-500",
-                    )}
-                  >
-                    {!own ? (
-                      <span className="mr-2 mt-auto w-7 shrink-0">
-                        {!sameSenderPrev ? <Avatar user={msg.sender} size={26} /> : null}
-                      </span>
-                    ) : null}
-
-                    <div
-                      className={cn(
-                        "relative max-w-[85%] sm:max-w-[65%] md:max-w-[55%]",
-                        own ? "text-right" : "text-left",
-                      )}
-                    >
-                      {isGroup && !own && !sameSenderPrev ? <span className="mb-1 block w-fit rounded-full bg-[var(--surface)] px-2 py-1 text-[0.68rem] font-semibold text-[var(--accent-fg)]">{msg.sender.displayName}</span> : null}
-                      {editingId === msg.id ? (
-                        <div className="card-glass rounded-2xl p-2">
-                          <textarea
-                            value={editDraft}
-                            onChange={(e) => setEditDraft(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter" && !e.shiftKey) {
-                                e.preventDefault();
-                                void saveEdit(msg.id);
-                              }
-                              if (e.key === "Escape") setEditingId(null);
-                            }}
-                            rows={2}
-                            autoFocus
-                            className="field-input border-0! bg-transparent! p-2! text-sm"
-                          />
-                          <div className="flex justify-end gap-1.5 px-1 pb-1">
-                            <button
-                              type="button"
-                              onClick={() => void saveEdit(msg.id)}
-                              disabled={busyId === msg.id}
-                              className="btn btn-primary px-2.5! py-1.5! text-xs!"
-                            >
-                              {busyId === msg.id ? (
-                                <Loader2 className="h-3 w-3 animate-spin" />
-                              ) : (
-                                <Check className="h-3 w-3" />
-                              )}
-                              Save
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setEditingId(null)}
-                              className="btn btn-ghost px-2.5! py-1! text-xs!"
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <>
-                          <LongPressTouchable
-                            onLongPress={() => {
-                              if (!deleted && !msg.selfDestruct) setMobileMenuMsg(msg);
-                            }}
-                            onSwipeRight={() => { if (!deleted && !msg.selfDestruct) { setReplyTo(msg); composerRef.current?.focus(); } }}
-                            onSwipeLeft={() => { if (!deleted && !msg.selfDestruct) setForwardMsg(msg); }}
-                          >
-                          <div
-                            className={cn(
-                              "chat-bubble inline-block max-w-full rounded-2xl px-3 py-2 text-left align-middle",
-                              own
-                                ? "rounded-br-md text-[var(--bubble-own-fg)]"
-                                : "rounded-bl-md border border-[var(--border)] bg-[var(--bubble-other-bg)]",
-                              deleted && "opacity-70",
-                            )}
-                            style={
-                              own
-                                ? { background: "var(--bubble-own-bg)", "--muted": "var(--bubble-own-sub)", "--accent-fg": "var(--bubble-own-fg)" } as React.CSSProperties
-                                : undefined
-                            }
-                          >
-                            {msg.forwarded ? (
-                              <span className="mb-1 block text-[0.6rem] font-medium italic text-[var(--muted)] opacity-70">
-                                Forwarded
-                              </span>
-                            ) : null}
-                            {msg.replyTo ? (
-                              <button
-                                type="button"
-                                onClick={() => jumpTo(msg.replyTo!.id)}
-                                className={cn(
-                                  "group/reply mb-2 w-full overflow-hidden rounded-xl text-left text-xs transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]",
-                                  own
-                                    ? "bg-[color-mix(in_srgb,var(--accent)_14%,transparent)]"
-                                    : "bg-[color-mix(in_srgb,var(--accent)_8%,transparent)]",
-                                )}
-                              >
-                                <div className="flex items-stretch">
-                                  <div
-                                    className={cn(
-                                      "w-1 shrink-0 rounded-full",
-                                      own ? "bg-[var(--accent)]" : "bg-[var(--accent-fg)]",
-                                    )}
-                                  />
-                                  <div className="flex min-w-0 flex-1 items-start gap-2 px-2.5 py-2">
-                                    <div className="relative mt-0.5 shrink-0">
-                                      <span
-                                        className="flex h-4 w-4 items-center justify-center rounded-full text-[0.5rem] font-bold text-white"
-                                        style={{
-                                          background: `linear-gradient(135deg, hsl(${avatarHue(msg.replyTo.senderId)} 48% 46%), hsl(${(avatarHue(msg.replyTo.senderId) + 40) % 360} 44% 52%))`,
-                                        }}
-                                      >
-                                        {initials(
-                                          msg.replyTo.senderId === me.id
-                                            ? me.displayName
-                                            : msg.replyTo.senderName,
-                                        )}
-                                      </span>
-                                      <div className="absolute -bottom-0.5 -right-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-[var(--surface)] shadow-sm">
-                                        <ReplyIcon className="h-2 w-2 text-[var(--muted)]" />
-                                      </div>
-                                    </div>
-                                    <span className="min-w-0">
-                                      <span className="flex items-center gap-1.5">
-                                        <span
-                                          className={cn(
-                                            "text-[0.65rem] font-medium uppercase tracking-wider",
-                                            own
-                                              ? "text-[var(--bubble-own-sub)]"
-                                              : "text-[var(--muted)]",
-                                          )}
-                                        >
-                                          Reply
-                                        </span>
-                                        <span className="h-3 w-px bg-[var(--border)]" />
-                                        <span
-                                          className={cn(
-                                            "truncate text-[0.72rem] font-semibold",
-                                            own
-                                              ? "text-[var(--bubble-own-fg)]"
-                                              : "text-[var(--accent-fg)]",
-                                          )}
-                                        >
-                                          {msg.replyTo.senderId === me.id
-                                            ? "You"
-                                            : msg.replyTo.senderName}
-                                        </span>
-                                      </span>
-                                      <span
-                                        className={cn(
-                                          "mt-0.5 line-clamp-2 block text-[0.75rem] leading-relaxed",
-                                          own
-                                            ? "text-[var(--bubble-own-sub)]"
-                                            : "text-[var(--muted)]",
-                                          msg.replyTo.deleted && "italic opacity-60",
-                                        )}
-                                      >
-                                        {msg.replyTo.deleted ? (
-                                          <span className="flex items-center gap-1">
-                                            <Ban className="inline h-3 w-3" />
-                                            Message unavailable
-                                          </span>
-                                        ) : msg.replyTo.encrypted && decryptedReplies.get(msg.replyTo.id) === undefined ? (
-                                          <span className="flex items-center gap-1 opacity-70">
-                                            {unavailableMessageIds.has(`reply:${msg.replyTo.id}`) ? "Reply unavailable on this device. Check Security & recovery." : "Loading replied message…"}
-                                            …
-                                          </span>
-                                        ) : (
-                                          <>
-                                            <Quote className="mr-0.5 inline h-2.5 w-2.5 opacity-50" />
-                                            {msg.replyTo.encrypted
-                                              ? decryptedReplies.get(msg.replyTo.id) ?? ""
-                                              : msg.replyTo.text}
-                                          </>
-                                        )}
-                                      </span>
-                                    </span>
-                                  </div>
-                                </div>
-                              </button>
-                            ) : null}
-
-                            {deleted ? (
-                              <span className="flex items-center gap-1.5 text-sm italic opacity-80">
-                                <Ban className="h-3.5 w-3.5" />
-                                {msg.selfDestruct ? "Message expired" : "Message deleted"}
-                              </span>
-                            ) : msg.selfDestruct && !own && !msg.text ? (
-                              <button type="button" className="btn min-h-11 text-sm" disabled={!e2ee.initialized} onClick={() => void revealMessage(msg)}>Reveal · disappears in 5 seconds</button>
-                            ) : (
-                              <>
-                                {msg.selfDestruct ? <SelfDestructCountdown deadline={msg.expiresAt} offset={serverClockOffset.current} /> : null}
-                                {msg.type === "audio" && msg.attachments.length > 0 ? (
-                                  <div className="mb-1.5 min-w-0 max-w-full">
-                                    <AudioMessage
-                                      src={msg.attachments[0].url}
-                                      attachment={msg.attachments[0]}
-                                      own={own}
-                                      sender={msg.sender}
-                                      duration={undefined}
-                                      attachmentId={msg.attachments[0].id}
-                                    />
-                                  </div>
-                                ) : msg.attachments.length > 0 ? (
-                                  <div className={cn(textOf(msg) && "mb-1.5")}>
-                                    <AttachmentList
-                                      attachments={msg.attachments}
-                                      own={own}
-                                    />
-                                  </div>
-                                ) : null}
-                                {msg.encrypted && Boolean(msg.text) && decryptedTexts.get(msg.id) === undefined ? (
-                                  <EncryptedMessageState
-                                    failed={unavailableMessageIds.has(msg.id)}
-                                    missingKey={missingMessageKeys.current.has(msg.id)}
-                                    deviceError={Boolean(e2ee.error)} signal={msg.text === "signal:v2"}
-                                    introduction={!requestAccepted && conversation.requestInitiatorId !== me.id}
-                                    onRetry={() => {
-                                      failedDecryptionRef.current.delete(msg.id);
-                                      setUnavailableMessageIds(current => { const next = new Set(current); next.delete(msg.id); return next; });
-                                      setDecryptRetry(value => value + 1);
-                                    }}
-                                    onSecurity={() => { if (e2ee.error || msg.text === "signal:v2") router.push("/app/profile#encryption-devices"); else setShowEncryptionInfo(true); }}
-                                  />
-                                ) : textOf(msg) ? (
-                                  <MessageText text={textOf(msg)} />
-                                ) : null}
-                              </>
-                            )}
-
-                            <span
-                              className={cn(
-                                "mt-0.5 flex items-center gap-0.5 text-[0.62rem] tabular-nums",
-                                own
-                                  ? "justify-end text-[var(--bubble-own-sub)]"
-                                  : "text-[var(--muted)]",
-                              )}
-                            >
-                              {msg.encrypted ? (
-                                <Lock className="h-2.5 w-2.5 opacity-60" aria-label="End-to-end encrypted" />
-                              ) : null}
-                              {msg.editedAt && !deleted ? (
-                                <span className="text-[0.58rem] italic opacity-70">edited</span>
-                              ) : null}
-                              <span>{timeLabel(msg.createdAt, hydrated)}</span>
-                              {msg.starred ? <Star className="h-2.5 w-2.5 fill-current text-[var(--accent-fg)]" /> : null}
-                              {own && !deleted ? (
-                                msg.sendStatus === "failed" ? (
-                                  <button type="button" onClick={() => void retryFailedMessage(msg)} aria-label="Retry failed message">
-                                    <ReceiptIcon message={msg} />
-                                  </button>
-                                ) : <ReceiptIcon message={msg} />
-                              ) : null}
-                            </span>
-                          </div>
-                          </LongPressTouchable>
-
-                          {own && msg.sendStatus === "queued" ? (
-                            <div role="status" className="mt-2 max-w-sm rounded-xl border border-sky-400/20 bg-sky-400/10 px-3 py-2 text-xs leading-relaxed text-[var(--text)]">
-                              <p>{msg.queueReason ?? "Waiting for secure delivery. Your message will send automatically when encryption is ready."}</p>
-                              <div className="mt-1 flex gap-3">
-                                <button type="button" className="underline" onClick={() => { if (msg.queueReason?.includes("This device needs approval")) router.push("/app/profile#encryption-devices"); else void retryFailedMessage(msg); }}>Try now</button>
-                                <button type="button" className="underline" onClick={async () => {
-                                  if (msg.clientMessageId) {
-                                    cancelledMessages.current.add(msg.clientMessageId);
-                                    try {
-                                      await removeQueuedMessage(me.id, conversationId, msg.clientMessageId);
-                                      setItems(current => current.filter(item => item.id !== msg.id));
-                                    } catch {
-                                      cancelledMessages.current.delete(msg.clientMessageId);
-                                      setError("Could not cancel the saved message. Please retry.");
-                                    }
-                                  }
-                                }}>Cancel queued message</button>
-                              </div>
-                            </div>
-                          ) : null}
-
-                          {msg.reactions.length > 0 ? (
-                            <div
-                              className={cn(
-                                "mt-1 flex flex-wrap gap-0.5",
-                                own ? "justify-end" : "justify-start",
-                              )}
-                            >
-                              {msg.reactions.map((r) => (
-                                <button
-                                  key={r.emoji}
-                                  type="button"
-                                  onClick={() => void toggleReaction(msg, r.emoji)}
-                                  aria-label={`${r.emoji} reaction, ${r.count}${r.mine ? ", yours" : ""}`}
-                                  className={cn(
-                                    "flex items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-[0.7rem] transition-transform duration-150 hover:scale-105",
-                                    r.mine
-                                      ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-fg)]"
-                                      : "border-[var(--border)] bg-[var(--surface)] text-[var(--muted)]",
-                                  )}
-                                >
-                                  <span className="leading-none">{r.emoji}</span>
-                                  {r.count > 1 ? (
-                                    <span className="tabular-nums font-semibold leading-none">
-                                      {r.count}
-                                    </span>
-                                  ) : null}
-                                </button>
-                              ))}
-                            </div>
-                          ) : null}
-
-                          {pendingDelete?.id === msg.id ? (
-                            <span
-                              className={cn(
-                                "absolute top-1/2 z-20 flex -translate-y-1/2 items-center gap-1",
-                                own ? "-left-16" : "-right-16",
-                              )}
-                            >
-                              <button
-                                type="button"
-                                aria-label="Confirm delete"
-                                onClick={() => void executeDelete(pendingDelete!.id, pendingDelete!.mode)}
-                                disabled={busyId === msg.id}
-                                className="flex h-7 w-7 items-center justify-center rounded-full bg-[var(--danger)] text-white"
-                              >
-                                {busyId === msg.id ? (
-                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                ) : (
-                                  <Check className="h-3.5 w-3.5" />
-                                )}
-                              </button>
-                              <button
-                                type="button"
-                                aria-label="Cancel delete"
-                                onClick={() => setPendingDelete(null)}
-                                className="flex h-7 w-7 items-center justify-center rounded-full border border-[var(--border-strong)] bg-[var(--surface)] text-[var(--muted)]"
-                              >
-                                <X className="h-3.5 w-3.5" />
-                              </button>
-                            </span>
-                          ) : (
-                            <MessageActions
-                              own={own}
-                              deleted={deleted || Boolean(msg.selfDestruct)}
-                              align={own ? "right" : "left"}
-                              starred={msg.starred}
-                              pinned={msg.pinned}
-                              textAvailable={Boolean(copyableText(msg))}
-                              onReply={() => {
-                                setReplyTo(msg);
-                                composerRef.current?.focus();
-                              }}
-                              onReact={(emoji) => void toggleReaction(msg, emoji)}
-                              onCopy={() => {
-                                const t = copyableText(msg);
-                                if (t) copyText(t);
-                              }}
-                              onForward={() => setForwardMsg(msg)}
-                              onReport={() => setReportMsg(msg)}
-                              onEdit={() => {
-                                if (isPendingDecrypt(msg)) return;
-                                setEditingId(msg.id);
-                                setEditDraft(copyableText(msg));
-                              }}
-                              onStar={() => void toggleStar(msg)}
-                              onUnstar={() => void toggleStar(msg)}
-                              onPin={() => void togglePin(msg)}
-                              onUnpin={() => void togglePin(msg)}
-                              onDeleteForMe={() => {
-                                void executeDelete(msg.id, "for_me");
-                              }}
-                              onDeleteForEveryone={() => setPendingDelete({ id: msg.id, mode: "for_everyone" })}
-                            />
-                          )}
-                        </>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+          <VirtualMessageHistory items={grouped} scrollRef={scrollRef} scrollElement={scrollElement} contentRef={messageContentRef} historyRef={historyRef}
+            editingId={editingId} renderItem={({msg, showDate, sameSenderPrev}) => <MessageRow key={msg.id}
+              msg={msg} showDate={showDate} sameSenderPrev={sameSenderPrev} me={me} hydrated={hydrated} isGroup={isGroup}
+              highlighted={highlightId === msg.id} unreadCount={msg.id === firstVisibleUnreadId ? initialUnread?.count ?? 0 : null}
+              editing={editingId === msg.id} editDraft={editingId === msg.id ? editDraft : ""} busy={busyId === msg.id}
+              text={textOf(msg)} copyableText={copyableText(msg)} decryptedText={decryptedTexts.get(msg.id)}
+              replyText={msg.replyTo ? decryptedReplies.get(msg.replyTo.id) : undefined}
+              unavailable={unavailableMessageIds.has(msg.id)} replyUnavailable={Boolean(msg.replyTo && unavailableMessageIds.has(`reply:${msg.replyTo.id}`))}
+              missingKey={missingMessageKeys.current.has(msg.id)} deviceError={Boolean(e2ee.error)} encryptionInitialized={e2ee.initialized}
+              introduction={!requestAccepted && conversation.requestInitiatorId !== me.id} clockOffset={serverClockOffset.current}
+              pendingDecrypt={isPendingDecrypt(msg)} deleteMode={pendingDelete?.id === msg.id ? pendingDelete.mode : undefined}
+              actions={rowActions} nodeRefs={nodeRefs}
+            />} />
         )}
 
         {/* Scroll to bottom button */}
@@ -3242,5 +2864,426 @@ const MessageText = memo(function MessageText({ text }: { text: string }) {
       {text}
     </p>
   );
+
+});
+
+type RowActions = {
+  editDraft: (text: string) => void; saveEdit: (id: string) => void; cancelEdit: () => void;
+  menu: (message: MessageDTO) => void; reply: (message: MessageDTO) => void; forward: (message: MessageDTO) => void;
+  jump: (id: string) => void; reveal: (message: MessageDTO) => void; retryDecrypt: (id: string) => void;
+  deviceSettings: () => void; security: () => void; retrySend: (message: MessageDTO) => void;
+  cancelQueued: (message: MessageDTO) => void; react: (message: MessageDTO, emoji: string) => void;
+  star: (message: MessageDTO) => void; pin: (message: MessageDTO) => void; copy: (text: string) => void;
+  report: (message: MessageDTO) => void; edit: (message: MessageDTO) => void;
+  delete: (id: string, mode: "for_me" | "for_everyone") => void; cancelDelete: () => void; requestDelete: (id: string) => void;
+};
+type MessageRowProps = {
+  msg: MessageDTO; showDate: boolean; sameSenderPrev: boolean; me: SafeUser; hydrated: boolean; isGroup: boolean;
+  highlighted: boolean; unreadCount: number | null; editing: boolean; editDraft: string; busy: boolean;
+  text: string; copyableText: string; decryptedText: string | undefined; replyText: string | undefined;
+  unavailable: boolean; replyUnavailable: boolean; missingKey: boolean; deviceError: boolean;
+  encryptionInitialized: boolean; introduction: boolean; clockOffset: number; pendingDecrypt: boolean;
+  deleteMode: "for_me" | "for_everyone" | undefined;
+  actions: React.RefObject<RowActions | null>; nodeRefs: React.RefObject<Map<string, HTMLDivElement | null>>;
+};
+/** All render inputs are explicit; immutable message updates use React's full shallow comparison. */
+const MessageRow = memo(function MessageRow({msg, showDate, sameSenderPrev, me, hydrated, isGroup,
+  highlighted, unreadCount, editing, editDraft, busy, text, copyableText, decryptedText, replyText,
+  unavailable, replyUnavailable, missingKey, deviceError, encryptionInitialized, introduction,
+  clockOffset, pendingDecrypt, deleteMode, actions, nodeRefs}: MessageRowProps) {
+              const own = msg.senderId === me.id;
+              const deleted = msg.deletedAt !== null;
+              if (msg.type === "system") return <div key={msg.id} data-message-id={msg.id} className="my-4 flex justify-center"><p className="max-w-[90%] rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-2 text-center text-xs text-[var(--muted)]">{msg.text}</p></div>;
+              return (
+                <div
+                  key={msg.id}
+                  data-message-id={msg.id}
+                  className="message-history-row"
+                  style={{ containIntrinsicSize: `auto ${msg.attachments.length ? 280 : 80}px` }}
+                  ref={(node) => {
+                    if (node) nodeRefs.current.set(msg.id, node); else nodeRefs.current.delete(msg.id);
+                  }}
+                >
+                  {unreadCount !== null ? (
+                    <div className="my-4 flex items-center gap-3" role="separator" aria-label={`${unreadCount ?? 0} unread messages`}>
+                      <span className="h-px flex-1 bg-[color-mix(in_srgb,var(--accent)_45%,transparent)]" />
+                      <span className="rounded-full bg-[var(--surface)] px-3 py-1 text-[0.68rem] font-semibold text-[var(--accent-fg)] shadow-sm">
+                        {unreadCount ?? 0} unread {unreadCount === 1 ? "message" : "messages"}
+                      </span>
+                      <span className="h-px flex-1 bg-[color-mix(in_srgb,var(--accent)_45%,transparent)]" />
+                    </div>
+                  ) : null}
+                  {showDate ? (
+                    <div className="my-4 flex justify-center">
+                      <span className="rounded-full bg-[var(--surface)] px-3.5 py-1.5 text-[0.66rem] font-medium text-[var(--muted)] shadow-sm">
+                        {dayLabel(msg.createdAt, hydrated)}
+                      </span>
+                    </div>
+                  ) : null}
+
+                  <div
+                    className={cn(
+                      "group flex w-full",
+                      own ? "justify-end" : "justify-start",
+                      sameSenderPrev ? "mt-0.5" : "mt-2.5",
+                      highlighted &&
+                        "rounded-xl ring-2 ring-[var(--accent)] ring-offset-2 ring-offset-[color-mix(in_srgb,var(--accent)_20%,transparent)] transition-shadow duration-500",
+                    )}
+                  >
+                    {!own ? (
+                      <span className="mr-2 mt-auto w-7 shrink-0">
+                        {!sameSenderPrev ? <Avatar user={msg.sender} size={26} /> : null}
+                      </span>
+                    ) : null}
+
+                    <div
+                      className={cn(
+                        "relative max-w-[85%] sm:max-w-[65%] md:max-w-[55%]",
+                        own ? "text-right" : "text-left",
+                      )}
+                    >
+                      {isGroup && !own && !sameSenderPrev ? <span className="mb-1 block w-fit rounded-full bg-[var(--surface)] px-2 py-1 text-[0.68rem] font-semibold text-[var(--accent-fg)]">{msg.sender.displayName}</span> : null}
+                      {editing ? (
+                        <div className="card-glass rounded-2xl p-2">
+                          <textarea
+                            value={editDraft}
+                            onChange={(e) => actions.current?.editDraft(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" && !e.shiftKey) {
+                                e.preventDefault();
+                                actions.current?.saveEdit(msg.id);
+                              }
+                              if (e.key === "Escape") actions.current?.cancelEdit();
+                            }}
+                            rows={2}
+                            autoFocus
+                            className="field-input border-0! bg-transparent! p-2! text-sm"
+                          />
+                          <div className="flex justify-end gap-1.5 px-1 pb-1">
+                            <button
+                              type="button"
+                              onClick={() => actions.current?.saveEdit(msg.id)}
+                              disabled={busy}
+                              className="btn btn-primary px-2.5! py-1.5! text-xs!"
+                            >
+                              {busy ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                <Check className="h-3 w-3" />
+                              )}
+                              Save
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => actions.current?.cancelEdit()}
+                              className="btn btn-ghost px-2.5! py-1! text-xs!"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <LongPressTouchable
+                            onLongPress={() => {
+                              if (!deleted && !msg.selfDestruct) actions.current?.menu(msg);
+                            }}
+                            onSwipeRight={() => { if (!deleted && !msg.selfDestruct) { actions.current?.reply(msg); } }}
+                            onSwipeLeft={() => { if (!deleted && !msg.selfDestruct) actions.current?.forward(msg); }}
+                          >
+                          <div
+                            className={cn(
+                              "chat-bubble inline-block max-w-full rounded-2xl px-3 py-2 text-left align-middle",
+                              own
+                                ? "rounded-br-md text-[var(--bubble-own-fg)]"
+                                : "rounded-bl-md border border-[var(--border)] bg-[var(--bubble-other-bg)]",
+                              deleted && "opacity-70",
+                            )}
+                            style={
+                              own
+                                ? { background: "var(--bubble-own-bg)", "--muted": "var(--bubble-own-sub)", "--accent-fg": "var(--bubble-own-fg)" } as React.CSSProperties
+                                : undefined
+                            }
+                          >
+                            {msg.forwarded ? (
+                              <span className="mb-1 block text-[0.6rem] font-medium italic text-[var(--muted)] opacity-70">
+                                Forwarded
+                              </span>
+                            ) : null}
+                            {msg.replyTo ? (
+                              <button
+                                type="button"
+                                onClick={() => actions.current?.jump(msg.replyTo!.id)}
+                                className={cn(
+                                  "group/reply mb-2 w-full overflow-hidden rounded-xl text-left text-xs transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]",
+                                  own
+                                    ? "bg-[color-mix(in_srgb,var(--accent)_14%,transparent)]"
+                                    : "bg-[color-mix(in_srgb,var(--accent)_8%,transparent)]",
+                                )}
+                              >
+                                <div className="flex items-stretch">
+                                  <div
+                                    className={cn(
+                                      "w-1 shrink-0 rounded-full",
+                                      own ? "bg-[var(--accent)]" : "bg-[var(--accent-fg)]",
+                                    )}
+                                  />
+                                  <div className="flex min-w-0 flex-1 items-start gap-2 px-2.5 py-2">
+                                    <div className="relative mt-0.5 shrink-0">
+                                      <span
+                                        className="flex h-4 w-4 items-center justify-center rounded-full text-[0.5rem] font-bold text-white"
+                                        style={{
+                                          background: `linear-gradient(135deg, hsl(${avatarHue(msg.replyTo.senderId)} 48% 46%), hsl(${(avatarHue(msg.replyTo.senderId) + 40) % 360} 44% 52%))`,
+                                        }}
+                                      >
+                                        {initials(
+                                          msg.replyTo.senderId === me.id
+                                            ? me.displayName
+                                            : msg.replyTo.senderName,
+                                        )}
+                                      </span>
+                                      <div className="absolute -bottom-0.5 -right-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-[var(--surface)] shadow-sm">
+                                        <ReplyIcon className="h-2 w-2 text-[var(--muted)]" />
+                                      </div>
+                                    </div>
+                                    <span className="min-w-0">
+                                      <span className="flex items-center gap-1.5">
+                                        <span
+                                          className={cn(
+                                            "text-[0.65rem] font-medium uppercase tracking-wider",
+                                            own
+                                              ? "text-[var(--bubble-own-sub)]"
+                                              : "text-[var(--muted)]",
+                                          )}
+                                        >
+                                          Reply
+                                        </span>
+                                        <span className="h-3 w-px bg-[var(--border)]" />
+                                        <span
+                                          className={cn(
+                                            "truncate text-[0.72rem] font-semibold",
+                                            own
+                                              ? "text-[var(--bubble-own-fg)]"
+                                              : "text-[var(--accent-fg)]",
+                                          )}
+                                        >
+                                          {msg.replyTo.senderId === me.id
+                                            ? "You"
+                                            : msg.replyTo.senderName}
+                                        </span>
+                                      </span>
+                                      <span
+                                        className={cn(
+                                          "mt-0.5 line-clamp-2 block text-[0.75rem] leading-relaxed",
+                                          own
+                                            ? "text-[var(--bubble-own-sub)]"
+                                            : "text-[var(--muted)]",
+                                          msg.replyTo.deleted && "italic opacity-60",
+                                        )}
+                                      >
+                                        {msg.replyTo.deleted ? (
+                                          <span className="flex items-center gap-1">
+                                            <Ban className="inline h-3 w-3" />
+                                            Message unavailable
+                                          </span>
+                                        ) : msg.replyTo.encrypted && replyText === undefined ? (
+                                          <span className="flex items-center gap-1 opacity-70">
+                                            {replyUnavailable ? "Reply unavailable on this device. Check Security & recovery." : "Loading replied message…"}
+                                            …
+                                          </span>
+                                        ) : (
+                                          <>
+                                            <Quote className="mr-0.5 inline h-2.5 w-2.5 opacity-50" />
+                                            {msg.replyTo.encrypted
+                                              ? replyText ?? ""
+                                              : msg.replyTo.text}
+                                          </>
+                                        )}
+                                      </span>
+                                    </span>
+                                  </div>
+                                </div>
+                              </button>
+                            ) : null}
+
+                            {deleted ? (
+                              <span className="flex items-center gap-1.5 text-sm italic opacity-80">
+                                <Ban className="h-3.5 w-3.5" />
+                                {msg.selfDestruct ? "Message expired" : "Message deleted"}
+                              </span>
+                            ) : msg.selfDestruct && !own && !msg.text ? (
+                              <button type="button" className="btn min-h-11 text-sm" disabled={!encryptionInitialized} onClick={() => actions.current?.reveal(msg)}>Reveal · disappears in 5 seconds</button>
+                            ) : (
+                              <>
+                                {msg.selfDestruct ? <SelfDestructCountdown deadline={msg.expiresAt} offset={clockOffset} /> : null}
+                                {msg.type === "audio" && msg.attachments.length > 0 ? (
+                                  <div className="mb-1.5 min-w-0 max-w-full">
+                                    <AudioMessage
+                                      src={msg.attachments[0].url}
+                                      attachment={msg.attachments[0]}
+                                      own={own}
+                                      sender={msg.sender}
+                                      duration={undefined}
+                                      attachmentId={msg.attachments[0].id}
+                                    />
+                                  </div>
+                                ) : msg.attachments.length > 0 ? (
+                                  <div className={cn(text && "mb-1.5")}>
+                                    <AttachmentList
+                                      attachments={msg.attachments}
+                                      own={own}
+                                    />
+                                  </div>
+                                ) : null}
+                                {msg.encrypted && Boolean(msg.text) && decryptedText === undefined ? (
+                                  <EncryptedMessageState
+                                    failed={unavailable}
+                                    missingKey={missingKey}
+                                    deviceError={deviceError} signal={msg.text === "signal:v2"}
+                                    introduction={introduction}
+                                    onRetry={() => actions.current?.retryDecrypt(msg.id)}
+                                    onSecurity={() => { if (deviceError || msg.text === "signal:v2") actions.current?.deviceSettings(); else actions.current?.security(); }}
+                                  />
+                                ) : text ? (
+                                  <MessageText text={text} />
+                                ) : null}
+                              </>
+                            )}
+
+                            <span
+                              className={cn(
+                                "mt-0.5 flex items-center gap-0.5 text-[0.62rem] tabular-nums",
+                                own
+                                  ? "justify-end text-[var(--bubble-own-sub)]"
+                                  : "text-[var(--muted)]",
+                              )}
+                            >
+                              {msg.encrypted ? (
+                                <Lock className="h-2.5 w-2.5 opacity-60" aria-label="End-to-end encrypted" />
+                              ) : null}
+                              {msg.editedAt && !deleted ? (
+                                <span className="text-[0.58rem] italic opacity-70">edited</span>
+                              ) : null}
+                              <span>{timeLabel(msg.createdAt, hydrated)}</span>
+                              {msg.starred ? <Star className="h-2.5 w-2.5 fill-current text-[var(--accent-fg)]" /> : null}
+                              {own && !deleted ? (
+                                msg.sendStatus === "failed" ? (
+                                  <button type="button" onClick={() => actions.current?.retrySend(msg)} aria-label="Retry failed message">
+                                    <ReceiptIcon message={msg} />
+                                  </button>
+                                ) : <ReceiptIcon message={msg} />
+                              ) : null}
+                            </span>
+                          </div>
+                          </LongPressTouchable>
+
+                          {own && msg.sendStatus === "queued" ? (
+                            <div role="status" className="mt-2 max-w-sm rounded-xl border border-sky-400/20 bg-sky-400/10 px-3 py-2 text-xs leading-relaxed text-[var(--text)]">
+                              <p>{msg.queueReason ?? "Waiting for secure delivery. Your message will send automatically when encryption is ready."}</p>
+                              <div className="mt-1 flex gap-3">
+                                <button type="button" className="underline" onClick={() => { if (msg.queueReason?.includes("This device needs approval")) actions.current?.deviceSettings(); else actions.current?.retrySend(msg); }}>Try now</button>
+                                <button type="button" className="underline" onClick={() => actions.current?.cancelQueued(msg)}>Cancel queued message</button>
+                              </div>
+                            </div>
+                          ) : null}
+
+                          {msg.reactions.length > 0 ? (
+                            <div
+                              className={cn(
+                                "mt-1 flex flex-wrap gap-0.5",
+                                own ? "justify-end" : "justify-start",
+                              )}
+                            >
+                              {msg.reactions.map((r) => (
+                                <button
+                                  key={r.emoji}
+                                  type="button"
+                                  onClick={() => actions.current?.react(msg, r.emoji)}
+                                  aria-label={`${r.emoji} reaction, ${r.count}${r.mine ? ", yours" : ""}`}
+                                  className={cn(
+                                    "flex items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-[0.7rem] transition-transform duration-150 hover:scale-105",
+                                    r.mine
+                                      ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-fg)]"
+                                      : "border-[var(--border)] bg-[var(--surface)] text-[var(--muted)]",
+                                  )}
+                                >
+                                  <span className="leading-none">{r.emoji}</span>
+                                  {r.count > 1 ? (
+                                    <span className="tabular-nums font-semibold leading-none">
+                                      {r.count}
+                                    </span>
+                                  ) : null}
+                                </button>
+                              ))}
+                            </div>
+                          ) : null}
+
+                          {deleteMode !== undefined ? (
+                            <span
+                              className={cn(
+                                "absolute top-1/2 z-20 flex -translate-y-1/2 items-center gap-1",
+                                own ? "-left-16" : "-right-16",
+                              )}
+                            >
+                              <button
+                                type="button"
+                                aria-label="Confirm delete"
+                                onClick={() => actions.current?.delete(msg.id, deleteMode!)}
+                                disabled={busy}
+                                className="flex h-7 w-7 items-center justify-center rounded-full bg-[var(--danger)] text-white"
+                              >
+                                {busy ? (
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                  <Check className="h-3.5 w-3.5" />
+                                )}
+                              </button>
+                              <button
+                                type="button"
+                                aria-label="Cancel delete"
+                                onClick={() => actions.current?.cancelDelete()}
+                                className="flex h-7 w-7 items-center justify-center rounded-full border border-[var(--border-strong)] bg-[var(--surface)] text-[var(--muted)]"
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </button>
+                            </span>
+                          ) : (
+                            <MessageActions
+                              own={own}
+                              deleted={deleted || Boolean(msg.selfDestruct)}
+                              align={own ? "right" : "left"}
+                              starred={msg.starred}
+                              pinned={msg.pinned}
+                              textAvailable={Boolean(copyableText)}
+                              onReply={() => {
+                                actions.current?.reply(msg);
+                              }}
+                              onReact={(emoji) => actions.current?.react(msg, emoji)}
+                              onCopy={() => {
+                                const t = copyableText;
+                                if (t) actions.current?.copy(t);
+                              }}
+                              onForward={() => actions.current?.forward(msg)}
+                              onReport={() => actions.current?.report(msg)}
+                              onEdit={() => {
+                                if (pendingDecrypt) return;
+                                actions.current?.edit(msg);
+                              }}
+                              onStar={() => actions.current?.star(msg)}
+                              onUnstar={() => actions.current?.star(msg)}
+                              onPin={() => actions.current?.pin(msg)}
+                              onUnpin={() => actions.current?.pin(msg)}
+                              onDeleteForMe={() => {
+                                actions.current?.delete(msg.id, "for_me");
+                              }}
+                              onDeleteForEveryone={() => actions.current?.requestDelete(msg.id)}
+                            />
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
 
 });

@@ -21,7 +21,7 @@ export async function testChatScroll(base, source, recipient, pool, conversation
   try {
     // Controlled unread display fixtures reuse real conversation ciphertext.
     // API sending/peer verification remains enforced and is tested separately.
-    fixtureIds.push(...(await pool.query("insert into messages(conversation_id,sender_id,text,type,encrypted,created_at) select conversation_id,$2,text,type,encrypted,now()-interval '2 minutes'+n*interval '1 second' from messages cross join generate_series(1,65) n where id=$1 returning id", [packet.message.id, peer.id])).rows.map(row => row.id));
+    fixtureIds.push(...(await pool.query("insert into messages(conversation_id,sender_id,text,type,encrypted,created_at) select conversation_id,$2,text,type,encrypted,now()-interval '3 minutes'+n*interval '1 second' from messages cross join generate_series(1,125) n where id=$1 returning id", [packet.message.id, peer.id])).rows.map(row => row.id));
     await page.addInitScript(() => {
       if (sessionStorage.getItem("delay-chat-decrypt") !== "1") return;
       sessionStorage.removeItem("delay-chat-decrypt");
@@ -83,6 +83,13 @@ export async function testChatScroll(base, source, recipient, pool, conversation
     assert.equal((await older).status(), 200);
     await page.waitForTimeout(800);
     assert(await viewport.evaluate(n => n.scrollHeight - n.scrollTop - n.clientHeight > 200), "Loading an older page preserves the reading position");
+    for (let pageNumber=0;pageNumber<4 && await page.locator('[data-virtualized="true"]').count()===0;pageNumber++) {
+      const nextPage=page.waitForResponse(r=>r.url().includes(`/api/conversations/${conversationId}/messages?cursor=`));
+      await viewport.hover();await page.mouse.wheel(0,-50000);
+      assert.equal((await nextPage).status(),200);await page.waitForTimeout(300);
+    }
+    assert.equal(await page.locator('[data-virtualized="true"]').count(),1,"Real encrypted history must switch to a bounded measured window");
+    assert(await viewport.locator('[data-message-id]').count()<60,"Loading older encrypted history must not mount every message row");
     await page.goto(base + "/app/chats/" + conversationId + "?message=" + fixtureIds[fixtureIds.length - 10]);
     await page.waitForTimeout(1500);
     assert(await viewport.evaluate(n => n.scrollHeight - n.scrollTop - n.clientHeight > 200), "Explicit older-message links keep their target");

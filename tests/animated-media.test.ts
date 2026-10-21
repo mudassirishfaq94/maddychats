@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import sharp from "sharp";
-import { ANIMATED_MEDIA, GIF_MEDIA, animatedMediaCatalog, animatedMediaPosterUrl, animatedMediaUrl } from "../src/lib/animated-media";
+import { ANIMATED_MEDIA, GIF_MEDIA, animatedMediaCatalog, animatedMediaPosterUrl, animatedMediaPreviewUrl, animatedMediaUrl } from "../src/lib/animated-media";
 
 test("first-party GIFs and stickers contain real, bounded animation frames", async () => {
   for (const gif of [false, true]) for (const item of animatedMediaCatalog(gif)) {
@@ -25,5 +25,20 @@ test("first-party GIFs and stickers contain real, bounded animation frames", asy
   for (const gif of GIF_MEDIA) {
     const pixels = await sharp(await readFile("public" + animatedMediaPosterUrl(gif.id, true))).ensureAlpha().raw().toBuffer();
     assert(!pixels.equals(sticker), "GIF scenes must not duplicate sticker artwork");
+  }
+});
+
+test("WebP previews are smaller without losing animation timing or frames", async () => {
+  for (const item of GIF_MEDIA) {
+    const original = await readFile("public" + animatedMediaUrl(item.id, true));
+    const preview = await readFile("public" + animatedMediaPreviewUrl(item.id, true));
+    assert(preview.length < original.length);
+    const before = await sharp(original, { animated: true }).metadata();
+    const after = await sharp(preview, { animated: true }).metadata();
+    assert.equal(after.format, "webp");
+    assert.equal(after.pages, before.pages);
+    assert.equal(after.pageHeight, before.pageHeight);
+    assert.equal(after.loop, before.loop);
+    assert.deepEqual(after.delay, before.delay);
   }
 });
