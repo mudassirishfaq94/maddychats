@@ -94,7 +94,6 @@ export async function profileMobile(base, cookieHeader = "", conversationId, qui
         measurement.requestCounts = { total: requestSamples.length, byCategory: Object.fromEntries(Object.entries(requestCategories).map(([name, summary]) => [name, summary.count])) };
         measurement.requestTimingMs = requestCategories;
         measurement.serverTimingMs = measurement.samples.filter(sample => sample.kind === "server").map(({ name, value }) => ({ name, durationMs: Number(value.toFixed(1)) }));
-        delete measurement.samples;
         await mkdir(resolve(".freebuff/performance"), { recursive: true });
         await page.screenshot({ path: resolve(`.freebuff/performance/mobile-${width}-${routeName.replace(/[^a-z0-9]/gi, "-") || "home"}.png`) });
         await background.close(); await page.bringToFront();
@@ -105,7 +104,14 @@ export async function profileMobile(base, cookieHeader = "", conversationId, qui
           if (document.visibilityState === "hidden") window.__circloSaveVitals(window.__circloPerformance || []);
         }));
         await page.goto("about:blank");
-        if (finalSamples) measurement.vitals = finalSamples.filter(sample => sample.kind === "vital").map(({ name, value }) => ({ name, value: Number(value.toFixed(1)) }));
+        if (finalSamples) measurement.samples = finalSamples;
+        const metricNames = new Set(["CLS", "FCP", "INP", "LCP", "TTFB"]);
+        measurement.samples = measurement.samples.filter(sample => Number.isFinite(sample.value) && (
+          sample.kind === "vital" && metricNames.has(sample.name) ||
+          sample.kind === "react" && sample.name === "application" ||
+          sample.kind === "longtask" && sample.name === "main-thread" ||
+          ["startup", "navigation", "request", "server", "chat"].includes(sample.kind) && ["startup-hydrated", "chat-navigation", "first-readable-message", "navigation", "auth-refresh", "notification-preferences", "conversation-list", "conversation-detail", "message-history", "community-list", "api-other", "conversations", "history"].includes(sample.name)
+        )).map(({ kind, name, value, phase }) => ({ kind, name, value: Number(value.toFixed(1)), ...(phase ? { phase } : {}) }));
         results.push({ width, route: routeName, path: routeName, status: response?.status(), ...measurement, pageErrorCount: errors.length, errors: errors.map(() => "page-error") });
         page.off("pageerror", collectError);
       }
