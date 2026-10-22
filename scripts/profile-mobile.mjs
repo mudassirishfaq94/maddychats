@@ -106,7 +106,7 @@ export async function profileMobile(base, cookieHeader = "", conversationId, qui
         }));
         await page.goto("about:blank");
         if (finalSamples) measurement.vitals = finalSamples.filter(sample => sample.kind === "vital").map(({ name, value }) => ({ name, value: Number(value.toFixed(1)) }));
-        results.push({ width, route: routeName, status: response?.status(), ...measurement, pageErrorCount: errors.length });
+        results.push({ width, route: routeName, path: routeName, status: response?.status(), ...measurement, pageErrorCount: errors.length, errors: errors.map(() => "page-error") });
         page.off("pageerror", collectError);
       }
       await context.close();
