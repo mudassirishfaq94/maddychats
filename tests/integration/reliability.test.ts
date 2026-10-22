@@ -23,6 +23,20 @@ test.before(async () => {
 });
 test.after(async () => { await pool.query("delete from conversations where created_by_id=any($1::uuid[])",[ids]); await pool.query("delete from users where id=any($1::uuid[])",[ids]); await pool.end(); });
 
+test("single-message reads enforce membership and cleared/deleted visibility", async () => {
+  const message = (await pool.query("insert into messages(conversation_id,sender_id,text) values($1,$2,'visibility-regression') returning id,created_at", [group, owner])).rows[0];
+  assert.equal((await chat.getMessageDTO(message.id, member))?.text, "visibility-regression");
+  assert.equal(await chat.getMessageDTO(message.id, outsider), null, "A known message ID is not authorization");
+  await pool.query("update conversation_members set cleared_at=$3 where conversation_id=$1 and user_id=$2", [group, member, message.created_at]);
+  try {
+    assert.equal(await chat.getMessageDTO(message.id, member), null, "The clear watermark includes messages at its timestamp");
+    assert.equal((await chat.getMessageDTO(message.id, owner))?.text, "visibility-regression");
+  } finally { await pool.query("update conversation_members set cleared_at=null where conversation_id=$1 and user_id=$2", [group, member]); }
+  await pool.query("insert into message_deletions(message_id,user_id) values($1,$2)", [message.id, member]);
+  assert.equal(await chat.getMessageDTO(message.id, member), null);
+  assert.equal((await chat.getMessageDTO(message.id, owner))?.text, "visibility-regression");
+});
+
 test("backend group policy allows ordinary additions and blocks restricted/nonmember mutation", async () => {
   assert.equal(await chat.addGroupMember(group, member, extra), "ok");
   assert.equal(await chat.addGroupMember(group, outsider, another), "not_found");

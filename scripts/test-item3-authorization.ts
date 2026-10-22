@@ -240,6 +240,28 @@ async function main() {
     const media = await api(`/api/media/${attachment.id}`, bobCookie);
     assert.equal(media.headers.get("cache-control"), "private, no-store", "Private media must reauthorize every request");
     assert.equal(media.status, 200); assert.equal(await media.text(), "isolated-private-attachment");
+    const forbiddenUnstar = await api(`/api/messages/${message.id}/star`, outsiderCookie, "DELETE");
+    const forbiddenBody = await forbiddenUnstar.json();
+    assert.equal(forbiddenUnstar.status, 404, "Unstar must not read a message from another conversation");
+    assert.equal(forbiddenBody.message, undefined, "Unauthorized responses contain no message DTO");
+    assert.equal((await api(`/api/messages/${message.id}/star`, bobCookie, "POST")).status, 200);
+    await sql.query("insert into pinned_messages(conversation_id,message_id,pinned_by) values($1,$2,$3)", [conversation.id, message.id, alice.id]);
+    const notice = (await sql.query("insert into notifications(user_id,actor_id,type,data) values($1,$2,'message',$3::jsonb) returning id", [bob.id, alice.id, JSON.stringify({conversationId:conversation.id,messageId:message.id,actorName:"Fixture",preview:"fixture-only"})])).rows[0];
+    const deliveryPath = `/api/notifications/push/delivery?id=${notice.id}`;
+    assert.equal((await api(deliveryPath, bobCookie)).status, 200);
+    await sql.query("update conversation_members set cleared_at=now() where conversation_id=$1 and user_id=$2", [conversation.id, bob.id]);
+    try {
+      assert.equal((await api(`/api/media/${attachment.id}`, bobCookie)).status, 404, "Cleared attachments cannot be retrieved by an old URL");
+      assert.equal((await api(`/api/media/${attachment.id}`, aliceCookie)).status, 200, "Another member retains access");
+      assert.equal((await api(deliveryPath, bobCookie)).status, 404, "Old pushes cannot restore cleared content");
+      for (const [path,key] of [[`/api/users/me/starred-messages`,"starred"],[`/api/conversations/${conversation.id}/pinned-messages`,"pins"],[`/api/conversations/${conversation.id}/files`,"files"]]) {
+        const response=await api(path,bobCookie);assert.equal(response.status,200);
+        assert.equal((await response.json())[key].length,0,`${key} respects cleared history`);
+      }
+    } finally { await sql.query("update conversation_members set cleared_at=null where conversation_id=$1 and user_id=$2", [conversation.id,bob.id]); }
+    assert.equal((await api(`/api/messages/${message.id}/star`, bobCookie, "DELETE")).status, 200);
+    await sql.query("delete from pinned_messages where conversation_id=$1 and message_id=$2", [conversation.id,message.id]);
+    await sql.query("delete from notifications where id=$1", [notice.id]);
     assert.equal((await api(historyPath, aliceCookie, "POST", { text: "ciphertext", encrypted: true }, { origin: "https://evil.example" })).status, 403);
     const adminPage = await api("/app/admin", bobCookie);
     const adminHtml = await adminPage.text();
