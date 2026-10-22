@@ -59,6 +59,7 @@ import {
   Copy,
 } from "lucide-react";
 import type { ConversationDetail, MessageDTO, MessagePage, PublicUser, SafeUser } from "@/lib/types";
+import { recordApplicationTiming } from "@/components/performance-monitor";
 import { Avatar } from "@/components/avatar";
 import { useRealtime, usePresence } from "@/components/providers/realtime-provider";
 import { VirtualMessageHistory, type MessageHistoryHandle } from "./virtual-message-history";
@@ -677,6 +678,24 @@ export function ChatView({
   const initialScrollDone = useRef(false);
   const unreadSnapshotTaken = useRef(false);
   const nodeRefs = useRef(new Map<string, HTMLDivElement | null>());
+  const chatMountedAt = useRef(performance.now());
+  const firstReadableRecorded = useRef(false);
+  useEffect(() => {
+    if (firstReadableRecorded.current) return;
+    const bounds = scrollRef.current?.getBoundingClientRect();
+    if (!bounds) return;
+    const readable = items.some(message => {
+      if (message.deletedAt || message.deletedForMe || message.selfDestruct || message.expiresAt) return false;
+      if (message.encrypted && !decryptedTexts.has(message.id)) return false;
+      const node = nodeRefs.current.get(message.id);
+      const box = node?.getBoundingClientRect();
+      return Boolean(box && box.bottom >= bounds.top && box.top <= bounds.bottom);
+    });
+    if (readable) {
+      firstReadableRecorded.current = true;
+      recordApplicationTiming("first-readable-message", performance.now() - chatMountedAt.current);
+    }
+  }, [items, decryptedTexts]);
   const typingActiveRef = useRef(false);
   const lastTypingSentRef = useRef(0);
   const remoteTypersRef = useRef(new Map<string, number>());

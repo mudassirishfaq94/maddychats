@@ -15,8 +15,10 @@ export async function GET(req: NextRequest) {
   const user = await getSessionUser();
   if (!user) return jsonError(401, "Not authenticated.");
 
-  const myCommunities = await listUserCommunities(user.id);
-  const publicCommunities = await listPublicCommunities();
+  const [myCommunities, publicCommunities] = await Promise.all([
+    listUserCommunities(user.id),
+    listPublicCommunities(),
+  ]);
 
   return NextResponse.json({ myCommunities, publicCommunities }, {
     headers: { "Cache-Control": "private, no-store" },

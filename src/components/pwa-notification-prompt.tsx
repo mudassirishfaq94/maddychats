@@ -6,12 +6,13 @@ import { useAuth } from "./providers/auth-provider";
 import { isNativeApp } from "@/lib/native-platform";
 import { androidNotificationStatus, hostedPush, syncNotificationPrivacy } from "@/lib/native-push-bridge";
 import { notificationLockedChatIds } from "@/lib/local-notification-preview";
+import { readNotificationPreferences } from "@/lib/notification-preference-read";
 const subscribe = () => () => {};
 const installed = () => (window.matchMedia("(display-mode: standalone)").matches || (navigator as Navigator & { standalone?: boolean }).standalone === true) && "Notification" in window && Notification.permission === "default";
 export function PwaNotificationPrompt() {
   const eligible = useSyncExternalStore(subscribe, installed, () => false);
   const native = useSyncExternalStore(subscribe, isNativeApp, () => false);
-  const { user } = useAuth();
+  const { user, requestScope } = useAuth();
   const [nativeEligible, setNativeEligible] = useState(false);
   const [working, setWorking] = useState(false);
   const [error, setError] = useState("");
@@ -21,10 +22,10 @@ export function PwaNotificationPrompt() {
     if (!native || !user?.id) return;
     let stopped = false;
     try { if (localStorage.getItem(`maddy:notification-onboarding:${user.id}`)) return; } catch {}
-    void Promise.all([androidNotificationStatus(), fetch("/api/notifications/preferences", { cache: "no-store" }).then(response => response.ok ? response.json() : null)])
-      .then(([device, settings]) => { if (!stopped) setNativeEligible(Boolean(device && !device.enabled && settings?.preferences?.pushNotifications)); }).catch(() => {});
+    void Promise.all([androidNotificationStatus(), readNotificationPreferences(requestScope)])
+      .then(([device, settings]) => { if (!stopped) setNativeEligible(Boolean(device && !device.enabled && settings?.pushNotifications)); }).catch(() => {});
     return () => { stopped = true; };
-  }, [native, user?.id]);
+  }, [native, user?.id, requestScope]);
   const dismiss = () => {
     setDismissed(true);
     if (native && user?.id) try { localStorage.setItem(`maddy:notification-onboarding:${user.id}`, "1"); } catch {}

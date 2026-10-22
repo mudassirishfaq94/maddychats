@@ -25,12 +25,13 @@ export async function profileMobile(base, cookieHeader = "", conversationId, qui
       await cdp.send("Network.emulateNetworkConditions", { offline: false, latency: 80, downloadThroughput: 200000, uploadThroughput: 100000 });
       await page.addInitScript(() => {
         window.__labCsp = [];
-        window.addEventListener("securitypolicyviolation", (event) => { if (window.__labCsp.length < 50) window.__labCsp.push({ directive: event.effectiveDirective, disposition: event.disposition, source: new URL(event.sourceFile || location.href).pathname, line: event.lineNumber, blocked: event.blockedURI.split(":")[0] }); });
+        window.addEventListener("securitypolicyviolation", (event) => { if (window.__labCsp.length < 50) window.__labCsp.push({ directive: event.effectiveDirective, disposition: event.disposition, source: new URL(event.sourceFile || location.href).pathname.startsWith("/app/") ? "app" : "other", line: event.lineNumber, blocked: event.blockedURI.split(":")[0] }); });
       });
       for (const path of quick ? ["/app/profile"] : conversationId ? ["/app", "/app/profile", `/app/chats/${conversationId}`] : ["/", "/login"]) {
+        const routeName = path.startsWith("/app/chats/") ? "chat" : path.replace(/^\/+|\/+$/g, "") || "home";
         finalSamples = undefined;
         const errors = [];
-        const collectError = (error) => errors.push(error.message.slice(0, 200));
+        const collectError = () => errors.push(true);
         page.on("pageerror", collectError);
         const response = await page.goto(new URL(`${path}?profile=1`, base).toString(), { waitUntil: "load", timeout: 90000 });
         await page.waitForFunction(() => window.__circloVitalsRegistered === true, undefined, { timeout: 15000 });
@@ -83,8 +84,19 @@ export async function profileMobile(base, cookieHeader = "", conversationId, qui
           horizontalOverflow: document.documentElement.scrollWidth > window.innerWidth + 1,
           navigation: performance.getEntriesByType("navigation").map((entry) => ({ ttfb: entry.responseStart - entry.requestStart, load: entry.loadEventEnd - entry.startTime })),
         }));
+        const summarize = (values) => {
+          const sorted = values.filter(Number.isFinite).sort((a, b) => a - b);
+          if (!sorted.length) return null;
+          return { count: sorted.length, minMs: Number(sorted[0].toFixed(1)), medianMs: Number(sorted[Math.floor((sorted.length - 1) / 2)].toFixed(1)), p95Ms: Number(sorted[Math.ceil(sorted.length * 0.95) - 1].toFixed(1)) };
+        };
+        const requestSamples = measurement.samples.filter(sample => sample.kind === "request");
+        const requestCategories = Object.fromEntries([...new Set(requestSamples.map(sample => sample.name))].sort().map(name => [name, summarize(requestSamples.filter(sample => sample.name === name).map(sample => sample.value))]));
+        measurement.requestCounts = { total: requestSamples.length, byCategory: Object.fromEntries(Object.entries(requestCategories).map(([name, summary]) => [name, summary.count])) };
+        measurement.requestTimingMs = requestCategories;
+        measurement.serverTimingMs = measurement.samples.filter(sample => sample.kind === "server").map(({ name, value }) => ({ name, durationMs: Number(value.toFixed(1)) }));
+        delete measurement.samples;
         await mkdir(resolve(".freebuff/performance"), { recursive: true });
-        await page.screenshot({ path: resolve(`.freebuff/performance/mobile-${width}-${path.replace(/[^a-z0-9]/gi, "-") || "home"}.png`) });
+        await page.screenshot({ path: resolve(`.freebuff/performance/mobile-${width}-${routeName.replace(/[^a-z0-9]/gi, "-") || "home"}.png`) });
         await background.close(); await page.bringToFront();
         // Real pagehide finalizes CLS/INP even when headless tab switches don't
         // change visibility. Register after the framework's metrics listeners.
@@ -93,19 +105,24 @@ export async function profileMobile(base, cookieHeader = "", conversationId, qui
           if (document.visibilityState === "hidden") window.__circloSaveVitals(window.__circloPerformance || []);
         }));
         await page.goto("about:blank");
-        if (finalSamples) measurement.samples = finalSamples;
-        results.push({ width, path, status: response?.status(), ...measurement, errors });
+        if (finalSamples) measurement.vitals = finalSamples.filter(sample => sample.kind === "vital").map(({ name, value }) => ({ name, value: Number(value.toFixed(1)) }));
+        results.push({ width, route: routeName, status: response?.status(), ...measurement, pageErrorCount: errors.length });
         page.off("pageerror", collectError);
       }
       await context.close();
     }
   } finally { await browser.close(); }
   await mkdir(resolve(".freebuff/performance"), { recursive: true });
-  await writeFile(resolve(".freebuff/performance/mobile-lab.json"), JSON.stringify({ generatedAt: new Date().toISOString(), kind: "emulated Chromium lab; 4x CPU, 80ms latency, 1.6Mbps download; single sample per route and width", results }, null, 2));
+  await writeFile(resolve(".freebuff/performance/mobile-lab.json"), JSON.stringify({ generatedAt: new Date().toISOString(), kind: "emulated Chromium lab; 4x CPU, 80ms latency, 1.6Mbps download; single sample per route and width", physicalDeviceValidation: "not run; requires the Poco X7 Pro attached over USB debugging", results }, null, 2));
   return results;
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))) {
-  profileMobile(process.env.PROFILE_BASE_URL || "http://127.0.0.1:3000").then(() => console.log("Saved .freebuff/performance/mobile-lab.json"))
+  profileMobile(
+    process.env.PROFILE_BASE_URL || "http://127.0.0.1:3000",
+    process.env.PROFILE_COOKIE || "",
+    process.env.PROFILE_CONVERSATION_ID,
+    process.env.PROFILE_QUICK === "1",
+  ).then(() => console.log("Saved .freebuff/performance/mobile-lab.json"))
     .catch((error) => { console.error(error.message); process.exitCode = 1; });
 }

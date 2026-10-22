@@ -21,6 +21,7 @@ import type { PresenceState, RealtimeEvent } from "@/lib/types";
 import { createConditionalInterval } from "@/lib/conditional-interval";
 import { createPresenceStore } from "@/lib/presence-store";
 import { isNativeApp } from "@/lib/native-platform";
+import { readNotificationPreferences, invalidateNotificationPreferences } from "@/lib/notification-preference-read";
 
 type Listener = (event: RealtimeEvent) => void;
 
@@ -30,17 +31,6 @@ interface NotificationPreferences {
   showNotificationDetails: boolean;
 }
 
-// Share only in-flight reads; never retain one account's response for another.
-const preferenceReads = new Map<string, Promise<NotificationPreferences | null>>();
-function readNotificationPreferences(userId: string): Promise<NotificationPreferences | null> {
-  const pending = preferenceReads.get(userId);
-  if (pending) return pending;
-  const load = fetch("/api/notifications/preferences", { cache: "no-store", signal: AbortSignal.timeout(10000) })
-    .then(async response => response.ok ? (await response.json() as { preferences?: NotificationPreferences }).preferences ?? null : null);
-  preferenceReads.set(userId, load);
-  void load.finally(() => { if (preferenceReads.get(userId) === load) preferenceReads.delete(userId); }).catch(() => undefined);
-  return load;
-}
 
 /**
  * Latest notification preferences. Every surface that renders an alert reads
@@ -80,7 +70,7 @@ function isOpenConversation(conversationId: string): boolean {
 export function RealtimeProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const { decrypt } = useSharedE2EE();
-  const { status, user } = useAuth();
+  const { status, user, requestScope } = useAuth();
   const userId = user?.id;
   const [connected, setConnected] = useState(false);
   const [presenceStore] = useState(createPresenceStore);
@@ -221,7 +211,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
         // Preserve the same account during a failed retry, but detach a previous
         // account before network work. Older APKs retain their legacy clear path.
         if (bridge.hasHostedPushBridge()) await bridge.hostedPush("reconcile", user.id).catch(() => bridge.hostedPush("clear"));
-        const settings = await readNotificationPreferences(user.id);
+        const settings = await readNotificationPreferences(requestScope);
         if (!settings || stopped) return;
         if (settings.pushNotifications !== true) {
           if (settings.pushNotifications === false && bridge.hasHostedPushBridge()) await bridge.hostedPush("clear");
@@ -250,6 +240,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     const preferenceChanged = (event: Event) => {
       const enabled = (event as CustomEvent<NotificationPreferences>).detail?.pushNotifications;
       preferenceEpoch++;
+      invalidateNotificationPreferences(requestScope);
       if (enabled === false) void import("@/lib/native-push-bridge").then(bridge => bridge.hasHostedPushBridge() ? bridge.hostedPush("clear") : null).catch(() => {});
       else void sync(true);
     };
@@ -260,7 +251,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     document.addEventListener("visibilitychange", resume);
     window.addEventListener("circlo:native-push-refresh", explicitRefresh);
     return () => { stopped = true; removeTap?.(); window.removeEventListener("maddy:notification-preferences", preferenceChanged); document.removeEventListener("visibilitychange", resume); window.removeEventListener("circlo:native-push-refresh", explicitRefresh); };
-  }, [status, user?.id]);
+  }, [status, user?.id, requestScope]);
 
 
   useEffect(() => {
@@ -288,12 +279,14 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     }
     notificationPreferencesSnapshot = null;
     const controller = new AbortController();
-    void readNotificationPreferences(userId)
+    void readNotificationPreferences(requestScope)
       .then(preferences => {
         if (!controller.signal.aborted && preferences) notificationPreferencesSnapshot = preferences;
       })
       .catch(() => undefined);
     const update = (event: Event) => {
+      invalidateNotificationPreferences(requestScope);
+      controller.abort(); // A pre-save read must not replace freshly saved preferences.
       notificationPreferencesSnapshot = (event as CustomEvent<NotificationPreferences>).detail;
     };
     window.addEventListener("maddy:notification-preferences", update);
@@ -301,7 +294,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
       controller.abort();
       window.removeEventListener("maddy:notification-preferences", update);
     };
-  }, [status, userId]);
+  }, [status, userId, requestScope]);
 
   useEffect(() => {
     const ring = () => { if (notificationPreferencesSnapshot?.notificationSound) playNotificationSound(); };

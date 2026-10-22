@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { Bell, BellRing, Eye, Loader2, Smartphone, Volume2, Users } from "lucide-react";
 import { Toggle } from "@/components/ui/toggle";
+import { useAuth } from "@/components/providers/auth-provider";
+import { readNotificationPreferences, invalidateNotificationPreferences } from "@/lib/notification-preference-read";
 import { isNativeApp } from "@/lib/native-platform";
 import { hasHostedPushBridge, hostedPush, androidNotificationStatus, androidCallSettings, type AndroidNotificationStatus } from "@/lib/native-push-bridge";
 
@@ -38,6 +40,7 @@ function subscriptionMatchesKey(subscription: PushSubscription, expected: Uint8A
 }
 
 export function NotificationPreferences() {
+  const { requestScope } = useAuth();
   const [androidStatus, setAndroidStatus] = useState<AndroidNotificationStatus | null>(null);
   const [hasAndroidSettings, setHasAndroidSettings] = useState(false);
   const [pushSubscribed, setPushSubscribed] = useState<boolean | null>(null);
@@ -67,18 +70,17 @@ export function NotificationPreferences() {
   const [subscribing, setSubscribing] = useState(false);
 
   useEffect(() => {
-    const controller = new AbortController();
-    void fetch("/api/notifications/preferences", { cache: "no-store", signal: controller.signal })
-      .then(async (response) => {
-        if (!response.ok) throw new Error("Could not load notification settings.");
-        return response.json() as Promise<{ preferences: Preferences }>;
+    let stopped = false;
+    void readNotificationPreferences(requestScope)
+      .then((preferences) => {
+        if (!preferences) throw new Error("Could not load notification settings.");
+        if (!stopped) setPreferences(preferences);
       })
-      .then((data) => setPreferences(data.preferences))
       .catch((error: Error) => {
-        if (error.name !== "AbortError") setMessage(error.message);
+        if (!stopped) setMessage(error.message);
       });
-    return () => controller.abort();
-  }, []);
+    return () => { stopped = true; };
+  }, [requestScope]);
 
   useEffect(() => {
     if (isNativeApp() || !("serviceWorker" in navigator) || !("PushManager" in window)) return;
@@ -183,6 +185,7 @@ export function NotificationPreferences() {
     } else {
       const data = await response.json() as { preferences: Preferences };
       setPreferences(data.preferences);
+      invalidateNotificationPreferences(requestScope);
       window.dispatchEvent(new CustomEvent("maddy:notification-preferences", { detail: data.preferences }));
       if (!enrollment) setMessage("Notification settings saved.");
     }
