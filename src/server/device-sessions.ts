@@ -24,7 +24,7 @@ export async function issueDeviceSession(req: NextRequest, user: SignInState, mf
   const secret = randomBytes(32).toString("base64url");
   const authTime = Date.now();
   const expiresAt = new Date(authTime + SESSION_TTL_SECONDS * 1000);
-  // Persist audit, presence and credentials atomically in one round trip.
+  // Persist audit, presence and credentials atomically after the state checks.
   // Expired rows are cleaned in bounded maintenance, never by every login.
   const ua = req.headers.get("user-agent");
   const result = await measureLoginStage("session_persist", () => db.transaction(async tx => {

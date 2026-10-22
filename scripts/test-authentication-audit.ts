@@ -45,7 +45,7 @@ async function main() {
     await assert.rejects(issueDeviceSession(request(),stale,0),SignInStateError);
     assert.equal((await beginSignIn(request(),stale)).status,401);
     assert.equal((await sql.query("select count(*)::int n from device_sessions where user_id=$1",[stale.id])).rows[0].n,0);
-    const secret="GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ";
+    const secret=Array.from(randomBytes(32),value=>"ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"[value & 31]).join("");
     await sql.query("insert into user_2fa(user_id,secret,enabled,enabled_at) values($1,$2,true,now())",[stale.id,secret]);
     assert.equal((await beginSignIn(request(),stale)).status,401,"A stale password proof cannot create a new MFA challenge");
     assert.equal((await sql.query("select count(*)::int n from mfa_challenges where user_id=$1",[stale.id])).rows[0].n,0);
@@ -125,7 +125,18 @@ async function main() {
     assert(await consumeProviderProof("google-native",phoneProof),"Provider namespaces cannot consume one another's proofs");
   }finally{
     globalThis.fetch=savedFetch;await appPool?.end();await sql?.end();
-    if(created)await admin.query(`DROP DATABASE "${database}" WITH (FORCE)`);await admin.end();
+    if(created){
+      // Wait for PostgreSQL to observe the closed pool sockets; force-dropping
+      // can otherwise terminate a retiring connection and emit an idle error.
+      let connections=0;
+      for(let attempt=0;attempt<100;attempt++){
+        connections=(await admin.query<{n:number}>("select count(*)::int n from pg_stat_activity where datname=$1",[database])).rows[0].n;
+        if(!connections)break;await new Promise(resolve=>setTimeout(resolve,50));
+      }
+      assert.equal(connections,0,"Audit fixture connections close before database removal");
+      await admin.query(`DROP DATABASE "${database}"`);
+    }
+    await admin.end();
   }
 }
 main().catch(error=>{console.error(error);process.exitCode=1;});
