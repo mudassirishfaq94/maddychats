@@ -498,7 +498,10 @@ class MainActivity : ComponentActivity() {
 private suspend fun nativeGoogleSignIn(activity: Activity, api: ZipTalkApi, policiesAccepted: Boolean = false): JSONObject {
     if (!policiesAccepted) throw IOException("Agree to both policies on the sign-in page. Link Google accounts in a browser.")
     val clientId = withContext(Dispatchers.IO) { api.googleClientId() }
-    val googleOption = GetSignInWithGoogleOption.Builder(clientId).build()
+    // Fresh requests must not reuse an otherwise identical cached ID token;
+    // the server consumes each signed native credential once.
+    val googleOption = GetSignInWithGoogleOption.Builder(clientId)
+        .setNonce(java.util.UUID.randomUUID().toString()).build()
     val result = try {
         CredentialManager.create(activity).getCredential(
             activity,

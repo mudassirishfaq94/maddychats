@@ -172,10 +172,20 @@ async function main() {
     const mfaDone = await api("/api/auth/mfa", { code: enrollment.data.recoveryCodes[0] }, pendingCookie);
     assert.equal(mfaDone.response.status, 200);
     assert.equal((await api("/api/auth/mfa", { code: enrollment.data.recoveryCodes[0] }, pendingCookie)).response.status, 401);
+    const canceledLogin = await api("/api/auth/login", { acceptTerms: true, acceptPrivacy: true, identifier: bob.username, password });
+    const canceledCookie = canceledLogin.response.headers.getSetCookie().find(value => value.startsWith("maddy_mfa_challenge="))!.split(";")[0];
+    const canceled = await api("/api/auth/logout", {}, canceledCookie);
+    assert.equal(canceled.response.status, 200);
+    assert(canceled.response.headers.getSetCookie().some(value => value.startsWith("maddy_mfa_challenge=") && /Max-Age=0/.test(value)));
+    assert.equal((await api("/api/auth/mfa", { code: enrollment.data.recoveryCodes[2] }, canceledCookie)).response.status, 401, "Logout cancels an unfinished MFA challenge server-side");
     const enabledAt = (await sql.query("SELECT enabled_at FROM user_2fa WHERE user_id=$1",[bob.id])).rows[0].enabled_at.getTime();
     const staleBob = await cookie(bob, false, enabledAt+1);
     assert.equal((await api("/api/privacy/2fa/verify", {}, staleBob, "DELETE")).response.status, 403);
-    assert.equal((await api("/api/privacy/2fa/verify", { password, mfaCode: enrollment.data.recoveryCodes[1] }, staleBob, "DELETE")).response.status, 200);
+    const disabled = await api("/api/privacy/2fa/verify", { password, mfaCode: enrollment.data.recoveryCodes[1] }, staleBob, "DELETE");
+    assert.equal(disabled.response.status, 200);
+    assert.equal(disabled.data.signInRequired, true);
+    assert.equal((await api("/api/auth/me", undefined, oldBobCookie, "GET")).response.status, 401, "Removing MFA cannot resurrect the original cookie");
+    assert.equal((await api("/api/auth/me", undefined, staleBob, "GET")).response.status, 401, "MFA removal revokes the modifying session too");
 
     const conv = (await sql.query("INSERT INTO conversations(type,name) VALUES('group','Test') RETURNING id")).rows[0].id;
     await sql.query("INSERT INTO conversation_members(conversation_id,user_id,role) VALUES($1,$2,'owner'),($1,$3,'member')", [conv,alice.id,bob.id]);

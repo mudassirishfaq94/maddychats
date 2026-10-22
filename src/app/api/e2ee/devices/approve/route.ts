@@ -83,7 +83,8 @@ export async function POST(req: NextRequest) {
   }
   if (body?.action !== "approve" || typeof body.token !== "string" || typeof body.proof !== "string" || !/^[A-Za-z0-9_-]{43}$/.test(body.proof)) return jsonError(422, "Approval proof is required.");
   try {
-    const { payload } = await jwtVerify(body.token, jwtSecret(), { algorithms: ["HS256"], audience });
+    const { payload } = await jwtVerify(body.token, jwtSecret(), { algorithms: ["HS256"], audience, requiredClaims: ["sub", "iat", "exp", "jti"], maxTokenAge: 120 });
+    if (typeof payload.exp !== "number" || typeof payload.iat !== "number" || payload.exp - payload.iat > 120) return jsonError(403, "Invalid device approval lifetime.");
     if (payload.sub !== user.id || typeof payload.jti !== "string" || typeof payload.source !== "string" || typeof payload.target !== "string" || typeof payload.nonceHash !== "string" || typeof payload.targetHash !== "string" || typeof payload.sourceHash !== "string") return jsonError(403, "Invalid device approval.");
     const expected = Buffer.from(payload.nonceHash, "hex"), actual = Buffer.from(digest(body.proof), "hex");
     if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) return jsonError(403, "Trusted device proof is invalid.");

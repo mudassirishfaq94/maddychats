@@ -9,7 +9,9 @@ test('mobile handoff binds policy acceptance to the signed OAuth result', async 
   try {
     const challenge = 'a'.repeat(43);
     const ticket = await createGoogleMobileHandoff('fixture-user', 'fixture', challenge);
-    assert.deepEqual(await verifyGoogleMobileHandoff(ticket), { userId: 'fixture-user', username: 'fixture', codeChallenge: challenge });
+    const verified = await verifyGoogleMobileHandoff(ticket);
+    assert(verified && Math.abs(Date.now()-verified.issuedAtMs)<5000);
+    assert.deepEqual({ ...verified, issuedAtMs: 0 }, { userId: 'fixture-user', username: 'fixture', codeChallenge: challenge, issuedAtMs: 0 });
     const old = await new SignJWT({ usr: 'fixture', codeChallenge: challenge }).setProtectedHeader({ alg: 'HS256' }).setSubject('fixture-user').setIssuer('circlo').setAudience('circlo-google-mobile-handoff').setIssuedAt().setExpirationTime('120s').sign(new TextEncoder().encode(process.env.JWT_SECRET));
     assert.equal(await verifyGoogleMobileHandoff(old), null, 'An older ticket without signed agreement cannot bypass the policy gate');
   } finally { if (saved === undefined) delete process.env.JWT_SECRET; else process.env.JWT_SECRET = saved; }

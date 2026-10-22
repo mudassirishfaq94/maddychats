@@ -7,6 +7,7 @@ import { ACCESS_TTL_SECONDS, REFRESH_COOKIE, SESSION_COOKIE, SESSION_TTL_SECONDS
 import { signSessionToken, type SessionClaims } from "./jwt";
 import { clientIp, requestIsSecure } from "./http";
 import { measureLoginStage } from "./login-performance";
+import { accountSuspended, sameSignInState, SignInStateError, type SignInState } from "./sign-in-state";
 
 const digest = (value: string) => createHash("sha256").update(value).digest("hex");
 const sameHash = (a: string, b: string | null) => Boolean(b && a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b)));
@@ -19,14 +20,21 @@ export function setDeviceCookies(res: NextResponse, req: NextRequest, credential
   res.headers.set("Cache-Control", "no-store");
 }
 
-export async function issueDeviceSession(req: NextRequest, user: { id: string; username: string }, mfaTime: number): Promise<DeviceCredentials> {
+export async function issueDeviceSession(req: NextRequest, user: SignInState, mfaTime: number): Promise<DeviceCredentials> {
   const secret = randomBytes(32).toString("base64url");
   const authTime = Date.now();
   const expiresAt = new Date(authTime + SESSION_TTL_SECONDS * 1000);
   // Persist audit, presence and credentials atomically in one round trip.
   // Expired rows are cleaned in bounded maintenance, never by every login.
   const ua = req.headers.get("user-agent");
-  const result = await measureLoginStage("session_persist", () => db.execute<{ id: string }>(sql`
+  const result = await measureLoginStage("session_persist", () => db.transaction(async tx => {
+    // Hashing/provider requests happen before this short transaction. Serialize
+    // credential issuance with password resets, suspension and MFA changes.
+    const [current] = await tx.select().from(users).where(eq(users.id, user.id)).for("update");
+    if (!current || !sameSignInState(user, current) || accountSuspended(current)) throw new SignInStateError();
+    const [factor] = await tx.select().from(user2fa).where(eq(user2fa.userId, user.id));
+    if (factor?.enabled && mfaTime < (factor.enabledAt ?? factor.createdAt).getTime()) throw new SignInStateError();
+    return tx.execute<{ id: string }>(sql`
     WITH audit AS (
       INSERT INTO login_history (user_id, identifier, success, ip_address, user_agent)
       VALUES (${user.id}, ${user.username}, true, ${clientIp(req)}, ${ua})
@@ -36,7 +44,8 @@ export async function issueDeviceSession(req: NextRequest, user: { id: string; u
     INSERT INTO device_sessions (user_id, refresh_hash, user_agent, auth_time, mfa_time, expires_at, approval_required)
     VALUES (${user.id}, ${digest(secret)}, ${(ua || "Unknown browser").slice(0, 300)}, ${authTime}, ${mfaTime}, ${expiresAt}, true)
     RETURNING id
-  `));
+  `);
+  }));
   const session = result.rows[0];
   if (!session) throw new Error("device_session_not_created");
   return { access: await measureLoginStage("jwt", () => signSessionToken(user.id, user.username, authTime, mfaTime, session.id, true)), refresh: `${session.id}.${secret}`, expiresAt };

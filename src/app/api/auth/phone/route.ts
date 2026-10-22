@@ -14,6 +14,7 @@ import { getFirebaseAdmin } from "@/server/firebase-admin";
 import { findUserByUsername } from "@/server/users";
 import { AUTH_RATE_LIMIT, rateLimit } from "@/server/rate-limit";
 import { clientIp, guardSameOrigin, jsonError, readJson } from "@/server/http";
+import { consumeProviderProof } from "@/server/provider-proof";
 
 const phoneAuthSchema = z.object({
   idToken: z.string().min(100).max(16_384),
@@ -94,6 +95,9 @@ async function handlePOST(req: NextRequest) {
   }
 
   // Only Firebase-verified numbers are searchable; owners must opt in separately.
+  // A first request may need profile fields; consume only the completed proof,
+  // so the profile-completion retry remains possible without a second SMS.
+  if (!(await consumeProviderProof("firebase-phone", parsed.data.idToken))) return jsonError(409, "Phone sign-in was already used. Request fresh phone verification.");
   await db.update(users).set({ verifiedPhone: decoded.phone_number }).where(eq(users.id, user.id));
   return beginSignIn(req, user);
 }

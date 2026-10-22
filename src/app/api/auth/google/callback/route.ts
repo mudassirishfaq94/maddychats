@@ -77,7 +77,7 @@ async function handleGoogleCallback(req: NextRequest) {
 
   let claims;
   try {
-    ({ payload: claims } = await jwtVerify(tokens.id_token, googleKeys, { issuer: ["https://accounts.google.com", "accounts.google.com"], audience: clientId }));
+    ({ payload: claims } = await jwtVerify(tokens.id_token, googleKeys, { issuer: ["https://accounts.google.com", "accounts.google.com"], audience: clientId, algorithms: ["RS256"], requiredClaims: ["sub", "iat", "exp"] }));
   } catch (error) {
     console.error("[auth/google] ID token verification failed", {
       message: error instanceof Error ? error.message : "unknown error",

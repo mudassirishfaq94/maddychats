@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { users, deviceSessions, fcmTokens } from "@/db/schema";
+import { users, deviceSessions, fcmTokens, mfaChallenges } from "@/db/schema";
+import { createHash } from "node:crypto";
+import { MFA_COOKIE } from "@/server/authentication";
 import { guardSameOrigin, requestIsSecure } from "@/server/http";
 import { SESSION_COOKIE, REFRESH_COOKIE } from "@/server/config";
 import { getSessionDeviceId, getDeviceSetupUser, sessionCookieOptions } from "@/server/session";
@@ -15,6 +17,10 @@ export const dynamic = "force-dynamic";
 export async function POST(req: NextRequest) {
   const blocked = guardSameOrigin(req);
   if (blocked) return blocked;
+  const challenge = req.cookies.get(MFA_COOKIE)?.value;
+  if (challenge && /^[A-Za-z0-9_-]{43}$/.test(challenge)) {
+    await db.delete(mfaChallenges).where(eq(mfaChallenges.tokenHash, createHash("sha256").update(challenge).digest("hex")));
+  }
 
   const me = await getDeviceSetupUser();
   if (me) {
@@ -35,5 +41,7 @@ export async function POST(req: NextRequest) {
     maxAge: 0,
   });
   res.cookies.set(REFRESH_COOKIE, "", { ...sessionCookieOptions(requestIsSecure(req)), maxAge: 0 });
+  res.cookies.set(MFA_COOKIE, "", { ...sessionCookieOptions(requestIsSecure(req)), maxAge: 0 });
+  res.headers.set("Cache-Control", "private, no-store");
   return res;
 }
