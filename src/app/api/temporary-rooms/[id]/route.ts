@@ -1,10 +1,9 @@
 import { NextRequest,NextResponse } from "next/server";
 import { z } from "zod";
 import { actOnTemporaryRoom,authorizeTemporaryRoom,credentialHash,readTemporaryRoom,roomCookie,TemporaryRoomError } from "@/server/temporary-rooms";
-import { resolveClientIp } from "@/server/client-ip";
 import { startStarterMaintenance } from "@/server/starter-maintenance";
 import { reserveTemporaryTransfer } from "@/server/temporary-transfer-capacity";
-import { guardSameOrigin,jsonError,readBoundedBody,requestIsSecure } from "@/server/http";
+import { clientIp,guardSameOrigin,jsonError,readBoundedBody,requestIsSecure } from "@/server/http";
 import { rateLimit } from "@/server/rate-limit";
 export const dynamic="force-dynamic";
 const action=z.discriminatedUnion("action",[
@@ -17,7 +16,7 @@ async function handle(req:NextRequest,ctx:{params:Promise<{id:string}>},write:bo
  const requestedRole=req.nextUrl.searchParams.get("role");if(requestedRole&&requestedRole!=="host"&&requestedRole!=="guest")return jsonError(422,"Invalid participant role.");
  const role=requestedRole==="host"||requestedRole==="guest"?requestedRole:(req.cookies.has(roomCookie(id,"host"))?"host":"guest");const cookieName=roomCookie(id,role);
  const credential=req.cookies.get(cookieName)?.value;if(!credential||!/^[a-f0-9]{64}$/.test(credential))return jsonError(404,"Room unavailable or expired.");
- const ip=resolveClientIp(req.headers,{render:Boolean(process.env.RENDER),production:process.env.NODE_ENV==="production",trustedHops:process.env.TRUSTED_PROXY_HOPS});
+ const ip=clientIp(req);
  const ipLimit=await rateLimit(`temporary-api-ip:${credentialHash(ip)}`,240,60000);if(!ipLimit.allowed)return jsonError(429,"Please wait a moment and try again.");
  const limit=await rateLimit(`temporary-${write?"write":"read"}:${id}:${credentialHash(credential)}`,write?40:120,60000);if(!limit.allowed)return jsonError(429,"Please wait a moment and try again.");
  const transfer:{release:(()=>void)|null}={release:null};let streamed=false;
