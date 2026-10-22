@@ -16,4 +16,6 @@ c26358f526fd64cf53ed2c77502064e0e1354601:signal-bridge/Cargo.lock:generic-api-ke
 7341141ede32971d51558d5837dd3fe00ff27fac:scripts/test-remaining-hardening.ts:generic-api-key:67
 7341141ede32971d51558d5837dd3fe00ff27fac:scripts/test-items4-6.ts:generic-api-key:65
 7341141ede32971d51558d5837dd3fe00ff27fac:scripts/test-item3-authorization.ts:generic-api-key:91
+# Same disposable loopback JWT fixture reproduced in the security-audit branch.
+8e8ba5fffed81ab13a07118ac0162f89af6299ef:scripts/test-item3-authorization.ts:generic-api-key:91
 7341141ede32971d51558d5837dd3fe00ff27fac:signal-bridge/Cargo.lock:generic-api-key:778
