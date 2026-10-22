@@ -13,6 +13,8 @@ import {
 import { useRouter } from "next/navigation";
 import type { AuthStatus, SafeUser } from "@/lib/types";
 import type { LoginInput, RegisterInput } from "@/lib/schemas";
+import { createInFlightRead } from "@/lib/in-flight-read";
+import { invalidateNotificationPreferences } from "@/lib/notification-preference-read";
 
 export interface AuthResult {
   ok: boolean;
@@ -25,6 +27,7 @@ export interface AuthResult {
 }
 
 interface AuthContextValue {
+  requestScope: object;
   status: AuthStatus;
   user: SafeUser | null;
   signIn: (input: LoginInput) => Promise<AuthResult>;
@@ -57,42 +60,64 @@ export function AuthProvider({ children, initialUser }: { children: ReactNode; i
   const [user, setUser] = useState<SafeUser | null>(initialUser ?? null);
   const router = useRouter();
   const mounted = useRef(true);
+  const [requestScope, setRequestScope] = useState<object>(() => ({}));
+  const scopeRef = useRef(requestScope);
+  const identityRef = useRef(initialUser?.id);
+  const refreshReads = useRef(createInFlightRead<void>());
+  const resetReads = useCallback(() => {
+    refreshReads.current.invalidate(scopeRef.current);
+    invalidateNotificationPreferences(scopeRef.current);
+    const scope = {};
+    scopeRef.current = scope;
+    setRequestScope(scope);
+  }, []);
   const loginRetryAt = useRef(0);
   // Tracks the last time we refreshed the session, so focus/visibility
   // handlers cannot fire a request on every tab switch.
   const lastRefreshAt = useRef(0);
 
   useEffect(() => {
+    const reads = refreshReads.current;
     mounted.current = true;
     lastRefreshAt.current = Date.now();
     return () => {
       mounted.current = false;
+      reads.invalidate(scopeRef.current);
+      invalidateNotificationPreferences(scopeRef.current);
     };
   }, []);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(() => {
+    const scope = scopeRef.current;
+    return refreshReads.current.run(scope, async () => {
     try {
       const res = await fetch("/api/auth/me", {
         cache: "no-store",
         credentials: "same-origin",
       });
-      if (!mounted.current) return;
+      if (!mounted.current || scope !== scopeRef.current) return;
       if (res.ok) {
         const data = (await res.json()) as { user: SafeUser };
+        if (!mounted.current || scope !== scopeRef.current) return;
+        if (identityRef.current !== data.user.id) resetReads();
+        identityRef.current = data.user.id;
         setUser(data.user);
         setStatus("authenticated");
       } else if (res.status === 401) {
+        identityRef.current = undefined;
+        resetReads();
         setUser(null);
         setStatus("unauthenticated");
       }
     } catch {
-      if (!mounted.current) return;
+      if (!mounted.current || scope !== scopeRef.current) return;
       // A network interruption must not turn a valid, persistent session into
       // an apparent logout. The next focus/heartbeat check will retry it.
       setStatus((previous) => previous === "authenticated" ? previous : "unauthenticated");
     }
-    lastRefreshAt.current = Date.now();
-  }, []);
+    if (mounted.current && scope === scopeRef.current) lastRefreshAt.current = Date.now();
+    }).catch(() => undefined); // Invalidated reads cannot publish into a new account.
+  }, [resetReads]);
 
   useEffect(() => {
     // The root already authorized this request. Focus/visibility still revalidate,
@@ -129,6 +154,7 @@ export function AuthProvider({ children, initialUser }: { children: ReactNode; i
       if (Date.now() < loginRetryAt.current) return {
         ok: false, error: `Please retry sign-in in ${Math.ceil((loginRetryAt.current - Date.now()) / 1000)} seconds.`,
       };
+      resetReads();
       try {
         const res = await fetch("/api/auth/login", {
           method: "POST",
@@ -146,6 +172,7 @@ export function AuthProvider({ children, initialUser }: { children: ReactNode; i
           error?: string;
           fields?: Record<string, string>;
         } | null;
+        resetReads();
         if (!res.ok) {
           if (res.status === 503 || res.status === 429) {
             const seconds = Number(res.headers.get("Retry-After") ?? 5);
@@ -160,6 +187,7 @@ export function AuthProvider({ children, initialUser }: { children: ReactNode; i
         }
         if (data?.mfaRequired || data?.verificationRequired) return { ok: true, mfaRequired: data.mfaRequired, verificationRequired: data.verificationRequired, emailSent: data.emailSent };
         if (data?.user) {
+          identityRef.current = data.user.id;
           setUser(data.user);
           setStatus("authenticated");
         }
@@ -169,11 +197,12 @@ export function AuthProvider({ children, initialUser }: { children: ReactNode; i
         return { ok: false, error: "Network error. Please try again." };
       }
     },
-    [],
+    [resetReads],
   );
 
   const signUp = useCallback(
     async (input: RegisterInput): Promise<AuthResult> => {
+      resetReads();
       try {
         const res = await fetch("/api/auth/register", {
           method: "POST",
@@ -192,6 +221,7 @@ export function AuthProvider({ children, initialUser }: { children: ReactNode; i
           fields?: Record<string, string>;
           suggestions?: string[];
         } | null;
+        resetReads();
         if (!res.ok) {
           return {
             ok: false,
@@ -203,6 +233,7 @@ export function AuthProvider({ children, initialUser }: { children: ReactNode; i
         }
         if (data?.mfaRequired || data?.verificationRequired) return { ok: true, mfaRequired: data.mfaRequired, verificationRequired: data.verificationRequired, emailSent: data.emailSent };
         if (data?.user) {
+          identityRef.current = data.user.id;
           setUser(data.user);
           setStatus("authenticated");
         }
@@ -212,10 +243,11 @@ export function AuthProvider({ children, initialUser }: { children: ReactNode; i
         return { ok: false, error: "Network error. Please try again." };
       }
     },
-    [],
+    [resetReads],
   );
 
   const signOut = useCallback(async () => {
+    resetReads();
     const signedOutUserId = user?.id;
     if ("serviceWorker" in navigator) {
       void navigator.serviceWorker.getRegistration("/").then(registration => registration?.active?.postMessage({ type: "CIRCLO_SIGNED_OUT" })).catch(() => {});
@@ -234,14 +266,16 @@ export function AuthProvider({ children, initialUser }: { children: ReactNode; i
         .then(({ clearVerifiedMessageCache }) => clearVerifiedMessageCache(signedOutUserId))
         .catch(() => {});
     }
+    resetReads();
+    identityRef.current = undefined;
     setUser(null);
     setStatus("unauthenticated");
     router.refresh();
-  }, [router, user?.id]);
+  }, [router, user?.id, resetReads]);
 
   const value = useMemo<AuthContextValue>(
-    () => ({ status, user, signIn, signUp, signOut, refresh }),
-    [status, user, signIn, signUp, signOut, refresh],
+    () => ({ status, user, signIn, signUp, signOut, refresh, requestScope }),
+    [status, user, signIn, signUp, signOut, refresh, requestScope],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

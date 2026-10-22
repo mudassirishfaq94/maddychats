@@ -1,7 +1,8 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { ConversationSummary } from "@/lib/types";
+import { createReconciledRead } from "@/lib/reconciled-read";
 import { useAuth } from "./auth-provider";
 import { useRealtime } from "./realtime-provider";
 
@@ -17,77 +18,91 @@ const Context = createContext<ConversationList | null>(null);
 function AccountConversationList({ userId, children }: { userId: string; children: ReactNode }) {
   const { connected, subscribe } = useRealtime();
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
-  const current = useRef<Snapshot | null>(null);
-  const pending = useRef<Promise<Snapshot> | null>(null);
-  const controller = useRef<AbortController | null>(null);
-  const active = useRef(true);
-  const revision = useRef(0);
-  const refresh = useCallback((): Promise<Snapshot> => {
-    if (!userId) return Promise.reject(new Error("Sign in to load conversations"));
-    if (pending.current) return pending.current;
-    const version = revision.current;
-    const request = new AbortController();
-    controller.current = request;
-    const load = (async () => {
-      const response = await fetch("/api/conversations", {
-        cache: "no-store", signal: AbortSignal.any([request.signal, AbortSignal.timeout(10000)]),
-      });
-      if (!response.ok) throw new Error("Conversation refresh failed");
-      const data = await response.json() as Snapshot;
-      if (data.viewerId !== userId || !Array.isArray(data.conversations)) throw new Error("Conversation account changed");
-      request.signal.throwIfAborted();
-      if (active.current && revision.current === version) { current.current = data; setSnapshot(data); }
-      return current.current ?? data;
-    })();
-    pending.current = load;
-    void load.finally(() => {
-      if (pending.current === load) pending.current = null;
-    }).catch(() => undefined);
-    return load;
-  }, [userId]);
-  const read = useCallback(() => pending.current ?? (current.current ? Promise.resolve(current.current) : refresh()), [refresh]);
+  const [account] = useState(() => {
+    let active = true;
+    let current: Snapshot | null = null;
+    let controller: AbortController | null = null;
+    const reads = createReconciledRead<Snapshot>(async () => {
+      if (!userId) throw new Error("Sign in to load conversations");
+      const request = new AbortController();
+      controller = request;
+      try {
+        const response = await fetch("/api/conversations", {
+          cache: "no-store", signal: AbortSignal.any([request.signal, AbortSignal.timeout(10000)]),
+        });
+        if (!response.ok) throw new Error("Conversation refresh failed");
+        const data = await response.json() as Snapshot;
+        if (data.viewerId !== userId || !Array.isArray(data.conversations)) throw new Error("Conversation account changed");
+        request.signal.throwIfAborted();
+        return data;
+      } finally {
+        if (controller === request) controller = null;
+      }
+    }, data => {
+      if (active && data.viewerId === userId) { current = data; setSnapshot(data); }
+    });
+    return {
+      reads,
+      get current() { return current; },
+      read() {
+        return reads.pendingIsCurrent && reads.pending
+          ? reads.pending
+          : reads.pending ? reads.refresh() : current ? Promise.resolve(current) : reads.refresh();
+      },
+      setCurrent(value: Snapshot | null) { current = value; },
+      setActive(value: boolean) { active = value; },
+      abort() { controller?.abort(); },
+    };
+  });
+  const { reads } = account;
+  const refresh = useCallback(() => reads.refresh(), [reads]);
+  const read = useCallback(() => account.read(), [account]);
   const seed = useCallback((conversations: ConversationSummary[]) => {
     // A prefetched tab may carry an older server snapshot than live state.
     // Keep current data visible and reconcile rather than overwriting it.
-    if (current.current) { void refresh().catch(() => undefined); return; }
-    revision.current++;
+    if (account.current) { reads.invalidate(); void refresh().catch(() => undefined); return; }
+    reads.invalidate();
     const data = { viewerId: userId, conversations };
-    current.current = data;
+    account.setCurrent(data);
     setSnapshot(data);
-  }, [userId, refresh]);
+  }, [userId, reads, refresh, account]);
 
   useEffect(() => {
-    active.current = true;
-    return () => { active.current = false; controller.current?.abort(); current.current = null; };
-  }, []);
+    account.setActive(true);
+    reads.start();
+    return () => {
+      account.setActive(false);
+      reads.stop();
+      account.abort();
+      account.setCurrent(null);
+    };
+  }, [account, reads]);
   useEffect(() => {
-    // Server-rendered list seeds arrive before this parent's passive effect.
-    // Reconcile after stream connection to cover the SSR-to-SSE gap.
-    if (userId && (connected || !current.current)) void refresh().catch(() => undefined);
-  }, [userId, connected, refresh]);
+    // A reconnect invalidates any snapshot started before the transport came back.
+    // The next refresh follows it, so recovery stays correct without overlap.
+    if (userId && (connected || !account.current)) {
+      if (connected) reads.invalidate();
+      void refresh().catch(() => undefined);
+    }
+  }, [userId, connected, account, reads, refresh]);
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | undefined;
-    let dirty = false;
     let stopped = false;
-    const reconcile = async () => {
-      // Wait out a pre-event snapshot, then request a post-event snapshot.
-      // Multiple subscribers still share each network request.
-      if (pending.current) await pending.current.catch(() => undefined);
-      if (!dirty || stopped || !active.current) return;
-      dirty = false;
-      await refresh().catch(() => undefined);
-      if (dirty && !stopped && active.current) timer = setTimeout(() => void reconcile(), 180);
+    const reconcile = () => {
+      reads.invalidate();
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        if (!stopped) void refresh().catch(() => undefined);
+      }, 180);
     };
     const remove = subscribe(event => {
       if (!["message:new", "message:update", "message:deleted", "message:lifetime", "message:read",
         "message:deleted_for_me", "conversation:new", "conversation:delete", "group:updated",
         "group:member-added", "group:member-removed", "group:member-updated"].includes(event.type)) return;
-      dirty = true;
-      clearTimeout(timer);
-      timer = setTimeout(() => void reconcile(), 180);
+      reconcile();
     });
     return () => { stopped = true; clearTimeout(timer); remove(); };
-  }, [subscribe, refresh]);
+  }, [subscribe, reads, refresh]);
   const value = useMemo(() => ({ snapshot, seed, read, refresh }), [snapshot, seed, read, refresh]);
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }
