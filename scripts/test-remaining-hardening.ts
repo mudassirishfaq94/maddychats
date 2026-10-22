@@ -72,7 +72,7 @@ async function main() {
     assert.equal((await api(`/api/admin/users/${target.id}`, modCookie, "PATCH", { displayName: "Hijacked" })).status, 403, "Moderator cannot edit identity or password");
     assert.equal((await api("/api/admin/users", ownerCookie, "PATCH", { userId: target.id, action: "role", role: "admin" }, { origin: "https://evil.example" })).status, 403);
     const claims = decodeJwt(ownerCookie.split("=")[1]);
-    const oldToken = await new SignJWT({ ...claims, authTime: Date.now() - 360000 }).setProtectedHeader({ alg: "HS256" }).sign(new TextEncoder().encode(secret));
+    const oldToken = await new SignJWT({ ...claims, authTime: Date.now() - 360000 }).setProtectedHeader({ alg: "HS256", typ: "JWT" }).sign(new TextEncoder().encode(secret));
     const oldCookie = `maddy_session=${oldToken}`;
     const conversation = (await sql.query("insert into conversations(type,created_by_id) values('dm',$1) returning id", [alice.id])).rows[0];
     await sql.query("insert into conversation_members(conversation_id,user_id,accepted_at) values($1,$2,now()),($1,$3,now())", [conversation.id, alice.id, bob.id]);
