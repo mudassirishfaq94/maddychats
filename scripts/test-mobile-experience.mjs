@@ -48,6 +48,8 @@ try{
  assert.equal(await phone.inputValue(),'+971501234567','Cancelling country search preserves the saved number');
  await page.getByRole('button',{name:'Choose country calling code'}).click();await phone.fill('+49');await phone.press('Enter');
  assert.equal(await phone.inputValue(),'+49501234567');
+ await page.getByRole('button',{name:'Choose country calling code'}).click();await phone.fill('+971501234567');await phone.press('Enter');
+ assert.equal(await phone.inputValue(),'+971501234567','A full number entered during country search becomes the phone value');
  await page.setViewportSize({width:390,height:844});await page.screenshot({path:'test-artifacts/phone-field-mobile.png'});
  await page.getByRole('button',{name:'Choose country calling code'}).click();await phone.fill('United');await page.screenshot({path:'test-artifacts/phone-country-search-mobile.png'});await phone.press('Escape');
  await page.evaluate(async()=>{

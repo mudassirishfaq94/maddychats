@@ -43,6 +43,7 @@ export function InternationalPhoneInput({id,value,onChange,disabled}:{id:string;
           if(event.key==="ArrowDown"){event.preventDefault();if(!open){setSearch("");setActive(0);setOpen(true);}else setActive(index=>Math.min(index+1,Math.max(0,matches.length-1)));}
           if(event.key==="ArrowUp"){event.preventDefault();setActive(index=>Math.max(0,index-1));}
           if(event.key==="Enter"&&open&&matches[active]){event.preventDefault();choose(matches[active]);}
+          else if(event.key==="Enter"&&open&&/^\+[\d ()-]+$/.test(search)){event.preventDefault();onChange(search);setOpen(false);}
           else if(event.key==="Enter"&&open&&/[a-z]/i.test(search))event.preventDefault();
         }}/>
       <button type="button" aria-label="Choose country calling code" aria-expanded={open} disabled={disabled} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-[var(--muted)]" onClick={()=>{if(!open){setSearch("");setActive(0);}setOpen(!open);input.current?.focus();}}><ChevronDown className="h-4 w-4"/></button>
