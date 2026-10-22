@@ -10,18 +10,18 @@ import tailwind from '@tailwindcss/postcss';
 
 // Real client components and WebCrypto/IndexedDB; no production test route or backend.
 const fixture=`
-import React, {useState} from 'react';
+import React from 'react';
 import {createRoot} from 'react-dom/client';
 import {CircloHelp} from './src/components/help/circlo-help';
-import {InternationalPhoneInput} from './src/components/profile/international-phone-input';
+import {PhoneDiscovery} from './src/components/profile/phone-discovery';
 import * as cache from './src/lib/e2ee-message-cache';
 import {InlineMedia} from './src/components/chats/attachments';
 window.cache=cache;
-function App(){const [phone,setPhone]=useState('+971501234567');return location.search==='?media'?<InlineMedia attachment={{id:'video',kind:'video',originalName:'Clip.webm'}}/>:location.search==='?phone'?<main><label htmlFor="phone">Phone number</label><InternationalPhoneInput id="phone" value={phone} onChange={setPhone}/><output>{phone}</output></main>:<CircloHelp/>;}
+function App(){return location.search==='?media'?<InlineMedia attachment={{id:'video',kind:'video',originalName:'Clip.webm'}}/>:location.search==='?phone'?<main className="mx-auto max-w-md px-4 py-6"><h1 className="text-xl font-semibold">Phone discovery</h1><PhoneDiscovery/></main>:<CircloHelp/>;}
 createRoot(document.getElementById('root')).render(<App/>);`;
 const bundle=await build({stdin:{contents:fixture,resolveDir:resolve('.'),loader:'tsx',sourcefile:'mobile-experience-fixture.tsx'},jsx:'automatic',bundle:true,write:false,format:'iife',platform:'browser',tsconfig:'tsconfig.json',define:{'process.env':'{}','process.env.NODE_ENV':'"production"'},plugins:[{name:'client-marker',setup(build){build.onResolve({filter:/^\.\/e2ee-context$/},()=>({path:'media-url',namespace:'media'}));build.onLoad({filter:/.*/,namespace:'media'},()=>({contents:"export function useEncryptedAttachmentUrl(){return {url:sessionStorage.getItem('fixtureMedia'),failed:false}}"}));build.onResolve({filter:/^client-only$/},()=>({path:'client-only',namespace:'empty'}));build.onLoad({filter:/.*/,namespace:'empty'},()=>({contents:''}));}}]});
 const css=await postcss([tailwind()]).process(await readFile('src/app/globals.css','utf8'),{from:resolve('src/app/globals.css')});
-const server=createServer((request,response)=>{const js=request.url==='/fixture.js',style=request.url==='/style.css';response.setHeader('Content-Type',js?'text/javascript':style?'text/css':'text/html');response.end(js?bundle.outputFiles[0].contents:style?css.css:'<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/style.css"><div id="root"></div><script src="/fixture.js"></script>');});
+const server=createServer((request,response)=>{if(request.url==='/api/contacts/phone'){response.setHeader('Content-Type','application/json');response.end(JSON.stringify({phone:'+971501234567',enabled:false}));return;}const js=request.url==='/fixture.js',style=request.url==='/style.css';response.setHeader('Content-Type',js?'text/javascript':style?'text/css':'text/html');response.end(js?bundle.outputFiles[0].contents:style?css.css:'<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/style.css"><div id="root"></div><script src="/fixture.js"></script>');});
 server.listen(0,'127.0.0.1');await once(server,'listening');
 let browser;const errors=[];
 try{
@@ -40,18 +40,20 @@ try{
   assert(await page.getByRole('textbox',{name:'Ask Circlo Help'}).isVisible());
   await mkdir('test-artifacts',{recursive:true});await page.screenshot({path:`test-artifacts/help-guide-${width}.png`,animations:'disabled'});
  }
- await page.goto(base+'?phone');const phone=page.getByRole('combobox',{name:'Phone number'});
- assert.equal(await page.locator('input').count(),1,'Only one phone/country input');
+ await page.goto(base+'?phone');const phone=page.getByRole('combobox',{name:'Phone number'});await phone.waitFor();await page.waitForFunction(()=>!document.querySelector('[role=combobox]').disabled);
+ assert.equal(await page.locator('input:not([type=checkbox])').count(),1,'Only one phone/country input');
  await page.getByRole('button',{name:'Choose country calling code'}).click();await phone.fill('United Kingdom');await phone.press('Enter');
  assert.equal(await phone.inputValue(),'+44501234567','Changing country preserves the national number');
  await phone.fill('+971501234567');await phone.press('ArrowDown');await phone.fill('France');await phone.press('Escape');
  assert.equal(await phone.inputValue(),'+971501234567','Cancelling country search preserves the saved number');
  await page.getByRole('button',{name:'Choose country calling code'}).click();await phone.fill('+49');await phone.press('Enter');
  assert.equal(await phone.inputValue(),'+49501234567');
+ await page.setViewportSize({width:390,height:844});await page.screenshot({path:'test-artifacts/phone-field-mobile.png'});
+ await page.getByRole('button',{name:'Choose country calling code'}).click();await phone.fill('United');await page.screenshot({path:'test-artifacts/phone-country-search-mobile.png'});await phone.press('Escape');
  await page.evaluate(async()=>{
   const canvas=document.createElement('canvas');canvas.width=160;canvas.height=90;const ctx=canvas.getContext('2d');ctx.fillStyle='#00cc44';ctx.fillRect(0,0,160,90);
-  const stream=canvas.captureStream(10),recorder=new MediaRecorder(stream,{mimeType:'video/webm'}),chunks=[];
-  recorder.ondataavailable=event=>chunks.push(event.data);const stopped=new Promise(resolve=>recorder.onstop=resolve);recorder.start();await new Promise(resolve=>setTimeout(resolve,250));recorder.stop();await stopped;stream.getTracks().forEach(track=>track.stop());
+  const stream=canvas.captureStream(10),recorder=new MediaRecorder(stream,{mimeType:'video/webm;codecs=vp8'}),chunks=[];
+  recorder.ondataavailable=event=>chunks.push(event.data);const stopped=new Promise(resolve=>recorder.onstop=resolve);recorder.start();const drawing=setInterval(()=>ctx.fillRect(0,0,160,90),40);await new Promise(resolve=>setTimeout(resolve,350));recorder.stop();await Promise.race([stopped,new Promise((_,reject)=>setTimeout(()=>reject(new Error('Video fixture recorder stalled')),5000))]);clearInterval(drawing);stream.getTracks().forEach(track=>track.stop());
   const data=await new Promise(resolve=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.readAsDataURL(new Blob(chunks,{type:'video/webm'}));});sessionStorage.setItem('fixtureMedia',data);
  });
  await page.goto(base+'?media');const video=page.getByLabel('Video thumbnail');await video.waitFor();

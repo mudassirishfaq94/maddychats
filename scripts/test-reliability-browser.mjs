@@ -11,6 +11,7 @@ import {testNativeNotificationState} from "./test-native-notification-state.mjs"
 import {testTemporaryRooms} from "./test-temporary-rooms.mjs";
 import {testOfflineCompose} from "./test-offline-compose.mjs";
 import {testNavigationLatency} from "./test-navigation-latency.mjs";
+import {testCachedChatHistory} from "./test-cached-chat-history.mjs";
 import {signSessionToken} from "../src/server/jwt.ts";
 import {generateKeyPair,exportPublicKey,exportPrivateKey,encryptPrivateKeyForStorage,generateConversationKey,encryptKeyForUser,conversationFingerprint,encryptMessage} from "../src/lib/crypto.ts";
 const url=new URL(process.env.DATABASE_URL??"");
@@ -90,6 +91,8 @@ try {
  const normal=`Normal encrypted regression ${randomUUID()}`;
  await owner.page.getByRole("textbox",{name:"Message text"}).fill(normal);await owner.page.getByRole("button",{name:"Send message",exact:true}).click();
  await member.page.getByRole("region",{name:"Messages",exact:true}).getByText(normal,{exact:true}).waitFor();console.log("PASS: normal E2EE message decrypted across browser sessions");
+ const cachedMessage=(await pool.query("select id,text from messages where conversation_id=$1 and not self_destruct order by created_at desc limit 1",[group])).rows[0];
+ await testCachedChatHistory(member.page,member.id,group,cachedMessage,normal);
  const note=`Ephemeral private note ${randomUUID()}`;
  await owner.page.getByRole("textbox",{name:"Message text"}).fill(note);
  await owner.page.getByLabel("Self-destruct message · 5 seconds after first reveal",{exact:true}).check();

@@ -33,9 +33,10 @@ export function InternationalPhoneInput({id,value,onChange,disabled}:{id:string;
   return <div ref={root} className="relative">
     <div className="flex min-h-12 items-center rounded-xl border border-[var(--border)] bg-[var(--surface)] focus-within:ring-2 focus-within:ring-[var(--accent)]">
       <input ref={input} id={id} type="text" role="combobox" autoComplete="tel" inputMode={open?"search":"tel"}
+        style={{outline:"none"}}
         aria-expanded={open} aria-controls={listId} aria-autocomplete="list" aria-activedescendant={open&&matches[active]?`${listId}-${matches[active].country}`:undefined}
         placeholder={open?"Search country or +calling code":"+971 50 123 4567"} maxLength={64} value={open?search:value} disabled={disabled}
-        className="min-w-0 flex-1 rounded-xl bg-transparent px-3 py-3 text-base outline-none disabled:opacity-50"
+        className="min-w-0 flex-1 rounded-xl bg-transparent px-3 py-3 text-base disabled:opacity-50"
         onChange={event=>{const next=event.target.value;setActive(0);if(open||/[a-z]/i.test(next)){setSearch(next);setOpen(true);}else onChange(next);}}
         onKeyDown={event=>{
           if(event.key==="Escape"){setOpen(false);return;}
