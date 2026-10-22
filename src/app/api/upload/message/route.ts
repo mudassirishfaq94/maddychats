@@ -1,5 +1,6 @@
 import { claimStage, type StageClaim } from "@/server/staged-media";
 import { normalizeMediaType } from "@/lib/media-types";
+import { messageVisibleTo } from "@/server/message-visibility";
 import { safeError } from "@/server/safe-error";
 import { readUploadForm } from "@/server/http";
 import { after, NextRequest, NextResponse } from "next/server";
@@ -30,7 +31,7 @@ import {
   validateUpload,
   sanitizeName,
 } from "@/server/storage";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { ENCRYPTED_MEDIA_OVERHEAD, MEDIA_MAX_BYTES, INLINE_MEDIA_MAX_BYTES } from "@/lib/media-limits";
 
 export const dynamic = "force-dynamic";
@@ -179,7 +180,7 @@ export async function POST(req: NextRequest) {
     const parent = await db
       .select({ conversationId: messages.conversationId })
       .from(messages)
-      .where(eq(messages.id, replyToMessageId))
+      .where(and(eq(messages.id, replyToMessageId), messageVisibleTo(me.id)))
       .limit(1);
     if (parent[0]?.conversationId === conversationId) {
       validReplyId = replyToMessageId;

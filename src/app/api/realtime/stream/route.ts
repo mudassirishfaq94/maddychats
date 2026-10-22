@@ -1,4 +1,5 @@
 import { canSeePresence } from "@/server/presence-privacy";
+import { currentMessageEvent } from "@/server/realtime-visibility";
 import { randomUUID } from "node:crypto";
 import { NextRequest } from "next/server";
 import { pool } from "@/db";
@@ -41,6 +42,8 @@ export async function GET(req: NextRequest) {
     async start(controller) {
       let closed = false, registered = false;
       const seen = new Set<string>();
+      let messageDelivery = Promise.resolve();
+      let pendingMessages = 0;
       let heartbeat: ReturnType<typeof setInterval> | undefined;
       let eligibility: ReturnType<typeof setInterval> | undefined;
       let lifetime: ReturnType<typeof setTimeout> | undefined;
@@ -71,6 +74,17 @@ export async function GET(req: NextRequest) {
         }
         seen.add(row.id);
         if (seen.size > 5000) seen.delete(seen.values().next().value!);
+        if (["message:new", "message:update", "message:deleted"].includes(row.payload.type)) {
+          // Preserve message order and bound queued authorization work. A slow
+          // consumer reconnects using durable IDs instead of growing memory.
+          if (++pendingMessages > 100) { cleanup(); return; }
+          messageDelivery = messageDelivery.then(async () => {
+            if (closed) return;
+            const payload = await currentMessageEvent(me.id, row.payload);
+            if (payload) send(`id: ${row.id}\ndata: ${JSON.stringify(payload)}\n\n`);
+          }).catch(() => cleanup()).finally(() => { pendingMessages--; });
+          return;
+        }
         if (row.payload.type === "presence:update") {
           const event = row.payload;
           void canSeePresence(me.id, event.userId).then(allowed => {
@@ -103,7 +117,13 @@ export async function GET(req: NextRequest) {
             values: [me.id, since, cursor?.stamp ?? null, cursor?.id ?? null], query_timeout: 5000,
           };
           const result = await pool.query<Delivery & { stamp: string }>(query);
-          for (const row of result.rows) deliver(row);
+          for (const row of result.rows) {
+            deliver(row);
+            // Replay pages contain up to 200 rows. Drain authorization work
+            // within each page rather than overflowing the live-delivery cap.
+            if (pendingMessages >= 50) await messageDelivery;
+          }
+          await messageDelivery;
           if (result.rows.length < 200) break;
           const last = result.rows[result.rows.length - 1]; cursor = { stamp: last.stamp, id: last.id };
           if (pages >= 24) {

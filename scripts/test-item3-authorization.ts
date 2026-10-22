@@ -3,7 +3,7 @@ import { testAuthFields } from "./test-auth-fields.mjs";
 import { testPublicPages } from "./test-public-pages.mjs";
 /** Production HTTP authorization checks, restricted to one disposable loopback DB. */
 import assert from "node:assert/strict";
-import { randomUUID, createHash, generateKeyPairSync } from "node:crypto";
+import { randomUUID, randomBytes, createHash, generateKeyPairSync } from "node:crypto";
 import { SignJWT } from "jose";
 import { spawn, type ChildProcess } from "node:child_process";
 import { once } from "node:events";
@@ -88,7 +88,7 @@ async function main() {
     const googlePair = generateKeyPairSync("rsa", { modulusLength: 2048 });
     const googlePublic = { ...googlePair.publicKey.export({ format: "jwk" }), kid: "disposable-google-jwk", alg: "RS256", use: "sig" };
     const env = { ...process.env, NODE_ENV: "production" as const, DATABASE_URL: runtimeUrl.toString(), REALTIME_DATABASE_URL: runtimeUrl.toString(), HOSTNAME: "127.0.0.1", PORT: "3109", CLIENT_URL: base,
-      TEST_GOOGLE_PRIVATE_KEY: googlePair.privateKey.export({ type: "pkcs8", format: "pem" }).toString(), TEST_GOOGLE_PUBLIC_JWK: JSON.stringify(googlePublic), JWT_SECRET: "item3-disposable-test-secret-at-least-thirty-two-characters", GOOGLE_CLIENT_ID: "disposable-google-client", GOOGLE_CLIENT_SECRET: "disposable-google-secret", CLIENT_IP_TRUSTED_HOPS: "1", HEALTHCHECK_SECRET: "item3-health", CRON_SECRET: "item3-cron",
+      TEST_GOOGLE_PRIVATE_KEY: googlePair.privateKey.export({ type: "pkcs8", format: "pem" }).toString(), TEST_GOOGLE_PUBLIC_JWK: JSON.stringify(googlePublic), JWT_SECRET: randomBytes(32).toString("hex"), GOOGLE_CLIENT_ID: "disposable-google-client", GOOGLE_CLIENT_SECRET: "disposable-google-secret", CLIENT_IP_TRUSTED_HOPS: "1", HEALTHCHECK_SECRET: "item3-health", CRON_SECRET: "item3-cron",
       SUPABASE_URL: "", SUPABASE_SERVICE_ROLE_KEY: "", RESEND_API_KEY: "", VAPID_PRIVATE_KEY: "", FIREBASE_PROJECT_ID: "", FIREBASE_CLIENT_EMAIL: "", FIREBASE_PRIVATE_KEY: "", TWA_DAL_ENABLED: "0" };
     await cp(resolve(".next/static"), resolve(".next/standalone/.next/static"), { recursive: true });
     await cp(resolve("public"), resolve(".next/standalone/public"), { recursive: true });
@@ -240,6 +240,42 @@ async function main() {
     const media = await api(`/api/media/${attachment.id}`, bobCookie);
     assert.equal(media.headers.get("cache-control"), "private, no-store", "Private media must reauthorize every request");
     assert.equal(media.status, 200); assert.equal(await media.text(), "isolated-private-attachment");
+    const forbiddenUnstar = await api(`/api/messages/${message.id}/star`, outsiderCookie, "DELETE");
+    const forbiddenBody = await forbiddenUnstar.json();
+    assert.equal(forbiddenUnstar.status, 404, "Unstar must not read a message from another conversation");
+    assert.equal(forbiddenBody.message, undefined, "Unauthorized responses contain no message DTO");
+    const ownUnstar = await api(`/api/messages/${message.id}/star`, bobCookie, "DELETE");
+    assert.equal(ownUnstar.status,200);
+    const replayMessage = (await ownUnstar.json()).message;
+    const replayRows = await sql.query("insert into realtime_events(user_id,payload) select $1,$2::jsonb from generate_series(1,201) returning id", [bob.id,JSON.stringify({type:"message:new",conversationId:conversation.id,message:replayMessage})]);
+    const waiting = new Set<string>(replayRows.rows.map(row=>row.id));
+    const replayAbort = new AbortController();
+    try {
+      const stream = await fetch(base+"/api/realtime/stream",{headers:{cookie:bobCookie,"last-event-id":randomUUID()},signal:AbortSignal.any([replayAbort.signal,AbortSignal.timeout(30000)])});
+      assert.equal(stream.status,200);
+      const reader=stream.body!.getReader();let buffer="";const decoder=new TextDecoder();
+      try {
+        while(waiting.size){const chunk=await reader.read();assert(!chunk.done,"A replay larger than one page must not disconnect before delivery");buffer+=decoder.decode(chunk.value,{stream:true});const frames=buffer.split("\n\n");buffer=frames.pop()!;for(const frame of frames){const match=/^id: ([a-f0-9-]+)$/m.exec(frame);if(match)waiting.delete(match[1]);}}
+      } finally { await reader.cancel().catch(()=>{}); }
+    } finally { replayAbort.abort();await sql.query("delete from realtime_events where user_id=$1 and id=any($2::uuid[])",[bob.id,replayRows.rows.map(row=>row.id)]); }
+    assert.equal((await api(`/api/messages/${message.id}/star`, bobCookie, "POST")).status, 200);
+    await sql.query("insert into pinned_messages(conversation_id,message_id,pinned_by) values($1,$2,$3)", [conversation.id, message.id, alice.id]);
+    const notice = (await sql.query("insert into notifications(user_id,actor_id,type,data) values($1,$2,'message',$3::jsonb) returning id", [bob.id, alice.id, JSON.stringify({conversationId:conversation.id,messageId:message.id,actorName:"Fixture",preview:"fixture-only"})])).rows[0];
+    const deliveryPath = `/api/notifications/push/delivery?id=${notice.id}`;
+    assert.equal((await api(deliveryPath, bobCookie)).status, 200);
+    await sql.query("update conversation_members set cleared_at=now() where conversation_id=$1 and user_id=$2", [conversation.id, bob.id]);
+    try {
+      assert.equal((await api(`/api/media/${attachment.id}`, bobCookie)).status, 404, "Cleared attachments cannot be retrieved by an old URL");
+      assert.equal((await api(`/api/media/${attachment.id}`, aliceCookie)).status, 200, "Another member retains access");
+      assert.equal((await api(deliveryPath, bobCookie)).status, 404, "Old pushes cannot restore cleared content");
+      for (const [path,key] of [[`/api/users/me/starred-messages`,"starred"],[`/api/conversations/${conversation.id}/pinned-messages`,"pins"],[`/api/conversations/${conversation.id}/files`,"files"]]) {
+        const response=await api(path,bobCookie);assert.equal(response.status,200);
+        assert.equal((await response.json())[key].length,0,`${key} respects cleared history`);
+      }
+    } finally { await sql.query("update conversation_members set cleared_at=null where conversation_id=$1 and user_id=$2", [conversation.id,bob.id]); }
+    assert.equal((await api(`/api/messages/${message.id}/star`, bobCookie, "DELETE")).status, 200);
+    await sql.query("delete from pinned_messages where conversation_id=$1 and message_id=$2", [conversation.id,message.id]);
+    await sql.query("delete from notifications where id=$1", [notice.id]);
     assert.equal((await api(historyPath, aliceCookie, "POST", { text: "ciphertext", encrypted: true }, { origin: "https://evil.example" })).status, 403);
     const adminPage = await api("/app/admin", bobCookie);
     const adminHtml = await adminPage.text();

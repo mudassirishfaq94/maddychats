@@ -44,12 +44,15 @@ export async function DELETE(
   _req: NextRequest,
   ctx: { params: Promise<{ id: string }> },
 ) {
+  const blocked = guardSameOrigin(_req);
+  if (blocked) return blocked;
   const me = await getSessionUser();
   if (!me) return jsonError(401, "Not authenticated.");
 
   const { id } = await ctx.params;
   if (!isUuid(id)) return jsonError(404, "Message not found.");
 
+  if (!await getMessageDTO(id, me.id)) return jsonError(404, "Message not found.");
   await unstarMessage(id, me.id);
 
   const dto = await getMessageDTO(id, me.id);

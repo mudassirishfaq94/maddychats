@@ -28,6 +28,7 @@ async function guard(messageId: string, userId: string) {
   if (!conversationId) return null;
   const membership = await getMembership(conversationId, userId);
   if (!membership) return null;
+  if (!await getMessageDTO(messageId, userId)) return null;
   return conversationId;
 }
 

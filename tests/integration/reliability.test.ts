@@ -23,6 +23,56 @@ test.before(async () => {
 });
 test.after(async () => { await pool.query("delete from conversations where created_by_id=any($1::uuid[])",[ids]); await pool.query("delete from users where id=any($1::uuid[])",[ids]); await pool.end(); });
 
+test("single-message reads enforce membership and cleared/deleted visibility", async () => {
+  const message = (await pool.query("insert into messages(conversation_id,sender_id,text) values($1,$2,'visibility-regression') returning id,created_at", [group, owner])).rows[0];
+  assert.equal((await chat.getMessageDTO(message.id, member))?.text, "visibility-regression");
+  assert.equal(await chat.getMessageDTO(message.id, outsider), null, "A known message ID is not authorization");
+  // Keep PostgreSQL's microsecond precision for the exact equality boundary.
+  await pool.query("update conversation_members set cleared_at=(select created_at from messages where id=$3) where conversation_id=$1 and user_id=$2", [group, member, message.id]);
+  try {
+    assert.equal(await chat.getMessageDTO(message.id, member), null, "The clear watermark includes messages at its timestamp");
+    assert.equal((await chat.getMessageDTO(message.id, owner))?.text, "visibility-regression");
+  } finally { await pool.query("update conversation_members set cleared_at=null where conversation_id=$1 and user_id=$2", [group, member]); }
+  await pool.query("insert into message_deletions(message_id,user_id) values($1,$2)", [message.id, member]);
+  assert.equal(await chat.getMessageDTO(message.id, member), null);
+  assert.equal((await chat.getMessageDTO(message.id, owner))?.text, "visibility-regression");
+});
+
+test("bookmarks, pins, galleries and reply previews share per-viewer visibility", async () => {
+  const conversation = (await chat.createGroupConversation({ creatorId: owner, name: "Visibility boundary", memberIds: [member] })).id;
+  const parent = (await pool.query("insert into messages(conversation_id,sender_id,text) values($1,$2,'https://example.invalid/private') returning id,created_at", [conversation, owner])).rows[0];
+  const { currentMessageEvent } = await import("../../src/server/realtime-visibility");
+  const original = (await chat.getMessageDTO(parent.id,member))!;
+  const retained = {type:"message:new" as const,conversationId:conversation,message:original};
+  assert.equal((await currentMessageEvent(member,retained))?.type,"message:new");
+  await pool.query("insert into message_stars(message_id,user_id) values($1,$2),($1,$3)", [parent.id, member, owner]);
+  await pool.query("insert into pinned_messages(conversation_id,message_id,pinned_by) values($1,$2,$3)", [conversation,parent.id,owner]);
+  await pool.query("insert into message_attachments(message_id,original_name,stored_name,mime_type,size,path,kind) values($1,'photo.png','visibility.png','image/png',10,'images/visibility.png','image'),($1,'private.txt','visibility.txt','text/plain',10,'files/visibility.txt','file')", [parent.id]);
+  assert.equal((await chat.listPinnedMessages(conversation,member)).length,1);
+  assert.equal((await chat.listConversationMedia(conversation,member)).length,1);
+  assert.equal((await chat.listConversationFiles(conversation,member)).length,1);
+  assert.equal((await chat.listConversationLinks(conversation,member)).length,1);
+  await pool.query("update conversation_members set cleared_at=(select created_at from messages where id=$3) where conversation_id=$1 and user_id=$2", [conversation,member,parent.id]);
+  assert.equal(await currentMessageEvent(member,retained),null,"A retained stream event cannot restore cleared content");
+  assert(!(await chat.listStarredMessages(member)).some(row=>row.messageId===parent.id));
+  assert.equal((await chat.listPinnedMessages(conversation,member)).length,0);
+  assert.equal((await chat.listConversationMedia(conversation,member)).length,0);
+  assert.equal((await chat.listConversationFiles(conversation,member)).length,0);
+  assert.equal((await chat.listConversationLinks(conversation,member)).length,0);
+  assert.equal((await chat.listPinnedMessages(conversation,owner)).length,1);
+  const reply = (await pool.query("insert into messages(conversation_id,sender_id,text,reply_to_message_id,created_at) values($1,$2,'later reply',$3,$4::timestamptz+interval '1 second') returning id", [conversation,owner,parent.id,parent.created_at])).rows[0];
+  assert.equal((await chat.getMessageDTO(reply.id,member))?.replyTo,null,"A newer reply cannot restore its cleared parent");
+  assert.equal((await chat.getMessageDTO(reply.id,owner))?.replyTo?.id,parent.id);
+  await pool.query("update conversation_members set cleared_at=null where conversation_id=$1 and user_id=$2", [conversation,member]);
+  await pool.query("insert into message_deletions(message_id,user_id) values($1,$2)", [parent.id,member]);
+  assert.equal((await chat.getMessageDTO(reply.id,member))?.replyTo,null);
+  assert.equal((await chat.listPinnedMessages(conversation,member)).length,0);
+  await pool.query("delete from conversation_members where conversation_id=$1 and user_id=$2", [conversation,member]);
+  assert.equal(await currentMessageEvent(member,retained),null,"Stream replay rechecks revoked membership");
+  assert(!(await chat.listStarredMessages(member)).some(row=>row.messageId===parent.id));
+  assert((await chat.listStarredMessages(owner)).some(row=>row.messageId===parent.id));
+});
+
 test("backend group policy allows ordinary additions and blocks restricted/nonmember mutation", async () => {
   assert.equal(await chat.addGroupMember(group, member, extra), "ok");
   assert.equal(await chat.addGroupMember(group, outsider, another), "not_found");
