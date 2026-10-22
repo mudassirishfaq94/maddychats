@@ -1,5 +1,5 @@
 "use client";
-import { callingCodes, discoveryPhone } from "@/lib/phone-numbers";
+import { discoveryPhone } from "@/lib/phone-numbers";
 import { useHydrated } from "@/hooks/use-hydrated";
 import { useEffect, useRef, useState } from "react";
 import type { PublicUser } from "@/lib/types";
@@ -8,13 +8,11 @@ type ContactNavigator = Navigator & { contacts?: { select(fields: string[], opti
 export function PhoneContactFinder({ onResults }: { onResults: (users: PublicUser[]) => void }) {
   const hydrated = useHydrated();
   const supported = hydrated && Boolean((navigator as ContactNavigator).contacts?.select);
-  const [countryCode, setCountryCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const lookup = useRef<AbortController | null>(null);
   useEffect(() => () => lookup.current?.abort(), []);
   return <div className="mt-3 space-y-2">
-    {supported ? <label className="block text-xs text-[var(--muted)]">Country code for local contacts<select aria-label="Country code for phone contacts" className="field-input mt-1" value={countryCode} disabled={busy} onChange={event => setCountryCode(event.target.value)}><option value="">Numbers already include +country code</option>{callingCodes.map(([code,country]) => <option key={code} value={code}>{country} ({code})</option>)}</select></label> : null}
     {supported ? <button type="button" className="btn btn-secondary min-h-11" disabled={busy} onClick={async () => {
       lookup.current?.abort();
       const controller = new AbortController(); lookup.current = controller;
@@ -23,7 +21,7 @@ export function PhoneContactFinder({ onResults }: { onResults: (users: PublicUse
       try {
         const selected = await (navigator as ContactNavigator).contacts!.select(["tel"], { multiple: true });
         if (!selected.length) return;
-        const numbers = [...new Set(selected.flatMap(contact => contact.tel ?? []).map(value => discoveryPhone(value,countryCode)))].filter((value): value is string => value !== null).slice(0,10);
+        const numbers = [...new Set(selected.flatMap(contact => contact.tel ?? []).map(value => discoveryPhone(value)))].filter((value): value is string => value !== null).slice(0,10);
         if (!numbers.length) { setMessage("Selected numbers need a +country code. You can also enter a number in search."); return; }
         const matches = new Map<string, PublicUser>();
         // Bound simultaneous requests and never upload the address book or contact names.

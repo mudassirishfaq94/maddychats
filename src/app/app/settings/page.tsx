@@ -10,6 +10,7 @@ import {
   Lock,
   Download,
   ExternalLink,
+  Users, Globe, BookOpen, Star,
 } from "lucide-react";
 import { getSessionUser } from "@/server/session";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -51,6 +52,14 @@ export default async function SettingsPage() {
         </div>
 
         <Link href="/app/profile" className="mt-6 flex min-h-16 items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4"><User className="h-5 w-5 shrink-0 text-[var(--accent-fg)]" /><span className="min-w-0 flex-1"><span className="block text-sm font-semibold">Your profile</span><span className="block text-xs text-[var(--muted)]">Photo, name, phone number and account details</span></span><ExternalLink className="h-4 w-4 shrink-0 text-[var(--muted)]" /></Link>
+        <section aria-label="Explore Circlo" className="mt-4 grid gap-2 sm:grid-cols-2">
+          {[
+            {href:"/app/people",title:"People & contacts",description:"Find people, add contacts or scan a QR code",icon:Users},
+            {href:"/app/communities",title:"Communities",description:"Your groups, communities and invitations",icon:Globe},
+            {href:"/app/starred",title:"Starred messages",description:"Return to messages you saved",icon:Star},
+            {href:"/help",title:"Circlo Help",description:"Ask the guide or explore suggested questions",icon:BookOpen},
+          ].map(({href,title,description,icon:Icon})=><Link key={href} href={href} prefetch={false} className="flex min-h-20 items-center gap-3 rounded-2xl border border-[var(--border)] p-4 hover:bg-[var(--surface-2)]"><Icon className="h-5 w-5 shrink-0 text-[var(--accent-fg)]"/><span className="min-w-0"><span className="block text-sm font-semibold">{title}</span><span className="mt-1 block text-xs text-[var(--muted)]">{description}</span></span></Link>)}
+        </section>
 
         {/* Inline sections */}
         <div className="mt-8 space-y-6">

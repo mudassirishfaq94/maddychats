@@ -35,7 +35,7 @@ function previewText(conv: ConversationSummary, previews: Map<string, string>): 
   if (last.deletedAt) return "Message deleted";
   if (last.encrypted) {
     // Ciphertext must never be shown as a preview.
-    if (last.text) return previews.get(`${last.id}:${last.text}`) ?? "…";
+    if (last.text) return previews.get(`${last.id}:${last.text}`) ?? ({ audio: "Voice message", image: "Photo", video: "Video", file: "File" }[last.type] ?? "Decrypting message…");
   }
   return last.text || ({ audio: "Voice message", image: "Photo", video: "Video", file: "File" }[last.type] ?? "Message");
 }
@@ -188,8 +188,13 @@ export function ChatsLayout({
   const sourceConversations = snapshot?.conversations ?? initialConversations;
   const conversations = liveList?.source === sourceConversations
     ? liveList.items : sourceConversations;
-  const { initialized, decrypt } = useSharedE2EE();
-  const [previews, setPreviews] = useState<Map<string, string>>(new Map());
+  const { initialized, decrypt, getCachedDecryptedMessage, cacheDecryptedMessage, loadCachedDecryptedMessages } = useSharedE2EE();
+  const [previews, setPreviews] = useState<Map<string, string>>(() => new Map(initialConversations.flatMap(conversation => {
+    const message=conversation.lastMessage;
+    if(!message?.encrypted || message.deletedAt || message.expiresAt)return [];
+    const plain=getCachedDecryptedMessage(conversation.id,message.id,message.text);
+    return plain===undefined?[]:[[`${message.id}:${message.text}`,plain] as const];
+  })));
   const previewCache = useRef(previews);
   useEffect(() => { previewCache.current = previews; }, [previews]);
   useEffect(()=>{
@@ -206,6 +211,12 @@ export function ChatsLayout({
   useEffect(() => {
     if (!initialized) return;
     let cancelled = false;
+    // Authorized summary IDs/ciphertexts select the encrypted disk cache. It
+    // races key/network decryption; it never supplies unverified history rows.
+    void mapWithConcurrency(conversations.filter(c=>c.lastMessage?.encrypted && c.lastMessage.text && !c.lastMessage.deletedAt && !c.lastMessage.expiresAt),4,async c=>{
+      const message=c.lastMessage!;
+      await loadCachedDecryptedMessages(c.id,[message],(id,text)=>{if(!cancelled)setPreviews(previous=>new Map(previous).set(`${id}:${message.text}`,text));});
+    });
     const pending = conversations.filter(c => c.lastMessage?.encrypted && c.lastMessage.text && !c.lastMessage.deletedAt && !previewCache.current.has(`${c.lastMessage.id}:${c.lastMessage.text}`));
     // Decrypting previews for every encrypted conversation at once fans out
     // unbounded crypto work onto the main thread as soon as the list renders.
@@ -216,6 +227,7 @@ export function ChatsLayout({
       for (let attempt = 0; attempt < 3; attempt++) {
         try {
           const text = await decrypt(message.text, c.id);
+          if (!message.expiresAt) cacheDecryptedMessage(c.id,message.id,message.text,text);
           if (!cancelled) setPreviews(previous => new Map(previous).set(key, text));
           return;
         } catch {
@@ -223,10 +235,10 @@ export function ChatsLayout({
           if (attempt < 2) await new Promise(resolve => setTimeout(resolve, 1500));
         }
       }
-      if (!cancelled) setPreviews(previous => new Map(previous).set(key, "Message unavailable"));
+      if (!cancelled) setPreviews(previous => previous.has(key) ? previous : new Map(previous).set(key, ({ audio:"Voice message",image:"Photo",video:"Video",file:"File" }[message.type] ?? "Message unavailable")));
     });
     return () => { cancelled = true; };
-  }, [conversations, initialized, decrypt]);
+  }, [conversations, initialized, decrypt, cacheDecryptedMessage, loadCachedDecryptedMessages]);
   const pathname = usePathname();
   const presence = usePresenceMap();
   const activeId = pathname.startsWith("/app/chats/")

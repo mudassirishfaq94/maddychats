@@ -5,23 +5,16 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   CircleDashed,
   Phone,
-  Globe,
   MessagesSquare,
   Settings,
-  Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-// Chats, calls and people are the hot paths; prefetch those eagerly. The
-// remaining tabs are lower-priority and are only fetched on hover/focus so the
-// first paint and tab-switch bundle stays small.
-const PREFETCHED = new Set(["/app/chats", "/app/calls", "/app/people"]);
+const PREFETCHED = new Set(["/app/chats", "/app/calls"]);
 const NAV_ITEMS = [
   { href: "/app/chats", icon: MessagesSquare, label: "Chats", match: "/app" },
-  { href: "/app/calls", icon: Phone, label: "Calls", match: "/app/calls" },
-  { href: "/app/communities", icon: Globe, label: "Communities", match: "/app/communities" },
-  { href: "/app/people", icon: Users, label: "People", match: "/app/people" },
   { href: "/app/status", icon: CircleDashed, label: "Status", match: "/app/status" },
+  { href: "/app/calls", icon: Phone, label: "Calls", match: "/app/calls" },
   { href: "/app/settings", icon: Settings, label: "Settings", match: "/app/settings" },
 ] as const;
 
@@ -43,7 +36,9 @@ export function MobileNav() {
           const active =
             item.match === "/app"
               ? pathname === "/app" || pathname.startsWith("/app/chats")
-              : pathname.startsWith(item.match);
+              : item.match === "/app/settings"
+                ? ["/app/settings", "/app/profile", "/app/people", "/app/users", "/app/communities", "/app/starred"].some(path => pathname.startsWith(path))
+                : pathname.startsWith(item.match);
           const Icon = item.icon;
           return (
             <Link
@@ -68,8 +63,8 @@ export function MobileNav() {
                   active && "fill-current",
                 )}
               />
-              <span className="max-w-full truncate text-[0.58rem] font-medium leading-none">
-                {item.label === "Communities" ? "Community" : item.label}
+              <span className="max-w-full truncate text-[0.7rem] font-medium leading-none">
+                {item.label}
               </span>
             </Link>
           );

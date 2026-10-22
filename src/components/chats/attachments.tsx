@@ -412,22 +412,23 @@ function InlineMediaPreview({
   const [loading, setLoading] = useState(true);
   const [failedRender, setFailedRender] = useState(false);
   const showFailed = failed || failedRender;
+  const label = attachment.kind === "video" ? "Video" : "Photo";
 
   if (!enabled) return <span className="block h-40" aria-label="Media preview" />;
   if (showFailed) {
     return (
       <span className="flex h-40 w-full flex-col items-center justify-center gap-2 bg-black/10 text-xs text-[var(--muted)]">
         <AlertTriangle className="h-5 w-5" />
-        {failedRender && url ? "Preview not supported. Open to download the original." : "Media unavailable"}
+        {failedRender && url ? "Preview not supported. Open to download the original." : `${label} unavailable`}
       </span>
     );
   }
 
   if (!url) {
     return (
-      <span className="absolute inset-0 flex items-center justify-center bg-black/10">
-        <Loader2 className="h-5 w-5 animate-spin text-white" />
-        <span className="sr-only">Decrypting securely…</span>
+      <span className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/10 text-xs text-[var(--muted)]" role="status">
+        <Loader2 className="h-5 w-5 animate-spin motion-reduce:animate-none" />
+        <span>Decrypting {label.toLowerCase()}…</span>
       </span>
     );
   }
@@ -443,12 +444,18 @@ function InlineMediaPreview({
         <video
           src={url}
           muted
-          preload="metadata"
+          playsInline
+          preload="auto"
+          aria-label="Video thumbnail"
+          onLoadedMetadata={event => {
+            const video=event.currentTarget;
+            if(video.duration>0)video.currentTime=Math.min(0.05,video.duration/2);
+          }}
           onLoadedData={() => setLoading(false)}
           onError={() => setFailedRender(true)}
           className={cn(
             "w-full object-cover transition-transform duration-300 group-hover/img:scale-105",
-            gallery ? "h-full" : "max-h-64",
+            gallery ? "h-full" : "aspect-video max-h-64 bg-black/5",
           )}
         />
       ) : (

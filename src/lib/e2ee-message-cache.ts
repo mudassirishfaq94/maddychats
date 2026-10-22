@@ -49,9 +49,10 @@ async function read<T>(store: string, id: string): Promise<T | undefined> {
   }
 }
 
-async function write(store: string, value: unknown): Promise<void> {
+async function write(store: string, value: unknown, isCurrent = () => true): Promise<void> {
   const database = await openDatabase();
   try {
+    if (!isCurrent()) return;
     const tx = database.transaction(store, "readwrite");
     tx.objectStore(store).put(value);
     await new Promise<void>((resolve, reject) => {
@@ -122,6 +123,7 @@ export async function readVerifiedMessage(
 export async function readVerifiedMessages(
   cacheKey: CryptoKey, userId: string, conversationId: string,
   messages: Array<{ id: string; text: string }>,
+  onVerified?: (id: string, plaintext: string) => void,
 ): Promise<Map<string, string>> {
   if (!messages.length) return new Map();
   const database = await openDatabase();
@@ -146,7 +148,9 @@ export async function readVerifiedMessages(
         name: "AES-GCM", iv: new Uint8Array(cached.iv),
         additionalData: associatedData(userId, conversationId, message.id, message.text),
       }, cacheKey, cached.ciphertext);
-      return [message.id, new TextDecoder().decode(bytes)] as const;
+      const plaintext = new TextDecoder().decode(bytes);
+      onVerified?.(message.id, plaintext);
+      return [message.id, plaintext] as const;
     } catch { return null; }
   });
   return new Map(verified.filter((entry): entry is readonly [string, string] => entry !== null));
@@ -159,6 +163,7 @@ export async function writeVerifiedMessage(
   id: string,
   sourceCiphertext: string,
   plaintext: string,
+  isCurrent?: () => boolean,
 ): Promise<void> {
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const ciphertext = await crypto.subtle.encrypt(
@@ -169,7 +174,7 @@ export async function writeVerifiedMessage(
   await write(MESSAGES, {
     id: messageId(userId, conversationId, id), userId, sourceCiphertext,
     iv: iv.buffer, ciphertext, updatedAt: Date.now(),
-  } satisfies CachedMessage);
+  } satisfies CachedMessage, isCurrent);
 }
 
 /** Logout invalidation: remove only the signed-out account's encrypted cache. */
