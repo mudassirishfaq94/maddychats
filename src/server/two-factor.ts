@@ -4,13 +4,31 @@
  */
 
 import { createHmac, createHash, randomBytes, timingSafeEqual } from "crypto";
-import { and, eq, isNull, lt, or, sql } from "drizzle-orm";
+import { and, eq, gt, isNull, lt, or, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { user2fa, users } from "@/db/schema";
+import { deviceSessions, mfaChallenges, user2fa, users, type UserRow } from "@/db/schema";
+import { accountSuspended } from "./sign-in-state";
 
 const DIGITS = 6;
 const PERIOD = 30; // seconds
 const ALGORITHM = "sha1";
+type SecurityTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/** Authorization and mutation share locks. A request admitted before MFA
+ * enrollment, logout or reset cannot change the newer authentication state. */
+async function lockMfaActor(tx: SecurityTransaction, userId: string, sessionId: string | undefined) {
+  if (!sessionId) return null;
+  const [user] = await tx.select().from(users).where(eq(users.id, userId)).for("update");
+  if (!user || accountSuspended(user)) return null;
+  // All live sessions use the same order as device revocation. Disabling MFA
+  // revokes them together; selecting just the actor first could deadlock.
+  const sessions = await tx.select().from(deviceSessions).where(and(eq(deviceSessions.userId, userId), isNull(deviceSessions.revokedAt), gt(deviceSessions.expiresAt, new Date()))).orderBy(deviceSessions.id).for("update");
+  const actor = sessions.find(session => session.id === sessionId);
+  if (!actor || actor.approvalRequired || (user.tokenInvalidBeforeAt && actor.authTime <= user.tokenInvalidBeforeAt.getTime())) return null;
+  const [factor] = await tx.select().from(user2fa).where(eq(user2fa.userId, userId)).for("update");
+  if (factor?.enabled && actor.mfaTime < (factor.enabledAt ?? factor.createdAt).getTime()) return null;
+  return { user, factor };
+}
 
 /* ──────────── TOTP helpers ──────────── */
 
@@ -73,38 +91,18 @@ export function generateTOTP(secret: string, timeStep: number): string {
 /* ──────────── Public API ──────────── */
 
 /** Generate a new TOTP secret and return setup data */
-export async function generateTOTPSetup(userId: string) {
-  // Check if already set up
-  const [existing] = await db
-    .select()
-    .from(user2fa)
-    .where(eq(user2fa.userId, userId));
-
-  let secret: string;
-  if (existing && !existing.enabled) {
-    // Re-generate for a pending setup
-    secret = generateSecret();
-    await db
-      .update(user2fa)
-      .set({ secret })
-      .where(eq(user2fa.userId, userId));
-  } else if (existing?.enabled) {
-    return { error: "2FA is already enabled." };
-  } else {
-    secret = generateSecret();
-    await db.insert(user2fa).values({ userId, secret, enabled: false });
-  }
-
-  const [user] = await db
-    .select({ email: users.email })
-    .from(users)
-    .where(eq(users.id, userId));
-
-  const issuer = "Circlo";
-  const accountName = user?.email ?? userId;
-  const otpauthUrl = `otpauth://totp/${encodeURIComponent(issuer)}:${encodeURIComponent(accountName)}?secret=${secret}&issuer=${encodeURIComponent(issuer)}&algorithm=${ALGORITHM.toUpperCase()}&digits=${DIGITS}&period=${PERIOD}`;
-
-  return { secret, otpauthUrl };
+export async function generateTOTPSetup(userId: string, sessionId: string | undefined) {
+  return db.transaction(async tx => {
+    const actor = await lockMfaActor(tx, userId, sessionId);
+    if (!actor) return { error: "Authentication changed. Sign in again." };
+    if (actor.factor?.enabled) return { error: "2FA is already enabled." };
+    const secret = generateSecret();
+    if (actor.factor) await tx.update(user2fa).set({ secret }).where(and(eq(user2fa.userId, userId), eq(user2fa.enabled, false)));
+    else await tx.insert(user2fa).values({ userId, secret, enabled: false });
+    const issuer = "Circlo";
+    const otpauthUrl = `otpauth://totp/${encodeURIComponent(issuer)}:${encodeURIComponent(actor.user.email)}?secret=${secret}&issuer=${encodeURIComponent(issuer)}&algorithm=${ALGORITHM.toUpperCase()}&digits=${DIGITS}&period=${PERIOD}`;
+    return { secret, otpauthUrl };
+  });
 }
 
 /** Strict code matching, including a bounded clock-drift window. */
@@ -126,20 +124,22 @@ export function newRecoveryCodes() {
   return { codes, hashes: codes.map(hashRecoveryCode) };
 }
 
-export async function verifyAndEnable2FA(userId: string, code: string): Promise<{ success: boolean; error?: string; recoveryCodes?: string[]; mfaTime?: number }> {
-  const [record] = await db.select().from(user2fa).where(eq(user2fa.userId, userId));
-  if (!record || record.enabled) return { success: false, error: "2FA is not pending setup." };
-  const step = matchingTOTPStep(record.secret, code);
-  if (step === null) return { success: false, error: "Invalid verification code." };
-  const recovery = newRecoveryCodes();
-  const enabledAt = new Date();
-  const enabled = await db.update(user2fa).set({ enabled: true, enabledAt, lastUsedStep: step, recoveryCodeHashes: recovery.hashes })
-    .where(and(eq(user2fa.userId, userId), eq(user2fa.secret, record.secret), eq(user2fa.enabled, false)))
-    .returning({ userId: user2fa.userId });
-  return enabled.length ? { success: true, recoveryCodes: recovery.codes, mfaTime: enabledAt.getTime() } : { success: false, error: "Setup changed. Please start again." };
+export async function verifyAndEnable2FA(userId: string, code: string, sessionId: string | undefined): Promise<
+  { success: false; error: string } | { success: true; recoveryCodes: string[]; mfaTime: number; signInUser: UserRow }
+> {
+  return db.transaction(async tx => {
+    const actor = await lockMfaActor(tx, userId, sessionId);
+    if (!actor) return { success: false, error: "Authentication changed. Sign in again." };
+    const record = actor.factor;
+    if (!record || record.enabled) return { success: false, error: "2FA is not pending setup." };
+    const step = matchingTOTPStep(record.secret, code);
+    if (step === null) return { success: false, error: "Invalid verification code." };
+    const recovery = newRecoveryCodes(), enabledAt = new Date();
+    await tx.update(user2fa).set({ enabled: true, enabledAt, lastUsedStep: step, recoveryCodeHashes: recovery.hashes }).where(eq(user2fa.userId, userId));
+    await tx.delete(mfaChallenges).where(eq(mfaChallenges.userId, userId));
+    return { success: true, recoveryCodes: recovery.codes, mfaTime: enabledAt.getTime(), signInUser: actor.user };
+  });
 }
-
-type SecurityTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 /** Caller holds a transaction; row lock serializes recovery and TOTP consumption. */
 export async function consumeSecondFactor(tx: SecurityTransaction, userId: string, code: string): Promise<boolean> {
@@ -163,11 +163,14 @@ export async function verifyTOTPLogin(userId: string, code: string): Promise<{ v
   return { valid, ...(!valid ? { error: "Invalid or already used verification code." } : {}) };
 }
 
-export async function replaceRecoveryCodes(userId: string) {
-  const recovery = newRecoveryCodes();
-  const rows = await db.update(user2fa).set({ recoveryCodeHashes: recovery.hashes })
-    .where(and(eq(user2fa.userId, userId), eq(user2fa.enabled, true))).returning({ userId: user2fa.userId });
-  return rows.length ? recovery.codes : null;
+export async function replaceRecoveryCodes(userId: string, sessionId: string | undefined) {
+  return db.transaction(async tx => {
+    const actor = await lockMfaActor(tx, userId, sessionId);
+    if (!actor?.factor?.enabled) return null;
+    const recovery = newRecoveryCodes();
+    await tx.update(user2fa).set({ recoveryCodeHashes: recovery.hashes }).where(eq(user2fa.userId, userId));
+    return recovery.codes;
+  });
 }
 
 /** Check if a user has 2FA enabled */
@@ -183,18 +186,20 @@ export async function is2FAEnabled(userId: string): Promise<boolean> {
 /** Disable 2FA */
 export async function disable2FA(
   userId: string,
+  sessionId: string | undefined,
 ): Promise<{ success: boolean; error?: string }> {
-  const [record] = await db
-    .select()
-    .from(user2fa)
-    .where(eq(user2fa.userId, userId));
-
-  if (!record?.enabled) {
-    return { success: false, error: "2FA is not enabled." };
-  }
-
-  await db.delete(user2fa).where(eq(user2fa.userId, userId));
-  return { success: true };
+  return db.transaction(async tx => {
+    const actor = await lockMfaActor(tx, userId, sessionId);
+    if (!actor?.factor?.enabled) return { success: false, error: "2FA is not enabled or authentication changed. Sign in again." };
+    const now = new Date();
+    // Removing the MFA row must not resurrect older cookies whose only
+    // revocation was the enabled-at comparison in session authorization.
+    await tx.update(users).set({ tokenInvalidBeforeAt: now, updatedAt: now }).where(eq(users.id, userId));
+    await tx.update(deviceSessions).set({ revokedAt: now }).where(and(eq(deviceSessions.userId, userId), isNull(deviceSessions.revokedAt)));
+    await tx.delete(mfaChallenges).where(eq(mfaChallenges.userId, userId));
+    await tx.delete(user2fa).where(eq(user2fa.userId, userId));
+    return { success: true };
+  });
 }
 
 /** Also revokes sessions minted before enrollment, including old-format JWTs. */

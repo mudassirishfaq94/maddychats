@@ -181,8 +181,9 @@ async function main() {
     await sql.query("delete from oauth_accounts where provider_account_id='disposable-google-identity'");
     console.log("PASS Google OAuth linking/sign-in with verified fixture JWTs; nonce/audience rejection, start/callback quotas, cross-site start rejection and account-bound state. Google responses mocked; no third-party calls.");
     const verifier = "a".repeat(43);
-    const ticket = await new SignJWT({ policyVersion: "2026-10-14", usr: alice.username, codeChallenge: createHash("sha256").update(verifier).digest("base64url") })
-      .setProtectedHeader({ alg: "HS256", typ: "JWT" }).setSubject(alice.id).setIssuer("circlo").setAudience("circlo-google-mobile-handoff").setIssuedAt().setExpirationTime("120s")
+    const issuedAtMs = Date.now();
+    const ticket = await new SignJWT({ issuedAtMs, policyVersion: "2026-10-14", usr: alice.username, codeChallenge: createHash("sha256").update(verifier).digest("base64url") })
+      .setProtectedHeader({ alg: "HS256", typ: "JWT" }).setSubject(alice.id).setIssuer("circlo").setAudience("circlo-google-mobile-handoff").setIssuedAt(Math.floor(issuedAtMs / 1000)).setExpirationTime("120s")
       .sign(new TextEncoder().encode(env.JWT_SECRET));
     assert.equal((await api("/api/auth/google/native", "", "POST", { acceptTerms: true, acceptPrivacy: true, ticket, verifier: "b".repeat(43) })).status, 401);
     assert.equal((await api("/api/auth/google/native", "", "POST", { acceptTerms: true, acceptPrivacy: true, ticket, verifier })).status, 200);

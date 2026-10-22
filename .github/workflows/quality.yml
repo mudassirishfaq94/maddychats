@@ -95,6 +95,10 @@ jobs:
       - name: Install PostgreSQL client
         run: sudo apt-get update && sudo apt-get install -y postgresql-client-16
       - run: npm ci
+      - name: Authentication state and provider replay regressions
+        env:
+          LOAD_TEST_ADMIN_URL: postgresql://circlo_ci:disposable-ci-database-only@127.0.0.1:5432/postgres
+        run: npx tsx scripts/test-authentication-audit.ts
       - name: Install mobile lab browser
         run: npx playwright install --with-deps chromium
       - name: Dependency audit

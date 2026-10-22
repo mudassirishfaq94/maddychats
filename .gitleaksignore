@@ -1,5 +1,8 @@
 # Reviewed historical findings: four disposable integration credentials, one Cargo checksum, one Firebase public client configuration key.
 # Exact commit/path/line fingerprints only; new credentials remain blocking.
+# Public RFC 6238 vector in the isolated authentication audit fixture; replaced
+# with a fresh random seed in the follow-up. This exact historical finding only.
+68e8d4f9cc650d0b3561d9f370cf932d2c9e1734:scripts/test-authentication-audit.ts:generic-api-key:48
 fb6cb95b32c092327c6ec44676a7f3afe540c75d:scripts/test-item3-authorization.ts:generic-api-key:45
 fb6cb95b32c092327c6ec44676a7f3afe540c75d:scripts/test-item1-security.ts:generic-api-key:47
 fb6cb95b32c092327c6ec44676a7f3afe540c75d:scripts/test-items4-6.ts:generic-api-key:64

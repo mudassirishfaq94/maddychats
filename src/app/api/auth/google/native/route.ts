@@ -13,6 +13,7 @@ import { verifyGoogleMobileHandoff } from "@/server/google-mobile-handoff";
 import { findUserById } from "@/server/users";
 import { createHash, timingSafeEqual } from "crypto";
 import { acceptsPolicies, policyAcceptance } from "@/lib/policy-consent";
+import { consumeProviderProof } from "@/server/provider-proof";
 
 export const dynamic = "force-dynamic";
 
@@ -37,7 +38,7 @@ async function handlePOST(req: NextRequest) {
       return jsonError(401, "Google mobile sign-in could not be verified.");
     }
     const user = await findUserById(handoff.userId);
-    if (!user || user.username !== handoff.username) return jsonError(401, "Google mobile sign-in expired.");
+    if (!user || user.username !== handoff.username || (user.tokenInvalidBeforeAt && handoff.issuedAtMs <= user.tokenInvalidBeforeAt.getTime())) return jsonError(401, "Google mobile sign-in expired.");
     // PKCE proves possession, but does not make a captured ticket/verifier
     // pair single-use. Consume it atomically in the shared store before auth.
     const ticketId = createHash("sha256").update(ticket).digest("hex");
@@ -46,7 +47,7 @@ async function handlePOST(req: NextRequest) {
   }
   if (!acceptsPolicies(body)) return jsonError(422, "Agree to both policies before signing in.");
   const idToken = typeof body?.idToken === "string" ? body.idToken : null;
-  if (!idToken) return jsonError(422, "Google ID token is required.");
+  if (!idToken || idToken.length > 16384) return jsonError(422, "A valid Google ID token is required.");
 
   const clientId = process.env.GOOGLE_CLIENT_ID;
   if (!clientId) return jsonError(503, "Google sign-in is not configured.");
@@ -56,6 +57,7 @@ async function handlePOST(req: NextRequest) {
     ({ payload: claims } = await jwtVerify(idToken, googleKeys, {
       issuer: ["https://accounts.google.com", "accounts.google.com"],
       audience: clientId,
+      algorithms: ["RS256"], requiredClaims: ["sub", "iat", "exp"],
     }));
   } catch {
     return jsonError(401, "Google could not verify this sign-in.");
@@ -64,6 +66,9 @@ async function handlePOST(req: NextRequest) {
   if (!claims.sub || typeof claims.email !== "string" || claims.email_verified !== true) {
     return jsonError(401, "Google account email is not verified.");
   }
+  // Credential Manager ID tokens are bearer proofs too. Match the web/mobile
+  // handoff's single-use semantics across instances, without storing the token.
+  if (!(await consumeProviderProof("google-native", idToken))) return jsonError(409, "Google sign-in was already used. Request a fresh Google credential.");
 
   let user = (await db.select({ user: users }).from(oauthAccounts)
     .innerJoin(users, eq(oauthAccounts.userId, users.id))

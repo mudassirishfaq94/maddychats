@@ -13,6 +13,7 @@ import { consumeSecondFactor, is2FAEnabled, verifyTOTPLogin } from "./two-factor
 import { findUserById, toSafeUser } from "./users";
 import { verifyPassword } from "./password";
 import { measureLoginStage } from "./login-performance";
+import { accountSuspended, sameSignInState, SignInStateError, type SignInState } from "./sign-in-state";
 
 export const MFA_COOKIE = "maddy_mfa_challenge";
 const CHALLENGE_MS = 5 * 60 * 1000;
@@ -22,8 +23,12 @@ export function recentlyAuthenticated(authTime: number, now = Date.now()) {
   return authTime > 0 && authTime <= now && now - authTime < CHALLENGE_MS;
 }
 
-export async function setAuthenticatedSession(response: NextResponse, req: NextRequest, user: Pick<UserRow, "id" | "username">, mfaTime = 0) {
-  setDeviceCookies(response, req, await issueDeviceSession(req, user, mfaTime));
+export async function setAuthenticatedSession(response: NextResponse, req: NextRequest, user: SignInState, mfaTime = 0) {
+  try { setDeviceCookies(response, req, await issueDeviceSession(req, user, mfaTime)); }
+  catch (error) {
+    if (!(error instanceof SignInStateError)) throw error;
+    return jsonError(401, "Authentication changed. Start sign-in again.");
+  }
   response.cookies.set(MFA_COOKIE, "", { ...sessionCookieOptions(requestIsSecure(req)), maxAge: 0 });
   response.headers.set("Cache-Control", "no-store");
   return response;
@@ -39,7 +44,15 @@ export async function beginSignIn(req: NextRequest, user: UserRow, redirectTo?: 
   if (blocked === "mfa_required") {
     const token = randomBytes(32).toString("base64url");
     const now = new Date();
-    await db.insert(mfaChallenges).values({ tokenHash: digest(token), userId: user.id, expiresAt: new Date(now.getTime() + CHALLENGE_MS) });
+    const issued = await db.transaction(async tx => {
+      const [current] = await tx.select().from(users).where(eq(users.id, user.id)).for("update");
+      if (!current || !sameSignInState(user, current) || accountSuspended(current)) return false;
+      const [factor] = await tx.select().from(user2fa).where(eq(user2fa.userId, user.id));
+      if (!factor?.enabled) return false;
+      await tx.insert(mfaChallenges).values({ tokenHash: digest(token), userId: user.id, expiresAt: new Date(now.getTime() + CHALLENGE_MS) });
+      return true;
+    });
+    if (!issued) return jsonError(401, "Authentication changed. Start sign-in again.");
     const response = redirectTo
       ? NextResponse.redirect(new URL(`/login?mfa=1&next=${encodeURIComponent(returnPath!)}`, clientUrl()))
       : NextResponse.json({ mfaRequired: true });
@@ -59,14 +72,16 @@ export async function completeMfaChallenge(token: string, code: string): Promise
   const [pending] = await db.select({ userId: mfaChallenges.userId }).from(mfaChallenges).where(eq(mfaChallenges.tokenHash, digest(token)));
   if (!pending || !(await rateLimit(`mfa-user:${pending.userId}`, 10, 10 * 60 * 1000)).allowed) return null;
   return db.transaction(async (tx) => {
+    // Same user-first order as reset and MFA mutation, avoiding challenge/user
+    // deadlocks while cancellation or password reset deletes challenges.
+    const [user] = await tx.select().from(users).where(eq(users.id, pending.userId)).for("update");
     const [challenge] = await tx.select().from(mfaChallenges)
-      .where(and(eq(mfaChallenges.tokenHash, digest(token)), gt(mfaChallenges.expiresAt, new Date()))).for("update");
+      .where(and(eq(mfaChallenges.tokenHash, digest(token)), eq(mfaChallenges.userId, pending.userId), gt(mfaChallenges.expiresAt, new Date()))).for("update");
     if (!challenge) return null;
-    const [user] = await tx.select().from(users).where(eq(users.id, challenge.userId)).for("update");
     if (!user || (user.suspendedAt && (!user.suspendedUntil || user.suspendedUntil.getTime() >= Date.now())) ||
       (user.tokenInvalidBeforeAt && challenge.createdAt <= user.tokenInvalidBeforeAt)) return null;
     const [factor] = await tx.select().from(user2fa).where(eq(user2fa.userId, user.id)).for("update");
-    if (!factor?.enabled || !(await consumeSecondFactor(tx, user.id, code))) return null;
+    if (!factor?.enabled || challenge.createdAt < (factor.enabledAt ?? factor.createdAt) || !(await consumeSecondFactor(tx, user.id, code))) return null;
     await tx.delete(mfaChallenges).where(eq(mfaChallenges.tokenHash, challenge.tokenHash));
     return { ...user, mfaTime: (factor.enabledAt ?? factor.createdAt).getTime() };
   });

@@ -109,7 +109,8 @@ async function main() {
     const { NextRequest } = await import("next/server");
     const { issueDeviceSession, rotateDeviceSession } = await import("../src/server/device-sessions");
     await local.query("UPDATE user_2fa SET enabled=false WHERE user_id=$1",[id]);
-    const credentials=await issueDeviceSession(new NextRequest("http://localhost/login",{headers:{"user-agent":"Atomic login fixture","x-forwarded-for":"127.0.0.1"}}),{id,username:"session_test"},0);
+    const signInUser=(await (await import("../src/server/users")).findUserById(id))!;
+    const credentials=await issueDeviceSession(new NextRequest("http://localhost/login",{headers:{"user-agent":"Atomic login fixture","x-forwarded-for":"127.0.0.1"}}),signInUser,0);
     assert.equal(await resolveSessionToken(credentials.access),null,"A new sign-in has no app access before device proof");
     assert.equal((await resolveSessionAccess(credentials.access))?.approvalRequired,true);
     const restrictedSid = JSON.parse(Buffer.from(credentials.access.split('.')[1],'base64url').toString()).sid;
@@ -124,7 +125,7 @@ async function main() {
     const presence=(await local.query("SELECT last_seen_at FROM users WHERE id=$1",[id])).rows[0].last_seen_at;
     const sessionCount=(await local.query("SELECT count(*)::int AS n FROM device_sessions WHERE user_id=$1",[id])).rows[0].n;
     await local.query("ALTER TABLE login_history ADD CONSTRAINT test_audit_failure CHECK(user_agent IS DISTINCT FROM 'Reject audit fixture')");
-    await assert.rejects(issueDeviceSession(new NextRequest("http://localhost/login",{headers:{"user-agent":"Reject audit fixture"}}),{id,username:"session_test"},0));
+    await assert.rejects(issueDeviceSession(new NextRequest("http://localhost/login",{headers:{"user-agent":"Reject audit fixture"}}),signInUser,0));
     assert.equal((await local.query("SELECT count(*)::int AS n FROM device_sessions WHERE user_id=$1",[id])).rows[0].n,sessionCount,"failed audit cannot persist a session");
     assert.equal((await local.query("SELECT last_seen_at FROM users WHERE id=$1",[id])).rows[0].last_seen_at.getTime(),presence.getTime(),"failed statement rolls back presence");
     await local.query("INSERT INTO device_sessions(user_id,refresh_hash,user_agent,auth_time,mfa_time,expires_at) SELECT $1,'expired','Cleanup fixture',0,0,now()-interval '1 day' FROM generate_series(1,1005)",[other]);

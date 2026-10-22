@@ -44,9 +44,12 @@ export async function verifySessionToken(
   token: string,
 ): Promise<SessionClaims | null> {
   try {
+    if (token.length > 8192) return null;
     const { payload } = await jwtVerify(token, jwtSecret(), {
+      algorithms: ["HS256"], typ: "JWT", requiredClaims: ["sub", "iat", "exp", "iss", "aud"],
       issuer: ISSUER,
       audience: AUDIENCE,
+      maxTokenAge: SESSION_TTL_SECONDS,
     });
     if (
       !payload.sub ||
@@ -57,6 +60,11 @@ export async function verifySessionToken(
     ) {
       return null;
     }
+    const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuid.test(payload.sub) || (payload.sid !== undefined && (typeof payload.sid !== "string" || !uuid.test(payload.sid))) ||
+      !Number.isSafeInteger(payload.iatMs) || Math.floor(payload.iatMs / 1000) !== payload.iat ||
+      typeof payload.exp !== "number" || payload.exp - payload.iat > (payload.sid ? ACCESS_TTL_SECONDS : SESSION_TTL_SECONDS) ||
+      [payload.authTime ?? 0, payload.mfaTime ?? 0].some(value => typeof value !== "number" || !Number.isSafeInteger(value) || value < 0 || value > Date.now() + 30000)) return null;
     return {
       sub: payload.sub,
       usr: payload.usr,

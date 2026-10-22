@@ -2,9 +2,13 @@
 import { FreshAuthentication } from "./fresh-authentication";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useAuth } from "@/components/providers/auth-provider";
 import { ShieldCheck, Loader2, QrCode, Key, X, AlertTriangle } from "lucide-react";
 
 export function TwoFactorAuth() {
+  const router = useRouter();
+  const { signOut } = useAuth();
   const [password, setPassword] = useState("");
   const [mfaCode, setMfaCode] = useState("");
   const [recoveryCodes, setRecoveryCodes] = useState<string[]>([]);
@@ -94,6 +98,7 @@ export function TwoFactorAuth() {
       setPassword("");
       setMfaCode("");
       setRecoveryCodes([]);
+      if (data.signInRequired) { await signOut(); router.replace("/login"); return; }
       setSuccess("Two-factor authentication disabled.");
       setTimeout(() => setSuccess(""), 3000);
     } catch {

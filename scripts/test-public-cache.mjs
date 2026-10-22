@@ -46,7 +46,7 @@ try {
     users.push(user);
     const now = Date.now();
     const session = (await db.query("INSERT INTO device_sessions(user_id,refresh_hash,user_agent,auth_time,mfa_time,expires_at,approval_required) VALUES($1,$2,'Cache QA browser',$3,0,now()+interval '1 hour',false) RETURNING id", [user.id, randomUUID(), now])).rows[0];
-    user.token = await new SignJWT({ usr: user.username, iatMs: now, authTime: now, mfaTime: 0, sid: session.id }).setProtectedHeader({ alg: 'HS256', typ: 'JWT' }).setSubject(user.id).setIssuer('maddy-chats').setAudience('maddy-chats-web').setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(secret));
+    user.token = await new SignJWT({ usr: user.username, iatMs: now, authTime: now, mfaTime: 0, sid: session.id }).setProtectedHeader({ alg: 'HS256', typ: 'JWT' }).setSubject(user.id).setIssuer('maddy-chats').setAudience('maddy-chats-web').setIssuedAt().setExpirationTime('15m').sign(new TextEncoder().encode(secret));
     const privateCommunity = (await db.query("INSERT INTO communities(name,created_by,is_public) VALUES($1,$2,false) RETURNING id", [tag + suffix + '_private', user.id])).rows[0];
     await db.query("INSERT INTO community_members(community_id,user_id,role) VALUES($1,$2,'owner')", [privateCommunity.id, user.id]);
   }
