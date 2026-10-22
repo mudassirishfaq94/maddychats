@@ -1,4 +1,5 @@
 import { messageExpired } from "@/lib/message-expiration";
+import { messageVisibleTo } from "./message-visibility";
 import { groupAllows } from "@/lib/group-permissions";
 import { and, desc, eq, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { db } from "@/db";
@@ -57,7 +58,7 @@ const attachmentQuery = db.select().from(messageAttachments)
   .where(sql`${messageAttachments.messageId}=any(${sql.placeholder("ids")}::uuid[])`).prepare("");
 const parentQuery = db.select({ message: messages, sender: users }).from(messages)
   .innerJoin(users, eq(messages.senderId, users.id))
-  .where(sql`${messages.id}=any(${sql.placeholder("ids")}::uuid[])`).prepare("");
+  .where(and(sql`${messages.id}=any(${sql.placeholder("ids")}::uuid[])`, messageVisibleTo(sql.placeholder("viewerId")))).prepare("");
 const viewerQuery = db.select({ id: messages.id, star: messageStars.id,
   deletion: messageDeletions.id, pin: pinnedMessages.id }).from(messages)
   .leftJoin(messageStars, and(eq(messageStars.messageId, messages.id), eq(messageStars.userId, sql.placeholder("viewerId"))))
@@ -216,7 +217,7 @@ export async function hydrateMessages(
     readQuery.execute({ ids }),
     attachmentQuery.execute({ ids }),
     replyIds.length > 0
-      ? parentQuery.execute({ ids: replyIds })
+      ? parentQuery.execute({ ids: replyIds, viewerId })
       : Promise.resolve([]),
     // Unique constraints make each join at most one row per message. Read
     // viewer flags together instead of taking three more pool connections.
@@ -290,7 +291,7 @@ export async function hydrateMessages(
   return dtos;
 }
 
-/** Loads a single message as a fully hydrated DTO. */
+/** Authorizes a single message before loading its content or related data. */
 export async function getMessageDTO(
   messageId: string,
   viewerId: string,
@@ -299,7 +300,7 @@ export async function getMessageDTO(
     .select({ message: messages, sender: users })
     .from(messages)
     .innerJoin(users, eq(messages.senderId, users.id))
-    .where(eq(messages.id, messageId))
+    .where(and(eq(messages.id, messageId), messageVisibleTo(viewerId)))
     .limit(1);
   if (!rows[0]) return null;
   const [dto] = await hydrateMessages(rows, viewerId);
@@ -796,6 +797,7 @@ export async function createMessage(
         and(
           eq(messages.id, replyToMessageId),
           eq(messages.conversationId, conversationId),
+          messageVisibleTo(senderId),
         ),
       )
       .limit(1);
@@ -1308,7 +1310,7 @@ export async function starMessage(
   const msgRows = await db
     .select({ id: messages.id, conversationId: messages.conversationId })
     .from(messages)
-    .where(eq(messages.id, messageId))
+    .where(and(eq(messages.id, messageId), messageVisibleTo(userId)))
     .limit(1);
   if (!msgRows[0]) return "not_found";
 
@@ -1373,7 +1375,7 @@ export async function listStarredMessages(
     .innerJoin(messages, eq(messageStars.messageId, messages.id))
     .innerJoin(users, eq(messages.senderId, users.id))
     .innerJoin(conversations, eq(messages.conversationId, conversations.id))
-    .where(eq(messageStars.userId, userId))
+    .where(and(eq(messageStars.userId, userId), messageVisibleTo(userId)))
     .orderBy(desc(messageStars.createdAt));
 
   if (rows.length === 0) return [];
@@ -1460,6 +1462,7 @@ export async function pinMessage(
       and(
         eq(messages.id, messageId),
         eq(messages.conversationId, conversationId),
+          messageVisibleTo(userId),
       ),
     )
     .limit(1);
@@ -1540,7 +1543,7 @@ export async function listPinnedMessages(
     .from(pinnedMessages)
     .innerJoin(messages, eq(pinnedMessages.messageId, messages.id))
     .innerJoin(users, eq(messages.senderId, users.id))
-    .where(eq(pinnedMessages.conversationId, conversationId))
+    .where(and(eq(pinnedMessages.conversationId, conversationId), messageVisibleTo(viewerId)))
     .orderBy(desc(pinnedMessages.createdAt));
   return rows.map((r) => ({
     id: r.pin.id,
@@ -1741,6 +1744,7 @@ export async function listConversationMedia(
         eq(messages.conversationId, conversationId),
         isNull(messages.deletedAt), eq(messages.selfDestruct, false), sql`(${messages.expiresAt} is null or ${messages.expiresAt}>now())`,
         inArray(messageAttachments.kind, ["image", "video"]),
+        messageVisibleTo(viewerId),
       ),
     )
     .orderBy(desc(messages.createdAt));
@@ -1782,6 +1786,7 @@ export async function listConversationFiles(
         eq(messages.conversationId, conversationId),
         isNull(messages.deletedAt), eq(messages.selfDestruct, false), sql`(${messages.expiresAt} is null or ${messages.expiresAt}>now())`,
         eq(messageAttachments.kind, "file"),
+        messageVisibleTo(viewerId),
       ),
     )
     .orderBy(desc(messages.createdAt));
@@ -1824,6 +1829,7 @@ export async function listConversationLinks(
         eq(messages.conversationId, conversationId),
         isNull(messages.deletedAt), eq(messages.selfDestruct, false), sql`(${messages.expiresAt} is null or ${messages.expiresAt}>now())`,
         sql`${messages.text} ~* ${'https?://[^\s]+'}`,
+        messageVisibleTo(viewerId),
       ),
     )
     .orderBy(desc(messages.createdAt))

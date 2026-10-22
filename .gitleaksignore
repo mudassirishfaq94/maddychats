@@ -17,3 +17,6 @@ c26358f526fd64cf53ed2c77502064e0e1354601:signal-bridge/Cargo.lock:generic-api-ke
 7341141ede32971d51558d5837dd3fe00ff27fac:scripts/test-items4-6.ts:generic-api-key:65
 7341141ede32971d51558d5837dd3fe00ff27fac:scripts/test-item3-authorization.ts:generic-api-key:91
 7341141ede32971d51558d5837dd3fe00ff27fac:signal-bridge/Cargo.lock:generic-api-key:778
+# Same pre-existing loopback-only JWT fixture re-emitted by Windows line endings
+# in the regression-only audit commit. Replaced with random bytes in the fix.
+8e8ba5fffed81ab13a07118ac0162f89af6299ef:scripts/test-item3-authorization.ts:generic-api-key:91

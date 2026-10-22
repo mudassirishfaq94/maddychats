@@ -8,6 +8,7 @@ import { guardSameOrigin, jsonError } from "@/server/http";
 import { isUuid } from "@/server/users";
 import { getNotificationPreferences } from "@/server/notification-preferences";
 import { messageNotificationPresentation } from "@/lib/notification-presentation";
+import { messageVisibleTo } from "@/server/message-visibility";
 
 export const dynamic = "force-dynamic";
 
@@ -32,7 +33,7 @@ export async function GET(req: NextRequest) {
   }).from(conversations)
     .innerJoin(conversationMembers, and(eq(conversationMembers.conversationId, conversations.id), eq(conversationMembers.userId, user.id)))
     .innerJoin(messages, and(eq(messages.conversationId, conversations.id), eq(messages.id, messageId)))
-    .where(eq(conversations.id, conversationId)).limit(1);
+    .where(and(eq(conversations.id, conversationId), messageVisibleTo(user.id))).limit(1);
   if (!context || context.deletedAt || context.messageDeletedAt || context.hidden || context.mutedAt || context.archivedAt || (context.expiresAt && context.expiresAt <= new Date()) || (context.type === "dm" && context.blocked)) return jsonError(404, "Notification unavailable.");
   const preferences = await getNotificationPreferences(user.id);
   if (!preferences.pushNotifications || !(context.type === "group" ? preferences.groupNotifications : preferences.messageNotifications)) return jsonError(404, "Notification unavailable.");

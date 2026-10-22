@@ -14,6 +14,7 @@ import { jsonError } from "@/server/http";
 import { readStored } from "@/server/storage";
 import path from "path";
 import { canViewStatus } from "@/server/status";
+import { messageVisibleTo } from "@/server/message-visibility";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -69,7 +70,7 @@ export async function GET(
       .select({ attachment: messageAttachments, message: messages })
       .from(messageAttachments)
       .innerJoin(messages, eq(messages.id, messageAttachments.messageId))
-      .where(eq(messageAttachments.id, segments[0]))
+      .where(and(eq(messageAttachments.id, segments[0]), messageVisibleTo(me.id)))
       .limit(1);
     const found = rows[0];
     if (!found) return jsonError(404, "Not found.");

@@ -37,6 +37,35 @@ test("single-message reads enforce membership and cleared/deleted visibility", a
   assert.equal((await chat.getMessageDTO(message.id, owner))?.text, "visibility-regression");
 });
 
+test("bookmarks, pins, galleries and reply previews share per-viewer visibility", async () => {
+  const conversation = (await chat.createGroupConversation({ creatorId: owner, name: "Visibility boundary", memberIds: [member] })).id;
+  const parent = (await pool.query("insert into messages(conversation_id,sender_id,text) values($1,$2,'https://example.invalid/private') returning id,created_at", [conversation, owner])).rows[0];
+  await pool.query("insert into message_stars(message_id,user_id) values($1,$2),($1,$3)", [parent.id, member, owner]);
+  await pool.query("insert into pinned_messages(conversation_id,message_id,pinned_by) values($1,$2,$3)", [conversation,parent.id,owner]);
+  await pool.query("insert into message_attachments(message_id,original_name,stored_name,mime_type,size,path,kind) values($1,'photo.png','visibility.png','image/png',10,'images/visibility.png','image'),($1,'private.txt','visibility.txt','text/plain',10,'files/visibility.txt','file')", [parent.id]);
+  assert.equal((await chat.listPinnedMessages(conversation,member)).length,1);
+  assert.equal((await chat.listConversationMedia(conversation,member)).length,1);
+  assert.equal((await chat.listConversationFiles(conversation,member)).length,1);
+  assert.equal((await chat.listConversationLinks(conversation,member)).length,1);
+  await pool.query("update conversation_members set cleared_at=$3 where conversation_id=$1 and user_id=$2", [conversation,member,parent.created_at]);
+  assert(!(await chat.listStarredMessages(member)).some(row=>row.messageId===parent.id));
+  assert.equal((await chat.listPinnedMessages(conversation,member)).length,0);
+  assert.equal((await chat.listConversationMedia(conversation,member)).length,0);
+  assert.equal((await chat.listConversationFiles(conversation,member)).length,0);
+  assert.equal((await chat.listConversationLinks(conversation,member)).length,0);
+  assert.equal((await chat.listPinnedMessages(conversation,owner)).length,1);
+  const reply = (await pool.query("insert into messages(conversation_id,sender_id,text,reply_to_message_id,created_at) values($1,$2,'later reply',$3,$4::timestamptz+interval '1 second') returning id", [conversation,owner,parent.id,parent.created_at])).rows[0];
+  assert.equal((await chat.getMessageDTO(reply.id,member))?.replyTo,null,"A newer reply cannot restore its cleared parent");
+  assert.equal((await chat.getMessageDTO(reply.id,owner))?.replyTo?.id,parent.id);
+  await pool.query("update conversation_members set cleared_at=null where conversation_id=$1 and user_id=$2", [conversation,member]);
+  await pool.query("insert into message_deletions(message_id,user_id) values($1,$2)", [parent.id,member]);
+  assert.equal((await chat.getMessageDTO(reply.id,member))?.replyTo,null);
+  assert.equal((await chat.listPinnedMessages(conversation,member)).length,0);
+  await pool.query("delete from conversation_members where conversation_id=$1 and user_id=$2", [conversation,member]);
+  assert(!(await chat.listStarredMessages(member)).some(row=>row.messageId===parent.id));
+  assert((await chat.listStarredMessages(owner)).some(row=>row.messageId===parent.id));
+});
+
 test("backend group policy allows ordinary additions and blocks restricted/nonmember mutation", async () => {
   assert.equal(await chat.addGroupMember(group, member, extra), "ok");
   assert.equal(await chat.addGroupMember(group, outsider, another), "not_found");

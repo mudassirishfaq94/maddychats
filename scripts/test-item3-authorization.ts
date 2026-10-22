@@ -3,7 +3,7 @@ import { testAuthFields } from "./test-auth-fields.mjs";
 import { testPublicPages } from "./test-public-pages.mjs";
 /** Production HTTP authorization checks, restricted to one disposable loopback DB. */
 import assert from "node:assert/strict";
-import { randomUUID, createHash, generateKeyPairSync } from "node:crypto";
+import { randomUUID, randomBytes, createHash, generateKeyPairSync } from "node:crypto";
 import { SignJWT } from "jose";
 import { spawn, type ChildProcess } from "node:child_process";
 import { once } from "node:events";
@@ -88,7 +88,7 @@ async function main() {
     const googlePair = generateKeyPairSync("rsa", { modulusLength: 2048 });
     const googlePublic = { ...googlePair.publicKey.export({ format: "jwk" }), kid: "disposable-google-jwk", alg: "RS256", use: "sig" };
     const env = { ...process.env, NODE_ENV: "production" as const, DATABASE_URL: runtimeUrl.toString(), REALTIME_DATABASE_URL: runtimeUrl.toString(), HOSTNAME: "127.0.0.1", PORT: "3109", CLIENT_URL: base,
-      TEST_GOOGLE_PRIVATE_KEY: googlePair.privateKey.export({ type: "pkcs8", format: "pem" }).toString(), TEST_GOOGLE_PUBLIC_JWK: JSON.stringify(googlePublic), JWT_SECRET: "item3-disposable-test-secret-at-least-thirty-two-characters", GOOGLE_CLIENT_ID: "disposable-google-client", GOOGLE_CLIENT_SECRET: "disposable-google-secret", CLIENT_IP_TRUSTED_HOPS: "1", HEALTHCHECK_SECRET: "item3-health", CRON_SECRET: "item3-cron",
+      TEST_GOOGLE_PRIVATE_KEY: googlePair.privateKey.export({ type: "pkcs8", format: "pem" }).toString(), TEST_GOOGLE_PUBLIC_JWK: JSON.stringify(googlePublic), JWT_SECRET: randomBytes(32).toString("hex"), GOOGLE_CLIENT_ID: "disposable-google-client", GOOGLE_CLIENT_SECRET: "disposable-google-secret", CLIENT_IP_TRUSTED_HOPS: "1", HEALTHCHECK_SECRET: "item3-health", CRON_SECRET: "item3-cron",
       SUPABASE_URL: "", SUPABASE_SERVICE_ROLE_KEY: "", RESEND_API_KEY: "", VAPID_PRIVATE_KEY: "", FIREBASE_PROJECT_ID: "", FIREBASE_CLIENT_EMAIL: "", FIREBASE_PRIVATE_KEY: "", TWA_DAL_ENABLED: "0" };
     await cp(resolve(".next/static"), resolve(".next/standalone/.next/static"), { recursive: true });
     await cp(resolve("public"), resolve(".next/standalone/public"), { recursive: true });

@@ -13,6 +13,7 @@ import { isUuid } from "@/server/users";
 import { publishToConversation, publishToUsers } from "@/server/realtime";
 import {
   deleteForMe,
+  conversationIdOfMessage,
   editMessage,
   getMembership,
   getMessageDTO,
@@ -147,16 +148,18 @@ export async function DELETE(
   }
 
   // "for_me" mode — per-user deletion
+  const conversationId = await conversationIdOfMessage(id);
+  if (!conversationId) return jsonError(404, "Message not found.");
   const result = await deleteForMe(id, me.id);
   if (result === "not_found") return jsonError(404, "Message not found.");
 
-  const dto = await getMessageDTO(id, me.id);
-
   await publishToUsers([me.id], {
     type: "message:deleted_for_me",
-    conversationId: dto!.conversationId,
+    conversationId,
     messageId: id,
   });
 
-  return NextResponse.json({ message: dto });
+  // Existing clients need a truthy message acknowledgement to remove the row;
+  // never re-read or return content after this user has deleted it.
+  return NextResponse.json({ message: { id, conversationId, deletedForMe: true } });
 }
