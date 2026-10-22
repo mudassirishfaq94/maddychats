@@ -65,7 +65,8 @@ export async function testNavigationLatency(context,base,conversationId) {
     {name:"People",path:"/app/people",text:"Your people"},
     {name:"Communities",path:"/app/communities",text:"Communities"},
    ]){
-    const link=page.getByRole("navigation",{name:"Mobile navigation",exact:true}).getByRole("link",{name:target.name,exact:true});
+    if(target.name!=="Calls"){await page.getByRole("navigation",{name:"Mobile navigation",exact:true}).getByRole("link",{name:"Settings",exact:true}).click();await page.getByRole("heading",{name:"Settings",exact:true}).waitFor();}
+    const link=target.name==="Calls"?page.getByRole("navigation",{name:"Mobile navigation",exact:true}).getByRole("link",{name:target.name,exact:true}):page.getByRole("region",{name:"Explore Circlo"}).getByRole("link",{name:target.name==="People"?/People & contacts/:/Communities/});
     additionalTabs.push({scenario,round,route:target.name,...await measure(page,link,target.path,"h1",target.text)});
     await page.waitForTimeout(250);
    }

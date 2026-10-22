@@ -19,6 +19,13 @@ export async function testUxFeatures(context,base,owner,member) {
   await page.goto(base+"/app/chats");await page.getByLabel("Search conversations",{exact:true}).waitFor();
   const help=page.getByRole("link",{name:"Open Circlo Help",exact:true});
   await help.click();await page.getByRole("heading",{name:"Circlo Help",exact:true}).waitFor();
+  await page.getByRole("button",{name:"How do I add a contact?",exact:true}).click();
+  await page.getByRole("status",{name:"Circlo Help is typing",exact:true}).waitFor();
+  assert.equal(await page.getByRole("article",{name:"Help answer"}).count(),0,"Guide shows typing before answering");
+  await page.getByRole("article",{name:"Help answer"}).waitFor();
+  await page.getByRole("heading",{name:"Add a contact or scan a QR code",exact:true}).waitFor();
+  assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),"Help must fit the phone viewport");
+  await page.screenshot({path:"test-artifacts/help-conversation-mobile.png",animations:"disabled"});
   await page.goto(base+"/app/chats");await page.getByLabel("Search conversations",{exact:true}).waitFor();
   const filters=page.locator(".chat-filters");assert.equal(await filters.evaluate(element=>getComputedStyle(element).scrollbarWidth),"none");
   const bounds=await filters.boundingBox();assert(bounds);await filters.evaluate(element=>{element.scrollLeft=0;});await page.mouse.move(bounds.x+bounds.width-12,bounds.y+bounds.height/2);await page.mouse.down();await page.mouse.move(bounds.x+12,bounds.y+bounds.height/2,{steps:12});await page.mouse.up();
@@ -48,6 +55,7 @@ export async function testUxFeatures(context,base,owner,member) {
   await page.evaluate(()=>document.documentElement.classList.remove("light"));
   await page.screenshot({path:"test-artifacts/inbox-minimal-390-dark.png",animations:"disabled"});
   await page.setViewportSize({width:360,height:800});
+  assert.deepEqual(await page.getByRole("navigation",{name:"Mobile navigation"}).getByRole("link").allTextContents(),["Chats","Status","Calls","Settings"]);
   const calls=page.getByRole("navigation",{name:"Mobile navigation"}).getByRole("link",{name:"Calls",exact:true});await calls.click();await page.getByRole("heading",{name:"Calls",exact:true}).waitFor();
   const history=await page.request.get(base+"/api/calls/history");assert.equal(history.status(),200);assert(Array.isArray((await history.json()).calls));
   await page.goto(base+"/app/settings");await page.getByText("Privacy preferences",{exact:true}).click();

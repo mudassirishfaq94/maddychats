@@ -4,9 +4,10 @@ import { Loader2, Lock } from "lucide-react";
 import { useEffect, useState } from "react";
 
 /** Only recovery guidance is rendered here, never ciphertext or raw errors. */
-export function EncryptedMessageState({ failed, missingKey, deviceError, signal, introduction = false, onRetry, onSecurity }: {
+export function EncryptedMessageState({ failed, missingKey, deviceError, signal, introduction = false, kind = "text", onRetry, onSecurity }: {
   failed: boolean; missingKey: boolean; deviceError: boolean; signal: boolean;
   introduction?: boolean;
+  kind?: string;
   onRetry: () => void; onSecurity: () => void;
 }) {
   const [slow, setSlow] = useState(false);
@@ -21,7 +22,7 @@ export function EncryptedMessageState({ failed, missingKey, deviceError, signal,
     <div className="max-w-xs space-y-2 py-1 text-sm" role="status" aria-live="polite" aria-busy={!unavailable}>
       <div className="flex items-center gap-2 font-medium">
         {unavailable ? <Lock className="h-4 w-4 shrink-0" aria-hidden="true" /> : <Loader2 className="h-4 w-4 shrink-0 animate-spin motion-reduce:animate-none" aria-hidden="true" />}
-        {introduction && !deviceError ? "Waiting for secure delivery" : unavailable ? "Message not available yet" : "Loading your message, please wait…"}
+        {introduction && !deviceError ? "Waiting for secure delivery" : unavailable ? "Message not available yet" : kind === "image" ? "Decrypting photo caption…" : kind === "video" ? "Decrypting video caption…" : kind === "audio" ? "Decrypting voice message…" : kind === "file" ? "Decrypting file details…" : "Decrypting message…"}
       </div>
       {unavailable ? <>
         <p className="text-xs leading-relaxed opacity-90">

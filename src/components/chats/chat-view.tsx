@@ -443,7 +443,9 @@ export function ChatView({
   useEffect(() => {
     if (!e2ee.initialized) return;
     let alive = true;
-    void loadCachedDecryptedMessages(conversationId, items.filter(message => !message.selfDestruct && !message.expiresAt)).then((cached) => {
+    void loadCachedDecryptedMessages(conversationId, items.filter(message => !message.selfDestruct && !message.expiresAt && !message.deletedAt && !message.deletedForMe), (id, plaintext) => {
+      if (alive) startTransition(() => setDecryptedTexts(current => current.get(id) === plaintext ? current : new Map(current).set(id, plaintext)));
+    }).then((cached) => {
       if (alive && cached.size > 0) {
         setDecryptedTexts((current) => new Map([...current, ...cached]));
       }
@@ -452,6 +454,11 @@ export function ChatView({
   }, [conversationId, e2ee.initialized, items, loadCachedDecryptedMessages]);
   useEffect(() => {
     if (!e2ee.initialized) return;
+    const bounds = scrollRef.current?.getBoundingClientRect();
+    const visible = new Set([...nodeRefs.current].flatMap(([id, node]) => {
+      const box = node?.getBoundingClientRect();
+      return box && bounds && box.bottom >= bounds.top && box.top <= bounds.bottom ? [id] : [];
+    }));
     const pending = items.filter(
       (m) =>
         m.encrypted &&
@@ -460,7 +467,7 @@ export function ChatView({
         (failedDecryptionRef.current.get(m.id) ?? 0) < 2 &&
         !decryptedTextsRef.current.has(m.id) &&
         !decryptingRef.current.has(m.id),
-    );
+    ).sort((a,b) => Number(visible.has(b.id)) - Number(visible.has(a.id)) || Date.parse(b.createdAt) - Date.parse(a.createdAt));
     const pendingReplies = items.filter((m) =>
       m.replyTo?.encrypted && m.replyTo.text &&
       (failedDecryptionRef.current.get(`reply:${m.replyTo.id}`) ?? 0) < 2 &&
@@ -469,12 +476,14 @@ export function ChatView({
     );
     if (pending.length === 0 && pendingReplies.length === 0) return;
     let alive = true;
+    let flushFrame: number | null = null;
     (async () => {
       let hadFailure = false;
       const messagesById = new Map(items.map(message => [message.id, message]));
       const textBatch = new Map<string, string>();
       const replyBatch = new Map<string, string>();
       const flushText = () => {
+        if (flushFrame !== null) { cancelAnimationFrame(flushFrame); flushFrame = null; }
         if (!alive || textBatch.size === 0) return;
         const ready = new Map(textBatch); textBatch.clear();
         startTransition(() => setDecryptedTexts(current => new Map([...current, ...[...ready].filter(([id])=>{
@@ -503,7 +512,9 @@ export function ChatView({
           if (m.expiresAt && Date.parse(m.expiresAt) <= Date.now() + serverClockOffset.current) return;
           if (!m.selfDestruct && !m.expiresAt) cacheDecryptedMessage(conversationId, m.id, m.text, plain);
           textBatch.set(m.id, plain);
-          if (textBatch.size >= 12) flushText();
+          // Publish ready rows on the next frame; one slow/missing key must
+          // never hold the first successes behind the rest of a history page.
+          if (flushFrame === null) flushFrame = requestAnimationFrame(flushText);
         } catch (cause) {
           // A peer can still publish a just-created key, but retries must be
           // bounded so one legacy message never burns CPU forever.
@@ -553,6 +564,7 @@ export function ChatView({
     })();
     return () => {
       alive = false;
+      if (flushFrame !== null) cancelAnimationFrame(flushFrame);
       if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
     };
   }, [items, e2ee.initialized, conversationId, decrypt, decryptRetry, cacheDecryptedMessage]);
@@ -3139,6 +3151,7 @@ const MessageRow = memo(function MessageRow({msg, showDate, sameSenderPrev, me, 
                                 ) : null}
                                 {msg.encrypted && Boolean(msg.text) && decryptedText === undefined ? (
                                   <EncryptedMessageState
+                                    kind={msg.type}
                                     failed={unavailable}
                                     missingKey={missingKey}
                                     deviceError={deviceError} signal={msg.text === "signal:v2"}

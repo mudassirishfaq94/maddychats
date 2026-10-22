@@ -79,6 +79,7 @@ export function useE2EE(userId: string | undefined) {
   // can render already authenticated text without repeating crypto work.
   const decryptedMessageCacheRef = useRef<Map<string, { ciphertext: string; plaintext: string }>>(new Map());
   const messageCacheKeyRef = useRef<Promise<CryptoKey> | null>(null);
+  const cacheEpochRef = useRef(0);
   const preparedConversationsRef = useRef<Map<string, {
     fingerprint: string;
     peerSignature: string;
@@ -89,6 +90,7 @@ export function useE2EE(userId: string | undefined) {
   useEffect(() => {
     if (!userId) return;
     const activeUserId = userId;
+    const cacheEpoch = cacheEpochRef;
     let active = true;
     const controller = new AbortController();
     const sendingKeys=conversationKeysRef.current,decryptionKeys=decryptionKeysRef.current,plaintextCache=decryptedMessageCacheRef.current,localKeyLoads=localKeyLoadsRef.current;
@@ -285,6 +287,7 @@ export function useE2EE(userId: string | undefined) {
         : "Encryption could not be initialized on this device. Reload to try again; existing keys were preserved.",
     })); });
     return () => {
+      cacheEpoch.current++;
       active=false;controller.abort();keyPairRef.current=null;
       sendingKeys.clear();decryptionKeys.clear();plaintextCache.clear();localKeyLoads.clear();
     };
@@ -997,44 +1000,57 @@ export function useE2EE(userId: string | undefined) {
     return entry?.ciphertext === ciphertext ? entry.plaintext : undefined;
   }, []);
 
+  const rememberPlaintext = useCallback((conversationId: string, messageId: string, ciphertext: string, plaintext: string) => {
+    const cache = decryptedMessageCacheRef.current, key = `${conversationId}:${messageId}`;
+    cache.delete(key); cache.set(key, { ciphertext, plaintext });
+    while (cache.size > 512) cache.delete(cache.keys().next().value!);
+  }, []);
   const cacheDecryptedMessage = useCallback((conversationId: string, messageId: string, ciphertext: string, plaintext: string) => {
-    decryptedMessageCacheRef.current.set(`${conversationId}:${messageId}`, { ciphertext, plaintext });
+    rememberPlaintext(conversationId, messageId, ciphertext, plaintext);
     if (!userId || !state.deviceId || !keyPairRef.current) return;
+    const epoch = cacheEpochRef.current;
     if (!messageCacheKeyRef.current) {
       messageCacheKeyRef.current = getMessageCacheKey(userId, state.deviceId, keyPairRef.current);
     }
     // Persistence is deliberately off the render/decryption critical path.
     void messageCacheKeyRef.current
-      .then((cacheKey) => writeVerifiedMessage(cacheKey, userId, conversationId, messageId, ciphertext, plaintext))
+      .then((cacheKey) => writeVerifiedMessage(cacheKey, userId, conversationId, messageId, ciphertext, plaintext, () => cacheEpochRef.current === epoch))
       .catch(() => { /* Cache is optional; never affect message delivery. */ });
-  }, [state.deviceId, userId]);
+  }, [state.deviceId, userId, rememberPlaintext]);
 
   const loadCachedDecryptedMessages = useCallback(async (
     conversationId: string,
     messages: Array<{ id: string; text: string; encrypted: boolean }>,
+    onVerified?: (id: string, plaintext: string) => void,
   ): Promise<Map<string, string>> => {
     if (!userId || !state.deviceId || !keyPairRef.current) return new Map();
-    if (!messageCacheKeyRef.current) {
-      messageCacheKeyRef.current = getMessageCacheKey(userId, state.deviceId, keyPairRef.current);
-    }
+    const epoch = cacheEpochRef.current;
     try {
-      const cacheKey = await messageCacheKeyRef.current;
       const result = new Map<string, string>();
       const missing = messages.filter(message => {
         if (!message.encrypted) return false;
         const memory = decryptedMessageCacheRef.current.get(`${conversationId}:${message.id}`);
-        if (memory?.ciphertext === message.text) { result.set(message.id, memory.plaintext); return false; }
+        if (memory?.ciphertext === message.text) { result.set(message.id, memory.plaintext); onVerified?.(message.id, memory.plaintext); return false; }
         return true;
       });
       if (missing.length) {
-        const stored = await readVerifiedMessages(cacheKey, userId, conversationId, missing);
+        if (!messageCacheKeyRef.current) messageCacheKeyRef.current = getMessageCacheKey(userId, state.deviceId, keyPairRef.current);
+        const cacheKey = await messageCacheKeyRef.current;
+        if (cacheEpochRef.current !== epoch) return new Map();
+        const sources = new Map(missing.map(message => [message.id, message.text]));
+        const stored = await readVerifiedMessages(cacheKey, userId, conversationId, missing, (id, plaintext) => {
+          if (cacheEpochRef.current !== epoch) return;
+          rememberPlaintext(conversationId, id, sources.get(id)!, plaintext);
+          onVerified?.(id, plaintext);
+        });
+        if (cacheEpochRef.current !== epoch) return new Map();
         for (const [id, text] of stored) result.set(id, text);
       }
       return result;
     } catch {
       return new Map();
     }
-  }, [state.deviceId, userId]);
+  }, [state.deviceId, userId, rememberPlaintext]);
 
   const forgetDecryptedMessages=useCallback((conversationId:string,ids:string[])=>{
     for(const id of ids)decryptedMessageCacheRef.current.delete(`${conversationId}:${id}`);
