@@ -244,6 +244,20 @@ async function main() {
     const forbiddenBody = await forbiddenUnstar.json();
     assert.equal(forbiddenUnstar.status, 404, "Unstar must not read a message from another conversation");
     assert.equal(forbiddenBody.message, undefined, "Unauthorized responses contain no message DTO");
+    const ownUnstar = await api(`/api/messages/${message.id}/star`, bobCookie, "DELETE");
+    assert.equal(ownUnstar.status,200);
+    const replayMessage = (await ownUnstar.json()).message;
+    const replayRows = await sql.query("insert into realtime_events(user_id,payload) select $1,$2::jsonb from generate_series(1,201) returning id", [bob.id,JSON.stringify({type:"message:new",conversationId:conversation.id,message:replayMessage})]);
+    const waiting = new Set<string>(replayRows.rows.map(row=>row.id));
+    const replayAbort = new AbortController();
+    try {
+      const stream = await fetch(base+"/api/realtime/stream",{headers:{cookie:bobCookie,"last-event-id":randomUUID()},signal:AbortSignal.any([replayAbort.signal,AbortSignal.timeout(30000)])});
+      assert.equal(stream.status,200);
+      const reader=stream.body!.getReader();let buffer="";const decoder=new TextDecoder();
+      try {
+        while(waiting.size){const chunk=await reader.read();assert(!chunk.done,"A replay larger than one page must not disconnect before delivery");buffer+=decoder.decode(chunk.value,{stream:true});const frames=buffer.split("\n\n");buffer=frames.pop()!;for(const frame of frames){const match=/^id: ([a-f0-9-]+)$/m.exec(frame);if(match)waiting.delete(match[1]);}}
+      } finally { await reader.cancel().catch(()=>{}); }
+    } finally { replayAbort.abort();await sql.query("delete from realtime_events where user_id=$1 and id=any($2::uuid[])",[bob.id,replayRows.rows.map(row=>row.id)]); }
     assert.equal((await api(`/api/messages/${message.id}/star`, bobCookie, "POST")).status, 200);
     await sql.query("insert into pinned_messages(conversation_id,message_id,pinned_by) values($1,$2,$3)", [conversation.id, message.id, alice.id]);
     const notice = (await sql.query("insert into notifications(user_id,actor_id,type,data) values($1,$2,'message',$3::jsonb) returning id", [bob.id, alice.id, JSON.stringify({conversationId:conversation.id,messageId:message.id,actorName:"Fixture",preview:"fixture-only"})])).rows[0];

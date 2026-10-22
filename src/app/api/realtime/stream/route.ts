@@ -117,7 +117,13 @@ export async function GET(req: NextRequest) {
             values: [me.id, since, cursor?.stamp ?? null, cursor?.id ?? null], query_timeout: 5000,
           };
           const result = await pool.query<Delivery & { stamp: string }>(query);
-          for (const row of result.rows) deliver(row);
+          for (const row of result.rows) {
+            deliver(row);
+            // Replay pages contain up to 200 rows. Drain authorization work
+            // within each page rather than overflowing the live-delivery cap.
+            if (pendingMessages >= 50) await messageDelivery;
+          }
+          await messageDelivery;
           if (result.rows.length < 200) break;
           const last = result.rows[result.rows.length - 1]; cursor = { stamp: last.stamp, id: last.id };
           if (pages >= 24) {
