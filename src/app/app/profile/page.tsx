@@ -2,9 +2,7 @@ import { redirect } from "next/navigation";
 import { eq } from "drizzle-orm";
 import type { Metadata } from "next";
 import type * as React from "react";
-import Link from "next/link";
 import {
-  ArrowLeft,
   AtSign,
   CalendarDays,
   Clock,
@@ -68,14 +66,6 @@ export default async function ProfilePage({
   return (
     <>
     <div className="mx-auto h-full w-full min-w-0 max-w-5xl overflow-y-auto overflow-x-hidden px-3 py-5 sm:px-6 sm:py-6">
-      <Link
-        href="/app"
-        className="inline-flex items-center gap-2 text-sm font-medium text-[var(--muted)] transition-colors hover:text-[var(--text)] animate-fade-up"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        Back to overview
-      </Link>
-
       {query.onboarding === "1" ? (
         <div className="mt-5 rounded-2xl border border-[color-mix(in_srgb,var(--accent)_35%,transparent)] bg-[color-mix(in_srgb,var(--accent)_10%,transparent)] p-4 text-sm">
           <p className="font-semibold">Welcome to Circlo</p>
@@ -133,3 +123,4 @@ export default async function ProfilePage({
     </>
   );
 }
+

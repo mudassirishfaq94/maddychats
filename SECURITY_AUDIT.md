@@ -1,10 +1,12 @@
-# ZipTalk End-to-End Encryption Security Audit
+# Historical Encryption Review Notes (Superseded)
 
 ## Executive Summary
 
-This document provides a comprehensive security audit of ZipTalk's end-to-end encryption (E2EE) infrastructure. The current implementation is **incomplete and has significant security limitations** that require expert cryptographic review before production use.
+> **Status: historical draft, not a current security audit.** The assessments below describe an earlier implementation and have not been reconciled with the current Circlo source or production configuration. Do not use them as claims about the shipped app, a release decision, or public encryption assurances.
 
-**Current Status: PRE-PRODUCTION / SECURITY REVIEW REQUIRED**
+The current repository contains both the legacy encryption path and Signal-style implementation code, including the Rust/WASM bridge, device registration, session manager, X3DH, and sender-key modules. Presence in source does not establish which path is active in a production build, prove protocol correctness, or establish that a release has received an independent cryptographic review. The deployed `STARTER_MODE` value and exact Android release configuration were not available when this note was updated.
+
+This file is retained as historical context until a source- and deployment-verified review replaces it. Any production or store claim must be based on the exact shipped build, live configuration, test evidence, and independent cryptographic review.
 
 ---
 
@@ -321,3 +323,4 @@ The existing implementation provides a foundation but has critical security gaps
 **Document Version:** 1.0
 **Last Updated:** September 14, 2026
 **Classification:** CONFIDENTIAL - Security Audit
+

@@ -2,7 +2,6 @@ import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
 import type { Metadata } from "next";
 import { getSessionUser } from "@/server/session";
-import { listConversationsFor } from "@/server/chat";
 import { ChatsLayout } from "@/components/chats/chats-layout";
 
 export const metadata: Metadata = { title: "Chats" };
@@ -17,11 +16,10 @@ export default async function ChatsSectionLayout({
   const user = await getSessionUser();
   if (!user) redirect("/login?next=/app/chats");
 
-  const conversations = await listConversationsFor(user.id);
-
   return (
     <>
-      <ChatsLayout conversations={conversations}>{children}</ChatsLayout>
+      <ChatsLayout>{children}</ChatsLayout>
     </>
   );
 }
+
