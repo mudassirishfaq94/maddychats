@@ -1,14 +1,13 @@
-# Current starter deployment: Render + Neon + Supabase Storage
+# Current production deployment: Render + Neon + Supabase Storage
 
-The selected target is the existing free Render service at
-https://maddychats.onrender.com, retaining Neon PostgreSQL and using private
-Supabase media storage. Supabase database cutover is deferred under the current
-$0 budget. Follow [the Render release plan](./docs/RENDER_DEPLOYMENT_CUTOVER.md)
-and `render.yaml`; no paid services are authorized.
+The live service remains https://maddychats.onrender.com until the approved
+Bluehost migration is staged and verified. The migration keeps Neon PostgreSQL
+and private Supabase media storage in place. Follow the
+[Bluehost VPS migration runbook](./docs/BLUEHOST_VPS_MIGRATION.md) for that
+cutover. The alternative VPS procedure below provisions a new Supabase database
+and is not part of this migration.
 
-The Docker VPS procedure below is an alternative deployment option. Free tiers
-can pause or reject traffic after a usage limit, so they cannot meet an
-always-on production requirement.
+The Render deployment plan remains useful for rollback until the VPS is stable.
 
 ## Current $0 starter deployment
 

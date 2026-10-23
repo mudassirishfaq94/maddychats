@@ -6,7 +6,8 @@ conversations, realtime delivery and presence, typing indicators, read
 receipts, reactions, replies, search, notifications, private attachments, and
 responsive light/dark themes.
 
-For the production Docker VPS setup, see [DEPLOYMENT.md](./DEPLOYMENT.md).
+For the live deployment and the approved Bluehost VPS cutover, see
+[DEPLOYMENT.md](./DEPLOYMENT.md) and the [migration runbook](./docs/BLUEHOST_VPS_MIGRATION.md).
 The private-media move to Cloudflare R2 is staged separately; Supabase remains
 the live storage backend until the object copy is verified and deployed. See
 [the R2 migration guide](./docs/CLOUDFLARE_R2_MEDIA_MIGRATION.md).
