@@ -208,10 +208,11 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     const unreadable = (await pool.query("insert into messages(conversation_id,sender_id,text,type,encrypted) values($1,$2,'unreadable-owned-fixture','text',true) returning id", [conversationId, peer.id])).rows[0].id;
     try {
       await source.page.reload();
-      await source.page.getByText("Couldn't load", { exact: true }).waitFor({ timeout: 45000 });
-      await source.page.getByRole("button", { name: "Tap to retry", exact: true }).click();
-      await source.page.getByText("Couldn't load", { exact: true }).waitFor({ timeout: 45000 });
-      assert.equal(await source.page.getByRole("button", { name: "Security & recovery", exact: true }).count(), 1);
+      const messageHistory = source.page.getByRole("region", { name: "Messages", exact: true });
+      await messageHistory.getByText("Message unavailable", { exact: true }).waitFor({ timeout: 45000 });
+      await source.page.getByRole("button", { name: "Try again", exact: true }).click();
+      await messageHistory.getByText("Message unavailable", { exact: true }).waitFor({ timeout: 45000 });
+      assert.equal(await source.page.getByRole("button", { name: "Recovery help", exact: true }).count(), 1);
       assert.equal(await source.page.getByText("unreadable-owned-fixture", { exact: true }).count(), 0, "Ciphertext is never displayed");
     } finally {
       await pool.query("delete from messages where id=$1 and conversation_id=$2", [unreadable, conversationId]);

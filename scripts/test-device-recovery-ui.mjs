@@ -47,6 +47,8 @@ export async function testDeviceRecoveryUI(base, pool) {
     await settingsPage.goto(base + "/app/settings#notifications");
     await settingsPage.getByRole("heading", { name: "Settings", exact: true }).waitFor();
     const notificationSection = settingsPage.locator("#notifications details");
+    await notificationSection.waitFor({ state: "visible" });
+    await settingsPage.locator("#notifications details[data-profile-disclosure-ready='true']").waitFor();
     assert.equal(await notificationSection.getAttribute("open"), null, "Notification preferences start collapsed in Settings");
     await settingsPage.evaluate(`(() => {
       const subscription = { toJSON: () => ({ endpoint: "https://fcm.googleapis.com/fcm/send/circlo-disposable-ui-fixture", keys: { p256dh: "fake-public-key-for-ui-test-only", auth: "fake-auth-for-ui-test" } }) };
@@ -56,8 +58,8 @@ export async function testDeviceRecoveryUI(base, pool) {
       Object.defineProperty(navigator, "serviceWorker", { configurable: true, value: { ready: Promise.resolve(registration), register: async () => registration, getRegistration: async () => registration } });
       if (!("PushManager" in window)) Object.defineProperty(window, "PushManager", { configurable: true, value: function () {} });
     })()`);
-    await notificationSection.locator("summary").first().evaluate(summary => summary.click());
-    await settingsPage.locator("#notifications details[open]").waitFor();
+    await settingsPage.getByText("Notification preferences", { exact: true }).click();
+    await settingsPage.locator("#notifications details[data-profile-disclosure-ready='true'][open]").waitFor();
     const pushSettings = await source.context.request.get(base + "/api/notifications/push");
     assert.equal(pushSettings.status(), 200);
     const pushConfig = await pushSettings.json();
@@ -65,12 +67,12 @@ export async function testDeviceRecoveryUI(base, pool) {
     assert.deepEqual(Object.keys(pushConfig), ["publicKey"], "Only the public push key is exposed");
     await notificationSection.getByRole("button", { name: "Enable", exact: true }).click();
     await notificationSection.getByText("Push alerts enabled. Floating banners and sounds also depend on your browser and Android settings.", { exact: true }).waitFor();
-    assert.equal(await source.page.evaluate(() => window.__pushHasKey), true);
-    assert.equal(await source.page.evaluate(() => window.__pushReplacedKey), true, "Subscriptions made with a previous deployment key are replaced");
+    assert.equal(await settingsPage.evaluate(() => window.__pushHasKey), true);
+    assert.equal(await settingsPage.evaluate(() => window.__pushReplacedKey), true, "Subscriptions made with a previous deployment key are replaced");
     assert.equal((await pool.query("select count(*)::int as n from push_subscriptions where user_id=$1", [user.id])).rows[0].n, 1);
     assert.equal((await source.context.request.delete(base + "/api/notifications/push", { data: { endpoint: "https://fcm.googleapis.com/fcm/send/circlo-disposable-ui-fixture" }, headers: { Origin: base } })).status(), 200);
-    await notificationSection.locator("summary").first().evaluate(summary => summary.click());
-    await settingsPage.locator("#notifications details:not([open])").waitFor();
+    await settingsPage.getByText("Notification preferences", { exact: true }).click();
+    await settingsPage.locator("#notifications details[data-profile-disclosure-ready='true']:not([open])").waitFor();
     await settingsPage.getByRole("link",{name:"Manage secure devices",exact:true}).waitFor();
     assert.equal(await settingsPage.getByRole("heading",{name:"Notifications",exact:true}).count(),1,"Detailed preference forms stay collapsed until requested");
     for(const width of [320,390,844]) { await settingsPage.setViewportSize({width,height:740}); assert(await settingsPage.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),"Simple settings fit mobile widths"); }
