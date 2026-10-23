@@ -62,7 +62,7 @@ export async function testProfilePhotos(base, pool, owner, peer, source, unrelat
   const created = source.page.waitForResponse(response => response.url() === base + "/api/groups" && response.request().method() === "POST");
   await groupDialog.getByRole("button", { name: "Create group", exact: true }).click();
   const create = await created; assert.equal(create.status(), 201); const group = (await create.json()).conversation;
-  await groupDialog.getByText("The group was created, but its image could not be uploaded.", { exact: true }).waitFor();
+  await groupDialog.getByText("The group was made, but the photo didn't upload.", { exact: true }).waitFor();
   const initialPhoto = source.page.waitForResponse(response => response.url().endsWith(`/api/groups/${group.id}/avatar`) && response.status() === 200);
   await groupDialog.getByRole("button", { name: "Retry group photo", exact: true }).click();
   assert.equal((await initialPhoto).status(),200);
