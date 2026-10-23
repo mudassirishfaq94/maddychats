@@ -224,6 +224,16 @@ async function main() {
     assert.equal((await api(historyPath)).status, 401);
     assert.equal((await api(historyPath, outsiderCookie)).status, 404);
     assert.equal((await api(`/api/conversations/${conversation.id}`, outsiderCookie)).status, 404);
+    const openPath = `/api/conversations/${conversation.id}/open`;
+    assert.equal((await api(openPath)).status, 401, "Combined chat reads require a live session");
+    assert.equal((await api(openPath, outsiderCookie)).status, 404, "Combined chat reads conceal nonmember conversations");
+    const openedChat = await api(openPath, aliceCookie);
+    assert.equal(openedChat.status, 200);
+    assert(openedChat.headers.get("cache-control")?.split(",").map(value => value.trim()).includes("no-store"));
+    assert(openedChat.headers.get("server-timing")?.includes("history;dur="));
+    const openedData = await openedChat.json();
+    assert.equal(openedData.conversation.id, conversation.id);
+    assert(openedData.initial.messages.length > 0, "Authorized chat open includes its first bounded history page");
     const first = await (await api(`${historyPath}?limit=99999`, aliceCookie)).json();
     assert.equal(first.messages.length, 50, "History is bounded even when an excessive limit is supplied");
     assert(first.nextCursor);

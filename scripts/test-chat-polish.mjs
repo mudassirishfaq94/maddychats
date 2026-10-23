@@ -59,13 +59,17 @@ export async function testChatPolish(page, recipient) {
       await menu.getByRole("menuitem", { name: "Close chat", exact: true }).scrollIntoViewIfNeeded(); await hitTest(menu);
       await page.keyboard.press("Escape"); await menu.waitFor({ state: "detached" });
     }
-    await page.route("**/api/conversations/*/controls", route => route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "temporary" }) }));
+    const controlsRoute = url => new URL(url).pathname.startsWith("/api/conversations/") && new URL(url).pathname.endsWith("/controls");
+    const failArchive = route => route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "temporary" }) });
+    await page.route(controlsRoute, failArchive);
     const beforeFailure = page.url();
     const failureMenu = await openChatOptions();
+    const failedArchive = page.waitForResponse(response => controlsRoute(response.url()) && response.request().method() === "POST");
     await failureMenu.getByRole("menuitem", { name: "Close chat", exact: true }).click();
+    assert.equal((await failedArchive).status(), 503, "The archive failure must be injected into the UI request");
     await failureMenu.getByRole("alert").waitFor();
     assert.equal(page.url(), beforeFailure, "A failed archive must not silently navigate away");
-    await page.keyboard.press("Escape"); await page.unroute("**/api/conversations/*/controls");
+    await page.keyboard.press("Escape"); await page.unroute(controlsRoute, failArchive);
     const cdp = await page.context().newCDPSession(page);
     for (const viewport of [{ width: 390, height: 844 }, { width: 844, height: 390 }]) {
       await page.setViewportSize(viewport);
