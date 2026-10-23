@@ -51,9 +51,11 @@ export async function testPwaNotifications(base, pool) {
     await page.getByRole("heading", { name: "Settings", exact: true }).waitFor();
     await page.locator("#notifications details > summary").click();
     await page.locator("#notifications details[open]").waitFor();
-    const help = page.locator("#notifications details").filter({ has: page.getByText("Notifications arrive, but no pop-up?", { exact: true }) });
-    await help.locator("summary").click();
-    assert(await help.getByText(/Android and your browser decide whether to show a banner/).isVisible());
+    const help = page.locator("#notifications details details").filter({ has: page.getByText("Notifications arrive, but no pop-up?", { exact: true }) });
+    await help.locator(":scope > summary").click();
+    const platformGuidance = help.getByText(/Android and your browser decide whether to show a banner/);
+    await platformGuidance.waitFor();
+    assert(await platformGuidance.isVisible());
     assert(await help.getByText(/Press and hold an actual Circlo message/).isVisible());
     assert.equal(await page.getByRole("button", { name: "Open Android notification settings", exact: true }).count(), 0, "Browser UI must not promise a native settings bridge");
     await page.evaluate(async () => { await navigator.serviceWorker.register("/sw.js", { scope: "/" }); await navigator.serviceWorker.ready; });
