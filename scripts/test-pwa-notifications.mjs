@@ -47,7 +47,10 @@ export async function testPwaNotifications(base, pool) {
     release(); await page.unrouteAll({ behavior: "wait" });
     await page.getByRole("status", { name: "Opening Circlo", exact: true }).waitFor({ state: "detached" });
     await page.getByRole("heading", { name: owner.username, exact: true }).waitFor();
-    await page.locator("summary").filter({ has: page.getByText("Notifications", { exact: true }) }).click();
+    await page.goto(base + "/app/settings#notifications");
+    await page.getByRole("heading", { name: "Settings", exact: true }).waitFor();
+    await page.locator("#notifications details > summary").click();
+    await page.locator("#notifications details[open]").waitFor();
     const help = page.locator("#notifications details").filter({ has: page.getByText("Notifications arrive, but no pop-up?", { exact: true }) });
     await help.locator("summary").click();
     assert(await help.getByText(/Android and your browser decide whether to show a banner/).isVisible());
