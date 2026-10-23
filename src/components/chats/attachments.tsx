@@ -190,7 +190,7 @@ export function Lightbox({
       {isDecrypting ? (
         <div className="flex flex-col items-center gap-3 text-white/80">
           <Loader2 className="h-8 w-8 animate-spin" />
-          <p className="text-sm">Decrypting securely…</p>
+          <p className="text-sm">Loading media…</p>
         </div>
       ) : null}
       {!isDecrypting && !resolved.failed && loading && !failed ? (
@@ -424,9 +424,9 @@ function InlineMediaPreview({
 
   if (!url) {
     return (
-      <span className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/10 text-xs text-[var(--muted)]" role="status">
+      <span className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/10 text-xs text-[var(--muted)]" role="status" aria-label={`Loading ${label.toLowerCase()}`}>
         <Loader2 className="h-5 w-5 animate-spin motion-reduce:animate-none" />
-        <span>Decrypting {label.toLowerCase()}…</span>
+        <span>Loading {label.toLowerCase()}…</span>
       </span>
     );
   }
