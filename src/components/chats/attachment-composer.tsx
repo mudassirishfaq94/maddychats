@@ -94,6 +94,7 @@ export function useAttachmentUpload() {
       file: File;
       wrappedKey: string;
       originalMime: string;
+      originalName?: string;
     }>,
     encryptText?: (plain: string) => Promise<string>,
     signal: AbortSignal = begin(),
@@ -132,7 +133,7 @@ export function useAttachmentUpload() {
             setPhase("uploading");
             staged.push(await stageEncryptedFile(out.file,conversationId,out.originalMime,signal,loaded=>setProgress(Math.min(99,Math.round((transferred+loaded)/Math.max(1,totalBytes)*100)))));
             transferred+=out.file.size;
-          } else form.append("files", out.file, p.file.name);
+          } else form.append("files", out.file, out.originalName ?? p.file.name);
           form.append("keys", out.wrappedKey);
           form.append("origTypes", out.originalMime);
         }

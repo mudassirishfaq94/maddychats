@@ -16,7 +16,9 @@ import {CircloHelp} from './src/components/help/circlo-help';
 import {PhoneDiscovery} from './src/components/profile/phone-discovery';
 import * as cache from './src/lib/e2ee-message-cache';
 import {InlineMedia} from './src/components/chats/attachments';
+import {optimizeImageForUpload} from './src/lib/optimize-image';
 window.cache=cache;
+window.optimizeImageForUpload=optimizeImageForUpload;
 function App(){return location.search==='?media'?<InlineMedia attachment={{id:'video',kind:'video',originalName:'Clip.webm'}}/>:location.search==='?phone'?<main className="mx-auto max-w-md px-4 py-6"><h1 className="text-xl font-semibold">Phone discovery</h1><PhoneDiscovery/></main>:<CircloHelp/>;}
 createRoot(document.getElementById('root')).render(<App/>);`;
 const bundle=await build({stdin:{contents:fixture,resolveDir:resolve('.'),loader:'tsx',sourcefile:'mobile-experience-fixture.tsx'},jsx:'automatic',bundle:true,write:false,format:'iife',platform:'browser',tsconfig:'tsconfig.json',define:{'process.env':'{}','process.env.NODE_ENV':'"production"'},plugins:[{name:'client-marker',setup(build){build.onResolve({filter:/^\.\/e2ee-context$/},()=>({path:'media-url',namespace:'media'}));build.onLoad({filter:/.*/,namespace:'media'},()=>({contents:"export function useEncryptedAttachmentUrl(){return {url:sessionStorage.getItem('fixtureMedia'),failed:false}}"}));build.onResolve({filter:/^client-only$/},()=>({path:'client-only',namespace:'empty'}));build.onLoad({filter:/.*/,namespace:'empty'},()=>({contents:''}));}}]});
@@ -62,6 +64,18 @@ try{
  assert.equal(await video.getAttribute('preload'),'metadata','Video previews should decode a thumbnail without eagerly initializing full playback');
  await page.waitForFunction(()=>{const video=document.querySelector('video');return video?.readyState>=2&&video.videoWidth>0;});
  assert(await video.evaluate(video=>{const canvas=document.createElement('canvas');canvas.width=1;canvas.height=1;const ctx=canvas.getContext('2d');ctx.drawImage(video,0,0,1,1);const pixel=ctx.getImageData(0,0,1,1).data;return pixel[1]>120&&pixel[0]<80&&video.paused&&!video.controls;}),'Video preview must display a decoded frame without a play-button-only control');
+ assert.equal(await video.evaluate(video=>{const box=video.parentElement.getBoundingClientRect();return Math.round(box.width/box.height*100)/100;}),1.33,'Image and video previews use a consistent 4:3 thumbnail frame');
+ const optimized=await page.evaluate(async()=>{
+  const canvas=document.createElement('canvas');canvas.width=2400;canvas.height=1600;const ctx=canvas.getContext('2d');
+  const pixels=ctx.createImageData(canvas.width,canvas.height);let seed=11;
+  for(let i=0;i<pixels.data.length;i+=4){seed=(seed*16807)%2147483647;pixels.data[i]=seed&255;pixels.data[i+1]=(seed>>>8)&255;pixels.data[i+2]=(seed>>>16)&255;pixels.data[i+3]=255;}
+  ctx.putImageData(pixels,0,0);const png=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));
+  const output=await window.optimizeImageForUpload(new File([png],'large-photo.png',{type:'image/png'}));
+  const bitmap=await createImageBitmap(output);const result={type:output.type,size:output.size,originalSize:png.size,width:bitmap.width,height:bitmap.height};bitmap.close();return result;
+ });
+ assert.equal(optimized.type,'image/webp','Large still images are normalized to WebP before encryption');
+ assert(optimized.size<optimized.originalSize,'Optimization must reduce upload bytes');
+ assert(Math.max(optimized.width,optimized.height)<=1920,'Optimized still images have a bounded longest edge');
  const cacheResult=await page.evaluate(async()=>{
   const key=await crypto.subtle.generateKey({name:'AES-GCM',length:256},false,['encrypt','decrypt']);
   await window.cache.writeVerifiedMessage(key,'alice','chat','slow','cipher-1','Slow verified text');
@@ -84,5 +98,5 @@ try{
  });
  assert.deepEqual(cacheResult,{progressive:true,changed:undefined,otherAccount:undefined,stale:undefined,encrypted:true});
  assert.deepEqual(errors,[]);
- console.log('PASS: responsive help conversation, typing/reply, one phone field with country selection/cancellation, decoded video thumbnail, progressive encrypted cache, ciphertext/account isolation and stale-write guard');
+ console.log('PASS: responsive help conversation, typing/reply, one phone field with country selection/cancellation, fixed-ratio decoded video thumbnail, image optimization, progressive encrypted cache, ciphertext/account isolation and stale-write guard');
 }finally{await browser?.close();await new Promise(resolve=>server.close(resolve));}

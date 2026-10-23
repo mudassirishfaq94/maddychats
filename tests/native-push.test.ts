@@ -25,12 +25,23 @@ test("FCM carries private fallback text and routing metadata only", () => {
   assert.equal(nativePushPayload({ ...input, callId: "call", callTtl: 1, silent: true }, 1000).data.silent, "true");
 });
 
-test("remote Android alerts never carry previews even with details enabled", () => {
+test("remote Android alerts keep message text generic when sender details are enabled", () => {
   const input = { recipientId: "recipient", notificationId: "event", conversationId: "chat", messageId: "message", actorName: "Alex", preview: "Are you free later?", encrypted: false };
   const payload = nativePushPayload(input, 1000);
-  // The installed app renders these ready-to-display fields.
   assert.equal(payload.data.title, "Circlo");
   assert.equal(payload.data.body, "New message received.");
+});
+
+test("opted-in Android push carries only a sender name, never message text", () => {
+  const input = { recipientId: "recipient", notificationId: "event", conversationId: "chat", messageId: "message", actorName: "Alex", preview: "Are you free later?", encrypted: true, showDetails: true };
+  const payload = nativePushPayload(input, 1000);
+  assert.equal(payload.data.actorName, "Alex");
+  assert.equal(payload.data.showDetails, "true");
+  assert.equal(payload.data.body, "New message received.");
+  assert.equal(JSON.stringify(payload).includes("Are you free later?"), false);
+  const request = nativePushPayload({ ...input, messageRequest: true }, 1000);
+  assert.equal(request.data.actorName, "Circlo", "Message requests keep the sender private");
+  assert.equal(request.data.showDetails, "false");
 });
 
 test("a private account still receives the generic alert and no sender", () => {

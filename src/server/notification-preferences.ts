@@ -16,7 +16,7 @@ const defaults: NotificationPreferencesDTO = {
   groupNotifications: true,
   pushNotifications: true,
   notificationSound: true,
-  showNotificationDetails: false,
+  showNotificationDetails: true,
 };
 
 function toDTO(row: typeof notificationPreferences.$inferSelect): NotificationPreferencesDTO {

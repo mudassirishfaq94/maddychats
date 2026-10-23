@@ -169,6 +169,11 @@ export async function testChatPolish(page, recipient) {
     const response = await accepted; assert.equal(response.status(), 201);
     const packet = await response.json(); assert(packet.message.encrypted); assert(!packet.message.text.includes("An encrypted video caption"));
     await recipient.getByText("An encrypted video caption", { exact: true }).waitFor();
+    const videoThumb = recipient.locator('button[aria-label="View polish-video.webm"] > span');
+    await videoThumb.waitFor();
+    const thumbSize = await videoThumb.evaluate(element => { const { width, height } = element.getBoundingClientRect(); return { width, height }; });
+    assert(thumbSize.width <= 360 && thumbSize.height <= 270, "Inline video previews stay within 360×270 CSS pixels");
+    assert(Math.abs(thumbSize.width / thumbSize.height - 4 / 3) < 0.02, "Inline image and video previews use a consistent 4:3 frame");
     await recipient.getByRole("button", { name: "View polish-video.webm", exact: true }).click();
     const player = recipient.getByRole("dialog", { name: "polish-video.webm", exact: true }).locator("video"); await player.waitFor();
     await player.evaluate(async element => { await element.play(); });
