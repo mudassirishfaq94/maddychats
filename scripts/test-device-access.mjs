@@ -30,7 +30,11 @@ export async function testDeviceAccess(base, pool, secret) {
     await source.page.goto(base+"/app/profile#encryption-devices");
     await source.page.getByText("This device: Trusted",{exact:true}).waitFor();
     const target = await open();
+    await target.page.getByRole("heading",{name:"Link this device to your account",exact:true}).waitFor();
     await target.page.getByRole("button",{name:"Show a device-link QR code",exact:true}).waitFor();
+    await target.page.getByText("I don’t have my old device",{exact:true}).waitFor();
+    await target.page.getByText("Advanced",{exact:true}).waitFor();
+    assert.equal(await target.page.getByRole("button",{name:"Cancel and sign out",exact:true}).isVisible().catch(()=>false),false,"Sign-out escape hatch stays collapsed on first view");
     await target.page.screenshot({path:"test-artifacts/device-access-choice-after.png",fullPage:true,animations:"disabled"});
     assert(target.page.url().includes("/app/device-access?"));
     assert.equal((await target.context.request.get(base+"/api/auth/me")).status(),202,"Credentials create only a restricted verification session");
