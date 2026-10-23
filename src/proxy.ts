@@ -97,7 +97,7 @@ export async function proxy(req: NextRequest) {
   headers.set("cookie", req.cookies.toString());
   // Always replace incoming nonce/policy headers; the browser cannot choose them.
   const nonce = randomBytes(18).toString("base64");
-  const policy = contentSecurityPolicy(nonce, process.env.NODE_ENV !== "production", process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN);
+  const policy = contentSecurityPolicy(nonce, process.env.NODE_ENV !== "production");
   headers.set("x-nonce", nonce);
   headers.set("Content-Security-Policy", policy);
   const res = NextResponse.next({ request: { headers } });

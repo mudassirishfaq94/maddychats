@@ -1,6 +1,5 @@
 /** Styles remain inline-compatible because the app uses dynamic CSS values. */
-export function contentSecurityPolicy(nonce: string, development: boolean, authDomain?: string) {
-  const firebase = authDomain && /^[a-z0-9.-]+$/.test(authDomain) ? ` https://${authDomain}` : "";
+export function contentSecurityPolicy(nonce: string, development: boolean) {
   return [
     "default-src 'self'",
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' 'wasm-unsafe-eval'${development ? " 'unsafe-eval'" : ""}`,
@@ -8,8 +7,8 @@ export function contentSecurityPolicy(nonce: string, development: boolean, authD
     "img-src 'self' data: blob: https:",
     "media-src 'self' blob:",
     "font-src 'self'",
-    `connect-src 'self' https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://*.firebaseapp.com${firebase}`,
-    `frame-src https://www.google.com https://www.recaptcha.net https://*.firebaseapp.com${firebase}`,
+    "connect-src 'self' https://*.googleapis.com",
+    "frame-src https://www.google.com",
     "worker-src 'self' blob:",
     "object-src 'none'", "base-uri 'self'", "form-action 'self'", "frame-ancestors 'self'",
     "report-uri /api/security/csp-report",
