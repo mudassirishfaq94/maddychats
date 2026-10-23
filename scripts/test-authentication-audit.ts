@@ -119,10 +119,9 @@ async function main() {
     assert.equal((await exchange({ticket,verifier})).status,401,"A pre-reset mobile ticket cannot resume authentication after account revocation");
     console.log("PASS: real native Google signature verification with local JWKS, single-use provider proof and mobile handoff revocation");
     const {consumeProviderProof}=await import("../src/server/provider-proof");
-    const phoneProof=randomBytes(32).toString("base64url");
-    const phoneResults=await Promise.all([consumeProviderProof("firebase-phone",phoneProof),consumeProviderProof("firebase-phone",phoneProof)]);
-    assert.equal(phoneResults.filter(Boolean).length,1,"Concurrent phone proof consumption is single-use");
-    assert(await consumeProviderProof("google-native",phoneProof),"Provider namespaces cannot consume one another's proofs");
+    const googleProof=randomBytes(32).toString("base64url");
+    const proofResults=await Promise.all([consumeProviderProof("google-native",googleProof),consumeProviderProof("google-native",googleProof)]);
+    assert.equal(proofResults.filter(Boolean).length,1,"Concurrent Google proof consumption is single-use");
   }finally{
     globalThis.fetch=savedFetch;await appPool?.end();await sql?.end();
     if(created){

@@ -8,10 +8,6 @@ COPY scripts/harden-braces.mjs ./scripts/harden-braces.mjs
 RUN npm ci
 
 FROM base AS builder
-ARG NEXT_PUBLIC_FIREBASE_API_KEY
-ARG NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
-ARG NEXT_PUBLIC_FIREBASE_PROJECT_ID
-ARG NEXT_PUBLIC_FIREBASE_APP_ID
 ARG NEXT_PUBLIC_VAPID_PUBLIC_KEY
 ARG APP_VERSION=development
 COPY --from=dependencies /app/node_modules ./node_modules
