@@ -21,7 +21,7 @@ const rows = [
   { key: "groupNotifications", label: "Group notifications", hint: "Alerts for activity in group chats", icon: Users },
   { key: "pushNotifications", label: "Desktop and mobile push", hint: "Allow push alerts on supported devices", icon: Smartphone },
   { key: "notificationSound", label: "Notification sound", hint: "Play a sound when an alert arrives", icon: Volume2 },
-  { key: "showNotificationDetails", label: "Show sender and message preview", hint: "Show who sent it and a preview in notifications", icon: Eye },
+  { key: "showNotificationDetails", label: "Show sender and message preview", hint: "On by default. Turn off to hide sender names and message text", icon: Eye },
 ] as const;
 
 function applicationServerKey(value: string): Uint8Array<ArrayBuffer> {

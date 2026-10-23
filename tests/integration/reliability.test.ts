@@ -217,6 +217,7 @@ test("call alerts are independent of message toggles and respect sender privacy 
  const {getNotificationPreferences,updateNotificationPreferences}=await import("../../src/server/notification-preferences");
  const previous=await getNotificationPreferences(member);
  assert.equal(previous.pushNotifications,true,"New account push preference starts enabled");
+ assert.equal(previous.showNotificationDetails,true,"Sender and message previews are enabled for users who have not changed the setting");
  const conversation=randomUUID(),callId=randomUUID(),notice=randomUUID();
  await pool.query("insert into conversations(id,type,created_by_id) values($1,'dm',$2)",[conversation,owner]);
  for(const user of [owner,member])await pool.query("insert into conversation_members(conversation_id,user_id,accepted_at) values($1,$2,now())",[conversation,user]);

@@ -26,7 +26,6 @@ import {
   UserPlus,
   Trash2,
   Users,
-  Play,
   Pin,
   Star,
   X,
@@ -507,11 +506,6 @@ function MediaGrid({ items }: { items: AttachmentDTO[] }) {
           >
             <InlineMedia attachment={item} gallery />
             <span className="absolute inset-0 bg-black/0 transition-colors group-hover:bg-black/20" />
-            {item.kind === "video" ? (
-              <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                <Play className="h-7 w-7 fill-white text-white drop-shadow" />
-              </span>
-            ) : null}
           </button>
         ))}
       </div>

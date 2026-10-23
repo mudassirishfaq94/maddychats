@@ -97,6 +97,7 @@ import {
 import { mapWithConcurrency } from "@/lib/async";
 import { chatPerf } from "@/lib/performance";
 import { offlineHistoryRows } from "@/lib/offline-history";
+import { optimizeImageForUpload } from "@/lib/optimize-image";
 import { rememberHistory } from "../../../public/offline-store.js";
 import { loadChatDraft, saveChatDraft, loadQueuedMessages, removeQueuedMessage, saveQueuedMessage } from "@/lib/chat-outbox";
 import { claimQueuedSend } from "@/lib/queued-send-claim";
@@ -701,21 +702,23 @@ export function ChatView({
   /** Encrypt a pending file into a ciphertext blob + conversation-wrapped key. */
   const encryptPendingFile = useCallback(
     async (file: File) => {
+      const uploadFile = await optimizeImageForUpload(file);
       const { key: conversationKey } = await e2ee.getConversationKey(conversationId, { waitForPeer: true });
       const mediaKey = await generateConversationKey();
       const mediaKeyB64 = await exportSymmetricKey(mediaKey);
       const iv=crypto.getRandomValues(new Uint8Array(12));
-      const ciphertext=await crypto.subtle.encrypt({name:"AES-GCM",iv},mediaKey,await file.arrayBuffer());
+      const ciphertext=await crypto.subtle.encrypt({name:"AES-GCM",iv},mediaKey,await uploadFile.arrayBuffer());
       const wrappedKeyB64 = await encryptBytes(
         new TextEncoder().encode(mediaKeyB64),
         conversationKey,
       );
       return {
-        file: new File([iv,ciphertext], file.name, {
+        file: new File([iv,ciphertext], uploadFile.name, {
           type: "application/octet-stream",
         }),
         wrappedKey: wrappedKeyB64,
-        originalMime: file.type || "application/octet-stream",
+        originalMime: uploadFile.type || "application/octet-stream",
+        originalName: uploadFile.name,
       };
     },
     [conversationId, e2ee],

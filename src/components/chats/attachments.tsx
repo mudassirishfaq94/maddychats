@@ -12,7 +12,6 @@ import {
   FileText,
   File as FileIcon,
   Loader2,
-  Play,
   X,
   ZoomIn,
   ZoomOut,
@@ -277,13 +276,7 @@ export function AttachmentList({
               aria-label={`View ${item.originalName}`}
             >
               <InlineMedia attachment={item} />
-              <span className="absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-all duration-200 group-hover/img:bg-black/25 group-hover/img:opacity-100">
-                {item.kind === "video" ? (
-                  <Play className="h-7 w-7 fill-white text-white" />
-                ) : (
-                  <ZoomIn className="h-6 w-6 text-white" />
-                )}
-              </span>
+              {item.kind === "image" ? <span className="absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-all duration-200 group-hover/img:bg-black/25 group-hover/img:opacity-100"><ZoomIn className="h-6 w-6 text-white" /></span> : null}
             </button>
           ))}
         </div>
@@ -396,16 +389,14 @@ function FileChip({ file, own }: { file: AttachmentDTO; own: boolean }) {
 
 export function InlineMedia(props: { attachment: AttachmentDTO; gallery?: boolean }) {
   const { ref, near } = useNearViewport<HTMLSpanElement>();
-  return <span ref={ref} className="relative block min-h-40 w-full"><InlineMediaPreview {...props} enabled={near} /></span>;
+  return <span ref={ref} className={cn("relative block w-full overflow-hidden bg-black/5", props.gallery ? "h-full" : "aspect-[4/3]")}><InlineMediaPreview {...props} enabled={near} /></span>;
 }
 
 function InlineMediaPreview({
   attachment,
-  gallery = false,
   enabled,
 }: {
   attachment: AttachmentDTO;
-  gallery?: boolean;
   enabled: boolean;
 }) {
   const { url, failed } = useEncryptedAttachmentUrl(attachment, enabled);
@@ -414,10 +405,10 @@ function InlineMediaPreview({
   const showFailed = failed || failedRender;
   const label = attachment.kind === "video" ? "Video" : "Photo";
 
-  if (!enabled) return <span className="block h-40" aria-label="Media preview" />;
+  if (!enabled) return <span className="absolute inset-0" aria-label="Media preview" />;
   if (showFailed) {
     return (
-      <span className="flex h-40 w-full flex-col items-center justify-center gap-2 bg-black/10 text-xs text-[var(--muted)]">
+      <span className="absolute inset-0 flex h-full w-full flex-col items-center justify-center gap-2 bg-black/10 text-xs text-[var(--muted)]">
         <AlertTriangle className="h-5 w-5" />
         {failedRender && url ? "Can't preview. Tap to download." : `${label} unavailable`}
       </span>
@@ -449,16 +440,13 @@ function InlineMediaPreview({
           aria-label="Video thumbnail"
           onLoadedMetadata={event => {
             const video=event.currentTarget;
-            if(video.duration>0)video.currentTime=Math.min(0.05,video.duration/2);
+            if(video.duration>0)video.currentTime=Math.min(1, Math.max(0.12, video.duration * 0.08));
             else setLoading(false);
           }}
           onLoadedData={event => { if (!event.currentTarget.seeking) setLoading(false); }}
           onSeeked={() => setLoading(false)}
           onError={() => setFailedRender(true)}
-          className={cn(
-            "w-full object-cover transition-transform duration-300 group-hover/img:scale-105",
-            gallery ? "h-full" : "aspect-video max-h-64 bg-black/5",
-          )}
+          className="absolute inset-0 h-full w-full object-cover"
         />
       ) : (
         // eslint-disable-next-line @next/next/no-img-element
@@ -468,10 +456,7 @@ function InlineMediaPreview({
           loading="lazy"
           onLoad={() => setLoading(false)}
           onError={() => setFailedRender(true)}
-          className={cn(
-            "w-full object-cover transition-transform duration-300 group-hover/img:scale-105",
-            gallery ? "h-full" : "max-h-64",
-          )}
+          className="absolute inset-0 h-full w-full object-cover"
         />
       )}
     </>

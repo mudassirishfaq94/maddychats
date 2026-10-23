@@ -6,6 +6,8 @@ import static org.junit.Assert.assertEquals;
 public class NativeMessagePrivacyTest {
     @Test public void normalRemoteMessageHasNoIdentityOrText() {
         assertEquals("Circlo", NativeMessagePrivacy.title(false, false));
+        assertEquals("Alex · Circlo", NativeMessagePrivacy.title(false, false, "Alex"));
+        assertEquals("Circlo", NativeMessagePrivacy.title(false, true, "Alex"));
         assertEquals("New message received.", NativeMessagePrivacy.body(false, false));
     }
     @Test public void requestHasOnlyRequestWording() {

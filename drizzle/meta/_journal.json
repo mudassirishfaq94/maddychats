@@ -401,6 +401,7 @@
       "tag": "0055_presence_privacy",
       "breakpoints": true
     },
-    {"idx":57,"version":"7","when":1792281600014,"tag":"0056_temporary_rooms","breakpoints":true}
+    {"idx":57,"version":"7","when":1792281600014,"tag":"0056_temporary_rooms","breakpoints":true},
+    {"idx":58,"version":"7","when":1792281600015,"tag":"0057_notification_previews_default_on","breakpoints":true}
   ]
 }

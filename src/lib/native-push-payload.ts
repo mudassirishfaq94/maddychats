@@ -14,7 +14,8 @@ function safeNotificationText(value: string | undefined, fallback: string, limit
  */
 export function nativePushPayload(input: { callCancelled?: boolean; messageRequest?: boolean; recipientId: string; notificationId: string; conversationId: string; messageId: string; actorName?: string; preview?: string; showDetails?: boolean; isGroup?: boolean; groupName?: string | null; encrypted?: boolean; title?: string; body?: string; callId?: string; silent?: boolean; callTtl?: number }, now = Date.now()) {
   const ttl = input.callId ? Math.min(45, Math.max(1, input.callTtl ?? 45)) : 3600;
-  const showDetails = input.showDetails !== false;
+  const showDetails = input.showDetails === true;
+  const showSender = showDetails && !input.callId && !input.messageRequest;
   // Encrypted is the safe default: an unknown message must never leak text.
   const encrypted = input.encrypted !== false;
   const presentation = input.title && input.body
@@ -36,7 +37,10 @@ export function nativePushPayload(input: { callCancelled?: boolean; messageReque
       messageRequest: String(input.messageRequest === true),
       recipientId: input.recipientId, eventId: input.notificationId,
       title: safePresentation.title, body: safePresentation.body,
-      actorName: !input.callId ? "Circlo" : showDetails ? safeNotificationText(input.actorName, "Circlo", 80) : "Circlo",
+      actorName: input.callId
+        ? showDetails ? safeNotificationText(input.actorName, "Circlo", 80) : "Circlo"
+        : showSender ? safeNotificationText(input.actorName, "Someone", 80) : "Circlo",
+      showDetails: String(showSender),
       // Message content never travels through FCM, even for legacy readable rows.
       preview: !input.callId || !showDetails
         ? "New message. Open Circlo to read it."

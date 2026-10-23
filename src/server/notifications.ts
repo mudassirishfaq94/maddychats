@@ -189,7 +189,7 @@ export async function notifyNewMessage(input: {
             body: presentation.body,
             actorName: input.actorName,
             preview: input.preview.slice(0, 140),
-            showDetails: false,
+            showDetails: preferences.showNotificationDetails,
             messageRequest: !isGroup && m.acceptedAt === null,
             isGroup,
             groupName: conversation[0]?.name ?? null,
