@@ -43,9 +43,12 @@ export async function testDeviceRecoveryUI(base, pool) {
     assert.equal(await overview.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
     if (process.env.PROFILE_QA_SCREENSHOT) await overview.screenshot({ path: process.env.PROFILE_QA_SCREENSHOT, fullPage: true });
     await overview.close();
-    const notificationSection = source.page.locator("details").filter({ has: source.page.locator("summary").filter({ hasText: /^Notifications/ }) }).first();
-    assert.equal(await notificationSection.getAttribute("open"), null, "Secondary profile settings start collapsed");
-    await source.page.evaluate(`(() => {
+    const settingsPage = await source.context.newPage();
+    await settingsPage.goto(base + "/app/settings#notifications");
+    await settingsPage.getByRole("heading", { name: "Settings", exact: true }).waitFor();
+    const notificationSection = settingsPage.locator("#notifications details");
+    assert.equal(await notificationSection.getAttribute("open"), null, "Notification preferences start collapsed in Settings");
+    await settingsPage.evaluate(`(() => {
       const subscription = { toJSON: () => ({ endpoint: "https://fcm.googleapis.com/fcm/send/circlo-disposable-ui-fixture", keys: { p256dh: "fake-public-key-for-ui-test-only", auth: "fake-auth-for-ui-test" } }) };
       const oldSubscription = { endpoint: "https://fcm.googleapis.com/fcm/send/old-disposable-ui-fixture", options: { applicationServerKey: new Uint8Array(65).buffer }, unsubscribe: async () => { window.__pushReplacedKey = true; return true; } };
       const registration = { pushManager: { getSubscription: async () => oldSubscription, subscribe: async options => { window.__pushHasKey = options.applicationServerKey.byteLength === 65; return subscription; } } };
@@ -66,8 +69,6 @@ export async function testDeviceRecoveryUI(base, pool) {
     assert.equal((await pool.query("select count(*)::int as n from push_subscriptions where user_id=$1", [user.id])).rows[0].n, 1);
     assert.equal((await source.context.request.delete(base + "/api/notifications/push", { data: { endpoint: "https://fcm.googleapis.com/fcm/send/circlo-disposable-ui-fixture" }, headers: { Origin: base } })).status(), 200);
     await notificationSection.locator(":scope > summary").click();
-    const settingsPage = await source.context.newPage();
-    await settingsPage.goto(base + "/app/settings");
     await settingsPage.getByRole("link",{name:"Manage secure devices",exact:true}).waitFor();
     assert.equal(await settingsPage.getByRole("heading",{name:"Notifications",exact:true}).count(),1,"Detailed preference forms stay collapsed until requested");
     for(const width of [320,390,844]) { await settingsPage.setViewportSize({width,height:740}); assert(await settingsPage.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),"Simple settings fit mobile widths"); }
