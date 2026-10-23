@@ -63,7 +63,9 @@ export async function testDeviceAccess(base, pool, secret) {
     const linkResult=await linkResponse; assert.equal(linkResult.status(),201);
     const {id:requestId,token}=await linkResult.json(); assert.match(token,/^[A-Za-z0-9_-]{43}$/);
     await target.page.getByRole("img",{name:"Temporary secure device-link QR code"}).waitFor();
-    await target.page.getByText("Show this device’s fingerprint",{exact:true}).click();
+    const fingerprintDetails=target.page.locator("details").filter({has:target.page.getByLabel("This device fingerprint")});
+    await fingerprintDetails.locator(":scope > summary").click();
+    await target.page.getByLabel("This device fingerprint").waitFor({state:"visible"});
     await source.page.getByText("Troubleshooting",{exact:true}).click();
     await source.page.getByRole("button",{name:"Refresh encryption devices",exact:true}).click();
     const qrPayload=JSON.stringify({kind:"circlo-device-link",version:1,requestId,token});
