@@ -100,6 +100,7 @@ export async function testChatRecovery(base, cookieHeader, conversationId) {
     await queuedNotice.waitFor();
     await queuedNotice.waitFor({ state: "hidden", timeout: 12000 });
     await target.getByLabel("Queued", { exact: true }).waitFor();
+    await target.getByRole("button", { name: "Show queued message options", exact: true }).waitFor();
     await source.goto(`${base}/app/profile#encryption-devices`);
     await target.goto(`${base}/app/profile#encryption-devices`);
     const linkResponse = target.waitForResponse(response => response.url().endsWith("/api/e2ee/devices/link") && response.request().method() === "POST");

@@ -76,9 +76,7 @@ try {
     await page.getByRole("textbox",{name:"Message text"}).press("Enter");
     await page.getByRole("region",{name:"Messages",exact:true}).getByText("Offline fixture message",{exact:true}).waitFor();
     await page.reload();await page.getByRole("region",{name:"Messages",exact:true}).getByText("Offline fixture message",{exact:true}).waitFor();
-    const cancelQueued = page.getByRole("button",{name:"Cancel message",exact:true});
-    if (!await cancelQueued.isVisible()) await page.getByRole("button",{name:"Show queued message options",exact:true}).click();
-    await cancelQueued.click();
+    await page.getByRole("button",{name:"Cancel queued message",exact:true}).click();
     await page.getByRole("region",{name:"Messages",exact:true}).getByText("Offline fixture message",{exact:true}).waitFor({state:"hidden"});
     await page.getByRole("button",{name:"Back to chats",exact:true}).click();
     await page.getByRole("listitem",{name:"Locked chat",exact:true}).click();
