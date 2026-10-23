@@ -8,8 +8,10 @@ import { pipeline } from "node:stream/promises";
 import { mkdir, stat, unlink, writeFile } from "fs/promises";
 import path from "path";
 import { createClient } from "@supabase/supabase-js";
+import { DeleteObjectsCommand, GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 
 const SUPABASE_MEDIA_BUCKET = process.env.SUPABASE_STORAGE_BUCKET ?? "maddy-media";
+const R2_MEDIA_BUCKET = process.env.R2_BUCKET ?? "circlo-media";
 
 function isSupabaseStorageConfigured(): boolean {
   return Boolean(
@@ -29,6 +31,72 @@ const supabaseStorage = isSupabaseStorageConfigured()
       { auth: { persistSession: false, autoRefreshToken: false } },
     )
   : null;
+
+function isR2StorageConfigured(): boolean {
+  return Boolean(process.env.R2_ACCOUNT_ID && process.env.R2_ACCESS_KEY_ID && process.env.R2_SECRET_ACCESS_KEY);
+}
+
+const r2Storage = isR2StorageConfigured()
+  ? new S3Client({
+      region: "auto",
+      endpoint: process.env.R2_ENDPOINT ?? `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+      forcePathStyle: true,
+      credentials: {
+        accessKeyId: process.env.R2_ACCESS_KEY_ID!,
+        secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
+      },
+    })
+  : null;
+
+type StorageBackend = "r2" | "supabase" | "local";
+
+function storageBackend(): StorageBackend {
+  const configured = process.env.MEDIA_STORAGE_BACKEND;
+  if (configured === "r2") {
+    if (!r2Storage) throw new Error("Cloudflare R2 storage is selected but its server credentials are incomplete.");
+    return "r2";
+  }
+  if (configured === "supabase") {
+    if (!supabaseStorage) throw new Error("Supabase Storage is selected but its server credentials are incomplete.");
+    return "supabase";
+  }
+  if (configured) throw new Error("MEDIA_STORAGE_BACKEND must be r2 or supabase.");
+  return supabaseStorage ? "supabase" : "local";
+}
+
+async function putR2Object(key: string, body: Buffer | ReadableStream<Uint8Array> | NodeJS.ReadableStream, size?: number) {
+  if (!r2Storage) throw new Error("Cloudflare R2 storage is not configured.");
+  await r2Storage.send(new PutObjectCommand({
+    Bucket: R2_MEDIA_BUCKET,
+    Key: key,
+    Body: body as PutObjectCommand["input"]["Body"],
+    ...(size !== undefined ? { ContentLength: size } : {}),
+    ContentType: "application/octet-stream",
+  }));
+}
+
+async function readR2Object(relativePath: string, signal?: AbortSignal): Promise<{ body: ReadableStream<Uint8Array>; size: number | null } | null> {
+  if (!r2Storage) return null;
+  try {
+    const result = await r2Storage.send(new GetObjectCommand({ Bucket: R2_MEDIA_BUCKET, Key: relativePath }), signal ? { abortSignal: signal } : undefined);
+    if (!result.Body) return null;
+    return { body: result.Body.transformToWebStream(), size: typeof result.ContentLength === "number" ? result.ContentLength : null };
+  } catch (error) {
+    const status = (error as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode;
+    const name = (error as { name?: string }).name;
+    if (status === 404 || name === "NoSuchKey" || name === "NotFound") return null;
+    throw error;
+  }
+}
+
+async function deleteR2Objects(paths: string[]) {
+  if (!paths.length) return;
+  if (!r2Storage) throw new Error("Cloudflare R2 storage is not configured.");
+  await r2Storage.send(new DeleteObjectsCommand({
+    Bucket: R2_MEDIA_BUCKET,
+    Delete: { Objects: paths.map((Key) => ({ Key })), Quiet: true },
+  }));
+}
 
 /**
  * Local filesystem media storage.
@@ -277,8 +345,12 @@ export async function saveBuffer(
   // Reserve inventory first: even a partial storage failure remains tracked.
   // A database outage must never create an object that cleanup cannot find.
   await trackUpload(relative);
-  if (supabaseStorage) {
-    const { error } = await supabaseStorage.storage
+  if (storageBackend() === "r2") {
+    await putR2Object(relative, data, data.byteLength);
+    return relative;
+  }
+  if (storageBackend() === "supabase") {
+    const { error } = await supabaseStorage!.storage
       .from(SUPABASE_MEDIA_BUCKET)
       .upload(relative, data, {
         contentType: "application/octet-stream",
@@ -298,7 +370,14 @@ export async function saveBuffer(
 export async function saveFile(bucket:Bucket,storedName:string,file:Blob):Promise<string> {
   if(!/^[a-zA-Z0-9.-]+$/.test(storedName)||storedName.includes(".."))throw new Error("invalid_path");
   const relative=path.posix.join(BUCKETS[bucket],storedName);
-  if(supabaseStorage && file.size>PRIVATE_PART_BYTES && process.env.LARGE_MEDIA_UPLOADS_ENABLED!=="0") {
+  const backend = storageBackend();
+  if(backend === "r2" && file.size>PRIVATE_PART_BYTES && process.env.LARGE_MEDIA_UPLOADS_ENABLED!=="0") {
+    return writePrivateParts(relative,file,async(objectPath,body)=>{
+      await trackUpload(objectPath);
+      await putR2Object(objectPath, body.stream() as ReadableStream<Uint8Array>, body.size);
+    },deleteR2Objects);
+  }
+  if(backend === "supabase" && file.size>PRIVATE_PART_BYTES && process.env.LARGE_MEDIA_UPLOADS_ENABLED!=="0") {
     return writePrivateParts(relative,file,async(objectPath,body)=>{
       await trackUpload(objectPath);
       const {error}=await supabaseStorage!.storage.from(SUPABASE_MEDIA_BUCKET).upload(objectPath,body.stream(),{contentType:"application/octet-stream",upsert:false,duplex:"half"});
@@ -306,8 +385,10 @@ export async function saveFile(bucket:Bucket,storedName:string,file:Blob):Promis
     },async(paths)=>{const {error}=await supabaseStorage!.storage.from(SUPABASE_MEDIA_BUCKET).remove(paths);if(error)throw new Error("Storage cleanup failed.");});
   }
   await trackUpload(relative);
-  if(supabaseStorage) {
-    const {error}=await supabaseStorage.storage.from(SUPABASE_MEDIA_BUCKET).upload(relative,file.stream(),{contentType:"application/octet-stream",upsert:false,duplex:"half"});
+  if(backend === "r2") {
+    await putR2Object(relative, file.stream() as ReadableStream<Uint8Array>, file.size);
+  }else if(backend === "supabase") {
+    const {error}=await supabaseStorage!.storage.from(SUPABASE_MEDIA_BUCKET).upload(relative,file.stream(),{contentType:"application/octet-stream",upsert:false,duplex:"half"});
     if(error)throw new Error("Encrypted media storage failed.");
   }else{
     await ensureBuckets();const absolute=resolveWithinUploads(relative);if(!absolute)throw new Error("invalid_path");
@@ -325,8 +406,19 @@ async function trackUpload(relative: string) {
 /** Retention retries storage failures rather than forgetting the object. */
 export async function deleteStoredStrict(relativePath: string): Promise<void> {
   if (!/^(avatars|images|files|statuses)\/[a-zA-Z0-9.-]+$/.test(relativePath) || relativePath.includes("..")) throw new Error("invalid_path");
-  if (supabaseStorage) {
-    const { error } = await supabaseStorage.storage.from(SUPABASE_MEDIA_BUCKET).remove(relativePath.endsWith(".parts")?privatePartPaths(relativePath):[relativePath]);
+  const paths = relativePath.endsWith(".parts") ? privatePartPaths(relativePath) : [relativePath];
+  if (storageBackend() === "r2") {
+    await deleteR2Objects(paths);
+    // During cutover, remove the old copy too so retention and user deletion
+    // continue to erase legacy objects while reads still support fallback.
+    if (supabaseStorage) {
+      const { error } = await supabaseStorage.storage.from(SUPABASE_MEDIA_BUCKET).remove(paths);
+      if (error) throw new Error("storage_delete_failed");
+    }
+    return;
+  }
+  if (storageBackend() === "supabase") {
+    const { error } = await supabaseStorage!.storage.from(SUPABASE_MEDIA_BUCKET).remove(paths);
     if (error) throw new Error("storage_delete_failed");
     return;
   }
@@ -357,16 +449,28 @@ export function streamStored(relativePath: string) {
   return createReadStream(absolute);
 }
 
-/** Reads a private Supabase Storage object, with local-disk fallback for development. */
+/** Reads private remote storage, with a Supabase migration fallback and local-disk development fallback. */
 export async function readStored(relativePath: string): Promise<{
   body: ReadableStream<Uint8Array> | NodeJS.ReadableStream;
   size: number | null;
 } | null> {
-  if (supabaseStorage) return relativePath.endsWith(".parts")?readPrivateParts(relativePath,readPrivateObject):readPrivateObject(relativePath);
+  const backend = storageBackend();
+  if (backend === "r2") return relativePath.endsWith(".parts")
+    ? readPrivateParts(relativePath, readPrivateR2Object)
+    : readPrivateR2Object(relativePath);
+  if (backend === "supabase") return relativePath.endsWith(".parts")?readPrivateParts(relativePath,readPrivateObject):readPrivateObject(relativePath);
   const info = await statStored(relativePath);
   if (!info?.isFile()) return null;
   const body = streamStored(relativePath);
   return body ? { body, size: info.size } : null;
+}
+
+/** R2 is primary after cutover; Supabase is read only for objects not copied yet. */
+async function readPrivateR2Object(relativePath: string, externalSignal?: AbortSignal): Promise<{ body: ReadableStream<Uint8Array>; size: number | null } | null> {
+  if (!/^(avatars|images|files|statuses)\/[a-zA-Z0-9.-]+$/.test(relativePath) || relativePath.includes("..")) return null;
+  const object = await readR2Object(relativePath, externalSignal);
+  if (object || !supabaseStorage) return object;
+  return readPrivateObject(relativePath, externalSignal);
 }
 
 /** Header timeout is cleared once streaming begins; cancellation still propagates. */

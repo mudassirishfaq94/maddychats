@@ -12,6 +12,7 @@
     "lint": "eslint . --max-warnings=0",
     "typecheck": "tsc --noEmit",
     "db:migrate": "drizzle-kit migrate",
+    "storage:migrate:r2": "node scripts/migrate-supabase-media-to-r2.mjs",
     "db:migrate:online": "node scripts/migrate-online-index.mjs up",
     "test:database-index": "tsx scripts/test-database-index.ts",
     "test:cache": "node scripts/test-public-cache.mjs",
@@ -38,6 +39,7 @@
     "test:virtual-history": "node scripts/test-virtual-message-history.mjs"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "3.1156.0",
     "@capacitor-mlkit/barcode-scanning": "^8.2.1",
     "@capacitor/android": "^8.5.3",
     "@capacitor/app": "^8.1.2",

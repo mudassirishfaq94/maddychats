@@ -6,7 +6,10 @@ conversations, realtime delivery and presence, typing indicators, read
 receipts, reactions, replies, search, notifications, private attachments, and
 responsive light/dark themes.
 
-For the production Docker VPS + Supabase setup, see [DEPLOYMENT.md](./DEPLOYMENT.md).
+For the production Docker VPS setup, see [DEPLOYMENT.md](./DEPLOYMENT.md).
+The private-media move to Cloudflare R2 is staged separately; Supabase remains
+the live storage backend until the object copy is verified and deployed. See
+[the R2 migration guide](./docs/CLOUDFLARE_R2_MEDIA_MIGRATION.md).
 Upload hardening, device sessions, staged CSP, and mobile profiling are documented
 in [Tasks 4–6](./docs/ITEMS4_6_HARDENING_AND_PERFORMANCE.md).
 
