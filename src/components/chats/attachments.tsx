@@ -389,7 +389,7 @@ function FileChip({ file, own }: { file: AttachmentDTO; own: boolean }) {
 
 export function InlineMedia(props: { attachment: AttachmentDTO; gallery?: boolean }) {
   const { ref, near } = useNearViewport<HTMLSpanElement>();
-  return <span ref={ref} className={cn("relative block w-full overflow-hidden bg-black/5", props.gallery ? "h-full" : "aspect-[4/3]")}><InlineMediaPreview {...props} enabled={near} /></span>;
+  return <span ref={ref} className={cn("relative block w-full overflow-hidden bg-black/5", props.gallery ? "h-full" : "aspect-[4/3] max-h-[270px] max-w-[360px]")}><InlineMediaPreview {...props} enabled={near} /></span>;
 }
 
 function InlineMediaPreview({
