@@ -65,10 +65,11 @@ export async function POST(req: NextRequest) {
     if (typeof body.linkId === "string") {
       if (selfProof) return jsonError(422, "Session registration or recovery cannot approve a linking request.");
       if (!isUuid(body.linkId)) return jsonError(422, "Invalid linking request.");
+      if (decision === "approve" && (typeof body.token !== "string" || !/^[A-Za-z0-9_-]{43}$/.test(body.token))) return jsonError(422, "Scan a current device-link QR code before approving.");
       const [link] = await db.select().from(deviceLinkRequests).where(and(eq(deviceLinkRequests.id, body.linkId), eq(deviceLinkRequests.userId, user.id), eq(deviceLinkRequests.deviceId, target.deviceId), eq(deviceLinkRequests.status, "pending"), gt(deviceLinkRequests.expiresAt, new Date()))).limit(1);
       if (!link || link.fingerprint !== targetHash) return jsonError(409, "Linking request expired or was already used.");
       const [session] = await db.select({ id: deviceSessions.id }).from(deviceSessions).where(and(eq(deviceSessions.id, link.sessionId), eq(deviceSessions.userId, user.id), isNull(deviceSessions.revokedAt), gt(deviceSessions.expiresAt, new Date()))).limit(1);
-      if (!session || (decision === "approve" && (typeof body.code !== "string" || digest(body.code.replace(/\s|-/g, "").toUpperCase()) !== link.codeHash))) return jsonError(403, "Linking code does not match this device.");
+      if (!session || (decision === "approve" && (typeof body.token !== "string" || digest(body.token) !== link.codeHash))) return jsonError(403, "Device-link QR token does not match this device.");
       linkId = link.id;
     } else if (decision === "reject") return jsonError(422, "A linking request is required.");
     const nonce = randomBytes(32).toString("base64url");
@@ -144,8 +145,8 @@ export async function POST(req: NextRequest) {
       }
       if (typeof payload.linkId === "string") {
         const [link] = await tx.select().from(deviceLinkRequests).where(and(eq(deviceLinkRequests.id, payload.linkId), eq(deviceLinkRequests.userId, user.id))).for("update");
-        if (!link || link.status !== "pending" || link.expiresAt <= new Date() || link.deviceId !== targetId || link.fingerprint !== payload.targetHash) return false;
-        await tx.update(deviceLinkRequests).set({ status: payload.decision === "reject" ? "rejected" : "approved" }).where(eq(deviceLinkRequests.id, link.id));
+        if (!link || link.status !== "pending" || link.usedAt || link.expiresAt <= new Date() || link.deviceId !== targetId || link.fingerprint !== payload.targetHash) return false;
+        await tx.update(deviceLinkRequests).set({ status: payload.decision === "reject" ? "rejected" : "approved", usedAt: new Date() }).where(eq(deviceLinkRequests.id, link.id));
         if (payload.decision === "reject") return true;
       }
       await tx.update(e2eeKeys).set({ trustedAt: new Date() }).where(eq(e2eeKeys.id, target.id));

@@ -38,6 +38,7 @@
     "test:virtual-history": "node scripts/test-virtual-message-history.mjs"
   },
   "dependencies": {
+    "@capacitor-mlkit/barcode-scanning": "^8.2.1",
     "@capacitor/android": "^8.5.1",
     "@capacitor/app": "^8.1.1",
     "@capacitor/camera": "^8.2.4",
@@ -52,6 +53,7 @@
     "@capacitor/status-bar": "^8.0.3",
     "@supabase/supabase-js": "2.117.3",
     "@tanstack/react-virtual": "3.14.21",
+    "@zxing/browser": "^0.2.1",
     "bcrypt": "6.0.0",
     "bcryptjs": "^3.0.3",
     "dotenv": "17.3.1",
@@ -81,14 +83,14 @@
     "@types/react-dom": "19.2.3",
     "@types/web-push": "3.6.4",
     "drizzle-kit": "0.31.11",
+    "esbuild": "0.25.12",
     "eslint": "9.39.4",
     "eslint-config-next": "16.4.1",
     "playwright": "1.63.0",
     "postcss": "8.5.30",
     "tailwindcss": "4.1.17",
     "tsx": "4.23.15",
-    "typescript": "5.9.3",
-    "esbuild": "0.25.12"
+    "typescript": "5.9.3"
   },
   "overrides": {
     "esbuild": "$esbuild",

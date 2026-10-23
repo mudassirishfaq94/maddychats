@@ -324,8 +324,9 @@ export default function PrivacyPage() {
           </h3>
           <p>
             A browser or phone becomes trusted only when a device you already trust approves it, by proving possession
-            of its private key. The approval screen shows the new device&apos;s key fingerprint so you can compare it,
-            and revoking a device removes its trust immediately, so it stops receiving keys. We do hold an encrypted
+            of its private key. To link a device, scan its short-lived, single-use QR code on a trusted device and
+            compare the new device&apos;s key fingerprint before approval. The QR expires after three minutes and never
+            contains private keys. Revoking a device removes its trust immediately, so it stops receiving keys. We hold an encrypted
             backup of your device key, so a returning browser can be restored — but the 32-byte secret that unlocks that
             backup is generated on your device and is never sent to us, which is why the backup is unreadable without
             it, including to us.
