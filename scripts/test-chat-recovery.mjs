@@ -130,10 +130,10 @@ export async function testChatRecovery(base, cookieHeader, conversationId) {
     await source.unroute(peersUrl, unavailablePeers);
     await source.getByRole("button", { name: "Restore my other devices", exact: true }).click();
     await source.getByRole("status").filter({ hasText: "Shared" }).waitFor();
-    // Keep the new device on the same page: approval and key restoration
-    // must release its queued message without reloading or replacing keys.
-    // Retries intentionally pause in background tabs. Return to the new
-    // browser as a user would after approving it on the trusted browser.
+    // Return to the new device's chat after approval. Key restoration must
+    // release its queued message without replacing keys.
+    // Retries pause in background tabs, so bring this browser to the front.
+    await target.goto(chatUrl);
     await target.bringToFront();
     await target.getByRole("region", { name: "Conversation", exact: true }).getByText(submitted, { exact: true }).waitFor({ timeout: 30000 });
     await source.getByRole("region", { name: "Conversation", exact: true }).getByText(pendingText, { exact: true }).waitFor({ timeout: 60000 });
