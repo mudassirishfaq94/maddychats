@@ -191,7 +191,7 @@ export async function testMobileLayout(base, pool, { recordOnly = false, navigat
         assert.equal((await user.goto(base + path)).status(), 200, path); await user.waitForTimeout(100);
         if (path === "/app/profile" || path === "/app/settings") await expandDetails(user);
         await check(user, path + "-" + size);
-        if (path === "/app/profile") {
+        if (path === "/app/settings") {
           await user.getByRole("button", { name: "Delete my account", exact: true }).click();
           await user.getByPlaceholder("Type DELETE", {exact:true}).fill("DELETE");
           const remove = user.getByRole("dialog", {name:"Delete account",exact:true}).getByRole("button",{name:"Delete permanently",exact:true});
