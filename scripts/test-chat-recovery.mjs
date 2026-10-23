@@ -99,7 +99,8 @@ export async function testChatRecovery(base, cookieHeader, conversationId) {
     assert.equal(await target.getByLabel("Failed to send", { exact: true }).count(), 0);
     await target.getByRole("status").filter({ hasText: "This device needs approval" }).waitFor();
     await source.goto(`${base}/app/profile#encryption-devices`);
-    const pending = source.locator("li").filter({ hasText: targetFingerprint });
+    const shortFingerprint = `${targetFingerprint.slice(0, 8)}…${targetFingerprint.slice(-8)}`;
+    const pending = source.locator("li").filter({ hasText: shortFingerprint });
     await pending.waitFor();
     await pending.getByText("Show full fingerprint", { exact: true }).click();
     await pending.getByText(targetFingerprint, { exact: true }).waitFor({ state: "visible", timeout: 10000 });
