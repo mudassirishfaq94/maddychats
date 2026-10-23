@@ -45,7 +45,6 @@ async function handlePOST(req: NextRequest) {
     if (!(await rateLimit(`google-mobile-handoff:${ticketId}`, 1, 5 * 60 * 1000)).allowed) return jsonError(409, "Google mobile sign-in was already used or could not be verified. Start sign-in again.");
     return beginSignIn(req, user);
   }
-  if (!acceptsPolicies(body)) return jsonError(422, "Agree to both policies before signing in.");
   const idToken = typeof body?.idToken === "string" ? body.idToken : null;
   if (!idToken || idToken.length > 16384) return jsonError(422, "A valid Google ID token is required.");
 

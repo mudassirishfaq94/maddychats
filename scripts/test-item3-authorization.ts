@@ -105,18 +105,13 @@ async function main() {
       method, headers: { cookie, origin: base, "content-type": "application/json", ...headers },
       body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(15000),
     });
-    for (const acceptance of [{}, { acceptTerms: true }, { acceptPrivacy: true }, { acceptTerms: "true", acceptPrivacy: true }]) {
-      const refused = await api("/api/auth/login", "", "POST", { identifier: "consent-negative-fixture", password, ...acceptance });
-      assert.equal(refused.status, 422, "Both explicit policy acceptances are required server-side");
-      assert.equal(refused.headers.getSetCookie().length, 0, "Missing consent cannot issue a session");
-    }
     await testPublicPages(base);
     const dal = await api("/.well-known/assetlinks.json", "maddy_session=invalid; maddy_refresh=invalid");
     assert.equal(dal.status, 503, "Public DAL fails closed when not configured, without redirecting an expired-cookie visitor to login");
     assert.match(dal.headers.get("content-type")!, /application\/json/);
     await testAuthFields(base, sql, alice.username, password);
     const login = async (username: string) => {
-      const response = await api("/api/auth/login", "", "POST", { acceptTerms: true, acceptPrivacy: true, identifier: username, password });
+      const response = await api("/api/auth/login", "", "POST", { identifier: username, password });
       assert.equal(response.status, 200);
       const cookie = response.headers.getSetCookie().find((c) => c.startsWith("maddy_session="))?.split(";")[0];
       assert(cookie); await fixtureAppSession(sql,response); return cookie;

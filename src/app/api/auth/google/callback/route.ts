@@ -43,7 +43,6 @@ async function handleGoogleCallback(req: NextRequest) {
   const mobile = req.cookies.get("google_oauth_mobile")?.value === "1";
   const mobileChallenge = req.cookies.get("google_oauth_code_challenge")?.value;
   if (!code || !state || !expectedState || state !== expectedState || !nonce || !verifier) return redirectError("google_invalid_state");
-  if (!linking && req.cookies.get("google_oauth_policy")?.value !== POLICY_VERSION) return finishGoogleOAuth(redirectError("consent_required"));
   const limit = await rateLimit(`google-callback:${clientIp(req)}`, AUTH_RATE_LIMIT.limit, AUTH_RATE_LIMIT.windowMs);
   if (!limit.allowed) {
     const response = jsonError(429, "Too many sign-in attempts. Please start again after waiting.");

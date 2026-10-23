@@ -12,7 +12,13 @@ try {
   const page=await context.newPage();
   for(const route of ["login","signup"]){
    await page.goto(base+"/"+route);const entry=page.getByRole("link",{name:/Start a temporary chat/});await entry.waitFor();await page.waitForTimeout(400);
-   const box=await entry.boundingBox();assert(box&&box.y+box.height<400,"Temporary chat visible before scrolling");
+   const box=await entry.boundingBox();const submit=await page.getByRole("button",{name:route==="login"?/Sign in/:/Create account/}).boundingBox();assert(box&&submit&&box.y>submit.y,"Temporary chat appears below the primary sign-in/sign-up flow");
+   if(route==="login"){
+    assert.equal(await page.getByRole("checkbox").count(),0,"Returning sign-in has no policy checkbox gate");
+    await page.getByText(/By signing in, you confirm/).waitFor();
+   }else{
+    assert.equal(await page.getByRole("checkbox").count(),2,"Signup still requires both explicit policy choices");
+   }
    assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),"No horizontal overflow");
    assert.equal(await page.evaluate(()=>document.activeElement?.tagName==="INPUT"),false,"Do not trigger a mobile keyboard before choosing a feature");
    assert.equal(await entry.getAttribute("href"),"/temporary");

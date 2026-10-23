@@ -3,15 +3,14 @@
 import { navigateWithReload } from "@/lib/navigation";
 import { deviceAccessPath } from "@/lib/device-access-navigation";
 
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useState, type FormEvent } from "react";
 import Link from "next/link";
 import { AlertTriangle, AtSign, Eye, EyeOff, Loader2, Lock } from "lucide-react";
 import { loginSchema, fieldErrors } from "@/lib/schemas";
 import { useAuth } from "@/components/providers/auth-provider";
 import { Field } from "./field";
-import { acceptsPolicies, type PolicyConsent } from "@/lib/policy-consent";
 
-export function LoginForm({ next, consent, agreement }: { next?: string; consent: PolicyConsent; agreement?: ReactNode }) {
+export function LoginForm({ next }: { next?: string }) {
   const { signIn } = useAuth();
 
   const [identifier, setIdentifier] = useState("");
@@ -29,7 +28,6 @@ export function LoginForm({ next, consent, agreement }: { next?: string; consent
     setFormError(null);
     setVerificationRequired(false);
 
-    if (!acceptsPolicies(consent)) { setFormError("Agree to both policies before signing in."); return; }
     const parsed = loginSchema.safeParse({ identifier, password });
     if (!parsed.success) {
       setErrors(fieldErrors(parsed.error));
@@ -38,7 +36,7 @@ export function LoginForm({ next, consent, agreement }: { next?: string; consent
     setErrors({});
     setPending(true);
 
-    const result = await signIn({ ...parsed.data, ...consent });
+    const result = await signIn(parsed.data);
     setPending(false);
 
     if (result.mfaRequired) { navigateWithReload(`/login?mfa=1&next=${encodeURIComponent(target)}`); return; }
@@ -106,11 +104,13 @@ export function LoginForm({ next, consent, agreement }: { next?: string; consent
         </div>
       </div>
 
-      {agreement}
-      <button type="submit" disabled={pending || !acceptsPolicies(consent)} className="btn btn-primary w-full">
+      <button type="submit" disabled={pending} className="btn btn-primary w-full">
         {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
         {pending ? "Signing in…" : "Sign in"}
       </button>
+      <p className="-mt-2 text-center text-xs leading-relaxed text-[var(--muted)]">
+        By signing in, you confirm you have read our <Link className="underline underline-offset-2" href="/terms">Terms</Link> and <Link className="underline underline-offset-2" href="/privacy">Privacy Policy</Link>.
+      </p>
     </form>
   );
 }
