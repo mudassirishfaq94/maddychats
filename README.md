@@ -6,7 +6,8 @@ conversations, realtime delivery and presence, typing indicators, read
 receipts, reactions, replies, search, notifications, private attachments, and
 responsive light/dark themes.
 
-For the production Docker VPS + Supabase setup, see [DEPLOYMENT.md](./DEPLOYMENT.md).
+For the live deployment and the approved Bluehost VPS cutover, see
+[DEPLOYMENT.md](./DEPLOYMENT.md) and the [migration runbook](./docs/BLUEHOST_VPS_MIGRATION.md).
 Upload hardening, device sessions, staged CSP, and mobile profiling are documented
 in [Tasks 4–6](./docs/ITEMS4_6_HARDENING_AND_PERFORMANCE.md).
 
