@@ -32,7 +32,6 @@ async function handlePOST(req: NextRequest) {
   if (!rl.allowed) return jsonError(429, "Too many attempts. Please try again later.");
 
   const body = await readJson(req);
-  if (!acceptsPolicies(body)) return jsonError(422, "Agree to both policies before signing in.");
   const parsed = phoneAuthSchema.safeParse(body);
   if (!parsed.success) return jsonError(400, "Invalid phone sign-in request.");
 
@@ -54,6 +53,7 @@ async function handlePOST(req: NextRequest) {
     .limit(1))[0]?.user;
 
   if (!user) {
+    if (!acceptsPolicies(body)) return jsonError(422, "Agree to both policies before creating your account.");
     const { displayName, username } = parsed.data;
     if (!displayName || !username) {
       return NextResponse.json({ needsProfile: true }, { status: 409 });

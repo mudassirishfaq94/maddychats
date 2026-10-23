@@ -96,7 +96,6 @@ export function AuthLayout({
         </div>
 
         <div className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center py-6">
-          {entry}
           <h1
             className="font-display text-[1.9rem] font-bold leading-tight animate-fade-up"
             style={{ "--d": "60ms" } as React.CSSProperties}
@@ -112,6 +111,7 @@ export function AuthLayout({
           <div className="mt-8 animate-fade-up" style={{ "--d": "180ms" } as React.CSSProperties}>
             {children}
           </div>
+          {entry ? <div className="mt-6">{entry}</div> : null}
           {footer ? (
             <div
               className="mt-8 text-center text-sm text-[var(--muted)] animate-fade-up"

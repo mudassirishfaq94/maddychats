@@ -26,7 +26,7 @@ export function PhoneSignIn({ next = "/app", signup = false, consent }: { next?:
   async function sendCode(e: FormEvent) {
     e.preventDefault();
     setError(null);
-    if (!acceptsPolicies(acceptance)) { setError("Agree to both signup policies first."); return; }
+    if (signup && !acceptsPolicies(acceptance)) { setError("Agree to both signup policies first."); return; }
     if (!/^\+[1-9]\d{7,14}$/.test(phone.trim())) {
       setError("Enter your phone number in international format, e.g. +971501234567.");
       return;
@@ -83,7 +83,7 @@ export function PhoneSignIn({ next = "/app", signup = false, consent }: { next?:
       </> : null}
       <div id="phone-recaptcha" />
       {stage === "profile" && !consent ? <PolicyAgreement value={localConsent} onChange={setLocalConsent} /> : null}
-      <button type="submit" disabled={pending || !acceptsPolicies(acceptance)} className="btn btn-secondary w-full">{pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Phone className="h-4 w-4" />}{stage === "phone" ? "Continue with phone" : "Verify and continue"}</button>
+      <button type="submit" disabled={pending || (signup && !acceptsPolicies(acceptance))} className="btn btn-secondary w-full">{pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Phone className="h-4 w-4" />}{stage === "phone" ? "Continue with phone" : "Verify and continue"}</button>
     </form>
   </>;
 }
