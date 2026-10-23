@@ -45,7 +45,7 @@ export async function testMessageRequests(base, senderCookie, recipientCookie, c
     await recipient.goto(url);
     await recipient.getByRole("button", { name: "Accept", exact: true }).waitFor({ timeout: 60000 });
     assert.equal(await recipient.getByRole("textbox", { name: "Message text" }).isDisabled(), true);
-    await recipient.getByText("Waiting for them to open Circlo…", { exact: true }).waitFor({ timeout: 15000 }).catch(async cause => {
+    await recipient.getByText("It will appear here when they open Circlo.", { exact: true }).waitFor({ timeout: 15000 }).catch(async cause => {
       throw new Error(`Recipient delivery state: ${await recipient.locator("body").innerText()}`, { cause });
     });
     const notifications = await recipient.context().request.get(`${base}/api/notifications`);

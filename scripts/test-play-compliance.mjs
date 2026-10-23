@@ -63,7 +63,9 @@ export async function testPlayCompliance({base,sql,api,account,login}) {
       const nativePage=await nativeContext.newPage();
       await nativePage.goto(`${base}/app/settings#notifications`);
       const section=nativePage.locator('#notifications');
-      await section.getByText('Notification preferences',{exact:true}).click();
+      const notificationPreferences=section.locator('details');
+      await notificationPreferences.locator(':scope > summary').click();
+      await section.locator('details[open]').waitFor();
       const enable=section.getByRole('button',{name:'Enable',exact:true});
       await enable.waitFor();
       assert.equal(await nativePage.evaluate(()=>window.__pushRequests),0,'Login must not prompt for Android notification permission');
