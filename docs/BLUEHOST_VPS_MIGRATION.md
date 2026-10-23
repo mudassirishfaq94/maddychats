@@ -43,7 +43,9 @@ conditions.
    Verify the server fingerprint on the first SSH connection. Apply Ubuntu
    security updates, configure key-based SSH, and allow only required firewall
    ports.
-2. Install Docker Engine and the Compose plugin. Clone the reviewed `main`
+2. Install Docker Engine and the Compose plugin. Install Caddy using the
+   [official Ubuntu package instructions](https://caddyserver.com/docs/install),
+   then copy the repository `Caddyfile` to `/etc/caddy/Caddyfile`. Clone the reviewed `main`
    commit, copy `.env.example` to `.env`, and set file permissions to `0600`.
    Transfer production secrets directly to the host; never place them in Git or
    chat. Set `DATABASE_URL` to the existing pooled Neon URL and
