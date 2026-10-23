@@ -39,7 +39,8 @@ export function prefetchChatRouteData(userId: string, conversationId: string): P
   }).catch((error: unknown) => {
     // A transport failure may use the last member-authorized response from
     // this account. HTTP authorization failures never reach this fallback.
-    if (error instanceof TypeError && entry.offlineData && entry.offlineExpiresAt > Date.now()) return entry.offlineData;
+    const offline = typeof navigator !== "undefined" && !navigator.onLine;
+    if ((error instanceof TypeError || offline) && entry.offlineData && entry.offlineExpiresAt > Date.now()) return entry.offlineData;
     throw error;
   });
   entry.promise = promise;

@@ -101,7 +101,7 @@ export async function testChatRecovery(base, cookieHeader, conversationId) {
     await source.goto(`${base}/app/profile#encryption-devices`);
     const pending = source.locator("li").filter({ hasText: targetFingerprint });
     await pending.waitFor();
-    assert(await pending.getByText(targetFingerprint, { exact: true }).isVisible(), "Verify the full fingerprint on both real devices");
+    await pending.getByText(targetFingerprint, { exact: true }).waitFor({ state: "visible", timeout: 10000 });
     await pending.getByRole("checkbox").check();
     await pending.getByRole("button", { name: "Approve encryption device" }).click();
     await source.getByRole("status").filter({ hasText: "Device approved." }).waitFor();

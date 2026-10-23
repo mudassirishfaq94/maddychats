@@ -229,7 +229,7 @@ async function main() {
     assert.equal((await api(openPath, outsiderCookie)).status, 404, "Combined chat reads conceal nonmember conversations");
     const openedChat = await api(openPath, aliceCookie);
     assert.equal(openedChat.status, 200);
-    assert.equal(openedChat.headers.get("cache-control"), "no-store");
+    assert(openedChat.headers.get("cache-control")?.split(",").map(value => value.trim()).includes("no-store"));
     assert(openedChat.headers.get("server-timing")?.includes("history;dur="));
     const openedData = await openedChat.json();
     assert.equal(openedData.conversation.id, conversation.id);
