@@ -56,12 +56,10 @@ export async function testDeviceRecoveryUI(base, pool) {
       Object.defineProperty(navigator, "serviceWorker", { configurable: true, value: { ready: Promise.resolve(registration), register: async () => registration, getRegistration: async () => registration } });
       if (!("PushManager" in window)) Object.defineProperty(window, "PushManager", { configurable: true, value: function () {} });
     })()`);
-    // Clicks on a summary can be intercepted by an overlay during this mobile
-    // fixture's route transition. Open the native disclosure through the DOM,
-    // which still exercises React's toggle handler and avoids a flaky pointer.
-    await notificationSection.evaluate(details => {
-      details.open = true;
-      details.dispatchEvent(new Event("toggle"));
+    await settingsPage.getByText("Notification preferences", { exact: true }).evaluate(label => {
+      const summary = label.closest("summary");
+      if (!summary) throw new Error("Notification disclosure summary is missing");
+      summary.click();
     });
     await settingsPage.locator("#notifications details[open]").waitFor();
     const pushSettings = await source.context.request.get(base + "/api/notifications/push");
@@ -75,9 +73,10 @@ export async function testDeviceRecoveryUI(base, pool) {
     assert.equal(await settingsPage.evaluate(() => window.__pushReplacedKey), true, "Subscriptions made with a previous deployment key are replaced");
     assert.equal((await pool.query("select count(*)::int as n from push_subscriptions where user_id=$1", [user.id])).rows[0].n, 1);
     assert.equal((await source.context.request.delete(base + "/api/notifications/push", { data: { endpoint: "https://fcm.googleapis.com/fcm/send/circlo-disposable-ui-fixture" }, headers: { Origin: base } })).status(), 200);
-    await notificationSection.evaluate(details => {
-      details.open = false;
-      details.dispatchEvent(new Event("toggle"));
+    await settingsPage.getByText("Notification preferences", { exact: true }).evaluate(label => {
+      const summary = label.closest("summary");
+      if (!summary) throw new Error("Notification disclosure summary is missing");
+      summary.click();
     });
     await settingsPage.locator("#notifications details:not([open])").waitFor();
     await settingsPage.getByRole("link",{name:"Manage secure devices",exact:true}).waitFor();
