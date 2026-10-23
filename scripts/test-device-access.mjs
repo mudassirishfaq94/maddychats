@@ -97,10 +97,11 @@ export async function testDeviceAccess(base, pool, secret) {
     await pool.query("update e2ee_keys set trusted_at=null where user_id=$1",[user.id]);
     const recovery = await open();
     await recovery.page.getByText("I don’t have my old device",{exact:true}).click();
-    assert.equal(await recovery.page.getByLabel("Device linking code",{exact:true}).count(),0,"Only the selected form is shown");
-    const confirm = recovery.page.getByRole("button",{name:"Confirm email and recover this browser",exact:true});
+    const recoveryText = await recovery.page.locator("#encryption-devices").innerText();
+    assert(recoveryText.includes("Recover with email") && recoveryText.includes("Send recovery code"));
+    assert(!recoveryText.includes("Show a device-link QR code") && !recoveryText.includes("Back up or restore chats"),"No-old-device recovery hides unrelated setup choices");
+    const confirm = recovery.page.getByRole("button",{name:"Verify code and sign out other devices",exact:true});
     assert(await confirm.isDisabled());
-    assert(await recovery.page.getByText("An email code can't bring back old messages by itself.",{exact:false}).isVisible());
     // A mailbox-code fixture avoids calling a paid or third-party email service.
     const pending = (await pool.query("select device_id,session_id,public_key from e2ee_keys where user_id=$1 order by created_at desc limit 1",[user.id])).rows[0];
     const fingerprint=createHash("sha256").update(pending.public_key).digest("hex"), code="483162";
@@ -111,9 +112,8 @@ export async function testDeviceAccess(base, pool, secret) {
     const hash=createHmac("sha256",secret).update(`device-recovery-email:v1:${user.id}:${pending.device_id}:${pending.session_id}:${fingerprint}:${code}`).digest("hex");
     await pool.query("insert into device_recovery_email_codes(user_id,device_id,session_id,fingerprint,code_hash,expires_at) values($1,$2,$3,$4,$5,now()+interval '10 minutes')",[user.id,pending.device_id,pending.session_id,fingerprint,hash]);
     await recovery.page.getByLabel("Email recovery code",{exact:true}).fill(code);
-    assert(await confirm.isDisabled(),"A code alone cannot sign out old devices without consent");
+    assert.equal(await confirm.isDisabled(),false,"The explicit button states that recovery signs out other devices");
     assert.equal((await source.context.request.get(base+"/api/auth/me")).status(),200);
-    await recovery.page.getByRole("checkbox",{name:/I want to sign out my other devices/}).check();
     for(const [width,height] of [[320,740],[844,390],[390,360]]) {
       await recovery.page.setViewportSize({width,height}); await confirm.scrollIntoViewIfNeeded();
       assert.deepEqual(await inspectMobileLayout(recovery.page,"access-recovery"),[]);

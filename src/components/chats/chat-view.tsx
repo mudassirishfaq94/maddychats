@@ -195,6 +195,31 @@ function ReceiptIcon({ message }: { message: MessageDTO }) {
   );
 }
 
+function queuedMessageHelp(reason?: string) {
+  if (reason?.includes("This device needs approval")) return "Saved. On a linked phone, open Settings → Devices and approve this phone. It will send automatically.";
+  if (reason?.includes("safety number")) return "Saved. Confirm the new phone’s safety number in this chat. It will send after confirmation.";
+  if (reason?.includes("No internet")) return "Saved. It will send automatically when you’re back online.";
+  return "Saved. It will send automatically when secure chat setup is ready.";
+}
+
+function QueuedMessageNotice({ reason, onTry, onCancel }: { reason?: string; onTry: () => void; onCancel: () => void }) {
+  const [visible, setVisible] = useState(true);
+  useEffect(() => {
+    if (!visible) return;
+    const timer = window.setTimeout(() => setVisible(false), 8000);
+    return () => window.clearTimeout(timer);
+  }, [visible]);
+  if (!visible) return <button type="button" className="mt-1 text-xs text-[var(--muted)] underline" aria-label="Show queued message options" onClick={() => setVisible(true)}>Queued · Options</button>;
+  return <div role="status" className="mt-2 max-w-sm rounded-xl border border-sky-400/20 bg-sky-400/10 px-3 py-2 text-xs leading-relaxed text-[var(--text)]">
+    <p>{queuedMessageHelp(reason)}</p>
+    <div className="mt-1 flex gap-3">
+      <button type="button" className="underline" onClick={onTry}>Try now</button>
+      <button type="button" className="underline" onClick={onCancel}>Cancel message</button>
+      <span className="ml-auto text-[var(--muted)]" aria-label="This notice closes automatically">8 sec</span>
+    </div>
+  </div>;
+}
+
 export function ChatView({
   conversationId,
   me,
@@ -451,6 +476,34 @@ export function ChatView({
   }, [conversationId]);
   useEffect(() => { decryptedTextsRef.current = decryptedTexts; }, [decryptedTexts]);
   useEffect(() => { decryptedRepliesRef.current = decryptedReplies; }, [decryptedReplies]);
+  // Key reconciliation runs in the background. If it makes this chat's keys
+  // available after the bounded initial decrypt retries, retry those rows
+  // without requiring the user to refresh or tap each message.
+  useEffect(() => {
+    const retryAfterKeySync = (event: Event) => {
+      const readyConversationId = (event as CustomEvent<{ conversationId?: string }>).detail?.conversationId;
+      if (readyConversationId !== conversationId) return;
+      // Include rows whose first decrypt is still in flight: the sync may
+      // finish before their first failure is recorded.
+      const retryIds = new Set(items.filter(message =>
+        message.encrypted && message.text && message.text !== "signal:v2" && !decryptedTextsRef.current.has(message.id),
+      ).map(message => message.id));
+      if (retryIds.size === 0) return;
+      for (const id of retryIds) {
+        failedDecryptionRef.current.delete(id);
+        missingMessageKeys.current.delete(id);
+      }
+      setUnavailableMessageIds(current => {
+        if (![...retryIds].some(id => current.has(id))) return current;
+        const next = new Set(current);
+        for (const id of retryIds) next.delete(id);
+        return next;
+      });
+      setDecryptRetry(value => value + 1);
+    };
+    window.addEventListener("maddy:message-keys-ready", retryAfterKeySync);
+    return () => window.removeEventListener("maddy:message-keys-ready", retryAfterKeySync);
+  }, [conversationId, items]);
   // Verified cache reads race normal local-key decryption; optional storage
   // must never hold fresh authorized history behind a full page scan.
   useEffect(() => {
@@ -3208,13 +3261,7 @@ const MessageRow = memo(function MessageRow({msg, showDate, sameSenderPrev, me, 
                           </LongPressTouchable>
 
                           {own && msg.sendStatus === "queued" ? (
-                            <div role="status" className="mt-2 max-w-sm rounded-xl border border-sky-400/20 bg-sky-400/10 px-3 py-2 text-xs leading-relaxed text-[var(--text)]">
-                              <p>{msg.queueReason ?? "Waiting for secure delivery. Your message will send automatically when encryption is ready."}</p>
-                              <div className="mt-1 flex gap-3">
-                                <button type="button" className="underline" onClick={() => { if (msg.queueReason?.includes("This device needs approval")) actions.current?.deviceSettings(); else actions.current?.retrySend(msg); }}>Try now</button>
-                                <button type="button" className="underline" onClick={() => actions.current?.cancelQueued(msg)}>Cancel queued message</button>
-                              </div>
-                            </div>
+                            <QueuedMessageNotice reason={msg.queueReason} onTry={() => { if (msg.queueReason?.includes("This device needs approval")) actions.current?.deviceSettings(); else actions.current?.retrySend(msg); }} onCancel={() => actions.current?.cancelQueued(msg)} />
                           ) : null}
 
                           {msg.reactions.length > 0 ? (

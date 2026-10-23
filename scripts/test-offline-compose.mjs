@@ -29,7 +29,7 @@ export async function testOfflineCompose(context, base, owner, group, pool, memb
   const hotPlain = "I'm on my way. I'll reply when I'm back online.";
   await page.getByRole("textbox", {name:"Message text"}).fill(hotPlain);
   await page.getByRole("button", {name:"Send message",exact:true}).click();
-  await page.getByRole("region",{name:"Messages",exact:true}).getByText("No internet. This will send when you're back online.",{exact:true}).waitFor();
+  await page.getByRole("region",{name:"Messages",exact:true}).getByText("Saved. It will send automatically when you’re back online.",{exact:true}).waitFor();
   assert.equal(await page.getByRole("textbox",{name:"Message text"}).inputValue(),"");
   await page.goto(base+"/app/chats");
   await page.getByRole("heading",{name:"Chats",exact:true}).waitFor();
@@ -77,7 +77,7 @@ export async function testOfflineCompose(context, base, owner, group, pool, memb
   const rejectedText="Keep this text if a retry is rejected.";
   await page.getByRole("textbox",{name:"Message text"}).fill(rejectedText);
   await page.getByRole("button",{name:"Send message",exact:true}).click();
-  await page.getByRole("region",{name:"Messages",exact:true}).getByText("No internet. This will send when you're back online.",{exact:true}).waitFor();
+  await page.getByRole("region",{name:"Messages",exact:true}).getByText("Saved. It will send automatically when you’re back online.",{exact:true}).waitFor();
   const rejectedId=await page.evaluate(async({userId,text})=>(await(await import("/offline-store.js")).queuedTexts(userId)).find(entry=>entry.text===text).id,{userId:owner.id,text:rejectedText});
   const rejectRoute=route=>route.request().method()==="POST"?route.fulfill({status:403,json:{error:"Controlled rejected retry"}}):route.continue();
   const pattern=base+`/api/conversations/${group}/messages`;
