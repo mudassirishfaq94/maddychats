@@ -21,7 +21,19 @@ test("encrypted notification previews never reveal message text", () => {
     actorName: "Ayesha",
     preview: "ciphertext that must remain secret",
     encrypted: true,
-  }), { title: "Ayesha · Circlo", body: "New message received." });
+  }), { title: "Ayesha · Circlo", body: "Sent you a message. Open Circlo to read it." });
+});
+
+test("encrypted media alerts identify the attachment type without exposing content", () => {
+  for (const [messageKind, body] of [
+    ["photo", "Sent you a photo. Open Circlo to view it."],
+    ["video", "Sent you a video. Open Circlo to watch it."],
+    ["voice", "Sent you a voice message. Open Circlo to listen."],
+    ["file", "Sent you a file. Open Circlo to view it."],
+  ] as const) {
+    assert.equal(messageNotificationPresentation({ showDetails: true, isGroup: false, groupName: null,
+      actorName: "Ayesha", preview: "private content", encrypted: true, messageKind }).body, body);
+  }
 });
 
 test("private notifications suppress both sender and preview", () => {
@@ -32,7 +44,7 @@ test("private notifications suppress both sender and preview", () => {
     actorName: "Ayesha",
     preview: "Private text",
     encrypted: false,
-  }), { title: "Circlo", body: "New message received." });
+  }), { title: "Circlo", body: "You have a new message. Open Circlo to read it." });
 });
 
 test("group alerts name the group and keep the sender with the message", () => {

@@ -38,8 +38,11 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         val locked = NativePushState.locked(this, chat)
         val senderName = remoteMessage.data["actorName"]
             ?.takeIf { remoteMessage.data["showDetails"] == "true" && !request && !locked }
-        val title = if (isCall) NativeNotificationText.title(remoteMessage.data) else NativeMessagePrivacy.title(request, locked, senderName)
-        val body = if (isCall) NativeNotificationText.body(remoteMessage.data) else NativeMessagePrivacy.body(request, locked)
+        val groupName = remoteMessage.data["groupName"]?.takeIf { remoteMessage.data["showDetails"] == "true" && !request && !locked }
+        val title = if (isCall) NativeNotificationText.title(remoteMessage.data) else NativeMessagePrivacy.title(request, locked, senderName, groupName)
+        val showDetails = remoteMessage.data["showDetails"] == "true" && !request
+        val messageKind = remoteMessage.data["messageKind"]?.takeIf { showDetails && !locked } ?: "text"
+        val body = if (isCall) NativeNotificationText.body(remoteMessage.data) else NativeMessagePrivacy.body(request, locked, messageKind, senderName, remoteMessage.data["isGroup"] == "true", showDetails)
         val url = remoteMessage.data["url"]
         val tag = remoteMessage.data["tag"]
         val message = android.net.Uri.parse(url.orEmpty()).getQueryParameter("message")

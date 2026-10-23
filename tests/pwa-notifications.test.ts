@@ -194,7 +194,7 @@ test("closed-app requests use synchronized lock state and unknown state stays pr
   assert.equal(h.cards[0].title, "New Message Request");
   assert.equal(h.cards[0].body, "You have received a new message request.");
   await h.privacy([chat]); await h.push();
-  assert.equal(h.cards[0].title, "Circlo"); assert.equal(h.cards[0].body, "New message received.");
+  assert.equal(h.cards[0].title, "Circlo"); assert.equal(h.cards[0].body, "You have a new message. Open Circlo to read it.");
   await h.privacy(null); await h.push(); assert.equal(h.cards[0].title, "Circlo");
 });
 

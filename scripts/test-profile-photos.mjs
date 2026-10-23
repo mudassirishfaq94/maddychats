@@ -46,7 +46,7 @@ export async function testProfilePhotos(base, pool, owner, peer, source, unrelat
   assert(groupTarget&&groupTarget.width>=44&&groupTarget.height>=44,"Mobile group action retains a 44px touch target");
   await newGroup.click();
   const createDialog = source.page.getByRole("dialog", { name: "Select people", exact: true });
-  await createDialog.getByPlaceholder("Type exact full name or username…").fill(peer.username);
+  await createDialog.getByPlaceholder("Search by name or username…", { exact: true }).fill(peer.username);
   await createDialog.getByRole("button").filter({ hasText: "@" + peer.username }).click();
   await createDialog.getByRole("button", { name: "Next (1)", exact: true }).click();
   const groupDialog = source.page.getByRole("dialog", { name: "Group info", exact: true });
@@ -62,7 +62,7 @@ export async function testProfilePhotos(base, pool, owner, peer, source, unrelat
   const created = source.page.waitForResponse(response => response.url() === base + "/api/groups" && response.request().method() === "POST");
   await groupDialog.getByRole("button", { name: "Create group", exact: true }).click();
   const create = await created; assert.equal(create.status(), 201); const group = (await create.json()).conversation;
-  await groupDialog.getByText("The group was created, but its image could not be uploaded.", { exact: true }).waitFor();
+  await groupDialog.getByText("The group was made, but the photo didn't upload.", { exact: true }).waitFor();
   const initialPhoto = source.page.waitForResponse(response => response.url().endsWith(`/api/groups/${group.id}/avatar`) && response.status() === 200);
   await groupDialog.getByRole("button", { name: "Retry group photo", exact: true }).click();
   assert.equal((await initialPhoto).status(),200);

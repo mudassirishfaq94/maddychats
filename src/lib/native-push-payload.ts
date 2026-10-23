@@ -1,4 +1,4 @@
-import { messageNotificationPresentation } from "./notification-presentation";
+import { messageNotificationPresentation, type NotificationMessageKind } from "./notification-presentation";
 
 function safeNotificationText(value: string | undefined, fallback: string, limit: number): string {
   const normalized = (value ?? "")
@@ -12,29 +12,37 @@ function safeNotificationText(value: string | undefined, fallback: string, limit
  * Message pushes carry a private fallback only. A running recipient WebView
  * may replace it locally after decryption. Call presentation remains separate.
  */
-export function nativePushPayload(input: { callCancelled?: boolean; messageRequest?: boolean; recipientId: string; notificationId: string; conversationId: string; messageId: string; actorName?: string; preview?: string; showDetails?: boolean; isGroup?: boolean; groupName?: string | null; encrypted?: boolean; title?: string; body?: string; callId?: string; silent?: boolean; callTtl?: number }, now = Date.now()) {
+export function nativePushPayload(input: { callCancelled?: boolean; messageRequest?: boolean; recipientId: string; notificationId: string; conversationId: string; messageId: string; actorName?: string; preview?: string; showDetails?: boolean; isGroup?: boolean; groupName?: string | null; encrypted?: boolean; messageKind?: NotificationMessageKind; title?: string; body?: string; callId?: string; silent?: boolean; callTtl?: number }, now = Date.now()) {
   const ttl = input.callId ? Math.min(45, Math.max(1, input.callTtl ?? 45)) : 3600;
   const showDetails = input.showDetails === true;
   const showSender = showDetails && !input.callId && !input.messageRequest;
   // Encrypted is the safe default: an unknown message must never leak text.
   const encrypted = input.encrypted !== false;
-  const presentation = input.title && input.body
+  const presentation = input.callId && input.title && input.body
     ? { title: safeNotificationText(input.title, "Circlo", 80), body: safeNotificationText(input.body, "New message. Open Circlo to read it.", 140) }
     : messageNotificationPresentation({
         showDetails,
         isGroup: Boolean(input.isGroup),
         groupName: input.groupName ?? null,
         actorName: input.actorName ?? "Someone",
-        preview: input.preview ?? "",
-        encrypted,
+        // FCM is a delivery hint. Never include message text here, including
+        // legacy readable rows; the receiving device may decrypt locally.
+        preview: "",
+        encrypted: true,
+        messageKind: input.messageKind,
       });
-  const safePresentation = input.callId ? presentation : { title: "Circlo", body: "New message received." };
+  const safePresentation = presentation;
   return {
     data: {
       url: `ziptalks://chat/${input.conversationId}?${input.callId ? `call=${input.callId}` : `message=${input.messageId}`}`,
       tag: input.callId ? `circlo-call-${input.callId}` : `circlo-chat-${input.conversationId}`,
       ...(input.callId ? { callId: input.callId, callCancelled: String(input.callCancelled === true) } : {}),
       messageRequest: String(input.messageRequest === true),
+      ...(!input.callId ? { messageKind: input.messageKind ?? "text" } : {}),
+      ...(!input.callId && showSender && input.isGroup ? {
+        isGroup: "true",
+        groupName: safeNotificationText(input.groupName ?? "", "Group chat", 80),
+      } : {}),
       recipientId: input.recipientId, eventId: input.notificationId,
       title: safePresentation.title, body: safePresentation.body,
       actorName: input.callId

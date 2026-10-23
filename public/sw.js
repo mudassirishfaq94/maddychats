@@ -141,7 +141,7 @@ self.addEventListener("push", event => {
       // Offline: preserve a generic alert without disclosing account or sender.
       // Permission to deliver does not establish permission to interrupt: a
       // failed lookup cannot tell us whether this conversation is muted.
-      detail = { title: "Circlo", body: "New message received.", silent: true };
+      detail = { title: "Circlo", body: "You have a new message. Open Circlo to read it.", silent: true };
     }
     // The user can foreground the app while the authenticated lookup runs.
     if ((await appWindows()).some(client => client.visibilityState === "visible")) { await clearAlerts(); return; }
@@ -172,7 +172,7 @@ self.addEventListener("push", event => {
     const requestFallback = detail.messageRequest && knownUnlocked;
     detail = { ...detail,
       title: local?.title ?? (requestFallback ? "New Message Request" : "Circlo"),
-      body: local?.body ?? (requestFallback ? "You have received a new message request." : "New message received."),
+      body: local?.body ?? (requestFallback ? "You have received a new message request." : "You have a new message. Open Circlo to read it."),
     };
     const url = detail.conversationId ? `/app/chats/${detail.conversationId}?message=${detail.messageId}` : "/app/chats";
     const tag = detail.conversationId ? `circlo-${data.recipientId}-${detail.conversationId}` : "circlo-activity";
