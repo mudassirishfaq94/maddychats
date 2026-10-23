@@ -151,7 +151,7 @@ export async function testMobileLayout(base, pool, { recordOnly = false, navigat
     const pending = await login(accounts[0]);
     await pending.goto(base + "/app/profile#encryption-devices");
     await pending.getByText("This device: Waiting for approval", { exact: true }).waitFor();
-    await pending.getByRole("button", { name: "Emergency recovery: no trusted device or recovery file", exact: true }).click();
+    await pending.getByRole("button", { name: "Emergency recovery: no linked device or backup file", exact: true }).click();
     const navigationScreens = await testNavigationSpace(pending);
     if (navigationOnly) { assert.deepEqual(errors, []); return { screens: navigationScreens, observations: [], browserErrors: errors }; }
     const group = (await pool.query("insert into conversations(type,name,description,created_by_id) values('group',$1,$2,$3) returning id", ["Circle".repeat(16), "Long mobile group description ".repeat(8), accounts[0].id])).rows[0];
