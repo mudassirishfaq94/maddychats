@@ -66,7 +66,7 @@ import { VirtualMessageHistory, type MessageHistoryHandle } from "./virtual-mess
 import { MessageActions } from "./message-actions";
 const MessageSearch = dynamic(() => import("./message-search").then(module => module.MessageSearch));
 import { ChatActionsMenu } from "./chat-actions-menu";
-import { AttachmentList } from "./attachments";
+const AttachmentList = dynamic(() => import("./attachments").then((module) => module.AttachmentList));
 const ConversationDetails = dynamic(() => import("./conversation-details").then((module) => module.ConversationDetails));
 import {
   AttachButton,
@@ -78,8 +78,8 @@ import { cn, formatDate, timeAgo, initials, avatarHue } from "@/lib/utils";
 import { CHAT_BACKGROUNDS, chatBubbleTheme, isBackgroundImage } from "@/lib/chat-backgrounds";
 import { getPattern } from "@/lib/chat-patterns";
 const MediaPicker = dynamic(() => import("./media-picker").then((module) => module.MediaPicker));
-import { AudioMessage } from "./audio-message";
-import { VoiceComposer } from "./voice-composer";
+const AudioMessage = dynamic(() => import("./audio-message").then((module) => module.AudioMessage));
+const VoiceComposer = dynamic(() => import("./voice-composer").then((module) => module.VoiceComposer));
 import { useVoiceRecorder } from "@/hooks/use-voice-recorder";
 import { LongPressTouchable } from "./long-press-touchable";
 const MobileMessageMenu = dynamic(() => import("./mobile-message-menu").then(module => module.MobileMessageMenu));
