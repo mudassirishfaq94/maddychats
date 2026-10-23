@@ -41,7 +41,7 @@ function Review({ pending, progress, phase, busy, caption, error, onCaptionChang
   }, []);
   const remember = () => onCaptionChange(input.current?.value ?? caption);
   const close = () => { if (!busy) { remember(); onClear(); } };
-  const status = phase === "encrypting" ? "Encrypting on your device…" : phase === "finishing" ? "Finishing secure delivery…" : `Uploading securely · ${Math.max(0, Math.min(100, progress ?? 0))}%`;
+  const status = phase === "encrypting" ? "Preparing…" : phase === "finishing" ? "Almost done…" : `Uploading · ${Math.max(0, Math.min(100, progress ?? 0))}%`;
   return createPortal(<dialog ref={dialog} aria-label="Review attachments" onCancel={event => { event.preventDefault(); close(); }}
     className="fixed m-auto h-[100dvh] max-h-[100dvh] w-screen max-w-none border-0 bg-[var(--bg)] p-0 text-[var(--text)] backdrop:bg-black/70 sm:max-w-4xl sm:rounded-3xl sm:border sm:border-[var(--border)]">
     <div className="flex h-full min-h-0 flex-col">

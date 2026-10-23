@@ -56,7 +56,7 @@ export function ChatActionsMenu({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action }),
       });
-      if (!response.ok) throw new Error(response.status === 401 ? "Sign in again, then retry." : "That action could not be completed. Please retry.");
+      if (!response.ok) throw new Error(response.status === 401 ? "Sign in again, then retry." : "Couldn't do that. Try again.");
       setOpen(false);
       setConfirmClear(false);
       if (action === "clear") router.push("/app/chats");
@@ -74,7 +74,7 @@ export function ChatActionsMenu({
     setError(null);
     try {
       const response = await fetch(`/api/users/${other.id}/block`, { method: blocked ? "DELETE" : "POST", signal: AbortSignal.timeout(15000) });
-      if (!response.ok) throw new Error(response.status === 401 ? "Sign in again, then retry." : "That action could not be completed. Please retry.");
+      if (!response.ok) throw new Error(response.status === 401 ? "Sign in again, then retry." : "Couldn't do that. Try again.");
       setBlocked((value) => !value);
       setOpen(false);
       router.refresh();
@@ -93,9 +93,9 @@ export function ChatActionsMenu({
         method: "POST", signal: AbortSignal.timeout(15000), headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "setDisappearing", disappearingSeconds: seconds }),
       });
-      if (!response.ok) throw new Error("The timer could not be saved. Please retry.");
+      if (!response.ok) throw new Error("Couldn't save the timer. Try again.");
       setOpen(false); router.refresh();
-    } catch { setError("The timer could not be saved. Check your connection and retry."); } finally { setBusy(false); }
+    } catch { setError("Couldn't save the timer. Try again."); } finally { setBusy(false); }
   }
 
   async function exportChat() {
@@ -103,7 +103,7 @@ export function ChatActionsMenu({
     setError(null);
     try {
       const response = await fetch(`/api/conversations/${conversationId}/export`, { signal: AbortSignal.timeout(15000) });
-      if (!response.ok) throw new Error(response.status === 401 ? "Sign in again, then retry." : "That action could not be completed. Please retry.");
+      if (!response.ok) throw new Error(response.status === 401 ? "Sign in again, then retry." : "Couldn't do that. Try again.");
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");

@@ -49,7 +49,7 @@ export function PwaNotificationPrompt() {
   return <aside aria-label="Set up Circlo notifications" className="fixed inset-x-3 bottom-20 z-[100] mx-auto max-w-sm rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-xl sm:bottom-5">
     <p className="text-sm font-semibold">Keep your circle close</p>
     <p className="mt-1 text-xs text-[var(--muted)]">Enable private message alerts for when Circlo is in the background or closed.</p>
-    <div className="mt-3 flex gap-3">{native ? <button type="button" disabled={working} onClick={() => void allow()} className="btn btn-primary min-h-11 text-xs">{working ? "Enabling…" : "Allow notifications"}</button> : <Link href="/app/profile#notifications" className="btn btn-primary min-h-11 text-xs">Set up notifications</Link>}<button type="button" disabled={working} onClick={dismiss} className="btn min-h-11 text-xs">Not now</button></div>
+    <div className="mt-3 flex gap-3">{native ? <button type="button" disabled={working} onClick={() => void allow()} className="btn btn-primary min-h-11 text-xs">{working ? "Enabling…" : "Allow notifications"}</button> : <Link href="/app/settings#notifications" className="btn btn-primary min-h-11 text-xs">Set up notifications</Link>}<button type="button" disabled={working} onClick={dismiss} className="btn min-h-11 text-xs">Not now</button></div>
     {error ? <p role="status" className="mt-2 text-xs text-[var(--danger)]">{error}</p> : null}
   </aside>;
 }

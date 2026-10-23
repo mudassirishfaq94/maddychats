@@ -58,7 +58,7 @@ export function OfflineComposeProvider() {
           if (!prepared.ready || prepared.trustChanged || prepared.missingPeers) { setStatus("Queued message is waiting for secure delivery."); continue; }
           await send(entry);
         }
-      } catch { if (!stopped) setStatus("Connection unavailable. Your queued messages are saved."); }
+      } catch { if (!stopped) setStatus("No connection. Your queued messages are saved."); }
       finally { running = false; }
     };
     const send = async (entry: OfflineText) => {

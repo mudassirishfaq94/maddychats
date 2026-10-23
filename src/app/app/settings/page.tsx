@@ -9,7 +9,7 @@ import {
   User,
   Lock,
   Download,
-  ExternalLink,
+  ChevronRight,
   Users, Globe, BookOpen, Star,
 } from "lucide-react";
 import { getSessionUser } from "@/server/session";
@@ -51,7 +51,7 @@ export default async function SettingsPage() {
           </div>
         </div>
 
-        <Link href="/app/profile" className="mt-6 flex min-h-16 items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4"><User className="h-5 w-5 shrink-0 text-[var(--accent-fg)]" /><span className="min-w-0 flex-1"><span className="block text-sm font-semibold">Your profile</span><span className="block text-xs text-[var(--muted)]">Photo, name, phone number and account details</span></span><ExternalLink className="h-4 w-4 shrink-0 text-[var(--muted)]" /></Link>
+        <Link href="/app/profile" className="mt-6 flex min-h-16 items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4"><User className="h-5 w-5 shrink-0 text-[var(--accent-fg)]" /><span className="min-w-0 flex-1"><span className="block text-sm font-semibold">Your profile</span><span className="block text-xs text-[var(--muted)]">Photo, name and account details</span></span><ChevronRight className="h-4 w-4 shrink-0 text-[var(--muted)]" /></Link>
         <section aria-label="Explore Circlo" className="mt-4 grid gap-2 sm:grid-cols-2">
           {[
             {href:"/app/people",title:"People & contacts",description:"Find people, add contacts or scan a QR code",icon:Users},
@@ -106,7 +106,7 @@ export default async function SettingsPage() {
             </h2>
             <div className="space-y-4">
               <E2EEStatus />
-              <ProfileDisclosure title="Two-step verification" description="Add an extra sign-in check."><TwoFactorAuth /></ProfileDisclosure>
+              <div id="two-step-verification"><ProfileDisclosure title="Two-step verification" description="Add an extra sign-in check." anchors={["two-step-verification"]}><TwoFactorAuth /></ProfileDisclosure></div>
               <ProfileDisclosure title="Recent sign-ins" description="Review recent account activity."><LoginHistory /></ProfileDisclosure>
             </div>
           </section>

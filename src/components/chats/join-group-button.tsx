@@ -12,9 +12,9 @@ export function JoinGroupButton({ code }: { code: string }) {
       try {
         const response = await fetch("/api/groups/join", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code }), signal: AbortSignal.timeout(15000) });
         const result = await response.json();
-        if (!response.ok) throw new Error(result.error ?? "Could not join. Please retry.");
+        if (!response.ok) throw new Error(result.error ?? "Couldn't join. Try again.");
         router.push(`/app/chats/${result.conversationId}`); router.refresh();
-      } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not join. Please retry."); setBusy(false); }
+      } catch (cause) { setError(cause instanceof Error ? cause.message : "Couldn't join. Try again."); setBusy(false); }
     }}>{busy ? "Joining…" : "Join group"}</button>
     {error ? <p role="alert" className="mt-2 text-sm text-[var(--danger)]">{error}</p> : null}
   </div>;

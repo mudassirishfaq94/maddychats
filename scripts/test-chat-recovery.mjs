@@ -90,7 +90,7 @@ export async function testChatRecovery(base, cookieHeader, conversationId) {
     await target.goto(`${base}/app/profile#encryption-devices`);
     await target.getByText("This device: Waiting for approval", { exact: true }).waitFor({ timeout: 30000 });
     await openDeviceTools(target);
-    const targetFingerprint = await target.getByLabel("This device fingerprint").innerText();
+    const targetFingerprint = await target.getByLabel("This device safety number").innerText();
     const pendingText = "A new device waits safely for approval";
     await target.goto(chatUrl);
     await target.getByRole("textbox", { name: "Message text" }).fill(pendingText);

@@ -79,7 +79,7 @@ import { CHAT_BACKGROUNDS, chatBubbleTheme, isBackgroundImage } from "@/lib/chat
 import { getPattern } from "@/lib/chat-patterns";
 const MediaPicker = dynamic(() => import("./media-picker").then((module) => module.MediaPicker));
 import { AudioMessage } from "./audio-message";
-import { VoiceComposer } from "./voice-composer";
+const VoiceComposer = dynamic(() => import("./voice-composer").then((module) => module.VoiceComposer));
 import { useVoiceRecorder } from "@/hooks/use-voice-recorder";
 import { LongPressTouchable } from "./long-press-touchable";
 const MobileMessageMenu = dynamic(() => import("./mobile-message-menu").then(module => module.MobileMessageMenu));
@@ -255,10 +255,10 @@ export function ChatView({
     try {
       const response = await fetch(`/api/messages/${message.id}/reveal`, { method: "POST", signal: AbortSignal.timeout(10000) });
       const result = await response.json();
-      if (!response.ok) throw new Error(result.error ?? "Message unavailable.");
+      if (!response.ok) throw new Error(result.error ?? "Couldn't show this message.");
       serverClockOffset.current = Date.parse(result.serverNow) - Date.now();
       setItems(current => current.map(item => item.id === message.id ? result.message : item));
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not reveal message."); }
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Couldn't show this message."); }
   }
   const [nextCursor, setNextCursor] = useState<string | null>(initial.nextCursor);
   const [hasMore, setHasMore] = useState(initial.hasMore);
@@ -573,12 +573,12 @@ export function ChatView({
   /** Plaintext for a message: decrypted locally, or raw when not encrypted. */
   const textOf = useCallback((m: { encrypted: boolean; text: string; id: string }) => {
     if (!m.encrypted) return m.text;
-    if (m.text === "signal:v2") return "🔒 Waiting for this device’s secure message…";
+    if (m.text === "signal:v2") return "Loading…";
     return decryptedTexts.get(m.id)
       ?? (conversation.type === "dm" && conversation.requestInitiatorId !== me.id && items.length === 1
-        ? "Encrypted introduction — waiting for secure delivery" : undefined)
+        ? "Waiting for them to open Circlo…" : undefined)
       ?? (unavailableMessageIds.has(m.id)
-        ? "🔒 Message unavailable on this device"
+        ? "Couldn't load"
         : "");
   }, [decryptedTexts, unavailableMessageIds, conversation.type, conversation.requestInitiatorId, me.id, items.length]);
 
@@ -602,7 +602,7 @@ export function ChatView({
    * can change while a chat remains open, so the initial UI snapshot is not
    * a safe basis for deciding whether plaintext may leave the device. */
   const prepareEncryptedSend = useCallback(async (allowMessageRequest = false) => {
-    if (!navigator.onLine) throw new SecureDeliveryWaiting("No internet connection. This message will send automatically when you are back online.");
+    if (!navigator.onLine) throw new SecureDeliveryWaiting("No internet. This will send when you're back online.");
     // A fast first keystroke/send can beat local key restoration on navigation.
     // Keep the optimistic message and draft while setup finishes, with a bound
     // so a failed initialization cannot leave the sending spinner running.
@@ -610,11 +610,11 @@ export function ChatView({
       await new Promise(resolve => setTimeout(resolve, 50));
     }
     const encryption = encryptionRef.current;
-    if (!encryption) throw new SecureDeliveryWaiting("Waiting for secure messaging to start. Your message will send automatically when ready.");
+    if (!encryption) throw new SecureDeliveryWaiting("Still setting up. This will send by itself in a moment.");
     if (!encryption.initialized) {
       throw new SecureDeliveryWaiting(encryption.loading
-        ? "Secure messaging is taking longer than expected. Your draft is saved; please retry."
-        : encryption.error ?? "Encryption is unavailable on this device.");
+        ? "Taking longer than expected. Your draft is saved — tap send again."
+        : encryption.error ?? "Can't send securely right now. Your draft is saved.");
     }
     // Refresh approved recipients before encryption. Group roster/device changes
     // establish a fresh sending key; the initial bootstrap remains serialized.
@@ -628,7 +628,7 @@ export function ChatView({
     }));
     if (!prepared.ready) {
       throw new SecureDeliveryWaiting(prepared.trustChanged
-        ? "A participant’s encryption device changed. Verify their device fingerprints before sending."
+        ? "Someone in this chat changed phones. Check their safety number before sending."
         : encryptionRef.current?.error ?? "Waiting for secure delivery. Your message will send automatically when encryption is ready.");
     }
   }, [conversationId]);
@@ -794,7 +794,7 @@ export function ChatView({
     try {
       const response = await fetch(`/api/conversations/${conversationId}/accept`, { method: "POST" });
       const data = await response.json().catch(() => null);
-      if (!response.ok) throw new Error(data?.error ?? "Could not accept this message request.");
+      if (!response.ok) throw new Error(data?.error ?? "Couldn't accept this request.");
       setRequestAccepted(true);
       requestAnimationFrame(() => composerRef.current?.focus());
     } catch (cause) {
@@ -1125,7 +1125,7 @@ export function ChatView({
         error?: string;
       };
       if (!res.ok) {
-        setError(data?.error ?? "Could not load older messages.");
+        setError(data?.error ?? "Couldn't load older messages.");
         return;
       }
       setItems((prev) => [...data.messages, ...prev]);
@@ -1136,7 +1136,7 @@ export function ChatView({
         if (node && !historyRef.current?.managesAnchoring) node.scrollTop = node.scrollHeight - prevHeight + prevTop;
       });
     } catch {
-      setError("Network error while loading older messages.");
+      setError("Couldn't load older messages. Check your connection.");
     } finally {
       setLoadingOlder(false);
     }
@@ -1168,7 +1168,7 @@ export function ChatView({
     if (typingStopTimerRef.current) clearTimeout(typingStopTimerRef.current);
     signalTyping(false);
 
-    if (selfDestruct && attachments.pending.length > 0) { setError("Self-destruct is a text-message option. Remove attachments or turn it off."); return; }
+    if (selfDestruct && attachments.pending.length > 0) { setError("Self-destruct is for text only. Remove attachments or turn it off."); return; }
     if (attachments.pending.length > 0) {
       if (sendPendingRef.current) return;
       setSendPending(true);
@@ -1198,7 +1198,7 @@ export function ChatView({
         nearBottomRef.current = true;
         scrollToBottom(true);
       } catch (cause) {
-        if (!uploadSignal.aborted) setError(cause instanceof Error ? cause.message : "Encryption failed before upload.");
+        if (!uploadSignal.aborted) setError(cause instanceof Error ? cause.message : "Couldn't prepare the file.");
       } finally {
         attachments.finish();
         setSendPending(false);
@@ -1285,16 +1285,16 @@ export function ChatView({
       } catch {
         // A lost response may happen after the server committed. The stable
         // client id makes this retry return the original row, never a duplicate.
-        res = await request().catch(() => { throw new SecureDeliveryWaiting("No internet connection. This message will send automatically when you are back online."); });
+        res = await request().catch(() => { throw new SecureDeliveryWaiting("No internet. This will send when you're back online."); });
       }
       const data = (await res.json().catch(() => null)) as {
         message?: MessageDTO;
         error?: string;
       } | null;
-      if (res.status >= 500 || res.status === 429) throw new SecureDeliveryWaiting("Connection unavailable. Your message will send automatically when the service is ready.");
+      if (res.status >= 500 || res.status === 429) throw new SecureDeliveryWaiting("Connection problem. This will send by itself in a moment.");
       if (!res.ok || !data?.message) {
         await removeQueuedMessage(me.id, conversationId, clientMessageId).catch(() => undefined);
-        setError(data?.error ?? "Message failed to send. Try again.");
+        setError(data?.error ?? "Couldn't send. Tap to retry.");
         setItems((prev) => prev.map((m) => m.id === optimisticId ? { ...m, sendStatus: "failed" } : m));
         return;
       }
@@ -1329,14 +1329,14 @@ export function ChatView({
           await saveQueuedMessage(me.id, { message: { ...optimistic, sendStatus: "queued", queueReason: cause.message }, plain: text });
           if (!selfDestruct) await clearDeliveredDraft(submittedDraft);
         } catch {
-          setError("Could not save the queued message. Your draft is still here; try again.");
+          setError("Couldn't save. Your draft is still here.");
           setItems(previous => previous.map(message => message.id === optimisticId ? { ...message, sendStatus: "failed" } : message));
           return;
         }
       }
       if (!waiting) {
         await removeQueuedMessage(me.id, conversationId, clientMessageId).catch(() => undefined);
-        setError(cause instanceof Error ? cause.message : "Network error. Message was not sent.");
+        setError(cause instanceof Error ? cause.message : "No connection. Message not sent.");
       }
       setItems((prev) => prev.map((m) => m.id === optimisticId ? { ...m, sendStatus: waiting ? "queued" : "failed", queueReason: waiting ? cause.message : undefined } : m));
     } finally {
@@ -1366,7 +1366,7 @@ export function ChatView({
       scrollToBottom(true);
       router.refresh();
     } catch (cause) {
-      if (!signal.aborted) setError(cause instanceof Error ? cause.message : "Network error. Your recording is still here.");
+      if (!signal.aborted) setError(cause instanceof Error ? cause.message : "No connection. Your recording is still here.");
     } finally {
       attachments.finish();
       setSendPending(false);
@@ -1385,7 +1385,7 @@ export function ChatView({
     if (!forwardMsg) return;
     const prep = await e2ee.prepareConversation(targetConversationId);
     if (!e2ee.initialized || !prep.ready) {
-      throw new Error("Encryption is not ready in the destination chat. No unencrypted message was forwarded.");
+      throw new Error("That chat isn't ready. Nothing was sent.");
     }
     const text = plain ? await e2ee.encrypt(plain, targetConversationId) : plain;
     let res: Response;
@@ -1405,7 +1405,7 @@ export function ChatView({
         form.append("keys", wrapped);
         form.append("origTypes", attachment.mimeType);
         totalBytes += bytes.byteLength;
-        if (totalBytes > 10 * 1024 * 1024) throw new Error("These attachments are too large to forward together (10 MB maximum).");
+        if (totalBytes > 10 * 1024 * 1024) throw new Error("These files are too large to forward (10 MB max).");
         form.append("files", new Blob([bytes], { type: "application/octet-stream" }), attachment.originalName);
       }
       res = await fetch("/api/upload/message", { method: "POST", body: form, signal: AbortSignal.timeout(60000) });
@@ -1507,9 +1507,9 @@ export function ChatView({
         }),
       });
       let res: Response;
-      try { res = await request(); } catch { res = await request().catch(() => { throw new SecureDeliveryWaiting("No internet connection. This message will send automatically when you are back online."); }); }
+      try { res = await request(); } catch { res = await request().catch(() => { throw new SecureDeliveryWaiting("No internet. This will send when you're back online."); }); }
       const data = await res.json().catch(() => null) as { message?: MessageDTO; error?: string } | null;
-      if (res.status >= 500 || res.status === 429) throw new SecureDeliveryWaiting("Connection unavailable. Your message will send automatically when the service is ready.");
+      if (res.status >= 500 || res.status === 429) throw new SecureDeliveryWaiting("Connection problem. This will send by itself in a moment.");
       if (!res.ok || !data?.message) throw new Error(data?.error ?? "Message failed to send.");
       const created = data.message;
       await removeQueuedMessage(me.id, conversationId, message.clientMessageId).catch(() => undefined);
@@ -2029,7 +2029,7 @@ export function ChatView({
           className="flex items-center gap-2 border-b border-[var(--warning,#f59e0b)] bg-[color-mix(in_srgb,var(--warning,#f59e0b)_10%,var(--surface))] px-4 py-2 text-left"
         >
           <ShieldCheck className="h-4 w-4 shrink-0 text-amber-600" />
-          <span className="min-w-0 flex-1 text-[0.72rem] text-[var(--muted)]">Encryption device keys changed. Review device fingerprints with your contact before approving.</span>
+          <span className="min-w-0 flex-1 text-[0.72rem] text-[var(--muted)]">A device changed in this chat. Check the safety numbers before you approve.</span>
           <span className="shrink-0 text-[0.65rem] font-bold text-amber-700">Approve</span>
         </button>
       ) : e2eeState.ready && requestAccepted ? (
@@ -2066,7 +2066,7 @@ export function ChatView({
         <div role="status" className="border-b border-[var(--border)] bg-[var(--accent-soft)] px-4 py-3">
           <p className="text-sm font-semibold">{sendPending ? "Sending message request" : requestSent ? "Message request sent" : "Start with a message request"}</p>
           <p className="mt-1 text-xs text-[var(--muted)]">{requestSent
-            ? "The other person has been notified. You can send more messages after they accept. Secure delivery may wait for their encryption setup and your trusted device to reconnect."
+            ? "They've been notified. You can send more messages after they accept. Secure delivery may wait for their phone to be ready and come back online."
             : "You can send one encrypted introduction. The other person will receive an approval request before you can send more."}</p>
         </div>
       ) : null}

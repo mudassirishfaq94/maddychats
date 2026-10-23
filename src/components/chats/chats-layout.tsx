@@ -35,7 +35,7 @@ function previewText(conv: ConversationSummary, previews: Map<string, string>): 
   if (last.deletedAt) return "Message deleted";
   if (last.encrypted) {
     // Ciphertext must never be shown as a preview.
-    if (last.text) return previews.get(`${last.id}:${last.text}`) ?? ({ audio: "Voice message", image: "Photo", video: "Video", file: "File" }[last.type] ?? "Decrypting message…");
+    if (last.text) return previews.get(`${last.id}:${last.text}`) ?? ({ audio: "Voice message", image: "Photo", video: "Video", file: "File" }[last.type] ?? "Loading…");
   }
   return last.text || ({ audio: "Voice message", image: "Photo", video: "Video", file: "File" }[last.type] ?? "Message");
 }
@@ -235,7 +235,7 @@ export function ChatsLayout({
           if (attempt < 2) await new Promise(resolve => setTimeout(resolve, 1500));
         }
       }
-      if (!cancelled) setPreviews(previous => previous.has(key) ? previous : new Map(previous).set(key, ({ audio:"Voice message",image:"Photo",video:"Video",file:"File" }[message.type] ?? "Message unavailable")));
+      if (!cancelled) setPreviews(previous => previous.has(key) ? previous : new Map(previous).set(key, ({ audio:"Voice message",image:"Photo",video:"Video",file:"File" }[message.type] ?? "Loading…")));
     });
     return () => { cancelled = true; };
   }, [conversations, initialized, decrypt, cacheDecryptedMessage, loadCachedDecryptedMessages]);

@@ -52,7 +52,7 @@ export default async function LoginPage({
       {passwordChanged === "1" ? <p role="status" className="mb-4 text-sm">Password updated. Sign in again with your new password or Google.</p> : null}
       {mfa === "1" ? <MfaForm next={next} /> : <>
         {process.env.STARTER_MODE === "1" ? <p className="mb-4 text-sm text-[var(--muted)]">{emailProof === "google" ? "Google verified your email. Enter your existing password to continue." : "New here? Continue with Google. If password sign-in asks for verification, continue with Google first, then enter your existing password."}</p> : null}
-        <LoginOptions next={next} phoneEnabled={process.env.STARTER_MODE !== "1"} />
+        <LoginOptions next={next} />
         <Link href="/help" className="mt-5 inline-flex min-h-11 items-center text-sm text-[var(--muted)]">Need a hand? Circlo Help</Link>
       </>}
     </AuthLayout>

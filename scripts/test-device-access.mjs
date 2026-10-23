@@ -26,7 +26,7 @@ export async function testDeviceAccess(base, pool, secret) {
     assert(new URL(redirect.headers().location,base).pathname === "/login"); await anonymous.close();
     const source = await open(); await source.page.waitForURL(base+"/app/chats");
     await source.page.goto(base+"/app/profile#encryption-devices");
-    await source.page.getByText("This device: Trusted",{exact:true}).waitFor();
+    await source.page.getByText("This device: Linked",{exact:true}).waitFor();
     const target = await open();
     await target.page.getByRole("button",{name:/^Link this device Have/}).waitFor();
     assert(target.page.url().includes("/app/device-access?"));

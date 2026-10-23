@@ -1,10 +1,12 @@
 "use client";
-import { ScheduledMessageManager } from "./scheduled-message-manager";
-
 import { groupAllows } from "@/lib/group-permissions";
 import Image from "next/image";
+import dynamic from "next/dynamic";
 
 import { useEffect, useRef, useState } from "react";
+
+// Secondary section: keep it out of the first paint and load it when opened.
+const ScheduledMessageManager = dynamic(() => import("./scheduled-message-manager").then((module) => module.ScheduledMessageManager));
 import { useRouter } from "next/navigation";
 import {
   Download,
@@ -30,6 +32,7 @@ import {
   X,
   AlertTriangle,
   Dices,
+  MoreHorizontal,
 } from "lucide-react";
 import type { AttachmentDTO, ConversationDetail, PublicUser } from "@/lib/types";
 import { Avatar } from "@/components/avatar";
@@ -86,6 +89,7 @@ export function ConversationDetails({
   const [inviteUses, setInviteUses] = useState("");
   const [inviteLinks, setInviteLinks] = useState<Array<{ id: string; code: string; url?: string; useCount: number; maxUses: number | null; expiresAt: Date | null }>>([]);
   const [showInviteLinks, setShowInviteLinks] = useState(false);
+  const [showMore, setShowMore] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const router = useRouter();
   const { subscribe } = useRealtime();
@@ -458,7 +462,8 @@ export function ConversationDetails({
             onPositionChange={(x, y) => changeBackground(undefined, undefined, { x, y })}
           />
           <div className="mt-4 border-t border-[var(--border)] pt-3">
-            <ScheduledMessageManager conversationId={conversationId} />
+            <button type="button" aria-expanded={showMore} onClick={() => setShowMore((value) => !value)} className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm hover:bg-[var(--surface-2)]"><MoreHorizontal className="h-4 w-4" /><span className="flex-1">More</span><small className="text-[var(--muted)]">{showMore ? "Hide" : "Scheduled messages"}</small></button>
+            {showMore ? <ScheduledMessageManager conversationId={conversationId} /> : null}
             <button type="button" disabled={groupBusy !== null} onClick={() => void toggleNotifications()} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm hover:bg-[var(--surface-2)]">
               {muted ? <Bell className="h-4 w-4" /> : <BellOff className="h-4 w-4" />}<span className="flex-1">Notifications</span><small className="text-[var(--muted)]">{muted ? "Muted" : "On"}</small>
             </button>

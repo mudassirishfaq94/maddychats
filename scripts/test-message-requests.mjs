@@ -23,7 +23,7 @@ export async function testMessageRequests(base, senderCookie, recipientCookie, c
   try {
     const sender = await makePage(senderCookie);
     await sender.goto(`${base}/app/profile#encryption-devices`);
-    await sender.getByText("This device: Trusted", { exact: true }).waitFor({ timeout: 60000 });
+    await sender.getByText("This device: Linked", { exact: true }).waitFor({ timeout: 60000 });
     await sender.goto(url);
     await sender.getByText("Start with a message request", { exact: true }).waitFor();
     const composer = sender.getByRole("textbox", { name: "Message text" });
@@ -45,7 +45,7 @@ export async function testMessageRequests(base, senderCookie, recipientCookie, c
     await recipient.goto(url);
     await recipient.getByRole("button", { name: "Accept", exact: true }).waitFor({ timeout: 60000 });
     assert.equal(await recipient.getByRole("textbox", { name: "Message text" }).isDisabled(), true);
-    await recipient.getByText("Waiting for secure delivery", { exact: true }).waitFor({ timeout: 15000 }).catch(async cause => {
+    await recipient.getByText("Waiting for them to open Circlo…", { exact: true }).waitFor({ timeout: 15000 }).catch(async cause => {
       throw new Error(`Recipient delivery state: ${await recipient.locator("body").innerText()}`, { cause });
     });
     const notifications = await recipient.context().request.get(`${base}/api/notifications`);
@@ -147,7 +147,7 @@ export async function testMessageRequests(base, senderCookie, recipientCookie, c
     await sender.getByRole("textbox", { name: "Message text" }).fill("Safety verification must remain required");
     await sender.getByRole("textbox", { name: "Message text" }).press("Enter");
     await sender.getByLabel("Queued", { exact: true }).waitFor();
-    await sender.getByText("A participant’s encryption device changed. Verify their device fingerprints before sending.", { exact: true }).waitFor();
+    await sender.getByText("Someone in this chat changed phones. Check their safety number before sending.", { exact: true }).waitFor();
     assert.equal(await sender.getByLabel("Failed to send", { exact: true }).count(), 0);
     await sender.getByRole("button", { name: "Cancel queued message", exact: true }).click();
     await sender.getByLabel("Queued", { exact: true }).waitFor({ state: "hidden" });

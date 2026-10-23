@@ -20,7 +20,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         <h1 className="font-display text-3xl font-semibold">Secure your admin account</h1>
         <p className="mt-4 text-sm leading-7 text-[var(--muted)]">Your account has administrator access. Turn on two-step verification before opening the dashboard. This extra check protects everyone’s accounts.</p>
         <div className="mt-6 flex flex-wrap gap-3">
-          <Link href="/app/profile#two-step-verification" className="btn btn-primary">Set up two-step verification</Link>
+          <Link href="/app/settings#two-step-verification" className="btn btn-primary">Set up two-step verification</Link>
           <Link href="/app/chats" className="btn btn-secondary">Back to chats</Link>
         </div>
         <p className="mt-5 text-sm text-[var(--muted)]">After setup, sign in again with your verification code, then return to the dashboard.</p>
