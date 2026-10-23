@@ -118,7 +118,7 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     const googleButton = registrationPage.getByRole("link", { name: "Continue with Google", exact: true });
     assert.equal(await registrationPage.getByRole("checkbox").count(), 0, "Returning sign-in has no policy checkbox gate");
     assert.equal(await signInButton.isEnabled(), true);
-    assert.equal(await googleButton.getAttribute("aria-disabled"), null);
+    assert.equal(await googleButton.getAttribute("aria-disabled"), "false");
     assert.doesNotMatch(await googleButton.getAttribute("href"), /terms=1|privacy=1/);
     await registrationPage.getByText(/By signing in, you confirm/).waitFor();
     await registrationPage.screenshot({ path: "test-artifacts/login-consent-after.png", fullPage: true, animations: "disabled" });
