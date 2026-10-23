@@ -90,7 +90,6 @@ export async function testChatRecovery(base, cookieHeader, conversationId) {
     await target.goto(`${base}/app/profile#encryption-devices`);
     await target.getByText("This device: Waiting for approval", { exact: true }).waitFor({ timeout: 30000 });
     await openDeviceTools(target);
-    const targetFingerprint = await target.getByLabel("This device fingerprint").innerText();
     const pendingText = "A new device waits safely for approval";
     await target.goto(chatUrl);
     await target.getByRole("textbox", { name: "Message text" }).fill(pendingText);
@@ -99,11 +98,29 @@ export async function testChatRecovery(base, cookieHeader, conversationId) {
     assert.equal(await target.getByLabel("Failed to send", { exact: true }).count(), 0);
     await target.getByRole("status").filter({ hasText: "This device needs approval" }).waitFor();
     await source.goto(`${base}/app/profile#encryption-devices`);
-    const pending = source.locator("li").filter({ hasText: targetFingerprint });
-    await pending.waitFor();
-    await pending.getByText(targetFingerprint, { exact: true }).waitFor({ state: "visible", timeout: 10000 });
-    await pending.getByRole("checkbox").check();
-    await pending.getByRole("button", { name: "Approve encryption device" }).click();
+    await target.goto(`${base}/app/profile#encryption-devices`);
+    const linkResponse = target.waitForResponse(response => response.url().endsWith("/api/e2ee/devices/link") && response.request().method() === "POST");
+    await target.getByRole("button", { name: "Show a device-link QR code", exact: true }).click();
+    const linkCreated = await linkResponse;
+    assert.equal(linkCreated.status(), 201);
+    const { id: requestId, token } = await linkCreated.json();
+    assert.match(token, /^[A-Za-z0-9_-]{43}$/);
+    const qrPayload = JSON.stringify({ kind: "circlo-device-link", version: 1, requestId, token });
+    await target.getByRole("img", { name: "Temporary secure device-link QR code" }).waitFor();
+    await source.evaluate(`(() => {
+      const payload = ${JSON.stringify(qrPayload)};
+      Object.defineProperty(window, "BarcodeDetector", { configurable: true, value: function () {} });
+      Object.defineProperty(window.BarcodeDetector, "getSupportedFormats", { value: function () { return Promise.resolve(["qr_code"]); } });
+      Object.defineProperty(window.BarcodeDetector.prototype, "detect", { value: function () { return Promise.resolve([{ rawValue: payload }]); } });
+      Object.defineProperty(navigator.mediaDevices, "getUserMedia", { configurable: true, value: async () => new MediaStream() });
+      HTMLMediaElement.prototype.play = async () => {};
+    })()`);
+    await source.getByRole("button", { name: "Scan QR from your old device", exact: true }).click();
+    await source.getByText("Fingerprint check:").waitFor();
+    await target.getByText("Security details", { exact: true }).click();
+    await source.getByText("Show full fingerprint", { exact: true }).click();
+    await source.getByLabel("I compared this fingerprint with the new device and it matches.").check();
+    await source.getByRole("button", { name: "Approve this device", exact: true }).click();
     await source.getByRole("status").filter({ hasText: "Device approved." }).waitFor();
     await source.goto(chatUrl);
     await source.getByRole("button", { name: activeName, exact: true }).click();
@@ -116,10 +133,10 @@ export async function testChatRecovery(base, cookieHeader, conversationId) {
     await source.unroute(peersUrl, unavailablePeers);
     await source.getByRole("button", { name: "Restore my other devices", exact: true }).click();
     await source.getByRole("status").filter({ hasText: "Shared" }).waitFor();
-    // Keep the new device on the same page: approval and key restoration
-    // must release its queued message without reloading or replacing keys.
-    // Retries intentionally pause in background tabs. Return to the new
-    // browser as a user would after approving it on the trusted browser.
+    // Return to the new device's chat after approval. Key restoration must
+    // release its queued message without replacing keys.
+    // Retries pause in background tabs, so bring this browser to the front.
+    await target.goto(chatUrl);
     await target.bringToFront();
     await target.getByRole("region", { name: "Conversation", exact: true }).getByText(submitted, { exact: true }).waitFor({ timeout: 30000 });
     await source.getByRole("region", { name: "Conversation", exact: true }).getByText(pendingText, { exact: true }).waitFor({ timeout: 60000 });

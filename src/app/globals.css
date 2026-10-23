@@ -522,3 +522,16 @@ svg.lucide { stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
   .message-action-cluster[data-align="right"] { left: -8.75rem; }
   .message-action-cluster[data-align="left"] { right: -8.75rem; }
 }
+body.barcode-scanner-active,
+body.barcode-scanner-active #__next {
+  background: transparent !important;
+}
+
+body.barcode-scanner-active * {
+  visibility: hidden !important;
+}
+
+body.barcode-scanner-active .device-link-camera-overlay,
+body.barcode-scanner-active .device-link-camera-overlay * {
+  visibility: visible !important;
+}
