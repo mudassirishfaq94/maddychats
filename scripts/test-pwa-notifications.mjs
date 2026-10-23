@@ -80,7 +80,7 @@ export async function testPwaNotifications(base, pool) {
     // below uses the actual clients API without this override.
     await worker.evaluate("self.originalMatchAll = self.clients.matchAll.bind(self.clients); self.clients.matchAll = async options => (await self.originalMatchAll(options)).map(client => ({url: client.url, visibilityState: 'hidden'}))");
     await push(0); let shown = await cards(); assert.equal(shown.length, 1); assert.equal(shown[0].title, "Circlo", "Unknown lock state must hide sender identity");
-    assert.equal(shown[0].body, "Open Circlo to see your new message.");
+    assert.equal(shown[0].body, "You have a new message. Open Circlo to read it.");
     assert(!shown[0].body.includes("Must not expose"));
     await push(1); shown = await cards(); assert.equal(shown.length, 1); assert.equal(shown[0].data.count, 2);
     await push(1); assert.equal((await cards())[0].data.count, 2, "Redelivery cannot duplicate a message");
