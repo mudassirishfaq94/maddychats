@@ -31,16 +31,17 @@ copying. Set `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, and
 `R2_BUCKET=circlo-media` in a trusted local environment or private deployment
 environment. Never print or commit these values.
 
-Run the inventory first; it does not write to either provider:
+Put the source and destination credentials in a local, gitignored `.env` file.
+Run the inventory first; it does not write objects to either provider:
 
 ```sh
-npm run storage:migrate:r2
+node --env-file=.env scripts/migrate-supabase-media-to-r2.mjs
 ```
 
 Review object counts and byte totals. To copy, run:
 
 ```sh
-npm run storage:migrate:r2 -- --apply
+node --env-file=.env scripts/migrate-supabase-media-to-r2.mjs --apply
 ```
 
 The script copies the four application prefixes, checks destination object
@@ -48,7 +49,7 @@ sizes, resumes when an identical object is already present, stops rather than
 overwriting a size mismatch, and never deletes from Supabase. Verify again:
 
 ```sh
-npm run storage:migrate:r2 -- --verify
+node --env-file=.env scripts/migrate-supabase-media-to-r2.mjs --verify
 ```
 
 The source remains intact for rollback. Use a maintenance window or pause
