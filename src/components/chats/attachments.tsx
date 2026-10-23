@@ -426,7 +426,7 @@ function InlineMediaPreview({
 
   if (!url) {
     return (
-      <span className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/10 text-xs text-[var(--muted)]" role="status">
+      <span className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/10 text-xs text-[var(--muted)]" role="status" aria-label={`Opening ${label.toLowerCase()}`}>
         <Loader2 className="h-5 w-5 animate-spin motion-reduce:animate-none" />
         <span>Opening {label.toLowerCase()}…</span>
       </span>

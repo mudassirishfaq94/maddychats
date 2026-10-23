@@ -8,9 +8,11 @@ const render = (options = {}) => renderToStaticMarkup(createElement(EncryptedMes
   failed: false, missingKey: false, deviceError: false, signal: false,
   onRetry() {}, onSecurity() {}, ...options,
 }));
-test("encrypted placeholders explain loading and actionable failure states", () => {
-  assert.match(render(), /Loading/);
-  assert.match(render(), /aria-busy="true"/);
+test("encrypted messages hide transient decryption state and keep actionable failures", () => {
+  assert.equal(render(), "");
+  assert.equal(render({kind:"image"}), "");
+  assert.equal(render({kind:"video"}), "");
+  assert.match(render({ introduction: true }), /Waiting/);
   const network = render({ failed: true });
   assert.match(network, /Check your connection/);
   assert.match(network, /Tap to retry/);
@@ -21,5 +23,4 @@ test("encrypted placeholders explain loading and actionable failure states", () 
   assert.match(render({ deviceError: true }), /Open settings/);
   assert.match(render({ signal: true }), /send it again/);
   assert.match(render({ failed: true, introduction: true }), /when they open Circlo/);
-  assert.match(render({ introduction: true }), /Waiting/);
 });

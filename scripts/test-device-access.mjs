@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { chromium } from "playwright";
 import { createHash, createHmac, randomBytes } from "node:crypto";
+import { mkdir } from "node:fs/promises";
 import bcrypt from "bcryptjs";
 import { inspectMobileLayout } from "./test-mobile-layout.mjs";
 
@@ -11,15 +12,16 @@ export async function testDeviceAccess(base, pool, secret) {
   const browser = await chromium.launch(), errors = [];
   const open = async existingContext => {
     const context = existingContext ?? await browser.newContext({viewport:{width:320,height:740},isMobile:true,hasTouch:true,serviceWorkers:"block",extraHTTPHeaders:{"X-Forwarded-For":"198.51.100.232"}});
-    const page = await context.newPage(); page.on("pageerror",e=>errors.push(e.message));
+    const page = await context.newPage(); const authMeRequests=[]; page.on("pageerror",e=>errors.push(e.message)); page.on("request",request=>{if(new URL(request.url()).pathname==="/api/auth/me")authMeRequests.push(request.url());});
     await page.goto(base+"/login?next=%2Fapp%2Fchats");
     await page.getByLabel("Email or username",{exact:true}).fill(name);
     await page.getByLabel("Password",{exact:true}).fill(password);
     for (const box of await page.getByRole("checkbox").all()) await box.check();
     await page.getByRole("button",{name:"Sign in",exact:true}).click();
-    return {context,page};
+    return {context,page,authMeRequests};
   };
   try {
+    await mkdir("test-artifacts",{recursive:true});
     const anonymous = await browser.newContext();
     const redirect = await anonymous.request.get(base+"/app/device-access",{maxRedirects:0});
     assert([303,307].includes(redirect.status()));
@@ -29,6 +31,7 @@ export async function testDeviceAccess(base, pool, secret) {
     await source.page.getByText("This device: Linked",{exact:true}).waitFor();
     const target = await open();
     await target.page.getByRole("button",{name:/^Link this device Have/}).waitFor();
+    await target.page.screenshot({path:"test-artifacts/device-access-choice-after.png",fullPage:true,animations:"disabled"});
     assert(target.page.url().includes("/app/device-access?"));
     assert.equal((await target.context.request.get(base+"/api/auth/me")).status(),202,"Credentials create only a restricted verification session");
     for (const route of ["/api/users/me","/api/conversations","/api/contacts","/api/status","/api/communities","/api/notifications","/api/privacy/settings","/api/admin/stats","/api/calls"]) {
@@ -64,11 +67,13 @@ export async function testDeviceAccess(base, pool, secret) {
     await target.page.getByLabel("Device linking code",{exact:true}).fill(linkCode);
     await target.page.getByRole("button",{name:"Link this device",exact:true}).click();
     await target.page.waitForURL(base+"/app/chats");
+    assert.equal(target.authMeRequests.length,0,"A completed private-key proof authorizes the app without a redundant /api/auth/me request");
     assert.equal((await source.context.request.get(base+"/api/auth/me")).status(),200,"Linking keeps the old browser signed in");
     assert.equal((await source.context.request.post(base+"/api/auth/logout",{headers:{Origin:base}})).status(),200);
     await source.page.close();
-    source.page = (await open(source.context)).page;
+    const returning = await open(source.context); source.page = returning.page; source.authMeRequests = returning.authMeRequests;
     await source.page.waitForURL(base+"/app/chats");
+    assert.equal(source.authMeRequests.length,0,"A returning trusted browser opens without a redundant /api/auth/me request");
     assert.equal((await source.context.request.get(base+"/api/auth/me")).status(),200,"Returning trusted browsers prove their saved key without another linking code");
     const before = (await pool.query("select device_id,public_key from e2ee_keys where user_id=$1",[user.id])).rows;
     assert.equal(before.length,2);

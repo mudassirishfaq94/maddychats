@@ -13,7 +13,6 @@ export async function testChatOpeningRace(sender, recipient) {
     await recipient.reload();
     await recipient.getByRole("textbox", { name: "Message text", exact: true }).waitFor();
     await started;
-    const previousRows = await recipient.locator(".message-history-row").count();
     await recipient.getByRole("textbox", { name: "Message text", exact: true }).fill("Keep my unsent draft");
     const saved = sender.waitForResponse(response => /\/api\/conversations\/[^/]+\/messages$/.test(response.url()) && response.request().method() === "POST", { timeout: 30000 });
     await sender.getByRole("textbox", { name: "Message text", exact: true }).fill(text);
@@ -23,9 +22,10 @@ export async function testChatOpeningRace(sender, recipient) {
     // Initial SSE replay covers only the last second. This event is older
     // than that window before the recipient establishes its live stream.
     await new Promise(resolve => setTimeout(resolve, 1500)); release();
-    await recipient.getByRole("region", { name: "Conversation", exact: true }).getByText(text, { exact: true }).waitFor({ timeout: 10000 });
+    const delivered = recipient.getByRole("region", { name: "Conversation", exact: true }).getByText(text, { exact: true });
+    await delivered.waitFor({ timeout: 10000 });
     assert.equal(await recipient.getByRole("textbox", { name: "Message text", exact: true }).inputValue(), "Keep my unsent draft");
-    assert(await recipient.locator(".message-history-row").count() >= previousRows + 1);
+    assert.equal(await delivered.count(), 1, "The realtime message committed during chat startup must appear exactly once");
     console.log("PASS message committed between history rendering and stream connection arrives without manual reload");
   } finally { release(); await recipient.unroute("**/api/realtime/stream"); await recipient.getByRole("textbox", { name: "Message text", exact: true }).fill(""); }
 }

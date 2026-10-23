@@ -18,6 +18,7 @@ export function EncryptedMessageState({ failed, missingKey, deviceError, signal,
     return () => clearTimeout(timer);
   }, [failed, deviceError, signal, attempt]);
   const unavailable = failed || deviceError || signal || slow;
+  if (!unavailable && !introduction) return null;
   return (
     <div className="max-w-xs space-y-2 py-1 text-sm" role="status" aria-live="polite" aria-busy={!unavailable}>
       <div className="flex items-center gap-2 font-medium">

@@ -52,8 +52,9 @@ try {
     return route.continue();
   });
   await page.goto(base+'/login');
-  await page.getByRole('checkbox').nth(0).check();
-  await page.getByRole('checkbox').nth(1).check();
+  assert.equal(await page.getByRole('checkbox').count(),0,'returning users can sign in without policy checkboxes');
+  await page.getByRole('link',{name:'Terms',exact:true}).waitFor();
+  await page.getByRole('link',{name:'Privacy Policy'}).waitFor();
   await page.getByLabel('Email or username',{exact:true}).fill('test@example.invalid');
   await page.getByLabel('Password',{exact:true}).fill('CorrectPassword99!');
   await page.getByRole('button',{name:'Sign in',exact:true}).click();
