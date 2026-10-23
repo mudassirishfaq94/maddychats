@@ -68,8 +68,11 @@ async function expandDetails(page, scope = page) {
 }
 
 async function testNavigationSpace(page) {
-  const enable = page.getByRole("button", { name: "Enable two-factor authentication", exact: true });
-  const twoFactor = page.locator(".card-glass").filter({ has: enable }).last();
+  const settings = await page.context().newPage();
+  await settings.goto(new URL("/app/settings#two-step-verification", page.url()).toString());
+  const enable = settings.getByRole("button", { name: "Enable two-factor authentication", exact: true });
+  await enable.waitFor({ state: "visible" });
+  const twoFactor = settings.locator("#two-step-verification");
   const measurements = [];
   for (const [width, height] of [[320, 740], [360, 800], [390, 844]]) {
     for (const fontSize of [20, 16, 24]) {
@@ -90,6 +93,19 @@ async function testNavigationSpace(page) {
         measurements.push({ width, height, fontSize, inset, ...boundary });
         assert(boundary.contentBottom <= boundary.navTop + 1, `Content overlaps mobile navigation: ${JSON.stringify(measurements.at(-1))}`);
         assert(boundary.navBottom <= boundary.height + 1);
+        await settings.setViewportSize({ width, height });
+        await settings.evaluate(({ fontSize, inset }) => {
+          document.documentElement.style.fontSize = `${fontSize}px`;
+          document.querySelector('nav[aria-label="Mobile navigation"]').style.paddingBottom = `${inset}px`;
+        }, { fontSize, inset });
+        await expandDetails(settings);
+        const settingsBoundary = await settings.evaluate(() => {
+          const content = document.querySelector("#main-content > :first-child").getBoundingClientRect();
+          const nav = document.querySelector('nav[aria-label="Mobile navigation"]').getBoundingClientRect();
+          return { contentBottom: content.bottom, navTop: nav.top, navBottom: nav.bottom, height: innerHeight };
+        });
+        assert(settingsBoundary.contentBottom <= settingsBoundary.navTop + 1, `Settings content overlaps mobile navigation: ${JSON.stringify({ width, height, fontSize, inset, ...settingsBoundary })}`);
+        assert(settingsBoundary.navBottom <= settingsBoundary.height + 1);
         await enable.scrollIntoViewIfNeeded(); await enable.click({ trial: true });
         const recover = page.getByRole("button", { name: "Confirm email and recover this browser", exact: true });
         await recover.scrollIntoViewIfNeeded();
@@ -100,10 +116,11 @@ async function testNavigationSpace(page) {
         }), "Recovery confirmation remains visible without bypassing its disabled verification gate");
         // Real keyboard focus traversal, with a smaller visual layout to model
         // space lost to a keyboard. Physical Android IME behavior is separate.
-        await page.setViewportSize({ width, height: height - 300 });
+        await settings.setViewportSize({ width, height: height - 300 });
         await twoFactor.getByLabel("Current password", { exact: true }).focus();
-        await page.keyboard.press("Tab");
-        assert(await twoFactor.getByLabel("Authenticator or recovery code (if enabled)", { exact: true }).evaluate(node => node === document.activeElement));
+        await settings.keyboard.press("Tab");
+        const codeInput = twoFactor.getByLabel("Authenticator or recovery code (if enabled)", { exact: true });
+        assert(await codeInput.evaluate(node => node === document.activeElement));
         await enable.click({ trial: true });
       }
     }
@@ -112,6 +129,7 @@ async function testNavigationSpace(page) {
     document.documentElement.style.fontSize = "";
     document.querySelector('nav[aria-label="Mobile navigation"]').style.removeProperty("padding-bottom");
   });
+  await settings.close();
   await mkdir(".freebuff/performance", { recursive: true });
   await writeFile(".freebuff/performance/mobile-navigation.json", JSON.stringify(measurements, null, 2));
   console.log("PASS mobile navigation: 18 viewport/font/safe-area combinations, recovery/MFA hit testing and keyboard focus with reduced viewport; physical Android IME not asserted");
