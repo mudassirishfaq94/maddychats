@@ -19,6 +19,10 @@ export async function testOfflineCompose(context, base, owner, group, pool, memb
     const store = await import("/offline-store.js");
     return store.activeAccount() === userId && (await store.offlineChats(userId)).length > 0;
   },owner.id);
+  // The client-driven chat route reads authorized detail/history after the
+  // reload; finish that online load before switching the browser offline.
+  await page.getByRole("region",{name:"Messages",exact:true}).getByText(historyText,{exact:true}).waitFor();
+  await page.getByRole("textbox",{name:"Message text"}).waitFor();
   const wrongAccount = await page.request.post(base+`/api/conversations/${group}/messages`, {headers:{Origin:base},data:{clientMessageId:crypto.randomUUID(),expectedSenderId:member.id,text:"ciphertext-account-binding-fixture",encrypted:true}});
   assert.equal(wrongAccount.status(),409,"Queued sends must reject a switched account on the server");
   await context.setOffline(true);
