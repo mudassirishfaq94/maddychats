@@ -1,6 +1,6 @@
 "use client";
 
-import { Mic2, Pause, Play, Captions, Loader2, Lock } from "lucide-react";
+import { Mic2, Pause, Play, Captions, Loader2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { AttachmentDTO, PublicUser } from "@/lib/types";
 import { Avatar } from "@/components/avatar";
@@ -201,18 +201,6 @@ export function AudioMessage({
               Voice
             </span>
           </div>
-          {attachment?.encrypted ? (
-            <span
-              className={cn(
-                "mt-1 flex items-center gap-1 text-[0.58rem] font-medium uppercase tracking-wide",
-                own ? "text-[var(--bubble-own-sub)]" : "text-[var(--muted)]",
-              )}
-            >
-              <Lock className="h-2.5 w-2.5" />
-              End-to-end encrypted
-            </span>
-          ) : null}
-
           {/* Transcript */}
           {!attachment?.encrypted && transcript ? (
             <p className={cn(

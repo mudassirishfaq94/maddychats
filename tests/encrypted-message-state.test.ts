@@ -8,11 +8,10 @@ const render = (options = {}) => renderToStaticMarkup(createElement(EncryptedMes
   failed: false, missingKey: false, deviceError: false, signal: false,
   onRetry() {}, onSecurity() {}, ...options,
 }));
-test("encrypted placeholders explain loading and actionable failure states", () => {
-  assert.match(render(), /Decrypting message/);
-  assert.match(render({kind:"image"}), /Decrypting photo caption/);
-  assert.match(render({kind:"video"}), /Decrypting video caption/);
-  assert.match(render(), /aria-busy="true"/);
+test("encrypted messages hide transient decryption state and keep actionable failures", () => {
+  assert.equal(render(), "");
+  assert.equal(render({kind:"image"}), "");
+  assert.equal(render({kind:"video"}), "");
   const network = render({ failed: true });
   assert.match(network, /Check your connection/);
   assert.match(network, /Try loading again/);
