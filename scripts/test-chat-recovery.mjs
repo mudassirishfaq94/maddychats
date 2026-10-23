@@ -98,6 +98,7 @@ export async function testChatRecovery(base, cookieHeader, conversationId) {
     assert.equal(await target.getByLabel("Failed to send", { exact: true }).count(), 0);
     await target.getByRole("status").filter({ hasText: "This device needs approval" }).waitFor();
     await source.goto(`${base}/app/profile#encryption-devices`);
+    await target.goto(`${base}/app/profile#encryption-devices`);
     const linkResponse = target.waitForResponse(response => response.url().endsWith("/api/e2ee/devices/link") && response.request().method() === "POST");
     await target.getByRole("button", { name: "Show a device-link QR code", exact: true }).click();
     const linkCreated = await linkResponse;
