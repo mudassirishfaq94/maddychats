@@ -451,6 +451,34 @@ export function ChatView({
   }, [conversationId]);
   useEffect(() => { decryptedTextsRef.current = decryptedTexts; }, [decryptedTexts]);
   useEffect(() => { decryptedRepliesRef.current = decryptedReplies; }, [decryptedReplies]);
+  // Key reconciliation runs in the background. If it makes this chat's keys
+  // available after the bounded initial decrypt retries, retry those rows
+  // without requiring the user to refresh or tap each message.
+  useEffect(() => {
+    const retryAfterKeySync = (event: Event) => {
+      const readyConversationId = (event as CustomEvent<{ conversationId?: string }>).detail?.conversationId;
+      if (readyConversationId !== conversationId) return;
+      // Include rows whose first decrypt is still in flight: the sync may
+      // finish before their first failure is recorded.
+      const retryIds = new Set(items.filter(message =>
+        message.encrypted && message.text && message.text !== "signal:v2" && !decryptedTextsRef.current.has(message.id),
+      ).map(message => message.id));
+      if (retryIds.size === 0) return;
+      for (const id of retryIds) {
+        failedDecryptionRef.current.delete(id);
+        missingMessageKeys.current.delete(id);
+      }
+      setUnavailableMessageIds(current => {
+        if (![...retryIds].some(id => current.has(id))) return current;
+        const next = new Set(current);
+        for (const id of retryIds) next.delete(id);
+        return next;
+      });
+      setDecryptRetry(value => value + 1);
+    };
+    window.addEventListener("maddy:message-keys-ready", retryAfterKeySync);
+    return () => window.removeEventListener("maddy:message-keys-ready", retryAfterKeySync);
+  }, [conversationId, items]);
   // Verified cache reads race normal local-key decryption; optional storage
   // must never hold fresh authorized history behind a full page scan.
   useEffect(() => {

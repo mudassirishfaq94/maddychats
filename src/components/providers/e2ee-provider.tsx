@@ -27,6 +27,8 @@ function UserEncryption({ userId, children, setupOnly }: { userId?: string; chil
             // Never bootstrap/replace a key during background reconciliation.
             await getConversationKey(id);
             await prepareConversation(id);
+            if (stopped) break;
+            window.dispatchEvent(new CustomEvent("maddy:message-keys-ready", { detail: { conversationId: id } }));
           } catch { /* A device without the original key must use trusted recovery. */ }
         }
       } catch { /* Offline reconciliation resumes on the next realtime connection. */ }
