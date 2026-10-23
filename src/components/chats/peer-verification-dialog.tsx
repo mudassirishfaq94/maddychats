@@ -23,7 +23,7 @@ export function PeerVerificationDialog({ review, names, onConfirm, onClose }: {
       else if (!event.shiftKey && (document.activeElement === last || document.activeElement === dialog.current)) { event.preventDefault(); first?.focus(); }
     }} className="max-h-[85dvh] w-full max-w-lg overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 shadow-xl">
       <h2 id="peer-verification-title" className="text-lg font-semibold">Check the safety numbers</h2>
-      <p className="mt-2 text-sm text-[var(--muted)]">Ask each person, through a way you already know them, to open Settings and compare their safety number with the one below.</p>
+      <p className="mt-2 text-sm text-[var(--muted)]">Ask each person, through a way you already know them, to open Profile → Encryption devices and compare their safety number with the one below.</p>
       {review.devices.length ? <ul className="mt-4 space-y-3">{review.devices.map(device => <li key={`${device.userId}:${device.deviceId}`} className="rounded-xl border border-[var(--border)] p-3 text-xs">
         <p className="font-semibold">{names[device.userId] ?? device.userId}</p>
         <code className="mt-2 block select-all break-all" aria-label="Participant safety number">{device.fingerprint}</code>
