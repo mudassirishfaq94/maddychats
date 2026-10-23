@@ -195,6 +195,30 @@ function ReceiptIcon({ message }: { message: MessageDTO }) {
   );
 }
 
+function queuedMessageHelp(reason?: string) {
+  if (reason?.includes("This device needs approval")) return "Saved. On a linked phone, open Settings → Devices and approve this phone. It will send automatically.";
+  if (reason?.includes("safety number")) return "Saved. Confirm the new phone’s safety number in this chat. It will send after confirmation.";
+  if (reason?.includes("No internet")) return "Saved. It will send automatically when you’re back online.";
+  return "Saved. It will send automatically when secure chat setup is ready.";
+}
+
+function QueuedMessageNotice({ reason, onTry, onCancel }: { reason?: string; onTry: () => void; onCancel: () => void }) {
+  const [visible, setVisible] = useState(true);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setVisible(false), 8000);
+    return () => window.clearTimeout(timer);
+  }, []);
+  if (!visible) return null;
+  return <div role="status" className="mt-2 max-w-sm rounded-xl border border-sky-400/20 bg-sky-400/10 px-3 py-2 text-xs leading-relaxed text-[var(--text)]">
+    <p>{queuedMessageHelp(reason)}</p>
+    <div className="mt-1 flex gap-3">
+      <button type="button" className="underline" onClick={onTry}>Try now</button>
+      <button type="button" className="underline" onClick={onCancel}>Cancel message</button>
+      <span className="ml-auto text-[var(--muted)]" aria-label="This notice closes automatically">8 sec</span>
+    </div>
+  </div>;
+}
+
 export function ChatView({
   conversationId,
   me,
@@ -3236,13 +3260,7 @@ const MessageRow = memo(function MessageRow({msg, showDate, sameSenderPrev, me, 
                           </LongPressTouchable>
 
                           {own && msg.sendStatus === "queued" ? (
-                            <div role="status" className="mt-2 max-w-sm rounded-xl border border-sky-400/20 bg-sky-400/10 px-3 py-2 text-xs leading-relaxed text-[var(--text)]">
-                              <p>{msg.queueReason ?? "Waiting for secure delivery. Your message will send automatically when encryption is ready."}</p>
-                              <div className="mt-1 flex gap-3">
-                                <button type="button" className="underline" onClick={() => { if (msg.queueReason?.includes("This device needs approval")) actions.current?.deviceSettings(); else actions.current?.retrySend(msg); }}>Try now</button>
-                                <button type="button" className="underline" onClick={() => actions.current?.cancelQueued(msg)}>Cancel queued message</button>
-                              </div>
-                            </div>
+                            <QueuedMessageNotice reason={msg.queueReason} onTry={() => { if (msg.queueReason?.includes("This device needs approval")) actions.current?.deviceSettings(); else actions.current?.retrySend(msg); }} onCancel={() => actions.current?.cancelQueued(msg)} />
                           ) : null}
 
                           {msg.reactions.length > 0 ? (
