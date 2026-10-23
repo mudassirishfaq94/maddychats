@@ -130,9 +130,9 @@ try {
  await owner.page.locator('input[type="file"]').first().setInputFiles({name:"large-encrypted-preview.png",mimeType:"image/png",buffer:largeImage});
  const uploadResponse=owner.page.waitForResponse(response=>new URL(response.url()).pathname==="/api/upload/message"&&response.request().method()==="POST");
  await owner.page.getByRole("button",{name:"Send attachments",exact:true}).click();const uploaded=await uploadResponse;assert.equal(uploaded.status(),201,await uploaded.text());
- const media=(await uploaded.json()).message.attachments[0];assert.equal(media.encrypted,true);assert.equal(media.size,largeImage.length+28);
- await member.page.getByRole("region",{name:"Messages",exact:true}).getByAltText("large-encrypted-preview.png",{exact:true}).waitFor({timeout:60000});
- const image=member.page.getByRole("region",{name:"Messages",exact:true}).getByAltText("large-encrypted-preview.png",{exact:true});
+  const media=(await uploaded.json()).message.attachments[0];assert.equal(media.encrypted,true);assert(media.size<largeImage.length,"Large still image is compressed before encryption");assert.equal(media.originalName,"large-encrypted-preview.webp");
+  await member.page.getByRole("region",{name:"Messages",exact:true}).getByAltText("large-encrypted-preview.webp",{exact:true}).waitFor({timeout:60000});
+  const image=member.page.getByRole("region",{name:"Messages",exact:true}).getByAltText("large-encrypted-preview.webp",{exact:true});
  await image.evaluate(element=>new Promise((resolve,reject)=>{if(element.complete&&element.naturalWidth>0)return resolve();element.addEventListener('load',()=>resolve(),{once:true});element.addEventListener('error',()=>reject(new Error('Recipient could not decode encrypted image')),{once:true});}));
  console.log("PASS: large encrypted chunk upload and real recipient image decryption");
  // File chips must not download ciphertext until the recipient requests it.
