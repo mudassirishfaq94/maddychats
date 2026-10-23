@@ -100,7 +100,7 @@ export async function testDeviceAccess(base, pool, secret) {
     assert.equal(await recovery.page.getByLabel("Device linking code",{exact:true}).count(),0,"Only the selected form is shown");
     const confirm = recovery.page.getByRole("button",{name:"Confirm email and recover this browser",exact:true});
     assert(await confirm.isDisabled());
-    assert(await recovery.page.getByText("Your email code cannot bring back lost encryption keys.",{exact:false}).isVisible());
+    assert(await recovery.page.getByText("An email code can't bring back old messages by itself.",{exact:false}).isVisible());
     // A mailbox-code fixture avoids calling a paid or third-party email service.
     const pending = (await pool.query("select device_id,session_id,public_key from e2ee_keys where user_id=$1 order by created_at desc limit 1",[user.id])).rows[0];
     const fingerprint=createHash("sha256").update(pending.public_key).digest("hex"), code="483162";

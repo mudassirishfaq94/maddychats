@@ -469,7 +469,7 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     assert.equal((await api("/api/e2ee/devices/link", rejected.cookies, { deviceId: rejectedId })).status, 201);
     const [rejectRequest] = (await pool.query("select id,device_id,fingerprint from device_link_requests where user_id=$1 and status='pending'", [owner.id])).rows;
     await profile(source.page); await refresh(source.page); await source.page.getByRole("button", { name: "Reject device linking", exact: true }).click();
-    await source.page.getByText("Device linking rejected. No encryption access was granted.", { exact: true }).waitFor();
+    await source.page.getByText("Linking rejected. No access was given.", { exact: true }).waitFor();
     assert.equal((await pool.query("select status from device_link_requests where id=$1", [rejectRequest.id])).rows[0].status, "rejected");
     const pendingSession = await renewSession(rejected);
     assert.equal((await pool.query("select trusted_at from e2ee_keys where user_id=$1 and session_id=$2", [owner.id, pendingSession])).rows[0].trusted_at, null, "Rebinding an untrusted key never approves it");

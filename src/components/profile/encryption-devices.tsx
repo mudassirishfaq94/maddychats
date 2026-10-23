@@ -136,7 +136,7 @@ export function EncryptionDevices({ recoveryEmail, openRecovery = false, setup =
       const payload = createDeviceLinkQrPayload(data.id, data.token);
       setIssuedQr({ deviceId: targetDeviceId, payload, expiresAt: data.expiresAt });
       setQrExpired(false);
-      setStatus("On your linked device, scan this QR and compare the security fingerprint before approval.");
+      setStatus("On your linked device, scan this QR and compare the safety number before approval.");
     } catch (cause) {
       setStatus(cause instanceof Error ? cause.message : "Unable to create a secure QR code.");
     } finally {
@@ -186,7 +186,7 @@ export function EncryptionDevices({ recoveryEmail, openRecovery = false, setup =
       {!setup && <button type="button" className="btn btn-secondary" disabled={busy} onClick={() => setRecoveryOpen(previous => !previous)}>Emergency recovery: no linked device or backup file</button>}
       {recoveryOpen && <div className="mt-3 text-sm">
         <p>You will keep the same account. Recovery signs out your other devices and lets you use this one. Nothing is deleted from your account.</p>
-        <p className="mt-2">An email code can&apos;t bring back old messages by itself. To read older chats, you still need a linked phone or a saved backup file that can read them.</p>
+        <p className="mt-2">An email code can&apos;t bring back old messages by itself. To read older chats, use a linked phone, a saved backup file, or a saved recovery code with its encrypted cloud backup if you set one up.</p>
         {recoveryEmail ? <div className="my-3 rounded-xl border border-[var(--border)] p-3">
           <p className="text-xs">Confirm your verified email: <strong>{maskEmail(recoveryEmail)}</strong></p>
           <p className="mt-1 text-xs text-[var(--muted)]">You must also have signed in again within the last five minutes. If needed, use the sign-in link below and choose Google.</p>
