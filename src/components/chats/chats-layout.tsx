@@ -17,6 +17,8 @@ import { NewChatDialog } from "./new-chat-dialog";
 import { ConversationMenu } from "./conversation-menu";
 import { usePresenceMap } from "@/components/providers/realtime-provider";
 import { useConversationList } from "@/components/providers/conversation-list-provider";
+import { useAuth } from "@/components/providers/auth-provider";
+import { prefetchChatRouteData, retainChatRouteAccount } from "@/lib/chat-route-prefetch";
 import { mapWithConcurrency } from "@/lib/async";
 import { cn, timeAgo } from "@/lib/utils";
 
@@ -63,8 +65,9 @@ function stampTime(iso: string | null, hydrated: boolean): string {
   return dateStampFormatter.format(d);
 }
 
-const ConversationRow = memo(function ConversationRow({ conv, active, online, preview, timestamp }: {
+const ConversationRow = memo(function ConversationRow({ conv, active, online, preview, timestamp, userId }: {
   conv: ConversationSummary; active: boolean; online: boolean; preview: string; timestamp: string;
+  userId: string | null;
 }) {
   const name = conv.name ?? conv.otherMember?.displayName ?? "Unknown";
   return (
@@ -74,7 +77,10 @@ const ConversationRow = memo(function ConversationRow({ conv, active, online, pr
         prefetch={false}
         onPointerEnter={() => void warmChatCode()}
         onFocus={() => void warmChatCode()}
-        onTouchStart={() => void warmChatCode()}
+        onPointerDown={() => {
+          void warmChatCode();
+          if (userId) void prefetchChatRouteData(userId, conv.id).catch(() => undefined);
+        }}
         aria-current={active ? "page" : undefined}
         className={cn(
           "chat-list-row flex min-h-[76px] min-w-0 flex-1 items-center gap-3 border-0 px-4 py-3 transition-colors duration-150",
@@ -184,8 +190,16 @@ export function ChatsLayout({
     source: ConversationSummary[]; items: ConversationSummary[];
   } | null>(null);
   const { snapshot, seed } = useConversationList();
+  const { user } = useAuth();
   useEffect(() => { if (initialConversations) seed(initialConversations); }, [initialConversations, seed]);
   const sourceConversations = useMemo(() => snapshot?.conversations ?? initialConversations ?? [], [snapshot?.conversations, initialConversations]);
+  useEffect(() => {
+    if (!user?.id) return;
+    retainChatRouteAccount(user.id);
+    for (const conversation of sourceConversations.slice(0, 5)) {
+      void prefetchChatRouteData(user.id, conversation.id).catch(() => undefined);
+    }
+  }, [sourceConversations, user?.id]);
   const conversations = liveList?.source === sourceConversations
     ? liveList.items : sourceConversations;
   const { initialized, decrypt, getCachedDecryptedMessage, cacheDecryptedMessage, loadCachedDecryptedMessages } = useSharedE2EE();
@@ -390,6 +404,7 @@ export function ChatsLayout({
                 key={conv.id} conv={conv} active={conv.id === activeId}
                 timestamp={stampTime(conv.lastMessageAt ?? conv.createdAt, hydrated)}
                 online={Boolean(conv.otherMember && presence[conv.otherMember.id]?.online)}
+                userId={user?.id ?? null}
                 preview={previewText(conv, previews)}
               />)}
             </ul>
