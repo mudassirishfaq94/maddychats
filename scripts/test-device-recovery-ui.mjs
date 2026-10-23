@@ -93,7 +93,9 @@ export async function testDeviceRecoveryUI(base, pool) {
     const invalidToken = await source.context.request.post(base + "/api/e2ee/devices/approve", { data: { action: "challenge", sourceDeviceId: sourceDevice.device_id, targetDeviceId: pendingDevice.device_id, targetFingerprint: fingerprint, linkId: requestId, token: "b".repeat(43) }, headers: { Origin: base } });
     assert.equal(invalidToken.status(), 403, "A mismatched QR token cannot approve the target");
     await source.page.evaluate(payload => {
-      Object.defineProperty(window, "BarcodeDetector", { configurable: true, value: class { static async getSupportedFormats() { return ["qr_code"]; } async detect() { return [{ rawValue: payload }]; } } });
+      Object.defineProperty(window, "BarcodeDetector", { configurable: true, value: function () {} });
+      Object.defineProperty(window.BarcodeDetector, "getSupportedFormats", { value: function () { return Promise.resolve(["qr_code"]); } });
+      Object.defineProperty(window.BarcodeDetector.prototype, "detect", { value: function () { return Promise.resolve([{ rawValue: payload }]); } });
       Object.defineProperty(navigator.mediaDevices, "getUserMedia", { configurable: true, value: async () => new MediaStream() });
       HTMLMediaElement.prototype.play = async () => {};
     }, qrPayload);

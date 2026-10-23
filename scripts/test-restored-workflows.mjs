@@ -298,7 +298,9 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     assert.equal((await api("/api/e2ee/devices/approve", source.cookies, { ...challenge, token: "b".repeat(43) })).status, 403);
     await profile(source.page); await refresh(source.page);
     await source.page.evaluate(payload => {
-      Object.defineProperty(window, "BarcodeDetector", { configurable: true, value: class { static async getSupportedFormats() { return ["qr_code"]; } async detect() { return [{ rawValue: payload }]; } } });
+      Object.defineProperty(window, "BarcodeDetector", { configurable: true, value: function () {} });
+      Object.defineProperty(window.BarcodeDetector, "getSupportedFormats", { value: function () { return Promise.resolve(["qr_code"]); } });
+      Object.defineProperty(window.BarcodeDetector.prototype, "detect", { value: function () { return Promise.resolve([{ rawValue: payload }]); } });
       Object.defineProperty(navigator.mediaDevices, "getUserMedia", { configurable: true, value: async () => new MediaStream() });
       HTMLMediaElement.prototype.play = async () => {};
     }, qrPayload);

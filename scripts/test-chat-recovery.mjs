@@ -108,7 +108,9 @@ export async function testChatRecovery(base, cookieHeader, conversationId) {
     const qrPayload = JSON.stringify({ kind: "circlo-device-link", version: 1, requestId, token });
     await target.getByRole("img", { name: "Temporary secure device-link QR code" }).waitFor();
     await source.evaluate(payload => {
-      Object.defineProperty(window, "BarcodeDetector", { configurable: true, value: class { static async getSupportedFormats() { return ["qr_code"]; } async detect() { return [{ rawValue: payload }]; } } });
+      Object.defineProperty(window, "BarcodeDetector", { configurable: true, value: function () {} });
+      Object.defineProperty(window.BarcodeDetector, "getSupportedFormats", { value: function () { return Promise.resolve(["qr_code"]); } });
+      Object.defineProperty(window.BarcodeDetector.prototype, "detect", { value: function () { return Promise.resolve([{ rawValue: payload }]); } });
       Object.defineProperty(navigator.mediaDevices, "getUserMedia", { configurable: true, value: async () => new MediaStream() });
       HTMLMediaElement.prototype.play = async () => {};
     }, qrPayload);

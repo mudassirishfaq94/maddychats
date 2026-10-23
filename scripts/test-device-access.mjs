@@ -67,7 +67,9 @@ export async function testDeviceAccess(base, pool, secret) {
     await source.page.getByText("Troubleshooting",{exact:true}).click();
     await source.page.getByRole("button",{name:"Refresh encryption devices",exact:true}).click();
     await source.page.evaluate(payload=>{
-      Object.defineProperty(window,"BarcodeDetector",{configurable:true,value:class{static async getSupportedFormats(){return ["qr_code"]}async detect(){return [{rawValue:payload}]}}});
+      Object.defineProperty(window,"BarcodeDetector",{configurable:true,value:function(){}});
+      Object.defineProperty(window.BarcodeDetector,"getSupportedFormats",{value:function(){return Promise.resolve(["qr_code"])}});
+      Object.defineProperty(window.BarcodeDetector.prototype,"detect",{value:function(){return Promise.resolve([{rawValue:payload}])}});
       Object.defineProperty(navigator.mediaDevices,"getUserMedia",{configurable:true,value:async()=>new MediaStream()});
       HTMLMediaElement.prototype.play=async()=>{};
     },JSON.stringify({kind:"circlo-device-link",version:1,requestId,token}));
