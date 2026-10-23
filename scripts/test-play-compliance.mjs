@@ -91,12 +91,14 @@ export async function testPlayCompliance({base,sql,api,account,login}) {
     });
     let deletionRequests=0;
     page.on('request',request=>{ if(new URL(request.url()).pathname==='/api/privacy/delete-account' && request.method()==='POST') deletionRequests++; });
-    await page.goto(`${base}/app/profile#account-data`);
+    await page.goto(`${base}/app/settings#data`);
+    await page.getByText('Manage your data',{exact:true}).click();
     await page.getByRole('button',{name:'Delete my account',exact:true}).waitFor();
     await page.reload();
+    await page.getByText('Manage your data',{exact:true}).click();
     await page.getByRole('button',{name:'Delete my account',exact:true}).waitFor();
     assert.equal(deletionRequests,0,'Navigating or refreshing deletion settings must never delete an account');
-    console.log('PASS deletion deep link: account-data opens collapsed settings on direct navigation and refresh; no deletion mutation triggered.');
+    console.log('PASS data settings stay collapsed until opened; refreshing never triggers account deletion.');
     await page.goto(`${base}/app/chats/${dm.id}`);
     await page.getByRole('button',{name:'Chat options',exact:true}).click();
     await page.getByRole('menuitem',{name:'Report contact',exact:true}).click();
