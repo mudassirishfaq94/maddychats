@@ -43,7 +43,7 @@ export function CloudRecoverySettings() {
     const keysResponse=await fetch("/api/e2ee/keys",{cache:"no-store",signal:AbortSignal.timeout(15000)});
     if(!keysResponse.ok) throw new Error("Sign in again before restoring.");
     const {keys}=await keysResponse.json();
-    if(!keys.some((key:{deviceId:string;publicKey:string})=>key.deviceId===bundle.deviceId && key.publicKey===publicKey)) throw new Error("This identity is no longer registered. Restore through a trusted device; no keys were replaced.");
+    if(!keys.some((key:{deviceId:string;publicKey:string})=>key.deviceId===bundle.deviceId && key.publicKey===publicKey)) throw new Error("This backup can't be restored here any more. Nothing was changed.");
     // Single active-identity write; quotas leave the existing identity untouched.
     localStorage.setItem(cloudRecoveryLocalKey(user.id,bundle.deviceId),JSON.stringify({id:backup.id,code:code.trim(),revision:backup.revision}));
     localStorage.setItem(recoveryBundleKey(user.id),JSON.stringify(bundle));
@@ -53,7 +53,7 @@ export function CloudRecoverySettings() {
   return <section id="cloud-recovery" className="mt-4 rounded-xl border border-[var(--border)] p-4">
     <h3 className="font-semibold">Encrypted chat recovery</h3>
     <p className="mt-2 text-sm">{current?`Backup saved ${new Date(current.updatedAt).toLocaleString()}. Keep your recovery code in your password manager.`:backups.length?"Recovery backups exist for other devices. This device is not yet protected by its own recovery code.":"Not configured. Clearing browser data or losing all linked devices can permanently remove access to your chat history."}</p>
-    <p className="mt-2 text-xs text-[var(--muted)]">Your separate recovery code encrypts the backup on this device. Circlo cannot read it or reset a lost code. Google login and email verification cannot decrypt old chats. Backups contain encryption identities and saved chat keys, not messages, media or Signal sessions.</p>
+    <p className="mt-2 text-xs text-[var(--muted)]">Your recovery code protects this phone&apos;s backup. Circlo can&apos;t read it or reset a lost code. Signing in with Google or email can&apos;t open old chats. The backup holds what&apos;s needed to reopen chats — not messages, media, or calls.</p>
     {!current && !generated?<button type="button" disabled={busy||!encryption.initialized} className="btn btn-secondary mt-3" onClick={()=>{setGenerated(newRecoveryCode());setCode("");}}>Set up recovery code</button>:null}
     {generated?<div className="mt-3 text-sm"><p>Save this code outside Circlo before continuing. Anyone with this code and your encrypted backup can restore its keys.</p><code className="mt-2 block select-all break-all" aria-label="New recovery code">{generated}</code><label className="mt-3 block">Re-enter the saved code<input className="field-input mt-1 w-full" type="password" autoComplete="off" value={code} onChange={event=>setCode(event.target.value)}/></label><button disabled={busy||code.trim()!==generated} type="button" className="btn btn-primary mt-3" onClick={()=>void run(setup)}>Confirm code and save encrypted backup</button></div>:null}
     {current?<button type="button" className="btn btn-secondary mt-3" disabled={busy} onClick={()=>void run(async()=>{if(user && await refreshCloudRecovery(user.id,encryption.deviceId)){await load();setStatus("Backup refreshed.");}else throw new Error("This device no longer has the backup code. Use your saved code to restore or create a separate recovery file.");})}>Refresh backup now</button>:null}

@@ -70,9 +70,9 @@ export function NewChatDialog({ start = "choose", compact = false, openExternall
     try {
     const res = await fetch("/api/conversations", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: person.id }) });
     const data = await res.json().catch(() => null) as { conversation?: ConversationDetail; error?: string } | null;
-    if (!res.ok || !data?.conversation) { setError(data?.error ?? "Could not start the conversation."); setStarting(false); return; }
+    if (!res.ok || !data?.conversation) { setError(data?.error ?? "Couldn't open the chat."); setStarting(false); return; }
     close(); router.push(`/app/chats/${data.conversation.id}`);
-    } catch { setError("Could not start the chat. Check your connection and try again."); setStarting(false); }
+    } catch { setError("Couldn't start the chat. Check your connection."); setStarting(false); }
   }
 
   async function createGroup() {
@@ -83,14 +83,14 @@ export function NewChatDialog({ start = "choose", compact = false, openExternall
       if (!groupId) {
       const res = await fetch("/api/groups", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, description, memberIds: selected.map((u) => u.id) }) });
       const data = await res.json().catch(() => null) as { conversation?: ConversationDetail; error?: string } | null;
-      if (!res.ok || !data?.conversation) throw new Error(data?.error ?? "Could not create the group.");
+      if (!res.ok || !data?.conversation) throw new Error(data?.error ?? "Couldn't create the group.");
       groupId = data.conversation.id; setCreatedGroupId(groupId);
       }
       if (image) {
         const form = new FormData(); form.append("file", image);
         const upload = await fetch(`/api/groups/${groupId}/avatar`, { method: "POST", body: form });
         const uploaded = await upload.json().catch(() => null) as { avatarUrl?: string } | null;
-        if (!upload.ok || !uploaded?.avatarUrl) throw new Error("The group was created, but its image could not be uploaded.");
+        if (!upload.ok || !uploaded?.avatarUrl) throw new Error("The group was made, but the photo didn't upload.");
       }
       close(); router.push(`/app/chats/${groupId}`);
     } catch (cause) { setError((cause as Error).message); setStarting(false); }
@@ -116,7 +116,7 @@ export function NewChatDialog({ start = "choose", compact = false, openExternall
 
         {(mode === "direct" || mode === "group-people") ? <>
           {mode === "group-people" && selected.length ? <div className="mt-3 flex gap-2 overflow-x-auto pb-1">{selected.map((u) => <button type="button" key={u.id} onClick={() => setSelected((s) => s.filter((x) => x.id !== u.id))} className="flex shrink-0 flex-col items-center text-[0.65rem]"><Avatar user={u} size={34} /><span className="mt-1 max-w-14 truncate">{u.displayName}</span></button>)}</div> : null}
-          <div className="relative mt-4"><Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted)]" /><input ref={inputRef} value={query} onChange={(e) => { const value = e.target.value; setQuery(value); setLoading(value.trim().length >= 3); }} placeholder="Type exact full name or username…" className="field-input field-input--icon" /></div>
+          <div className="relative mt-4"><Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted)]" /><input ref={inputRef} value={query} onChange={(e) => { const value = e.target.value; setQuery(value); setLoading(value.trim().length >= 3); }} placeholder="Search by name or username…" className="field-input field-input--icon" /></div>
           <div className="mt-3 max-h-[48vh] overflow-y-auto">
             {loading ? (
               <p className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin" /></p>

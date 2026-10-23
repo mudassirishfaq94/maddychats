@@ -34,7 +34,7 @@ export default async function SignupPage({ searchParams }: { searchParams: Promi
     >
       {!verificationDeliveryConfigured() && <p className="mb-4 text-sm text-[var(--muted)]">Email accounts need verification before sign-in. Email delivery is currently unavailable; Google sign-in is also available.</p>}
       {query.error === "consent_required" ? <p role="alert" className="mb-4 text-sm">Please agree to both policies below, then continue with Google to create your account.</p> : null}
-      <SignupOptions phoneEnabled={process.env.STARTER_MODE !== "1"} />
+      <SignupOptions />
     </AuthLayout>
   );
 }

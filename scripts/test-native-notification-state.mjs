@@ -37,7 +37,10 @@ export async function testNativeNotificationState(context, base, userId) {
     for (let n = 0; n < 40 && !registrations; n++) await page.waitForTimeout(50);
     assert(registrations > 0, "Allow performs native permission and server enrollment");
     assert.equal(preferences.pushNotifications, true);
-    await page.goto(base + "/app/profile#notifications");
+    await page.goto(base + "/app/settings#notifications");
+    const notificationPreferences = page.locator("#notifications details");
+    await notificationPreferences.locator(":scope > summary").click();
+    await page.locator("#notifications details[open]").waitFor();
     await page.getByRole("switch", { name: "Desktop and mobile push", exact: true }).waitFor();
     await page.waitForTimeout(150);
     assert.equal(await page.getByText("Enable push alerts on this device", { exact: true }).count(), 0, "Registered devices must not appear disabled after reopening settings");
@@ -55,6 +58,8 @@ export async function testNativeNotificationState(context, base, userId) {
     await page.waitForFunction(() => window.nativeNotificationTest.bound === null);
     assert.equal(preferences.pushNotifications, false, "Only explicit account opt-out clears delivery binding");
     await page.reload();
+    await page.locator("#notifications details > summary").click();
+    await page.locator("#notifications details[open]").waitFor();
     await page.getByRole("switch", { name: "Desktop and mobile push", exact: true }).waitFor();
     assert.equal(await page.getByRole("switch", { name: "Desktop and mobile push", exact: true }).getAttribute("aria-checked"), "false");
     failedEnrollment = true;
@@ -64,6 +69,8 @@ export async function testNativeNotificationState(context, base, userId) {
     await page.waitForFunction(id => window.nativeNotificationTest.bound === id, userId);
     failedEnrollment = false;
     await page.reload();
+    await page.locator("#notifications details > summary").click();
+    await page.locator("#notifications details[open]").waitFor();
     await page.getByRole("switch", { name: "Desktop and mobile push", exact: true }).waitFor();
     assert.equal(await page.getByRole("switch", { name: "Desktop and mobile push", exact: true }).getAttribute("aria-checked"), "true");
     console.log("PASS: native onboarding permission, persisted opt-in, session registration status, failed-resume preservation and explicit opt-out (Android bridge simulated)");

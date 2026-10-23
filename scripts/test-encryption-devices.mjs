@@ -38,7 +38,7 @@ export async function testEncryptionDevices(base, pool, owner, peer, password, c
     }
     else {
       const original = await login(owner); contact = await login(peer);
-      for (const client of [original, contact]) { await client.page.goto(base + "/app/profile#encryption-devices"); await client.page.getByText("This device: Trusted", { exact: true }).waitFor(); }
+      for (const client of [original, contact]) { await client.page.goto(base + "/app/profile#encryption-devices"); await client.page.getByText("This device: Linked", { exact: true }).waitFor(); }
       for (const client of [original, contact]) { await client.page.goto(base + "/app/chats/" + conversationId); await client.page.getByRole("textbox", { name: "Message text" }).waitFor(); }
       await original.page.getByRole("textbox", { name: "Message text" }).fill("Recovery baseline ciphertext");
       await original.page.getByRole("textbox", { name: "Message text" }).press("Enter");
@@ -53,9 +53,9 @@ export async function testEncryptionDevices(base, pool, owner, peer, password, c
     await device.page.goto(base + "/app/profile#encryption-devices");
     await device.page.getByText("This device: Waiting for approval", { exact: true }).waitFor();
     assert.equal(await device.page.getByRole("button", { name: "Approve encryption device", exact: true }).count(), 0, "Pending browsers do not offer impossible approval controls");
-    await device.page.getByText(/No trusted device is available/).waitFor();
+    await device.page.getByText(/No linked device is available/).waitFor();
     await openDeviceTools(device.page);
-    const fingerprint = await device.page.getByLabel("This device fingerprint").innerText();
+    const fingerprint = await device.page.getByLabel("This device safety number").innerText();
     const target = (await pool.query("select device_id,session_id,public_key from e2ee_keys where user_id=$1 and trusted_at is null order by created_at desc limit 1", [owner.id])).rows[0]; assert(target);
     assert.equal(createHash("sha256").update(target.public_key).digest("hex"), fingerprint);
     const emailCode = "381529";
@@ -91,7 +91,7 @@ export async function testEncryptionDevices(base, pool, owner, peer, password, c
     const before = (await pool.query("select id,text,encrypted from messages where conversation_id=$1 order by id", [conversationId])).rows;
     const wrapsBefore = (await pool.query("select count(*)::int as n from e2ee_conversation_keys where conversation_id=$1", [conversationId])).rows[0].n;
     await device.page.reload(); await openDeviceTools(device.page);
-    await device.page.getByRole("button", { name: "Emergency recovery: no trusted device or recovery file", exact: true }).click();
+    await device.page.getByRole("button", { name: "Emergency recovery: no linked device or backup file", exact: true }).click();
     const section = device.page.locator("#encryption-devices");
     await section.getByLabel("Encryption recovery confirmation").fill("RESET ENCRYPTION TRUST");
     await section.getByLabel("Email recovery code").fill(emailCode);
@@ -113,7 +113,7 @@ export async function testEncryptionDevices(base, pool, owner, peer, password, c
     device.cookies = (await device.page.context().cookies()).filter(cookie => /^(maddy_session|maddy_refresh)$/.test(cookie.name)).map(cookie => `${cookie.name}=${cookie.value}`).join("; ");
     assert.equal((await api(device.cookies, { ...proof, proof: "A".repeat(43) })).status, 403, "A cookie cannot substitute for private-key proof");
     assert.equal((await pool.query("select used_at from device_recovery_email_codes where code_hash=$1", [codeHash])).rows[0].used_at !== null, true, "Mailbox code is consumed exactly once");
-    await section.getByText("This device: Trusted", { exact: true }).waitFor();
+    await section.getByText("This device: Linked", { exact: true }).waitFor();
     const trusted = (await pool.query("select device_id from e2ee_keys where user_id=$1 and trusted_at is not null", [owner.id])).rows;
     assert.deepEqual(trusted.map(k => k.device_id), [target.device_id], "Only the proven recovery key is enrolled");
     const activeSessions = (await pool.query("select id from device_sessions where user_id=$1 and revoked_at is null and expires_at>now()", [owner.id])).rows;
@@ -125,13 +125,13 @@ export async function testEncryptionDevices(base, pool, owner, peer, password, c
     // An existing contact explicitly verifies the changed identity before sharing keys.
     await contact.page.goto(base + "/app/chats/" + conversationId);
     await contact.page.getByRole("textbox", { name: "Message text" }).waitFor();
-    const changed = contact.page.getByRole("button", { name: /Encryption device keys changed/ });
+    const changed = contact.page.getByRole("button", { name: /A device changed in this chat/ });
     await changed.waitFor(); await changed.click();
-    const verification = contact.page.getByRole("dialog", { name: "Verify encryption device changes", exact: true });
-    const confirmation = verification.getByRole("button", { name: "Approve verified changes", exact: true });
+    const verification = contact.page.getByRole("dialog", { name: "Check the safety numbers", exact: true });
+    const confirmation = verification.getByRole("button", { name: "Approve", exact: true });
     assert.equal(await confirmation.isEnabled(), false);
     await openDeviceTools(device.page);
-    const expectedFingerprint = await device.page.getByLabel("This device fingerprint").innerText();
+    const expectedFingerprint = await device.page.getByLabel("This device safety number").innerText();
     assert.equal(await verification.getByText(expectedFingerprint, { exact: true }).count(), 1);
     await verification.getByRole("checkbox").check(); await confirmation.click();
     await contact.page.getByRole("textbox", { name: "Message text" }).fill("Encrypted recovery verification");

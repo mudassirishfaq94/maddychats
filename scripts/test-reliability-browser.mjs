@@ -80,12 +80,12 @@ try {
  // Compare against the independently generated fixture identities before approval.
  for(const account of [owner,member]) {
   await account.page.reload();
-  await account.page.getByRole("button").filter({hasText:"Encryption device keys changed."}).click();
-  await account.page.getByLabel("Participant device fingerprint").nth(accounts.length-2).waitFor();
-  const fingerprints=await account.page.getByLabel("Participant device fingerprint").allTextContents();
+  await account.page.getByRole("button").filter({hasText:"A device changed in this chat."}).click();
+  await account.page.getByLabel("Participant safety number").nth(accounts.length-2).waitFor();
+  const fingerprints=await account.page.getByLabel("Participant safety number").allTextContents();
   assert.deepEqual(fingerprints.sort(),accounts.filter(peer=>peer!==account).map(peer=>createHash("sha256").update(peer.publicKey).digest("hex")).sort());
-  await account.page.getByLabel("I verified these participant device identities or confirmed the intended removal.",{exact:true}).check();
-  await account.page.getByRole("button",{name:"Approve verified changes",exact:true}).click();
+  await account.page.getByLabel("I compared the safety numbers and they match.",{exact:true}).check();
+  await account.page.getByRole("button",{name:"Approve",exact:true}).click();
  }
  console.log("PASS: added participant identities verified without bypassing E2EE trust");
  const normal=`Normal encrypted regression ${randomUUID()}`;
@@ -112,6 +112,7 @@ try {
  const scheduled=await api(owner,`/api/conversations/${group}/scheduled`,{text:await encryptMessage("Scheduled editable note",key),encrypted:true,scheduledFor:new Date(Date.now()+120000).toISOString()});assert.equal(scheduled.status(),201);
  await owner.page.getByRole("button",{name:"Open group settings",exact:true}).click();
  await owner.page.getByRole("button",{name:"Group settings",exact:true}).click();
+ await owner.page.getByRole("button",{name:"More Scheduled messages",exact:true}).click();
  await owner.page.getByRole("button",{name:"Scheduled messages",exact:true}).click();await owner.page.getByRole("button",{name:"Edit message and time",exact:true}).click();
  const messageField=owner.page.getByRole("dialog",{name:"Manage scheduled messages"}).getByRole("textbox",{name:"Message",exact:true});await messageField.waitFor({timeout:90000});assert.equal(await messageField.inputValue(),"Scheduled editable note");
  await messageField.fill("Updated encrypted schedule");await owner.page.getByRole("button",{name:"Save scheduled message",exact:true}).click();

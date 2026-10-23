@@ -147,7 +147,7 @@ export async function testMobileLayout(base, pool, { recordOnly = false, navigat
     await mkdir(".freebuff/performance", { recursive: true });
     const user = await login(accounts[0]);
     await user.goto(base + "/app/profile#encryption-devices");
-    await user.getByText("This device: Trusted", { exact: true }).waitFor();
+    await user.getByText("This device: Linked", { exact: true }).waitFor();
     const pending = await login(accounts[0]);
     await pending.goto(base + "/app/profile#encryption-devices");
     await pending.getByText("This device: Waiting for approval", { exact: true }).waitFor();

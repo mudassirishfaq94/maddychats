@@ -116,10 +116,10 @@ export async function testChatRecovery(base, cookieHeader, conversationId) {
       HTMLMediaElement.prototype.play = async () => {};
     })()`);
     await source.getByRole("button", { name: "Scan QR from your old device", exact: true }).click();
-    await source.getByText("Fingerprint check:").waitFor();
-    await target.getByText("Security details", { exact: true }).click();
-    await source.getByText("Show full fingerprint", { exact: true }).click();
-    await source.getByLabel("I compared this fingerprint with the new device and it matches.").check();
+    await source.getByText("Safety number:").waitFor();
+    await target.getByText("Device details", { exact: true }).click();
+    await source.getByText("Show full safety number", { exact: true }).click();
+    await source.getByLabel("I compared this safety number with the new phone and it matches.").check();
     await source.getByRole("button", { name: "Approve this device", exact: true }).click();
     await source.getByRole("status").filter({ hasText: "Device approved." }).waitFor();
     await source.goto(chatUrl);

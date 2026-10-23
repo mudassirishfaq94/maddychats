@@ -28,7 +28,7 @@ export async function testDeviceAccess(base, pool, secret) {
     assert(new URL(redirect.headers().location,base).pathname === "/login"); await anonymous.close();
     const source = await open(); await source.page.waitForURL(base+"/app/chats");
     await source.page.goto(base+"/app/profile#encryption-devices");
-    await source.page.getByText("This device: Trusted",{exact:true}).waitFor();
+    await source.page.getByText("This device: Linked",{exact:true}).waitFor();
     const target = await open();
     await target.page.getByRole("button",{name:"Show a device-link QR code",exact:true}).waitFor();
     await target.page.screenshot({path:"test-artifacts/device-access-choice-after.png",fullPage:true,animations:"disabled"});
@@ -63,9 +63,9 @@ export async function testDeviceAccess(base, pool, secret) {
     const linkResult=await linkResponse; assert.equal(linkResult.status(),201);
     const {id:requestId,token}=await linkResult.json(); assert.match(token,/^[A-Za-z0-9_-]{43}$/);
     await target.page.getByRole("img",{name:"Temporary secure device-link QR code"}).waitFor();
-    const fingerprintDetails=target.page.locator("details").filter({has:target.page.getByLabel("This device fingerprint")});
+    const fingerprintDetails=target.page.locator("details").filter({has:target.page.getByLabel("This device safety number")});
     await fingerprintDetails.locator(":scope > summary").click();
-    await target.page.getByLabel("This device fingerprint").waitFor({state:"visible"});
+    await target.page.getByLabel("This device safety number").waitFor({state:"visible"});
     await source.page.getByText("Troubleshooting",{exact:true}).click();
     await source.page.getByRole("button",{name:"Refresh encryption devices",exact:true}).click();
     const qrPayload=JSON.stringify({kind:"circlo-device-link",version:1,requestId,token});
@@ -78,9 +78,9 @@ export async function testDeviceAccess(base, pool, secret) {
       HTMLMediaElement.prototype.play=async()=>{};
     })()`);
     await source.page.getByRole("button",{name:"Scan QR from your old device",exact:true}).click();
-    await source.page.getByText("Fingerprint check:").waitFor();
-    await source.page.getByText("Show full fingerprint",{exact:true}).click();
-    await source.page.getByLabel("I compared this fingerprint with the new device and it matches.").check();
+    await source.page.getByText("Safety number:").waitFor();
+    await source.page.getByText("Show full safety number",{exact:true}).click();
+    await source.page.getByLabel("I compared this safety number with the new phone and it matches.").check();
     await source.page.getByRole("button",{name:"Approve this device",exact:true}).click();
     await target.page.waitForURL(base+"/app/chats");
     assert.equal(target.authMeRequests.length,0,"A completed private-key proof authorizes the app without a redundant /api/auth/me request");
@@ -100,7 +100,7 @@ export async function testDeviceAccess(base, pool, secret) {
     assert.equal(await recovery.page.getByLabel("Device linking code",{exact:true}).count(),0,"Only the selected form is shown");
     const confirm = recovery.page.getByRole("button",{name:"Confirm email and recover this browser",exact:true});
     assert(await confirm.isDisabled());
-    assert(await recovery.page.getByText("Your email code cannot bring back lost encryption keys.",{exact:false}).isVisible());
+    assert(await recovery.page.getByText("An email code can't bring back old messages by itself.",{exact:false}).isVisible());
     // A mailbox-code fixture avoids calling a paid or third-party email service.
     const pending = (await pool.query("select device_id,session_id,public_key from e2ee_keys where user_id=$1 order by created_at desc limit 1",[user.id])).rows[0];
     const fingerprint=createHash("sha256").update(pending.public_key).digest("hex"), code="483162";

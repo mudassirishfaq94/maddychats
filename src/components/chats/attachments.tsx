@@ -190,7 +190,7 @@ export function Lightbox({
       {isDecrypting ? (
         <div className="flex flex-col items-center gap-3 text-white/80">
           <Loader2 className="h-8 w-8 animate-spin" />
-          <p className="text-sm">Loading media…</p>
+          <p className="text-sm">Opening…</p>
         </div>
       ) : null}
       {!isDecrypting && !resolved.failed && loading && !failed ? (
@@ -199,7 +199,7 @@ export function Lightbox({
       {resolved.failed || (!isDecrypting && failed) ? (
         <div className="flex max-w-sm flex-col items-center gap-3 text-center text-white/75">
           <AlertTriangle className="h-8 w-8" />
-          <p className="text-sm">{resolved.failed ? "This device could not decrypt this media. Check Security & recovery from the chat." : "This device cannot preview this format. Download the original file using the download button above."}</p>
+          <p className="text-sm">{resolved.failed ? "Couldn't open this file." : "Can't preview this file. Tap download to save it."}</p>
         </div>
       ) : null}
       {!isDecrypting && activeSrc ? (
@@ -355,7 +355,9 @@ function FileChip({ file, own }: { file: AttachmentDTO; own: boolean }) {
             own ? "text-[var(--bubble-own-sub)]" : "text-[var(--muted)]",
           )}
         >
-          {file.encrypted && unavailable ? "Locked — could not decrypt" : humanSize(file.size)}
+          {file.encrypted && unavailable
+            ? "Couldn't open"
+            : `${humanSize(file.size)}${file.encrypted ? " · end-to-end encrypted" : ""}`}
         </span>
       </span>
       {unavailable ? (
@@ -417,16 +419,16 @@ function InlineMediaPreview({
     return (
       <span className="flex h-40 w-full flex-col items-center justify-center gap-2 bg-black/10 text-xs text-[var(--muted)]">
         <AlertTriangle className="h-5 w-5" />
-        {failedRender && url ? "Preview not supported. Open to download the original." : `${label} unavailable`}
+        {failedRender && url ? "Can't preview. Tap to download." : `${label} unavailable`}
       </span>
     );
   }
 
   if (!url) {
     return (
-      <span className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/10 text-xs text-[var(--muted)]" role="status" aria-label={`Loading ${label.toLowerCase()}`}>
+      <span className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/10 text-xs text-[var(--muted)]" role="status" aria-label={`Opening ${label.toLowerCase()}`}>
         <Loader2 className="h-5 w-5 animate-spin motion-reduce:animate-none" />
-        <span>Loading {label.toLowerCase()}…</span>
+        <span>Opening {label.toLowerCase()}…</span>
       </span>
     );
   }

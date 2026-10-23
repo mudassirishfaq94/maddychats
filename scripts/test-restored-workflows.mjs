@@ -170,7 +170,7 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     assert.equal((await api("/api/auth/login", "", { acceptTerms: true, acceptPrivacy: true, identifier: registerName, password: "IncorrectPassword1" })).status, 401);
     const source = await login(owner), recipient = await login(peer);
     await profile(source.page); await profile(recipient.page);
-    await source.page.getByText("This device: Trusted", { exact: true }).waitFor();
+    await source.page.getByText("This device: Linked", { exact: true }).waitFor();
     assert.equal(await source.page.getByText(/App (by|My) Mudassir/).count(), 0);
     if (process.env.GROUP_ONLY === "1" && !ownedLive) {
       const photos = await testProfilePhotos(base, pool, owner, peer, source, unrelatedCookie, recipient.cookies);
@@ -208,9 +208,9 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     const unreadable = (await pool.query("insert into messages(conversation_id,sender_id,text,type,encrypted) values($1,$2,'unreadable-owned-fixture','text',true) returning id", [conversationId, peer.id])).rows[0].id;
     try {
       await source.page.reload();
-      await source.page.getByText("Message not available yet", { exact: true }).waitFor({ timeout: 45000 });
-      await source.page.getByRole("button", { name: "Try loading again", exact: true }).click();
-      await source.page.getByText("Message not available yet", { exact: true }).waitFor({ timeout: 45000 });
+      await source.page.getByText("Couldn't load", { exact: true }).waitFor({ timeout: 45000 });
+      await source.page.getByRole("button", { name: "Tap to retry", exact: true }).click();
+      await source.page.getByText("Couldn't load", { exact: true }).waitFor({ timeout: 45000 });
       assert.equal(await source.page.getByRole("button", { name: "Security & recovery", exact: true }).count(), 1);
       assert.equal(await source.page.getByText("unreadable-owned-fixture", { exact: true }).count(), 0, "Ciphertext is never displayed");
     } finally {
@@ -306,10 +306,10 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
       HTMLMediaElement.prototype.play = async () => {};
     })()`);
     await source.page.getByRole("button", { name: "Scan QR from your old device", exact: true }).click();
-    await source.page.getByText("Fingerprint check:").waitFor();
-    await target.page.getByText("Security details", { exact: true }).click();
-    await source.page.getByText("Show full fingerprint", { exact: true }).click();
-    await source.page.getByLabel("I compared this fingerprint with the new device and it matches.").check();
+    await source.page.getByText("Safety number:").waitFor();
+    await target.page.getByLabel("This device safety number").waitFor({ state: "visible" });
+    await source.page.getByText("Show full safety number", { exact: true }).click();
+    await source.page.getByLabel("I compared this safety number with the new phone and it matches.").check();
     const proofResponse = source.page.waitForResponse(response => response.url().endsWith("/api/e2ee/devices/approve") && response.request().postDataJSON()?.action === "approve", { timeout: 60000 });
     await source.page.getByRole("button", { name: "Approve this device", exact: true }).click();
     const proof = (await proofResponse).request().postDataJSON();
@@ -317,7 +317,7 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     assert.equal((await pool.query("select status from device_link_requests where id=$1", [request.id])).rows[0].status, "approved");
     assert.equal((await api("/api/e2ee/devices/approve", source.cookies, challenge)).status, 409);
     assert.equal((await api("/api/e2ee/devices/approve", source.cookies, proof)).status, 409);
-    await refresh(target.page); await target.page.getByText("This device: Trusted", { exact: true }).waitFor();
+    await refresh(target.page); await target.page.getByText("This device: Linked", { exact: true }).waitFor();
     await chat(source.page);
     await source.page.getByRole("button", { name: "End-to-end encryption is active. View details", exact: true }).click();
     await source.page.getByRole("button", { name: "Restore my other devices", exact: true }).click();
@@ -469,7 +469,7 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     assert.equal((await api("/api/e2ee/devices/link", rejected.cookies, { deviceId: rejectedId })).status, 201);
     const [rejectRequest] = (await pool.query("select id,device_id,fingerprint from device_link_requests where user_id=$1 and status='pending'", [owner.id])).rows;
     await profile(source.page); await refresh(source.page); await source.page.getByRole("button", { name: "Reject device linking", exact: true }).click();
-    await source.page.getByText("Device linking rejected. No encryption access was granted.", { exact: true }).waitFor();
+    await source.page.getByText("Linking rejected. No access was given.", { exact: true }).waitFor();
     assert.equal((await pool.query("select status from device_link_requests where id=$1", [rejectRequest.id])).rows[0].status, "rejected");
     const pendingSession = await renewSession(rejected);
     assert.equal((await pool.query("select trusted_at from e2ee_keys where user_id=$1 and session_id=$2", [owner.id, pendingSession])).rows[0].trusted_at, null, "Rebinding an untrusted key never approves it");

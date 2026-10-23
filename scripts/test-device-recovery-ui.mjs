@@ -24,16 +24,16 @@ export async function testDeviceRecoveryUI(base, pool) {
     return { context, page };
   };
   try {
-    const source = await open(); await source.page.getByText("This device: Trusted", { exact: true }).waitFor();
+    const source = await open(); await source.page.getByText("This device: Linked", { exact: true }).waitFor();
     const simple = await source.context.newPage();
     await simple.goto(base + "/app/profile#encryption-devices");
-    await simple.getByText("This device: Trusted", { exact:true }).waitFor();
-    assert.equal(await simple.getByLabel("This device fingerprint").isVisible(),false,"Fingerprints are hidden in ordinary device settings");
+    await simple.getByText("This device: Linked", { exact:true }).waitFor();
+    assert.equal(await simple.getByLabel("This device safety number").isVisible(),false,"Fingerprints are hidden in ordinary device settings");
     assert(!await simple.locator("#encryption-devices").innerText().then(text=>text.includes("Device ID:")),"Identifiers do not clutter the main view");
     await mkdir(".freebuff/performance",{recursive:true});
     await simple.screenshot({path:".freebuff/performance/simple-devices.png",fullPage:true});
-    await simple.getByText("Security details",{exact:true}).click();
-    assert(await simple.getByLabel("This device fingerprint").isVisible(),"Verification remains available on demand");
+    await simple.getByText("Device details",{exact:true}).click();
+    assert(await simple.getByLabel("This device safety number").isVisible(),"Verification remains available on demand");
     await simple.close();
     const overview = await source.context.newPage();
     await overview.goto(base + "/app/profile");
@@ -43,9 +43,12 @@ export async function testDeviceRecoveryUI(base, pool) {
     assert.equal(await overview.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
     if (process.env.PROFILE_QA_SCREENSHOT) await overview.screenshot({ path: process.env.PROFILE_QA_SCREENSHOT, fullPage: true });
     await overview.close();
-    const notificationSection = source.page.locator("details").filter({ has: source.page.locator("summary").filter({ hasText: /^Notifications/ }) }).first();
-    assert.equal(await notificationSection.getAttribute("open"), null, "Secondary profile settings start collapsed");
-    await source.page.evaluate(`(() => {
+    const settingsPage = await source.context.newPage();
+    await settingsPage.goto(base + "/app/settings#notifications");
+    await settingsPage.getByRole("heading", { name: "Settings", exact: true }).waitFor();
+    const notificationSection = settingsPage.locator("#notifications details");
+    assert.equal(await notificationSection.getAttribute("open"), null, "Notification preferences start collapsed in Settings");
+    await settingsPage.evaluate(`(() => {
       const subscription = { toJSON: () => ({ endpoint: "https://fcm.googleapis.com/fcm/send/circlo-disposable-ui-fixture", keys: { p256dh: "fake-public-key-for-ui-test-only", auth: "fake-auth-for-ui-test" } }) };
       const oldSubscription = { endpoint: "https://fcm.googleapis.com/fcm/send/old-disposable-ui-fixture", options: { applicationServerKey: new Uint8Array(65).buffer }, unsubscribe: async () => { window.__pushReplacedKey = true; return true; } };
       const registration = { pushManager: { getSubscription: async () => oldSubscription, subscribe: async options => { window.__pushHasKey = options.applicationServerKey.byteLength === 65; return subscription; } } };
@@ -53,7 +56,8 @@ export async function testDeviceRecoveryUI(base, pool) {
       Object.defineProperty(navigator, "serviceWorker", { configurable: true, value: { ready: Promise.resolve(registration), register: async () => registration, getRegistration: async () => registration } });
       if (!("PushManager" in window)) Object.defineProperty(window, "PushManager", { configurable: true, value: function () {} });
     })()`);
-    await notificationSection.locator(":scope > summary").click();
+    await notificationSection.locator(":scope > summary").evaluate(summary => summary.click());
+    await settingsPage.locator("#notifications details[open]").waitFor();
     const pushSettings = await source.context.request.get(base + "/api/notifications/push");
     assert.equal(pushSettings.status(), 200);
     const pushConfig = await pushSettings.json();
@@ -65,9 +69,8 @@ export async function testDeviceRecoveryUI(base, pool) {
     assert.equal(await source.page.evaluate(() => window.__pushReplacedKey), true, "Subscriptions made with a previous deployment key are replaced");
     assert.equal((await pool.query("select count(*)::int as n from push_subscriptions where user_id=$1", [user.id])).rows[0].n, 1);
     assert.equal((await source.context.request.delete(base + "/api/notifications/push", { data: { endpoint: "https://fcm.googleapis.com/fcm/send/circlo-disposable-ui-fixture" }, headers: { Origin: base } })).status(), 200);
-    await notificationSection.locator(":scope > summary").click();
-    const settingsPage = await source.context.newPage();
-    await settingsPage.goto(base + "/app/settings");
+    await notificationSection.locator(":scope > summary").evaluate(summary => summary.click());
+    await settingsPage.locator("#notifications details:not([open])").waitFor();
     await settingsPage.getByRole("link",{name:"Manage secure devices",exact:true}).waitFor();
     assert.equal(await settingsPage.getByRole("heading",{name:"Notifications",exact:true}).count(),1,"Detailed preference forms stay collapsed until requested");
     for(const width of [320,390,844]) { await settingsPage.setViewportSize({width,height:740}); assert(await settingsPage.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),"Simple settings fit mobile widths"); }
@@ -101,12 +104,12 @@ export async function testDeviceRecoveryUI(base, pool) {
       HTMLMediaElement.prototype.play = async () => {};
     })()`);
     await source.page.getByRole("button", { name: "Scan QR from your old device", exact: true }).click();
-    await source.page.getByText("Fingerprint check:").waitFor();
-    await target.page.getByText("Security details", { exact: true }).click();
-    await source.page.getByText("Show full fingerprint", { exact: true }).click();
-    await source.page.getByLabel("I compared this fingerprint with the new device and it matches.").check();
+    await source.page.getByText("Safety number:").waitFor();
+    await target.page.getByLabel("This device safety number").waitFor({ state: "visible" });
+    await source.page.getByText("Show full safety number", { exact: true }).click();
+    await source.page.getByLabel("I compared this safety number with the new phone and it matches.").check();
     await source.page.getByRole("button", { name: "Approve this device", exact: true }).click();
-    await target.page.getByText("This device: Trusted", { exact: true }).waitFor({ timeout: 30000 });
+    await target.page.getByText("This device: Linked", { exact: true }).waitFor({ timeout: 30000 });
     const device = (await pool.query("select device_id from e2ee_keys where user_id=$1 order by created_at desc limit 1", [user.id])).rows[0];
     const reused = await target.context.request.post(base + "/api/e2ee/devices/approve", { data: { action: "challenge", sourceDeviceId: sourceDevice.device_id, targetDeviceId: device.device_id, targetFingerprint: fingerprint, linkId: requestId, token }, headers: { Origin: base } });
     assert.equal(reused.status(), 409, "An approved QR request cannot be replayed");
@@ -114,13 +117,13 @@ export async function testDeviceRecoveryUI(base, pool) {
     assert.equal((await target.context.request.get(base + "/api/auth/me")).status(), 401);
     assert.equal((await source.context.request.get(base + "/api/auth/me")).status(), 200, "Signing out another browser keeps this session active");
     await login(target.context); await target.page.reload();
-    await target.page.getByText("This device: Trusted", { exact: true }).waitFor({ timeout: 30000 });
+    await target.page.getByText("This device: Linked", { exact: true }).waitFor({ timeout: 30000 });
     const downloadEvent = source.page.waitForEvent("download");
     await source.page.getByRole("button", { name: "Download encrypted recovery file", exact: true }).click();
     const file = await readFile(await (await downloadEvent).path());
     const recoveryCode = await source.page.locator('code[aria-label="Recovery file code"]').innerText();
     await openDeviceTools(source.page);
-    const sourceFingerprint = await source.page.getByLabel("This device fingerprint").innerText();
+    const sourceFingerprint = await source.page.getByLabel("This device safety number").innerText();
     await source.context.close();
     const restored = await open();
     await restored.page.getByText("Restore a recovery file or move from the old website", { exact: true }).click();
@@ -128,9 +131,9 @@ export async function testDeviceRecoveryUI(base, pool) {
     await restored.page.locator('input[type="password"]').last().fill(recoveryCode);
     await restored.page.getByRole("checkbox", { name: /I saved a recovery file/ }).check();
     await restored.page.getByRole("button", { name: "Restore encryption identity", exact: true }).click();
-    await restored.page.getByText("This device: Trusted", { exact: true }).waitFor({ timeout: 30000 });
+    await restored.page.getByText("This device: Linked", { exact: true }).waitFor({ timeout: 30000 });
     await openDeviceTools(restored.page);
-    assert.equal(await restored.page.getByLabel("This device fingerprint").innerText(), sourceFingerprint);
+    assert.equal(await restored.page.getByLabel("This device safety number").innerText(), sourceFingerprint);
     assert.equal((await pool.query("select count(*)::int as n from e2ee_keys where user_id=$1 and trusted_at is not null", [user.id])).rows[0].n, 2, "Recovery preserves the other browser's trust");
     assert.equal(await restored.page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth), false, "Mobile recovery page fits the viewport");
     assert.deepEqual(errors, []);

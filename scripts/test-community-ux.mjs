@@ -19,6 +19,7 @@ export async function testCommunityUx(context,base,owner,member,pool){
   const invitations=await page.request.get(`${base}/api/groups/${conversationId}/invites`);const links=(await invitations.json()).links;assert.equal(links[0].maxUses,1);assert(Date.parse(links[0].expiresAt)>Date.now());
   assert.equal((await page.request.get(base+href)).status(),200);
   await page.getByRole("button",{name:"Revoke",exact:true}).click();await link.waitFor({state:"detached"});assert.equal((await page.request.get(base+href)).status(),404);
+  await page.getByRole("button",{name:"More Scheduled messages",exact:true}).click();
   await page.getByRole("button",{name:"Scheduled messages",exact:true}).click();await page.getByRole("dialog",{name:"Manage scheduled messages",exact:true}).waitFor();
   const changed=await page.request.post(`${base}/api/conversations/${conversationId}/controls`,{headers:{Origin:base},data:{action:"setDisappearing",disappearingSeconds:86400}});assert.equal(changed.status(),200);
   for(const target of [page,member.page]){await target.goto(`${base}/app/chats/${conversationId}`);await target.locator("[data-message-id] p:visible").getByText("New messages disappear after 24 hours.",{exact:true}).first().waitFor();}

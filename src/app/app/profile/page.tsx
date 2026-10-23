@@ -10,15 +10,11 @@ import {
 } from "lucide-react";
 import { getSessionUser } from "@/server/session";
 import { ProfileEditor } from "@/components/profile/profile-editor";
-import { NotificationPreferences } from "@/components/profile/notification-preferences";
+import { EncryptionDevices } from "@/components/profile/encryption-devices";
 import { AuthenticationMethods } from "@/components/profile/authentication-methods";
 import { PasswordSettings } from "@/components/profile/password-settings";
-import { PrivacySettings } from "@/components/profile/privacy-settings";
-import { LoginHistory } from "@/components/profile/login-history";
-import { AccountDataSection } from "@/components/profile/account-data";
-import { TwoFactorAuth } from "@/components/profile/two-factor-auth";
-import { EncryptionDevices } from "@/components/profile/encryption-devices";
 import { Devices } from "@/components/profile/devices";
+import Link from "next/link";
 import { ProfileDisclosure } from "@/components/profile/profile-disclosure";
 import { db } from "@/db";
 import { oauthAccounts, users } from "@/db/schema";
@@ -101,15 +97,10 @@ export default async function ProfilePage({
           <ProfileDisclosure title="Encryption & trusted devices" description="Manage your devices and keep access to your private chats." anchors={["encryption-devices", "cloud-recovery"]} defaultOpen={query.recovery === "1"}>
             <EncryptionDevices openRecovery={query.recovery === "1"} recoveryEmail={accountSecurity?.emailVerifiedAt && !user.email.endsWith("@auth.maddychats.invalid") ? user.email : undefined} />
           </ProfileDisclosure>
-          <ProfileDisclosure title="Sign-in & account security" description="Google, passwords, two-step verification, and signed-in sessions." anchors={["account-security", "devices", "authentication-methods", "two-step-verification"]} defaultOpen={Boolean(notice)}>
-            <div id="account-security" className="space-y-4"><AuthenticationMethods initialMethods={initialMethods} notice={notice} /><ProfileDisclosure title="Password" description="Set or change your password."><PasswordSettings email={user.email} google={initialMethods.google} /></ProfileDisclosure><ProfileDisclosure title="Two-step verification" description="Add an extra sign-in check." anchors={["two-step-verification"]}><div id="two-step-verification"><TwoFactorAuth /></div></ProfileDisclosure><Devices /><ProfileDisclosure title="Recent sign-ins" description="Review recent account activity."><LoginHistory /></ProfileDisclosure></div>
+          <ProfileDisclosure title="Sign-in & account security" description="Google, passwords, and signed-in sessions." anchors={["account-security", "devices", "authentication-methods"]} defaultOpen={Boolean(notice)}>
+            <div id="account-security" className="space-y-4"><AuthenticationMethods initialMethods={initialMethods} notice={notice} /><ProfileDisclosure title="Password" description="Set or change your password."><PasswordSettings email={user.email} google={initialMethods.google} /></ProfileDisclosure><Devices /></div>
           </ProfileDisclosure>
-          <ProfileDisclosure title="Notifications" description="Enable push alerts and choose which messages notify you." anchors={["notifications"]}>
-            <div id="notifications"><NotificationPreferences /></div>
-          </ProfileDisclosure>
-          <ProfileDisclosure title="Privacy & your data" description="Visibility settings, account export, and account deletion." anchors={["privacy-settings", "account-data"]}>
-            <div id="privacy-settings" className="space-y-4"><PrivacySettings /><AccountDataSection /></div>
-          </ProfileDisclosure>
+          <Link href="/app/settings" className="flex min-h-16 items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--card)] px-5 py-4"><span className="min-w-0 flex-1"><span className="block font-semibold">Notifications, privacy and two-step verification</span><span className="mt-1 block text-xs text-[var(--muted)]">These live in Settings.</span></span><span aria-hidden className="text-[var(--muted)]">›</span></Link>
         </div>
 
         <div className="min-w-0 space-y-4">

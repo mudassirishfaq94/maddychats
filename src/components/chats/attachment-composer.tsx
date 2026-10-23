@@ -108,7 +108,7 @@ export function useAttachmentUpload() {
       }
       if (selected.reduce((total, item) => total + item.file.size, 0) > MEDIA_MAX_BYTES) {
         finish();
-        resolve({ ok: false, error: "Attachments must total 250 MB or less. Send larger batches separately." });
+        resolve({ ok: false, error: "These files are too large (250 MB max). Send them in smaller groups." });
         return;
       }
       (async () => {
@@ -138,7 +138,7 @@ export function useAttachmentUpload() {
         }
         if(usingStaging)form.append("staged",JSON.stringify(staged));
         if (text) {
-          if (!encryptText) throw new Error("Caption encryption is required.");
+          if (!encryptText) throw new Error("Couldn't prepare the caption.");
           const encryptedCaption = await encryptText(text);
           form.append("text", encryptedCaption);
         }
@@ -184,7 +184,7 @@ export function useAttachmentUpload() {
       xhr.onerror = () => {
         xhrRef.current = null;
         setProgress(null);
-        resolve({ ok: false, error: "Network error during upload." });
+        resolve({ ok: false, error: "No connection during upload." });
       };
       xhr.onabort = () => {
         xhrRef.current = null;
@@ -198,7 +198,7 @@ export function useAttachmentUpload() {
         } catch {
           xhrRef.current = null;
           setProgress(null);
-          resolve({ ok: false, error: signal.aborted ? "Upload cancelled." : "Encryption failed before upload." });
+          resolve({ ok: false, error: signal.aborted ? "Upload cancelled." : "Couldn't prepare the file." });
         }
       })();
     });

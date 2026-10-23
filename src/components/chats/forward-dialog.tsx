@@ -56,10 +56,10 @@ export function ForwardDialog({
       try {
         const response = await fetch("/api/conversations", { cache: "no-store", signal: controller.signal });
         const data = await response.json();
-        if (!response.ok) throw new Error(data.error ?? "Could not load conversations.");
+        if (!response.ok) throw new Error(data.error ?? "Couldn't load chats.");
         if (!controller.signal.aborted) setConversations(data.conversations ?? []);
       } catch (err) {
-        if (!controller.signal.aborted) setError(err instanceof Error ? err.message : "Could not load conversations.");
+        if (!controller.signal.aborted) setError(err instanceof Error ? err.message : "Couldn't load chats.");
       } finally {
         if (!controller.signal.aborted) setLoadingConvs(false);
       }
@@ -83,7 +83,7 @@ export function ForwardDialog({
 
   async function handleForward() {
     if (sending) return;
-    if (!selected.length) { setError("Choose at least one conversation."); return; }
+    if (!selected.length) { setError("Choose at least one chat."); return; }
     setSending(true);
     setError(null);
     setProgress(Object.fromEntries(selected.map((id) => [id, "sending"])));
@@ -94,7 +94,7 @@ export function ForwardDialog({
       setSent(true);
       setTimeout(() => onClose(), 600);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Forwarding failed. Please try again.");
+      setError(err instanceof Error ? err.message : "Couldn't forward. Tap to retry.");
       setSending(false);
     }
   }
