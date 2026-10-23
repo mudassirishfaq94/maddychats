@@ -10,6 +10,18 @@ export interface NotificationPresentation {
   body: string;
 }
 
+export type NotificationMessageKind = "text" | "photo" | "video" | "voice" | "file";
+
+function safeMessageFallback(kind: NotificationMessageKind): string {
+  switch (kind) {
+    case "photo": return "Sent you a photo. Open Circlo to view it.";
+    case "video": return "Sent you a video. Open Circlo to watch it.";
+    case "voice": return "Sent you a voice message. Open Circlo to listen.";
+    case "file": return "Sent you a file. Open Circlo to view it.";
+    default: return "Sent you a message. Open Circlo to read it.";
+  }
+}
+
 function cleanText(value: string, fallback: string, maxLength: number): string {
   const normalized = value
     .replace(/[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/g, " ")
@@ -27,16 +39,17 @@ export function messageNotificationPresentation(input: {
   actorName: string;
   preview: string;
   encrypted: boolean;
+  messageKind?: NotificationMessageKind;
 }): NotificationPresentation {
-  if (input.locked) return { title: "Circlo", body: "New message received." };
+  if (input.locked) return { title: "Circlo", body: "Open Circlo to see your new message." };
   if (input.messageRequest) return { title: "New Message Request", body: "You have received a new message request." };
   if (!input.showDetails) {
-    return { title: "Circlo", body: "New message received." };
+    return { title: "Circlo", body: "You have a new message. Open Circlo to read it." };
   }
 
   const actor = cleanText(input.actorName, "Someone", MAX_LABEL_LENGTH);
   const message = input.encrypted
-    ? "New message received."
+    ? safeMessageFallback(input.messageKind ?? "text")
     : cleanText(input.preview, "New message. Open Circlo to read it.", MAX_BODY_LENGTH);
 
   return input.isGroup

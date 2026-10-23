@@ -1,5 +1,6 @@
 import { deliverNativePush } from "@/lib/native-push-delivery";
 import { nativePushPayload } from "@/lib/native-push-payload";
+import type { NotificationMessageKind } from "@/lib/notification-presentation";
 import { safeError } from "@/server/safe-error";
 import webPush from "web-push";
 import { and, eq, gt, isNull } from "drizzle-orm";
@@ -85,6 +86,7 @@ export async function sendMessagePush(
     isGroup?: boolean;
     groupName?: string | null;
     encrypted?: boolean;
+    messageKind?: NotificationMessageKind;
     /** Ready-to-display alert text; resolved by the caller. */
     title?: string;
     body?: string;

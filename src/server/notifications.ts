@@ -1,6 +1,6 @@
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { conversationMembers, conversations, notifications } from "@/db/schema";
+import { conversationMembers, conversations, messageAttachments, notifications } from "@/db/schema";
 import { publishToUsers } from "./realtime";
 import { getNotificationPreferences } from "./notification-preferences";
 import { sendMessagePush } from "./web-push";
@@ -140,6 +140,15 @@ export async function notifyNewMessage(input: {
     .where(eq(conversations.id, input.conversationId))
     .limit(1);
   const isGroup = conversation[0]?.type === "group";
+  const attachmentRows = await db.select({ mimeType: messageAttachments.mimeType })
+    .from(messageAttachments).where(eq(messageAttachments.messageId, input.messageId));
+  const messageKind = attachmentRows.some(({ mimeType }) => mimeType.startsWith("video/"))
+    ? "video" as const
+    : attachmentRows.some(({ mimeType }) => mimeType.startsWith("image/"))
+    ? "photo" as const
+    : attachmentRows.some(({ mimeType }) => mimeType.startsWith("audio/"))
+    ? "voice" as const
+    : attachmentRows.length ? "file" as const : "text" as const;
 
   await Promise.all(
     members
@@ -182,6 +191,7 @@ export async function notifyNewMessage(input: {
             actorName: input.actorName,
             preview: input.preview.slice(0, 140),
             encrypted: input.encrypted !== false,
+            messageKind,
           });
           await sendMessagePush(m.userId, {
             notificationId,
