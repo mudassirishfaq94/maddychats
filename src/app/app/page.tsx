@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation";
 import type { Metadata } from "next";
 import { getSessionUser } from "@/server/session";
-import { listConversationsFor } from "@/server/chat";
 import { ChatsLayout } from "@/components/chats/chats-layout";
 
 export const metadata: Metadata = { title: "Chats" };
@@ -15,13 +14,12 @@ export default async function AppHome() {
   const user = await getSessionUser();
   if (!user) redirect("/login");
 
-  const conversations = await listConversationsFor(user.id);
-
   return (
     <>
-      <ChatsLayout conversations={conversations}>
+      <ChatsLayout>
         {null}
       </ChatsLayout>
     </>
   );
 }
+
