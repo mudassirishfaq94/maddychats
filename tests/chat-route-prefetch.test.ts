@@ -62,3 +62,19 @@ test("failed authorization responses are never retained as chat data", async (t)
   await prefetchChatRouteData("account-d", conversationId);
   assert.equal(requests, 2, "a later request retries the member-authorized API read");
 });
+
+test("only a transport failure may fall back to recent authorized data", async (t) => {
+  const originalFetch = globalThis.fetch;
+  const originalNow = Date.now;
+  t.after(() => { globalThis.fetch = originalFetch; Date.now = originalNow; });
+  let fail = false;
+  globalThis.fetch = (async () => {
+    if (fail) throw new TypeError("Failed to fetch");
+    return fixtureResponse();
+  }) as typeof fetch;
+  const authorized = await prefetchChatRouteData("account-offline", conversationId);
+  Date.now = () => originalNow() + 16_000;
+  fail = true;
+  const fallback = await prefetchChatRouteData("account-offline", conversationId);
+  assert.equal(fallback, authorized);
+});
