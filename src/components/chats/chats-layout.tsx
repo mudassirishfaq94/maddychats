@@ -35,7 +35,7 @@ function previewText(conv: ConversationSummary, previews: Map<string, string>): 
   if (last.deletedAt) return "Message deleted";
   if (last.encrypted) {
     // Ciphertext must never be shown as a preview.
-    if (last.text) return previews.get(`${last.id}:${last.text}`) ?? ({ audio: "Voice message", image: "Photo", video: "Video", file: "File" }[last.type] ?? "Decrypting message…");
+    if (last.text) return previews.get(`${last.id}:${last.text}`) ?? ({ audio: "Voice message", image: "Photo", video: "Video", file: "File" }[last.type] ?? "Message");
   }
   return last.text || ({ audio: "Voice message", image: "Photo", video: "Video", file: "File" }[last.type] ?? "Message");
 }

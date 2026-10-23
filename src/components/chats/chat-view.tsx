@@ -363,6 +363,18 @@ export function ChatView({
     trustChanged: boolean;
   }>({ ready: false, fingerprint: null, checking: true, peersMissingKeys: 0, keyVersion: 1, needsRotation: false, trustChanged: false });
   const [showEncryptionInfo, setShowEncryptionInfo] = useState(false);
+  const [encryptionNoticeFor, setEncryptionNoticeFor] = useState<string | null>(null);
+  const encryptionNoticeKey = `circlo:e2ee-notice:v1:${me.id}:${conversationId}`;
+  useEffect(() => {
+    if (!requestAccepted || !e2eeState.ready || e2eeState.trustChanged || e2eeState.peersMissingKeys > 0) return;
+    try {
+      if (window.localStorage.getItem(encryptionNoticeKey)) return;
+      window.localStorage.setItem(encryptionNoticeKey, "shown");
+    } catch {
+      // The notice is informational; storage being unavailable must not block chat use.
+    }
+    setEncryptionNoticeFor(encryptionNoticeKey);
+  }, [encryptionNoticeKey, e2eeState.peersMissingKeys, e2eeState.ready, e2eeState.trustChanged, requestAccepted]);
   const [decryptedTexts, setDecryptedTexts] = useState<Map<string, string>>(() => new Map(
     initial.messages.flatMap((message) => {
       if (!message.encrypted) return [];
@@ -1955,9 +1967,7 @@ export function ChatView({
                   ? "Online"
                   : otherLastSeen
                     ? hydrated ? `Last seen ${timeAgo(otherLastSeen)}` : "Last seen"
-                    : e2eeState.ready
-                      ? "End-to-end encrypted"
-                      : "Offline"}
+                    : "Offline"}
               </span>
             </span>
           </Link>
@@ -1975,9 +1985,11 @@ export function ChatView({
           type="button"
           onClick={() => setShowEncryptionInfo(true)}
           aria-label={
-            e2eeState.ready
-              ? "End-to-end encryption is active. View details"
-              : "Encryption status"
+            e2eeState.ready && e2eeState.needsRotation
+              ? "Encryption key rotation needed. View details"
+              : e2eeState.ready
+                ? "End-to-end encryption is active. View details"
+                : "Encryption status"
           }
           title={
             e2eeState.checking
@@ -1989,7 +2001,7 @@ export function ChatView({
                   : "Encryption unavailable"
           }
           className={cn(
-            "flex min-h-[44px] shrink-0 items-center justify-center gap-1 rounded-full px-2 transition-colors sm:px-2.5",
+            "flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-full px-2 transition-colors sm:px-2.5",
             e2eeState.ready
               ? "text-[var(--accent-fg)] hover:bg-[var(--accent-soft)]"
               : "text-[var(--muted)] hover:bg-[var(--surface-2)]",
@@ -1998,13 +2010,13 @@ export function ChatView({
           {e2eeState.checking ? (
             <Loader2 className="h-4 w-4 animate-spin" />
           ) : e2eeState.ready ? (
-            <Lock className="h-4 w-4" />
+            <span className="relative flex">
+              <Lock className="h-4 w-4" />
+              {e2eeState.needsRotation ? <span aria-hidden="true" className="absolute -right-1 -top-1 size-2 rounded-full bg-amber-500" /> : null}
+            </span>
           ) : (
             <ShieldCheck className="h-4 w-4" />
           )}
-          <span className="hidden text-[0.62rem] font-bold uppercase tracking-wide md:inline">
-            {e2eeState.ready ? (e2eeState.needsRotation ? "E2E 🔄" : "E2E") : "Sec"}
-          </span>
         </button>
 
         <ChatActionsMenu
@@ -2018,7 +2030,12 @@ export function ChatView({
 
       </header>
 
-      {/* E2EE status banner — visible proof chats are encrypted */}
+      {encryptionNoticeFor === encryptionNoticeKey ? (
+        <div className="flex items-center gap-2 border-b border-[var(--border)] px-4 py-2 text-[0.72rem] text-[var(--muted)]" role="status">
+          <span className="min-w-0 flex-1">Messages in this chat are end-to-end encrypted and can be read only on devices in this conversation.</span>
+          <button type="button" className="min-h-11 shrink-0 px-2 font-medium text-[var(--text)]" onClick={() => setEncryptionNoticeFor(null)} aria-label="Dismiss encryption notice">Dismiss</button>
+        </div>
+      ) : null}
       {e2eeState.trustChanged ? (
         <button
           type="button"
@@ -2031,20 +2048,6 @@ export function ChatView({
           <ShieldCheck className="h-4 w-4 shrink-0 text-amber-600" />
           <span className="min-w-0 flex-1 text-[0.72rem] text-[var(--muted)]">Encryption device keys changed. Review device fingerprints with your contact before approving.</span>
           <span className="shrink-0 text-[0.65rem] font-bold text-amber-700">Approve</span>
-        </button>
-      ) : e2eeState.ready && requestAccepted ? (
-        <button
-          type="button"
-          onClick={() => setShowEncryptionInfo(true)}
-          className="flex items-center gap-2 border-b border-[color-mix(in_srgb,var(--accent)_25%,transparent)] bg-[color-mix(in_srgb,var(--accent)_7%,var(--surface))] px-4 py-1.5 text-left transition-colors hover:bg-[color-mix(in_srgb,var(--accent)_12%,var(--surface))]"
-        >
-          <Lock className="h-3 w-3 shrink-0 text-[var(--accent-fg)]" />
-          <span className="min-w-0 flex-1 truncate text-[0.7rem] text-[var(--muted)]">
-            Messages are end-to-end encrypted — only you and the recipient(s) can read them.
-          </span>
-          <span className="shrink-0 text-[0.62rem] font-bold uppercase tracking-wide text-[var(--accent-fg)]">
-            Learn more
-          </span>
         </button>
       ) : e2eeState.peersMissingKeys > 0 && !e2eeState.checking && !awaitingApproval ? (
         <button
@@ -2225,12 +2228,6 @@ export function ChatView({
             <p className="mt-1.5 max-w-[15rem] text-sm leading-relaxed text-[var(--muted)]">
               Say hello to {otherName.split(" ")[0]}.
             </p>
-            <div className="mt-6 flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3.5 py-2.5">
-              <Lock className="h-3.5 w-3.5 shrink-0 text-[var(--accent-fg)]" />
-              <span className="max-w-[18rem] text-[0.7rem] leading-relaxed text-[var(--muted)]">
-                Messages in this chat are <b>end-to-end encrypted</b>. Only you and {otherName.split(" ")[0]} can read them.
-              </span>
-            </div>
           </div>
         ) : (
           <VirtualMessageHistory items={grouped} scrollRef={scrollRef} scrollElement={scrollElement} contentRef={messageContentRef} historyRef={historyRef}
@@ -2304,7 +2301,7 @@ export function ChatView({
                 {replyTo.deletedAt
                   ? "Message deleted"
                   : isPendingDecrypt(replyTo)
-                    ? "\u{1F512} Decrypting…"
+                    ? "Encrypted message"
                     : copyableText(replyTo)}
               </span>
             </span>
@@ -2621,6 +2618,7 @@ export function ChatView({
           checking={e2eeState.checking}
           error={e2ee.error}
           fingerprint={e2eeState.fingerprint}
+          needsRotation={e2eeState.needsRotation}
           peersMissing={e2eeState.peersMissingKeys}
           conversationName={otherName}
           onRestoreOtherDevices={() => e2ee.syncKnownConversations(conversationId)}
@@ -2639,6 +2637,7 @@ function EncryptionInfoDialog({
   fingerprint,
   error,
   peersMissing,
+  needsRotation,
   conversationName,
   onRestoreOtherDevices,
   onClose,
@@ -2648,6 +2647,7 @@ function EncryptionInfoDialog({
   fingerprint: string | null;
   error: string | null;
   peersMissing: number;
+  needsRotation: boolean;
   conversationName: string;
   onRestoreOtherDevices: () => Promise<string>;
   onClose: () => void;
@@ -2695,6 +2695,7 @@ function EncryptionInfoDialog({
             <p role="alert" className="py-6 text-sm text-[var(--muted)]">{error}</p>
           ) : ready ? (
             <>
+              {needsRotation ? <p role="alert" className="mb-3 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3.5 py-2.5 text-xs leading-relaxed text-amber-800 dark:text-amber-200">Encryption keys need rotation. Review the key status before continuing.</p> : null}
               <div className="flex items-center gap-2 rounded-xl border border-[color-mix(in_srgb,var(--accent)_25%,transparent)] bg-[color-mix(in_srgb,var(--accent)_7%,transparent)] px-3.5 py-2.5">
                 <Lock className="h-4 w-4 shrink-0 text-[var(--accent-fg)]" />
                 <p className="text-xs leading-relaxed">
@@ -2790,9 +2791,7 @@ function EncryptionInfoDialog({
                   : "Encryption keys are still being prepared."}
               </p>
               <p className="text-xs leading-relaxed text-[var(--muted)]">
-                As soon as everyone&apos;s key is ready, all new messages in
-                this chat are automatically end-to-end encrypted — you&apos;ll see
-                the lock appear on every message.
+                  As soon as everyone&apos;s key is ready, new messages in this chat are automatically end-to-end encrypted.
               </p>
             </div>
           )}
@@ -3192,9 +3191,6 @@ const MessageRow = memo(function MessageRow({msg, showDate, sameSenderPrev, me, 
                                   : "text-[var(--muted)]",
                               )}
                             >
-                              {msg.encrypted ? (
-                                <Lock className="h-2.5 w-2.5 opacity-60" aria-label="End-to-end encrypted" />
-                              ) : null}
                               {msg.editedAt && !deleted ? (
                                 <span className="text-[0.58rem] italic opacity-70">edited</span>
                               ) : null}

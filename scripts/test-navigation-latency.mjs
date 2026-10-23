@@ -70,6 +70,14 @@ export async function testNavigationLatency(context,base,conversationId) {
     const before=requests.length;const timing=await measure(page,chat,`/app/chats/${conversationId}`,'textarea[aria-label="Message text"]',null);
     if(process.env.NAV_BASELINE!=="1")assert(requests.slice(before).some(request=>new URL(request.url).pathname===`/app/chats/${conversationId}`),"Opening a chat must fetch authorized current history, not reuse a full-route snapshot");
     rows.push({scenario,round,route:"Open chat",...timing,rscRequests:requests.length-before});
+    if(scenario==="normal"&&round===0){
+     const dismissNotice=page.getByRole("button",{name:"Dismiss encryption notice",exact:true});
+     if(await dismissNotice.count())await dismissNotice.click();
+     assert.equal(await page.getByText(/end-to-end encrypted/i).count(),0,"Routine chat view must not repeat encryption copy after its one-time notice is dismissed");
+     assert.equal(await page.locator('[aria-label="End-to-end encrypted"]').count(),0,"Messages must not repeat the encryption lock icon");
+     assert.equal(await page.getByRole("button",{name:/^(Encryption status|End-to-end encryption is active\. View details|Encryption key rotation needed\. View details)$/}).count(),1,"Encryption details remain available from one compact header control");
+     await mkdir("test-artifacts",{recursive:true});await page.screenshot({path:"test-artifacts/encryption-chat-after.png",animations:"disabled"});
+    }
     await nav().getByRole("link",{name:"Chats",exact:true}).click();await page.getByLabel("Search conversations",{exact:true}).waitFor();await page.waitForTimeout(250);
    }
    for(let round=0;round<2;round++)for(const target of [

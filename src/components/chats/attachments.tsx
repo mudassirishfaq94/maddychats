@@ -355,9 +355,7 @@ function FileChip({ file, own }: { file: AttachmentDTO; own: boolean }) {
             own ? "text-[var(--bubble-own-sub)]" : "text-[var(--muted)]",
           )}
         >
-          {file.encrypted && unavailable
-            ? "Locked — could not decrypt"
-            : `${humanSize(file.size)}${file.encrypted ? " · end-to-end encrypted" : ""}`}
+          {file.encrypted && unavailable ? "Locked — could not decrypt" : humanSize(file.size)}
         </span>
       </span>
       {unavailable ? (
