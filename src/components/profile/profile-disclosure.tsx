@@ -6,8 +6,10 @@ import { ChevronDown } from "lucide-react";
 export function ProfileDisclosure({ title, description, anchors = [], defaultOpen = false, children }: { title: string; description: string; anchors?: string[]; defaultOpen?: boolean; children: ReactNode }) {
   const [open, setOpen] = useState(defaultOpen);
   const [loaded, setLoaded] = useState(defaultOpen);
+  const [hydrated, setHydrated] = useState(false);
   const anchorKey = anchors.join(",");
   useEffect(() => {
+    setHydrated(true);
     const reveal = () => {
       if (anchorKey && anchorKey.split(",").includes(window.location.hash.slice(1))) {
         setOpen(true); setLoaded(true);
@@ -17,7 +19,7 @@ export function ProfileDisclosure({ title, description, anchors = [], defaultOpe
     reveal(); window.addEventListener("hashchange", reveal);
     return () => window.removeEventListener("hashchange", reveal);
   }, [anchorKey]);
-  return <details open={open} onToggle={event => { const next = event.currentTarget.open; setOpen(next); if (next) setLoaded(true); }} className="min-w-0 rounded-2xl border border-[var(--border)] bg-[var(--card)]">
+  return <details data-profile-disclosure-ready={hydrated ? "true" : undefined} open={open} onToggle={event => { const next = event.currentTarget.open; setOpen(next); if (next) setLoaded(true); }} className="min-w-0 rounded-2xl border border-[var(--border)] bg-[var(--card)]">
     <summary className="flex cursor-pointer list-none items-center gap-3 rounded-2xl px-5 py-4 focus-visible:outline-2 focus-visible:outline-[var(--accent)]">
       <span className="min-w-0 flex-1"><span className="block font-semibold">{title}</span><span className="mt-1 block text-xs text-[var(--muted)]">{description}</span></span>
       <ChevronDown aria-hidden className={`h-4 w-4 shrink-0 transition-transform ${open ? "rotate-180" : ""}`} />
