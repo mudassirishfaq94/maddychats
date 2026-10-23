@@ -361,8 +361,15 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
       const original = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
       window.polishMicrophoneCalls = 0;
       navigator.mediaDevices.getUserMedia = async constraints => { window.polishMicrophoneCalls++; return original(constraints); };
-      const button = document.querySelector('button[aria-label="Record voice message"]'); button.click(); button.click();
     });
+    const existingVoice = source.page.getByRole("region", { name: "Voice message studio", exact: true });
+    if (await existingVoice.count()) {
+      const discard = source.page.getByRole("button", { name: /^(Cancel recording|Delete recording)$/ });
+      if (await discard.count()) await discard.click();
+    }
+    const recordVoice = source.page.getByRole("button", { name: "Record voice message", exact: true });
+    await recordVoice.waitFor({ state: "visible" });
+    await recordVoice.evaluate(button => { button.click(); button.click(); });
     await source.page.getByRole("button", { name: "Stop recording", exact: true }).waitFor();
     assert.equal(await source.page.evaluate(() => window.polishMicrophoneCalls), 1, "Rapid microphone clicks must share one permission request and stream");
     await source.page.waitForTimeout(1600); await source.page.getByRole("button", { name: "Stop recording", exact: true }).click();
