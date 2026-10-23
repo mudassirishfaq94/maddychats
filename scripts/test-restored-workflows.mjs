@@ -5,7 +5,7 @@ import { testChatOpeningRace } from "./test-chat-opening.mjs";
 import {testChatScroll} from "./test-chat-scroll.mjs";
 import assert from "node:assert/strict";
 import { chromium } from "playwright";
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import { randomBytes, createHash, createHmac } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { testMobilePerformance } from "./test-mobile-performance.mjs";
@@ -107,7 +107,8 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     return sessions.currentSessionId;
   };
   try {
-    const registrationContext = await browser.newContext({ serviceWorkers: "block" });
+    await mkdir("test-artifacts", { recursive: true });
+    const registrationContext = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, serviceWorkers: "block" });
     await registrationContext.addInitScript(() => { window.__workflowCsp = []; document.addEventListener("securitypolicyviolation", event => window.__workflowCsp.push(event.violatedDirective)); });
     const registrationPage = await registrationContext.newPage();
     pages.push(registrationPage);
@@ -120,7 +121,9 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     assert.equal(await googleButton.getAttribute("aria-disabled"), null);
     assert.doesNotMatch(await googleButton.getAttribute("href"), /terms=1|privacy=1/);
     await registrationPage.getByText(/By signing in, you confirm/).waitFor();
+    await registrationPage.screenshot({ path: "test-artifacts/login-consent-after.png", fullPage: true, animations: "disabled" });
     await registrationPage.goto(base + "/signup");
+    await registrationPage.screenshot({ path: "test-artifacts/signup-consent-after.png", fullPage: true, animations: "disabled" });
     await registrationPage.getByLabel("Display name", { exact: true }).fill("Workflow registration");
     await registrationPage.getByLabel("Username", { exact: true }).fill(registerName);
     await registrationPage.getByLabel("Email", { exact: true }).fill(registerName + "@example.invalid");
