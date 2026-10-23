@@ -72,7 +72,10 @@ export async function testNavigationLatency(context,base,conversationId) {
     rows.push({scenario,round,route:"Open chat",...timing,rscRequests:requests.length-before});
     if(scenario==="normal"&&round===0){
      const dismissNotice=page.getByRole("button",{name:"Dismiss encryption notice",exact:true});
-     if(await dismissNotice.count())await dismissNotice.click();
+     if(await dismissNotice.count()){
+      await dismissNotice.click();
+      await page.getByRole("status").filter({hasText:"Messages in this chat are end-to-end encrypted and can be read only on devices in this conversation."}).waitFor({state:"detached"});
+     }
      assert.equal(await page.getByText(/end-to-end encrypted/i).count(),0,"Routine chat view must not repeat encryption copy after its one-time notice is dismissed");
      assert.equal(await page.getByText(/decrypting/i).count(),0,"Routine chat view must not expose transient decryption progress copy");
      assert.equal(await page.locator('[aria-label="End-to-end encrypted"]').count(),0,"Messages must not repeat the encryption lock icon");
