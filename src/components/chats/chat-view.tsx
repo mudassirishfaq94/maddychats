@@ -79,7 +79,7 @@ import { CHAT_BACKGROUNDS, chatBubbleTheme, isBackgroundImage } from "@/lib/chat
 import { getPattern } from "@/lib/chat-patterns";
 const MediaPicker = dynamic(() => import("./media-picker").then((module) => module.MediaPicker));
 const AudioMessage = dynamic(() => import("./audio-message").then((module) => module.AudioMessage));
-const VoiceComposer = dynamic(() => import("./voice-composer").then((module) => module.VoiceComposer));
+import { VoiceComposer } from "./voice-composer";
 import { useVoiceRecorder } from "@/hooks/use-voice-recorder";
 import { LongPressTouchable } from "./long-press-touchable";
 const MobileMessageMenu = dynamic(() => import("./mobile-message-menu").then(module => module.MobileMessageMenu));
