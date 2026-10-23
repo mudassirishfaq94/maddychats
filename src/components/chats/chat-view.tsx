@@ -205,10 +205,11 @@ function queuedMessageHelp(reason?: string) {
 function QueuedMessageNotice({ reason, onTry, onCancel }: { reason?: string; onTry: () => void; onCancel: () => void }) {
   const [visible, setVisible] = useState(true);
   useEffect(() => {
+    if (!visible) return;
     const timer = window.setTimeout(() => setVisible(false), 8000);
     return () => window.clearTimeout(timer);
-  }, []);
-  if (!visible) return null;
+  }, [visible]);
+  if (!visible) return <button type="button" className="mt-1 text-xs text-[var(--muted)] underline" aria-label="Show queued message options" onClick={() => setVisible(true)}>Queued · Options</button>;
   return <div role="status" className="mt-2 max-w-sm rounded-xl border border-sky-400/20 bg-sky-400/10 px-3 py-2 text-xs leading-relaxed text-[var(--text)]">
     <p>{queuedMessageHelp(reason)}</p>
     <div className="mt-1 flex gap-3">

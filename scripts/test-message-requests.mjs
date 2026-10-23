@@ -149,7 +149,9 @@ export async function testMessageRequests(base, senderCookie, recipientCookie, c
     await sender.getByLabel("Queued", { exact: true }).waitFor();
     await sender.getByText("Saved. Confirm the new phone’s safety number in this chat. It will send after confirmation.", { exact: true }).waitFor();
     assert.equal(await sender.getByLabel("Failed to send", { exact: true }).count(), 0);
-    await sender.getByRole("button", { name: "Cancel message", exact: true }).click();
+    const cancelQueuedMessage = sender.getByRole("button", { name: "Cancel message", exact: true });
+    if (!await cancelQueuedMessage.isVisible()) await sender.getByRole("button", { name: "Show queued message options", exact: true }).click();
+    await cancelQueuedMessage.click();
     await sender.getByLabel("Queued", { exact: true }).waitFor({ state: "hidden" });
     await sender.unroute(peersUrl);
     await sender.reload();
