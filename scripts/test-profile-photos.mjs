@@ -46,7 +46,7 @@ export async function testProfilePhotos(base, pool, owner, peer, source, unrelat
   assert(groupTarget&&groupTarget.width>=44&&groupTarget.height>=44,"Mobile group action retains a 44px touch target");
   await newGroup.click();
   const createDialog = source.page.getByRole("dialog", { name: "Select people", exact: true });
-  await createDialog.getByPlaceholder("Type exact full name or username…").fill(peer.username);
+  await createDialog.getByPlaceholder("Search by name or username…", { exact: true }).fill(peer.username);
   await createDialog.getByRole("button").filter({ hasText: "@" + peer.username }).click();
   await createDialog.getByRole("button", { name: "Next (1)", exact: true }).click();
   const groupDialog = source.page.getByRole("dialog", { name: "Group info", exact: true });
