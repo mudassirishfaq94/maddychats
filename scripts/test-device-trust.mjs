@@ -81,34 +81,23 @@ try {
   const registerB = await call("/api/e2ee/keys", { method: "POST", cookies: sessionA, body: { deviceId: deviceB, publicKey: keyB, encryptedPrivateKey: "v2:placeholder" } });
   record("second device registers as pending", registerB.status === 200 && registerB.json?.pendingApproval === true, JSON.stringify(registerB.json));
 
-  // The new device cannot mint a code for itself.
-  const selfCode = await call("/api/e2ee/devices/link/code", { method: "POST", cookies: sessionA, body: { deviceId: deviceA } });
-  record("a trusted device cannot link itself", selfCode.status === 422, `status=${selfCode.status} ${selfCode.text.slice(0, 120)}`);
-
+  // The old numeric-code endpoints are retired so linking always requires a
+  // scanned target token and an explicit trusted-device fingerprint approval.
   const codeResponse = await call("/api/e2ee/devices/link/code", { method: "POST", cookies: sessionA, body: { deviceId: deviceB } });
-  const code = codeResponse.json?.code;
-  record("trusted device generates a linking code", codeResponse.status === 201 && typeof code === "string" && code.length === 8, `status=${codeResponse.status} code=${code}`);
-
-  const wrongCode = await call("/api/e2ee/devices/link/verify", { method: "POST", cookies: sessionA, body: { code: "00000000", deviceId: deviceB } });
-  record("a wrong code is rejected", wrongCode.status === 403, `status=${wrongCode.status}`);
-
-  const verify = await call("/api/e2ee/devices/link/verify", { method: "POST", cookies: sessionA, body: { code: code.toLowerCase(), deviceId: deviceB, deviceName: "Work laptop — Chrome" } });
-  record("the new device redeems the code", verify.status === 200, `status=${verify.status} ${verify.text.slice(0, 160)}`);
-
-  const reuse = await call("/api/e2ee/devices/link/verify", { method: "POST", cookies: sessionA, body: { code, deviceId: deviceB } });
-  record("the code is single use", reuse.status === 403, `status=${reuse.status}`);
+  record("legacy numeric-code issuance is retired", codeResponse.status === 404, `status=${codeResponse.status}`);
+  const verify = await call("/api/e2ee/devices/link/verify", { method: "POST", cookies: sessionA, body: { code: "000000", deviceId: deviceB } });
+  record("legacy numeric-code approval is retired", verify.status === 404, `status=${verify.status}`);
 
   const afterLinks = await call("/api/e2ee/devices/link", { cookies: sessionA });
-  const linkedRow = afterLinks.json?.requests?.find((row) => row.deviceId === deviceB);
-  record("the linking request is recorded as approved", linkedRow?.status === "approved", JSON.stringify(linkedRow));
+  record("retired numeric-code endpoints created no linking requests", afterLinks.status === 200 && afterLinks.json?.requests?.length === 0, JSON.stringify(afterLinks.json?.requests));
 
   const list = await call("/api/privacy/devices", { cookies: sessionA });
   const devices = list.json?.devices ?? [];
   const rowA = devices.find((device) => device.deviceId === deviceA);
   const rowB = devices.find((device) => device.deviceId === deviceB);
   record("the device list returns both devices", list.status === 200 && Boolean(rowA) && Boolean(rowB), `status=${list.status} count=${devices.length}`);
-  record("trust is read from the device row", Boolean(rowA?.trusted) && Boolean(rowB?.trusted), JSON.stringify({ a: rowA?.trusted, b: rowB?.trusted }));
-  record("devices carry a readable label", Boolean(rowA?.label) && rowB?.label === "Work laptop — Chrome", JSON.stringify({ a: rowA?.label, b: rowB?.label }));
+  record("trust is read from the device row", Boolean(rowA?.trusted) && !rowB?.trusted, JSON.stringify({ a: rowA?.trusted, b: rowB?.trusted }));
+  record("devices carry readable labels", Boolean(rowA?.label) && Boolean(rowB?.label), JSON.stringify({ a: rowA?.label, b: rowB?.label }));
   record("devices report platform and country fields", typeof rowA?.platform === "string" && typeof rowA?.countryName === "string", JSON.stringify({ platform: rowA?.platform, country: rowA?.countryName }));
   record("devices expose the browser session list", Array.isArray(rowA?.sessions) && rowA.sessions.length >= 1, JSON.stringify(rowA?.sessions?.length));
 
@@ -122,7 +111,7 @@ try {
 
   const keysList = await call("/api/e2ee/keys", { cookies: sessionB });
   const keyRowB = keysList.json?.keys?.find((key) => key.deviceId === deviceB);
-  record("the linked device exposes its public key", Boolean(keyRowB?.publicKey), JSON.stringify({ found: Boolean(keyRowB) }));
+  record("the pending device exposes its public key without granting trust", Boolean(keyRowB?.publicKey) && !keyRowB?.trustedAt, JSON.stringify({ found: Boolean(keyRowB), trusted: Boolean(keyRowB?.trustedAt) }));
 
   // Revoking the session removes that device's encryption approval.
   // The browser used for the second sign-in must still be visible: either bound
@@ -132,10 +121,8 @@ try {
     (afterRelogin.json?.unboundSessions ?? []).find((session) => session.current);
   record("the browser in use is listed after signing in again", Boolean(currentSession), JSON.stringify({ currentSessionId: afterRelogin.json?.currentSessionId, listed: Boolean(currentSession) }));
 
-  // Captured before any revocation, so the assertions describe the state the
-  // linking flow itself produced.
-  const linkRow = await client.query("select status, used_at, source_device_id, code_hash from device_link_requests where user_id=$1", [userId]);
-  record("only the code hash is stored", linkRow.rows.length === 1 && linkRow.rows[0].status === "approved" && Boolean(linkRow.rows[0].used_at) && linkRow.rows[0].source_device_id === deviceA && linkRow.rows[0].code_hash !== code, JSON.stringify(linkRow.rows[0]));
+  const linkRow = await client.query("select id from device_link_requests where user_id=$1", [userId]);
+  record("retired numeric endpoints create no pairing records", linkRow.rows.length === 0, JSON.stringify(linkRow.rows));
 
   const sessionId = currentSession?.id;
   if (sessionId) {
@@ -156,8 +143,8 @@ try {
     // trusted device's approval.
     const afterRevoke = await client.query("select device_id, trusted_at from e2ee_keys where user_id=$1 order by device_id", [userId]);
     record(
-      "revoking an unbound session leaves device trust intact",
-      afterRevoke.rows.every((row) => row.trusted_at !== null),
+      "revoking an unbound session leaves existing trust intact",
+      afterRevoke.rows.find((row) => row.device_id === deviceA)?.trusted_at !== null && afterRevoke.rows.find((row) => row.device_id === deviceB)?.trusted_at === null,
       JSON.stringify(afterRevoke.rows),
     );
 
@@ -178,7 +165,7 @@ try {
   }
 
   const stored = await client.query("select device_id, trusted_at, device_name, platform from e2ee_keys where user_id=$1 order by device_id", [userId]);
-  record("device identity is stored with the key", stored.rows.some((row) => row.device_id === deviceB && row.device_name === "Work laptop — Chrome" && row.platform), JSON.stringify(stored.rows));
+  record("device identity is stored with the key", stored.rows.some((row) => row.device_id === deviceB && row.platform), JSON.stringify(stored.rows));
 
   const unauth = await call("/api/privacy/devices");
   record("the device list requires a session", unauth.status === 401, `status=${unauth.status}`);
