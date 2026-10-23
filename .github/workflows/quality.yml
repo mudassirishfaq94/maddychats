@@ -178,5 +178,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: mobile-and-database-lab
-          path: .freebuff/performance/*.json
+          path: |
+            .freebuff/performance/*.json
+            .freebuff/performance/*.png
           if-no-files-found: ignore

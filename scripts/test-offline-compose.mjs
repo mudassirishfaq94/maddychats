@@ -88,7 +88,10 @@ export async function testOfflineCompose(context, base, owner, group, pool, memb
   // Retry changes the bubble to queued before its request is acknowledged.
   // Wait for the actual commit, then verify the original ID delivered once.
   await page.waitForFunction(async ({userId,id})=>!(await(await import("/offline-store.js")).queuedTexts(userId)).some(entry=>entry.id===id),{userId:owner.id,id:rejectedId});
-  assert.equal((await pool.query("select count(*)::int n from messages where conversation_id=$1 and client_message_id=$2",[group,rejectedId])).rows[0].n,1);
+  const retryStarted=Date.now();let retryRows=[];
+  while(Date.now()-retryStarted<45000){retryRows=(await pool.query("select text,encrypted from messages where conversation_id=$1 and sender_id=$2 and client_message_id=$3",[group,owner.id,rejectedId])).rows;if(retryRows.length)break;await page.waitForTimeout(250);}
+  assert.equal(retryRows.length,1,"The acknowledged retry must be durably committed once on the server");
+  assert.equal(retryRows[0].encrypted,true);assert.notEqual(retryRows[0].text,rejectedText);
   console.log("PASS: rejected retry keeps encrypted text across reload; explicit retry succeeds with the original client ID (403 response mocked)");
   console.log("PASS: offline cold navigation, encrypted durable queue, reload, automatic E2EE delivery, server acknowledgment, no duplicates, no private SW cache");
 }

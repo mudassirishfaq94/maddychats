@@ -59,6 +59,7 @@ try{
   const data=await new Promise(resolve=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.readAsDataURL(new Blob(chunks,{type:'video/webm'}));});sessionStorage.setItem('fixtureMedia',data);
  });
  await page.goto(base+'?media');const video=page.getByLabel('Video thumbnail');await video.waitFor();
+ assert.equal(await video.getAttribute('preload'),'metadata','Video previews should decode a thumbnail without eagerly initializing full playback');
  await page.waitForFunction(()=>{const video=document.querySelector('video');return video?.readyState>=2&&video.videoWidth>0;});
  assert(await video.evaluate(video=>{const canvas=document.createElement('canvas');canvas.width=1;canvas.height=1;const ctx=canvas.getContext('2d');ctx.drawImage(video,0,0,1,1);const pixel=ctx.getImageData(0,0,1,1).data;return pixel[1]>120&&pixel[0]<80&&video.paused&&!video.controls;}),'Video preview must display a decoded frame without a play-button-only control');
  const cacheResult=await page.evaluate(async()=>{

@@ -35,6 +35,7 @@ async function main() {
   const pushKeys = webPush.generateVAPIDKeys();
   try {
     // This dedicated, verified loopback database prevents test users and limits leaking between runs.
+    await mkdir(".freebuff/performance", { recursive: true });
     await pool.query("drop schema if exists drizzle cascade; drop schema public cascade; create schema public;");
     await migrate(drizzle(pool), { migrationsFolder: "drizzle" });
     await cp(resolve(".next/static"), resolve(".next/standalone/.next/static"), { recursive: true });

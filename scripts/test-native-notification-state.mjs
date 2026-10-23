@@ -37,7 +37,8 @@ export async function testNativeNotificationState(context, base, userId) {
     for (let n = 0; n < 40 && !registrations; n++) await page.waitForTimeout(50);
     assert(registrations > 0, "Allow performs native permission and server enrollment");
     assert.equal(preferences.pushNotifications, true);
-    await page.goto(base + "/app/profile#notifications");
+    await page.goto(base + "/app/settings#notifications");
+    await page.getByText("Notification preferences", { exact: true }).click();
     await page.getByRole("switch", { name: "Desktop and mobile push", exact: true }).waitFor();
     await page.waitForTimeout(150);
     assert.equal(await page.getByText("Enable push alerts on this device", { exact: true }).count(), 0, "Registered devices must not appear disabled after reopening settings");

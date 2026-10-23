@@ -445,13 +445,15 @@ function InlineMediaPreview({
           src={url}
           muted
           playsInline
-          preload="auto"
+          preload="metadata"
           aria-label="Video thumbnail"
           onLoadedMetadata={event => {
             const video=event.currentTarget;
             if(video.duration>0)video.currentTime=Math.min(0.05,video.duration/2);
+            else setLoading(false);
           }}
-          onLoadedData={() => setLoading(false)}
+          onLoadedData={event => { if (!event.currentTarget.seeking) setLoading(false); }}
+          onSeeked={() => setLoading(false)}
           onError={() => setFailedRender(true)}
           className={cn(
             "w-full object-cover transition-transform duration-300 group-hover/img:scale-105",

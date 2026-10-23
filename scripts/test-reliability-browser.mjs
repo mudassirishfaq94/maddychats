@@ -80,12 +80,12 @@ try {
  // Compare against the independently generated fixture identities before approval.
  for(const account of [owner,member]) {
   await account.page.reload();
-  await account.page.getByRole("button").filter({hasText:"Encryption device keys changed."}).click();
-  await account.page.getByLabel("Participant device fingerprint").nth(accounts.length-2).waitFor();
-  const fingerprints=await account.page.getByLabel("Participant device fingerprint").allTextContents();
+  await account.page.getByRole("button").filter({hasText:"A device changed in this chat."}).click();
+  await account.page.getByLabel("Participant safety number").nth(accounts.length-2).waitFor();
+  const fingerprints=await account.page.getByLabel("Participant safety number").allTextContents();
   assert.deepEqual(fingerprints.sort(),accounts.filter(peer=>peer!==account).map(peer=>createHash("sha256").update(peer.publicKey).digest("hex")).sort());
-  await account.page.getByLabel("I verified these participant device identities or confirmed the intended removal.",{exact:true}).check();
-  await account.page.getByRole("button",{name:"Approve verified changes",exact:true}).click();
+  await account.page.getByLabel("I compared the safety numbers and they match.",{exact:true}).check();
+  await account.page.getByRole("button",{name:"Approve",exact:true}).click();
  }
  console.log("PASS: added participant identities verified without bypassing E2EE trust");
  const normal=`Normal encrypted regression ${randomUUID()}`;
