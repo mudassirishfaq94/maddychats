@@ -84,7 +84,7 @@ async function readR2Object(relativePath: string, signal?: AbortSignal): Promise
   } catch (error) {
     const status = (error as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode;
     const name = (error as { name?: string }).name;
-    if (status === 404 || name === "NoSuchKey" || name === "NotFound") return null;
+    if (name === "NoSuchKey" || (status === 404 && name === "NotFound")) return null;
     throw error;
   }
 }
@@ -92,10 +92,11 @@ async function readR2Object(relativePath: string, signal?: AbortSignal): Promise
 async function deleteR2Objects(paths: string[]) {
   if (!paths.length) return;
   if (!r2Storage) throw new Error("Cloudflare R2 storage is not configured.");
-  await r2Storage.send(new DeleteObjectsCommand({
+  const result = await r2Storage.send(new DeleteObjectsCommand({
     Bucket: R2_MEDIA_BUCKET,
     Delete: { Objects: paths.map((Key) => ({ Key })), Quiet: true },
   }));
+  if (result.Errors?.length) throw new Error("storage_delete_failed");
 }
 
 /**

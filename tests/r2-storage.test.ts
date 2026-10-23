@@ -4,7 +4,7 @@ import { after, before, test } from "node:test";
 
 let server: Server;
 let endpoint = "";
-let mode: "r2-object" | "supabase-fallback" | "r2-error" = "r2-object";
+let mode: "r2-object" | "supabase-fallback" | "r2-error" | "r2-bucket-error" = "r2-object";
 let fallbackAuthorization = "";
 let readStored: typeof import("../src/server/storage").readStored;
 
@@ -20,6 +20,11 @@ before(async () => {
     if (path.startsWith("/circlo-media/images/") && mode === "r2-error") {
       response.writeHead(503, { "content-type": "application/xml" });
       response.end("<Error><Code>ServiceUnavailable</Code></Error>");
+      return;
+    }
+    if (path.startsWith("/circlo-media/images/") && mode === "r2-bucket-error") {
+      response.writeHead(404, { "content-type": "application/xml", "x-amz-request-id": "test" });
+      response.end("<Error><Code>NoSuchBucket</Code><Message>Bucket not found</Message></Error>");
       return;
     }
     if (path.startsWith("/circlo-media/images/") && mode === "supabase-fallback") {
@@ -80,5 +85,12 @@ test("R2 service failures do not silently switch providers", async () => {
   mode = "r2-error";
   fallbackAuthorization = "";
   await assert.rejects(readStored("images/r2-error"));
+  assert.equal(fallbackAuthorization, "");
+});
+
+test("a missing R2 bucket is not mistaken for a missing object", async () => {
+  mode = "r2-bucket-error";
+  fallbackAuthorization = "";
+  await assert.rejects(readStored("images/r2-bucket-error"));
   assert.equal(fallbackAuthorization, "");
 });
