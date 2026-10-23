@@ -297,13 +297,14 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     assert.equal((await api("/api/e2ee/devices/approve", recipient.cookies, challenge)).status, 403);
     assert.equal((await api("/api/e2ee/devices/approve", source.cookies, { ...challenge, token: "b".repeat(43) })).status, 403);
     await profile(source.page); await refresh(source.page);
-    await source.page.evaluate(payload => {
+    await source.page.evaluate(`(() => {
+      const payload = ${JSON.stringify(qrPayload)};
       Object.defineProperty(window, "BarcodeDetector", { configurable: true, value: function () {} });
       Object.defineProperty(window.BarcodeDetector, "getSupportedFormats", { value: function () { return Promise.resolve(["qr_code"]); } });
       Object.defineProperty(window.BarcodeDetector.prototype, "detect", { value: function () { return Promise.resolve([{ rawValue: payload }]); } });
       Object.defineProperty(navigator.mediaDevices, "getUserMedia", { configurable: true, value: async () => new MediaStream() });
       HTMLMediaElement.prototype.play = async () => {};
-    }, qrPayload);
+    })()`);
     await source.page.getByRole("button", { name: "Scan QR from your old device", exact: true }).click();
     await source.page.getByText("Fingerprint check:").waitFor();
     await target.page.getByText("Security details", { exact: true }).click();

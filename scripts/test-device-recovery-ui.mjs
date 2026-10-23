@@ -92,13 +92,14 @@ export async function testDeviceRecoveryUI(base, pool) {
     const fingerprint = (await pool.query("select fingerprint from device_link_requests where id=$1", [requestId])).rows[0].fingerprint;
     const invalidToken = await source.context.request.post(base + "/api/e2ee/devices/approve", { data: { action: "challenge", sourceDeviceId: sourceDevice.device_id, targetDeviceId: pendingDevice.device_id, targetFingerprint: fingerprint, linkId: requestId, token: "b".repeat(43) }, headers: { Origin: base } });
     assert.equal(invalidToken.status(), 403, "A mismatched QR token cannot approve the target");
-    await source.page.evaluate(payload => {
+    await source.page.evaluate(`(() => {
+      const payload = ${JSON.stringify(qrPayload)};
       Object.defineProperty(window, "BarcodeDetector", { configurable: true, value: function () {} });
       Object.defineProperty(window.BarcodeDetector, "getSupportedFormats", { value: function () { return Promise.resolve(["qr_code"]); } });
       Object.defineProperty(window.BarcodeDetector.prototype, "detect", { value: function () { return Promise.resolve([{ rawValue: payload }]); } });
       Object.defineProperty(navigator.mediaDevices, "getUserMedia", { configurable: true, value: async () => new MediaStream() });
       HTMLMediaElement.prototype.play = async () => {};
-    }, qrPayload);
+    })()`);
     await source.page.getByRole("button", { name: "Scan QR from your old device", exact: true }).click();
     await source.page.getByText("Fingerprint check:").waitFor();
     await target.page.getByText("Security details", { exact: true }).click();

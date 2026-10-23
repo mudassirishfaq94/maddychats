@@ -107,13 +107,14 @@ export async function testChatRecovery(base, cookieHeader, conversationId) {
     assert.match(token, /^[A-Za-z0-9_-]{43}$/);
     const qrPayload = JSON.stringify({ kind: "circlo-device-link", version: 1, requestId, token });
     await target.getByRole("img", { name: "Temporary secure device-link QR code" }).waitFor();
-    await source.evaluate(payload => {
+    await source.evaluate(`(() => {
+      const payload = ${JSON.stringify(qrPayload)};
       Object.defineProperty(window, "BarcodeDetector", { configurable: true, value: function () {} });
       Object.defineProperty(window.BarcodeDetector, "getSupportedFormats", { value: function () { return Promise.resolve(["qr_code"]); } });
       Object.defineProperty(window.BarcodeDetector.prototype, "detect", { value: function () { return Promise.resolve([{ rawValue: payload }]); } });
       Object.defineProperty(navigator.mediaDevices, "getUserMedia", { configurable: true, value: async () => new MediaStream() });
       HTMLMediaElement.prototype.play = async () => {};
-    }, qrPayload);
+    })()`);
     await source.getByRole("button", { name: "Scan QR from your old device", exact: true }).click();
     await source.getByText("Fingerprint check:").waitFor();
     await target.getByText("Security details", { exact: true }).click();

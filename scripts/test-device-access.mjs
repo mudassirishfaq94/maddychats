@@ -66,13 +66,15 @@ export async function testDeviceAccess(base, pool, secret) {
     await target.page.getByText("Show this device’s fingerprint",{exact:true}).click();
     await source.page.getByText("Troubleshooting",{exact:true}).click();
     await source.page.getByRole("button",{name:"Refresh encryption devices",exact:true}).click();
-    await source.page.evaluate(payload=>{
+    const qrPayload=JSON.stringify({kind:"circlo-device-link",version:1,requestId,token});
+    await source.page.evaluate(`(()=>{
+      const payload=${JSON.stringify(qrPayload)};
       Object.defineProperty(window,"BarcodeDetector",{configurable:true,value:function(){}});
       Object.defineProperty(window.BarcodeDetector,"getSupportedFormats",{value:function(){return Promise.resolve(["qr_code"])}});
       Object.defineProperty(window.BarcodeDetector.prototype,"detect",{value:function(){return Promise.resolve([{rawValue:payload}])}});
       Object.defineProperty(navigator.mediaDevices,"getUserMedia",{configurable:true,value:async()=>new MediaStream()});
       HTMLMediaElement.prototype.play=async()=>{};
-    },JSON.stringify({kind:"circlo-device-link",version:1,requestId,token}));
+    })()`);
     await source.page.getByRole("button",{name:"Scan QR from your old device",exact:true}).click();
     await source.page.getByText("Fingerprint check:").waitFor();
     await source.page.getByText("Show full fingerprint",{exact:true}).click();
