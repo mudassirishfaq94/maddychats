@@ -15,16 +15,12 @@ export function prefetchChatRouteData(userId: string, conversationId: string): P
   if (existing && existing.expiresAt > Date.now()) return existing.promise;
   entries.delete(key);
 
-  const promise = Promise.all([
-    fetch(`/api/conversations/${encodeURIComponent(conversationId)}`, { cache: "no-store", signal: AbortSignal.timeout(10_000) }),
-    fetch(`/api/conversations/${encodeURIComponent(conversationId)}/messages?limit=20`, { cache: "no-store", signal: AbortSignal.timeout(10_000) }),
-  ]).then(async ([detailResponse, historyResponse]) => {
-    if (!detailResponse.ok || !historyResponse.ok) throw new Error("Conversation could not be loaded.");
-    const [{ conversation }, initial] = await Promise.all([
-      detailResponse.json() as Promise<{ conversation: ConversationDetail }>,
-      historyResponse.json() as Promise<MessagePage>,
-    ]);
-    return { conversation, initial };
+  const promise = fetch(`/api/conversations/${encodeURIComponent(conversationId)}/open`, {
+    cache: "no-store", signal: AbortSignal.timeout(10_000),
+  }).then(async (response) => {
+    if (!response.ok) throw new Error("Conversation could not be loaded.");
+    const data = await response.json() as { conversation: ConversationDetail; initial: MessagePage };
+    return data;
   });
 
   const entry = { expiresAt: Date.now() + TTL_MS, promise };
