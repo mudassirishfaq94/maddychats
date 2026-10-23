@@ -16,7 +16,7 @@ export default async function DeviceAccessPage({ searchParams }: { searchParams:
   const query = await searchParams;
   const [account] = await db.select({ emailVerifiedAt: users.emailVerifiedAt }).from(users).where(eq(users.id, user.id)).limit(1);
   const recoveryEmail = account?.emailVerifiedAt && !user.email.endsWith("@auth.maddychats.invalid") ? user.email : undefined;
-  return <AuthLayout title="Confirm this device" subtitle="Your account is verified. Complete this check to sign in.">
+  return <AuthLayout title="Link this device to your account" subtitle="Scan a QR code from a trusted device to unlock your encrypted chats.">
     <DeviceAccess recoveryEmail={recoveryEmail} next={deviceAccessDestination(query.next)} openRecovery={query.recovery === "1"} />
   </AuthLayout>;
 }
