@@ -58,6 +58,8 @@ export async function testNativeNotificationState(context, base, userId) {
     await page.waitForFunction(() => window.nativeNotificationTest.bound === null);
     assert.equal(preferences.pushNotifications, false, "Only explicit account opt-out clears delivery binding");
     await page.reload();
+    await page.locator("#notifications details > summary").click();
+    await page.locator("#notifications details[open]").waitFor();
     await page.getByRole("switch", { name: "Desktop and mobile push", exact: true }).waitFor();
     assert.equal(await page.getByRole("switch", { name: "Desktop and mobile push", exact: true }).getAttribute("aria-checked"), "false");
     failedEnrollment = true;
@@ -67,6 +69,8 @@ export async function testNativeNotificationState(context, base, userId) {
     await page.waitForFunction(id => window.nativeNotificationTest.bound === id, userId);
     failedEnrollment = false;
     await page.reload();
+    await page.locator("#notifications details > summary").click();
+    await page.locator("#notifications details[open]").waitFor();
     await page.getByRole("switch", { name: "Desktop and mobile push", exact: true }).waitFor();
     assert.equal(await page.getByRole("switch", { name: "Desktop and mobile push", exact: true }).getAttribute("aria-checked"), "true");
     console.log("PASS: native onboarding permission, persisted opt-in, session registration status, failed-resume preservation and explicit opt-out (Android bridge simulated)");
