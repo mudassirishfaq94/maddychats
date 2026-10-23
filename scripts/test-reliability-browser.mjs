@@ -112,6 +112,7 @@ try {
  const scheduled=await api(owner,`/api/conversations/${group}/scheduled`,{text:await encryptMessage("Scheduled editable note",key),encrypted:true,scheduledFor:new Date(Date.now()+120000).toISOString()});assert.equal(scheduled.status(),201);
  await owner.page.getByRole("button",{name:"Open group settings",exact:true}).click();
  await owner.page.getByRole("button",{name:"Group settings",exact:true}).click();
+ await owner.page.getByRole("button",{name:"More",exact:true}).click();
  await owner.page.getByRole("button",{name:"Scheduled messages",exact:true}).click();await owner.page.getByRole("button",{name:"Edit message and time",exact:true}).click();
  const messageField=owner.page.getByRole("dialog",{name:"Manage scheduled messages"}).getByRole("textbox",{name:"Message",exact:true});await messageField.waitFor({timeout:90000});assert.equal(await messageField.inputValue(),"Scheduled editable note");
  await messageField.fill("Updated encrypted schedule");await owner.page.getByRole("button",{name:"Save scheduled message",exact:true}).click();
