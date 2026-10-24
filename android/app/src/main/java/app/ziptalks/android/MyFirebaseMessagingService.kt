@@ -8,6 +8,7 @@ import android.Manifest
 import android.content.pm.PackageManager
 import androidx.core.content.ContextCompat
 import android.os.Build
+import android.os.SystemClock
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 
@@ -20,6 +21,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
 
     override fun onMessageReceived(remoteMessage: RemoteMessage) {
         super.onMessageReceived(remoteMessage)
+        val callbackStartedAt = SystemClock.elapsedRealtime()
 
         if (remoteMessage.data["callId"] != null) {
             android.util.Log.i("CircloCall", "Call push received; cancelled=${remoteMessage.data["callCancelled"] == "true"}")
@@ -27,6 +29,11 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             return
         }
         try {
+        val pushSentAt = remoteMessage.data["pushSentAtMs"]?.toLongOrNull()
+        if (pushSentAt != null) {
+            val elapsed = System.currentTimeMillis() - pushSentAt
+            if (elapsed in 0L..3_600_000L) android.util.Log.i("CircloPushMetrics", "fcm_to_android_callback_ms=$elapsed")
+        }
         // Drop other accounts, expired events and duplicates before displaying the approved preview.
         if (!NativePushState.accept(this, remoteMessage.data["recipientId"], remoteMessage.data["eventId"], remoteMessage.data["expiresAt"])) return
         if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return
@@ -78,6 +85,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             tag ?: "circlo-messages", 0,
             builder.build()
         )
+        android.util.Log.i("CircloPushMetrics", "android_callback_to_notify_ms=${SystemClock.elapsedRealtime() - callbackStartedAt}")
         if (!isCall) NativePushState.requestPreview(remoteMessage.data["recipientId"], remoteMessage.data["eventId"])
         } finally { NativeMessageReceipt.receive(this, remoteMessage.data["recipientId"], remoteMessage.data["url"]) }
     }

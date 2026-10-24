@@ -31,6 +31,12 @@ copying. Set `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, and
 `R2_BUCKET=circlo-media` in a trusted local environment or private deployment
 environment. Never print or commit these values.
 
+On 2026-10-24, a read-only `--verify` pass against the configured source and R2
+found matching-size copies for all 13 current objects (4,878,111 bytes total).
+This verifies the current inventory only; repeat the pass after uploads are
+paused for a final migration check and verify the live app's server configuration
+before considering the cutover complete.
+
 Put the source and destination credentials in a local, gitignored `.env` file.
 Run the inventory first; it does not write objects to either provider:
 

@@ -2,11 +2,33 @@
 
 ## Target and current state
 
-Move the Circlo Node.js web app, scheduled-message worker, and private upload
-scanner from Render to the Bluehost Standard NVMe 4 VPS in Mumbai. Keep Neon
-PostgreSQL in Ohio and Supabase private media storage in Mumbai for this first
-move. No database or media migration is part of this cutover. Keep the existing
-Render service available as rollback until the VPS passes the release checks.
+The Circlo Node.js web app, scheduled-message worker, and private upload scanner
+are running on the Bluehost Standard NVMe 4 VPS in Mumbai. The production Neon
+PostgreSQL database remains in Ohio. Supabase private media was copied to
+Cloudflare R2, and the source bucket remains available for rollback. A separate
+Neon PostgreSQL 18 candidate now exists in AWS Singapore; production has not
+been switched to it. Keep the existing Render service and source database until
+the candidate passes migration and release checks.
+
+## Database move candidate
+
+The source is PostgreSQL 18.6 in AWS Ohio. Read-only inspection found
+`public.e2ee_key_history` alone uses 502,734,848 bytes, so the Circlo database
+already exceeds the 500 MB storage allowance on the connected Supabase Free
+organization. Do not trim or discard this table: it holds encryption recovery
+history. Supabase in Mumbai also runs PostgreSQL 17, so it is not the safe
+zero-cost destination for this database.
+
+The prepared candidate is the Neon project `lively-paper-26698921`, PostgreSQL
+18.6 in AWS Singapore, branch `br-icy-smoke-aoa2mx1r`. It is separate and has
+not received production data. Singapore is the closest region available to the
+connected Neon organization; Mumbai was unavailable. The cutover should use
+PostgreSQL 18 client tools, copy the complete database without owners/ACLs,
+validate schema, constraints and table row counts, then pause writes for one
+final consistent copy before changing the VPS database URLs. Keep Ohio unchanged
+as a rollback source. Do not switch the app while users are writing to a stale
+copy. Compare database RTT from the Bluehost host and measure chat flows again;
+regional proximity is an estimate until measured, not a promised speedup.
 
 The repository already contains the production Docker Compose stack. The VPS
 uses `docker-compose.yml`, `.env`, and [`Caddyfile`](../Caddyfile); Caddy
@@ -54,8 +76,10 @@ conditions.
    JWT and provider secrets so existing sessions and sign-in continue working.
 3. Set `CLIENT_URL=https://circlo.chat`, the matching Google callback, and the
    existing Firebase/VAPID values. Set a random `HEALTHCHECK_SECRET` and
-   `CRON_SECRET`. Confirm the VPS can reach Neon and Supabase without opening
-   inbound database or storage ports.
+   `CRON_SECRET`. The application and migration containers use the bundled
+   Supabase root CA at `/app/scripts/certs/supabase-ca.crt`; do not carry over a
+   Render-only absolute path for `NODE_EXTRA_CA_CERTS`. Confirm the VPS can reach
+   Neon and Supabase without opening inbound database or storage ports.
 4. Build and start the Docker Compose stack while keeping public DNS on Render.
    Confirm the database migration container exits successfully, all containers
    become healthy, `/api/ready` reports readiness from inside the host, and

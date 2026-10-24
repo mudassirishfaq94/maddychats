@@ -15,6 +15,7 @@ test("FCM carries private fallback text and routing metadata only", () => {
   assert.equal(bounded.data.preview, "New message. Open Circlo to read it.");
   assert.equal(payload.data.url, "ziptalks://chat/chat?message=message");
   assert.equal(payload.data.expiresAt, "3601000");
+  assert.equal(payload.data.pushSentAtMs, "1000");
   assert.equal(payload.android.ttl, 3600000);
   const privatePayload = nativePushPayload({ ...input, showDetails: false }, 1000);
   assert.equal(privatePayload.data.actorName, "Circlo");
@@ -83,15 +84,17 @@ test("a call alert keeps the resolved caller and answer prompt", () => {
   assert.equal(payload.data.body, "Incoming audio call. Open Circlo to answer.");
 });
 
-test("native delivery waits for sends and retires only invalid/unregistered tokens", async () => {
-  const sent: string[] = [], retired: string[] = [], failed: string[] = [];
+test("native delivery waits for sends, records provider acceptance timing, and retires only invalid tokens", async () => {
+  const sent: string[] = [], retired: string[] = [], failed: string[] = [], accepted: number[] = [];
   const payload = nativePushPayload({ recipientId: "recipient", notificationId: "event", conversationId: "chat", messageId: "message" });
   await deliverNativePush(["ok", "invalid", "unregistered", "temporary"].map(token => ({ token })), payload, async message => {
     await new Promise(resolve => setTimeout(resolve, 5));
     sent.push(message.token);
     if (message.token !== "ok") throw { code: message.token === "invalid" ? "messaging/invalid-registration-token" : message.token === "unregistered" ? "messaging/registration-token-not-registered" : "messaging/server-unavailable" };
-  }, async token => { retired.push(token); }, code => { failed.push(code); });
+  }, async token => { retired.push(token); }, code => { failed.push(code); }, elapsed => { accepted.push(elapsed); });
   assert.equal(sent.length, 4);
+  assert.equal(accepted.length, 1, "only accepted sends have a provider acceptance time");
+  assert(accepted.every(Number.isSafeInteger));
   assert.deepEqual(retired.sort(), ["invalid", "unregistered"]);
   assert.deepEqual(failed, ["messaging/server-unavailable"]);
 });

@@ -41,7 +41,7 @@ export function messageNotificationPresentation(input: {
   encrypted: boolean;
   messageKind?: NotificationMessageKind;
 }): NotificationPresentation {
-  if (input.locked) return { title: "Circlo", body: "Open Circlo to see your new message." };
+  if (input.locked) return { title: "Circlo", body: "Open Circlo to view your message." };
   if (input.messageRequest) return { title: "New Message Request", body: "You have received a new message request." };
   if (!input.showDetails) {
     return { title: "Circlo", body: "You have a new message. Open Circlo to read it." };

@@ -4,6 +4,8 @@ services:
       context: .
       target: migrator
     env_file: .env
+    environment:
+      NODE_EXTRA_CA_CERTS: /app/scripts/certs/supabase-ca.crt
     restart: "no"
   web:
     build:
@@ -24,6 +26,7 @@ services:
     environment:
       CLAMAV_HOST: clamav
       CLAMAV_PORT: "3310"
+      NODE_EXTRA_CA_CERTS: /app/scripts/certs/supabase-ca.crt
     healthcheck:
       test: ["CMD", "node", "scripts/readiness.mjs"]
       interval: 30s
