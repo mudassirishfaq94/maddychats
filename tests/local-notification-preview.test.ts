@@ -21,7 +21,7 @@ test("recipient-only previews enforce request, lock, preference and decryption g
     detail.isGroup = true; detail.groupName = "Weekend";
     assert.equal((await resolve())?.body, "Alex: Are we meeting tonight?");
     locks = JSON.stringify([chat]); decryptions = 0;
-    assert.deepEqual(await resolve(), { title: "Circlo", body: "Open Circlo to see your new message.", conversationId: chat, messageId: notice, silent: false });
+    assert.deepEqual(await resolve(), { title: "Circlo", body: "Open Circlo to view your message.", conversationId: chat, messageId: notice, silent: false });
     assert.equal(decryptions, 0);
     locks = "[]"; detail.messageRequest = true;
     assert.equal((await resolve())?.title, "New Message Request");
@@ -31,7 +31,7 @@ test("recipient-only previews enforce request, lock, preference and decryption g
     assert.equal((await resolve())?.title, "Circlo"); assert.equal(decryptions, 0);
     detail.previewAllowed = true;
     assert.equal((await resolve(async () => { throw new Error("no key"); }))?.title, "Circlo");
-    assert.equal((await resolve(async () => { locks = JSON.stringify([chat]); return "must not escape"; }))?.body, "Open Circlo to see your new message.");
+    assert.equal((await resolve(async () => { locks = JSON.stringify([chat]); return "must not escape"; }))?.body, "Open Circlo to view your message.");
     locks = "broken"; assert.equal(notificationChatLocked(chat), true);
     locks = "[]";
     assert.equal(await resolve(decrypt, () => false), null);

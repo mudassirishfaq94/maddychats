@@ -20,7 +20,7 @@ object LocalMessageNotification {
         val uuid = Regex("[a-fA-F0-9-]{36}")
         if (!uuid.matches(chat) || !uuid.matches(message)) return
         val locked = NativePushState.locked(context, chat)
-        val text = if (locked) mapOf("title" to "Circlo", "body" to "New message received.") else mapOf("title" to notice.optString("title"), "body" to notice.optString("body"))
+        val text = if (locked) mapOf("title" to "Circlo", "body" to NativeMessagePrivacy.body(false, true)) else mapOf("title" to notice.optString("title"), "body" to notice.optString("body"))
         val intent = Intent(context, MainActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
             putExtra("notification_url", "ziptalks://chat/$chat?message=$message")

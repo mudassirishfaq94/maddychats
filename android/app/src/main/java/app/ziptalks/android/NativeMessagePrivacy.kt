@@ -3,7 +3,7 @@ package app.ziptalks.android
 /** FCM cannot establish permission to show local plaintext or sender identity. */
 object NativeMessagePrivacy {
     @JvmStatic @JvmOverloads fun body(request: Boolean, locked: Boolean, kind: String = "text", senderName: String? = null, group: Boolean = false, showDetails: Boolean = true): String {
-        if (locked) return "Open Circlo to see your new message."
+        if (locked) return "Open Circlo to view your message."
         if (request) return "You have received a new message request."
         if (!showDetails) return "You have a new message. Open Circlo to read it."
         val message = when (kind) {

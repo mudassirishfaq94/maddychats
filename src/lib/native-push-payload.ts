@@ -44,6 +44,9 @@ export function nativePushPayload(input: { callCancelled?: boolean; messageReque
         groupName: safeNotificationText(input.groupName ?? "", "Group chat", 80),
       } : {}),
       recipientId: input.recipientId, eventId: input.notificationId,
+      // Timing only: enables Android to separate FCM transport latency from
+      // local notification rendering. No personal or message data is added.
+      pushSentAtMs: String(now),
       title: safePresentation.title, body: safePresentation.body,
       actorName: input.callId
         ? showDetails ? safeNotificationText(input.actorName, "Circlo", 80) : "Circlo"

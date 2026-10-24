@@ -18,6 +18,8 @@ FROM dependencies AS migrator
 COPY drizzle.config.ts ./
 COPY drizzle ./drizzle
 COPY src/db/schema.ts ./src/db/schema.ts
+COPY scripts/certs/supabase-ca.crt ./scripts/certs/supabase-ca.crt
+ENV NODE_EXTRA_CA_CERTS=/app/scripts/certs/supabase-ca.crt
 USER node
 CMD ["npm", "run", "db:migrate"]
 
@@ -35,9 +37,11 @@ COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --chown=nextjs:nodejs scripts/readiness.mjs scripts/reconstruct-status-photo.mjs ./scripts/
+COPY --chown=nextjs:nodejs scripts/certs/supabase-ca.crt ./scripts/certs/supabase-ca.crt
 RUN mkdir -p /app/server/uploads /app/.next/cache && chown -R nextjs:nodejs /app/server /app/.next/cache
 USER nextjs
 EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
+ENV NODE_EXTRA_CA_CERTS=/app/scripts/certs/supabase-ca.crt
 CMD ["node", "server.js"]

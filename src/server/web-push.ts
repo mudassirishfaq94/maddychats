@@ -60,6 +60,7 @@ async function sendFCM(
     message => messaging.send(message),
     async token => { await db.delete(fcmTokens).where(eq(fcmTokens.token, token)); },
     code => console.error("[push] FCM delivery failed:", code),
+    elapsedMs => console.info("[push-metric] fcm_provider_accept_ms=" + elapsedMs),
   );
 }
 

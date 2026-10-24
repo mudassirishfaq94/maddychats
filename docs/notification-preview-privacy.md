@@ -8,8 +8,9 @@ The original generic message was intentional: the server cannot decrypt E2EE mes
 - The authenticated no-store delivery lookup checks current account, membership, blocks, mute/archive, deletion/expiry and preferences. It returns encrypted text only to an authorized recipient with previews enabled, and never for a pending request.
 - A running browser/PWA answers a worker MessageChannel request using the existing recipient-side decrypt function. The worker allows 800 ms for a runnable client and otherwise shows a private fallback. This affects only alert presentation, never message transport. Plaintext is not cached in worker storage or notification data.
 - Android first displays the private FCM alert. It posts an event to an existing exact-origin WebView, which may decrypt and replace that same conversation card through the exact-origin bridge. No WebView is started to obtain keys, and no background key service is added. SSE can also trigger a local alert.
-- Normal local previews show sender + text; groups show group name + sender/text. Requests show `New Message Request` / `You have received a new message request.` without decryption. Locked chats override both with `Circlo` / `New message received.`.
+- Normal local previews show sender + text; groups show group name + sender/text. Requests show `New Message Request` / `You have received a new message request.` without decryption. Locked chats override both with `Circlo` / `Open Circlo to view your message.`.
 - Without a runnable recipient, normal messages remain private. Request wording is available with previously synchronized device lock state; missing or corrupt lock state falls back to the generic alert too.
+- FCM provider acceptance time is logged as `fcm_provider_accept_ms`; Android logs `fcm_to_android_callback_ms` and `android_callback_to_notify_ms`. These contain timings only and distinguish provider acceptance from handset receipt/rendering; provider acceptance is not a delivery receipt.
 - Foreground OS notifications remain suppressed; the existing in-app banner uses the same recipient-side policy.
 
 ## Lock integration
