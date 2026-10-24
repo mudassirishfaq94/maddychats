@@ -1,4 +1,4 @@
-FROM node:22-alpine AS base
+FROM node:22.23.4-alpine3.24 AS base
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
 
@@ -28,7 +28,7 @@ COPY --chown=node:node scripts/scheduled-worker.mjs ./scripts/scheduled-worker.m
 USER node
 CMD ["node", "scripts/scheduled-worker.mjs"]
 
-FROM node:22-alpine AS runner
+FROM node:22.23.4-alpine3.24 AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
