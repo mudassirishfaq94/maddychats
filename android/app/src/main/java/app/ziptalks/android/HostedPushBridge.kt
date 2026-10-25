@@ -2,14 +2,19 @@ package app.ziptalks.android
 
 import android.Manifest
 import android.os.Build
+import android.util.Base64
+import android.content.ClipData
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.webkit.WebView
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import com.google.firebase.messaging.FirebaseMessaging
 import org.json.JSONObject
+import java.io.File
 
 /** Exact HTTPS origin and main-frame restriction, including asynchronous responses. */
 class HostedPushBridge(private val activity: MainActivity, private val requestPermission: (() -> Unit) -> Unit) {
@@ -19,8 +24,9 @@ class HostedPushBridge(private val activity: MainActivity, private val requestPe
         WebViewCompat.addWebMessageListener(view, "CircloPush", setOf(BuildConfig.API_BASE_URL)) { source, message, origin, mainFrame, reply ->
             if (!PushPolicy.allowsBridge(mainFrame, origin.toString(), source.url.orEmpty(), BuildConfig.API_BASE_URL)) return@addWebMessageListener
             val raw = runCatching { message.data }.getOrNull() ?: return@addWebMessageListener
-            if (raw.length > 4096) return@addWebMessageListener
+            if (raw.length > 28 * 1024 * 1024) return@addWebMessageListener
             val data = runCatching { JSONObject(raw) }.getOrNull() ?: return@addWebMessageListener
+            if (data.optString("command") != "open-file" && raw.length > 4096) return@addWebMessageListener
             val id = data.optString("id")
             if (!Regex("[a-zA-Z0-9-]{1,64}").matches(id)) return@addWebMessageListener
             fun respond(token: String? = null, error: String? = null, status: JSONObject? = null, audio: JSONObject? = null) {
@@ -58,6 +64,41 @@ class HostedPushBridge(private val activity: MainActivity, private val requestPe
                 }
                 "call-settings" -> { NotificationChannels.openCallSettings(activity); respond() }
                 "settings" -> { runCatching { NotificationChannels.openSettings(activity) }.onSuccess { respond() }.onFailure { respond(error = "Open Android Settings > Apps > Circlo > Notifications.") } }
+                "open-file" -> {
+                    val attachment = data.optJSONObject("file")
+                    val name = attachment?.optString("name").orEmpty()
+                        .replace(Regex("[^a-zA-Z0-9._ -]"), "_").take(120).ifBlank { "attachment" }
+                    val mime = attachment?.optString("mime").orEmpty()
+                        .takeIf { it.length <= 128 && Regex("[a-zA-Z0-9.+_-]+/[a-zA-Z0-9.+_-]+").matches(it) }
+                        ?: "application/octet-stream"
+                    val encoded = attachment?.optString("data").orEmpty()
+                    if (encoded.isBlank() || encoded.length > 28 * 1024 * 1024) {
+                        respond(error = "This file is too large to open in Circlo.")
+                        return@addWebMessageListener
+                    }
+                    Thread {
+                        val uriResult = runCatching {
+                            val bytes = Base64.decode(encoded, Base64.DEFAULT)
+                            if (bytes.isEmpty() || bytes.size > 20 * 1024 * 1024) throw IllegalArgumentException("File exceeds the supported size.")
+                            val folder = File(activity.cacheDir, "attachments").apply { mkdirs() }
+                            val expiry = System.currentTimeMillis() - 24 * 60 * 60 * 1000L
+                            folder.listFiles()?.filter { it.lastModified() < expiry }?.forEach { it.delete() }
+                            val output = File.createTempFile("circlo_", "_$name", folder)
+                            output.writeBytes(bytes)
+                            FileProvider.getUriForFile(activity, "${BuildConfig.APPLICATION_ID}.fileprovider", output)
+                        }
+                        activity.runOnUiThread {
+                            uriResult.onSuccess { uri ->
+                                val viewIntent = Intent(Intent.ACTION_VIEW).setDataAndType(uri, mime)
+                                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                viewIntent.clipData = ClipData.newUri(activity.contentResolver, name, uri)
+                                runCatching { activity.startActivity(Intent.createChooser(viewIntent, "Open $name")) }
+                                    .onSuccess { respond(token = "opened") }
+                                    .onFailure { respond(error = "No app on this device can open this file type.") }
+                            }.onFailure { respond(error = "Couldn't prepare this file to open. Please try again.") }
+                        }
+                    }.start()
+                }
                 "status" -> respond(status = NotificationChannels.status(activity))
                 "token" -> token()
                 "request" -> requestPermission { token() }

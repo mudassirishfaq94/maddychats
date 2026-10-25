@@ -74,6 +74,7 @@ import {
   useAttachmentUpload,
 } from "./attachment-composer";
 import { emojiOnlyCount } from "@/lib/emoji";
+import { splitMessageLinks } from "@/lib/message-links";
 import { cn, formatDate, timeAgo, initials, avatarHue } from "@/lib/utils";
 import { CHAT_BACKGROUNDS, chatBubbleTheme, isBackgroundImage } from "@/lib/chat-backgrounds";
 import { getPattern } from "@/lib/chat-patterns";
@@ -2941,18 +2942,32 @@ const MessageText = memo(function MessageText({ text }: { text: string }) {
           </div>
         </div>
         <p className="whitespace-pre-wrap break-words text-[0.9rem] leading-relaxed">
-          {parsed.replyText}
+          <LinkedMessageText text={parsed.replyText ?? ""} />
         </p>
       </div>
     );
   }
   return (
     <p className={cn("whitespace-pre-wrap break-words", emojiOnlyCount(text) === 1 ? "emoji-message text-[3.5rem] leading-tight py-1" : emojiOnlyCount(text) ? "text-[2.5rem] leading-tight py-1" : "text-[0.9rem] leading-relaxed")}>
-      {text}
+      {emojiOnlyCount(text) ? text : <LinkedMessageText text={text} />}
     </p>
   );
 
 });
+
+function LinkedMessageText({ text }: { text: string }) {
+  return <>{splitMessageLinks(text).map((part, index) => part.type === "link" ? (
+    <a
+      key={`${index}:${part.href}`}
+      href={part.href}
+      rel="noopener noreferrer"
+      className="break-all text-[var(--accent-fg)] underline underline-offset-2"
+      onClick={(event) => event.stopPropagation()}
+    >
+      {part.value}
+    </a>
+  ) : <span key={`${index}:${part.value.slice(0, 12)}`}>{part.value}</span>)}</>;
+}
 
 type RowActions = {
   editDraft: (text: string) => void; saveEdit: (id: string) => void; cancelEdit: () => void;

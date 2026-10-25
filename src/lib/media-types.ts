@@ -22,3 +22,25 @@ export function normalizeMediaType(name: string, supplied: string): string {
   const ext=name.split(".").pop()?.toLowerCase() ?? "";
   return Object.entries(MEDIA_TYPES).find(([,extensions])=>extensions.includes(ext))?.[0] ?? (type || "application/octet-stream");
 }
+
+/** MIME types that may execute or render active document content in a browser. */
+const ACTIVE_CONTENT_TYPES = new Set([
+  "text/html",
+  "application/xhtml+xml",
+  "application/vnd.wap.xhtml+xml",
+  "image/svg+xml",
+  "application/xml",
+  "text/xml",
+  "application/atom+xml",
+  "application/rss+xml",
+  "text/javascript",
+  "application/javascript",
+  "application/x-javascript",
+  "text/ecmascript",
+  "application/ecmascript",
+]);
+
+export function isActiveContentType(supplied: string): boolean {
+  const type = supplied.split(";")[0].trim().toLowerCase();
+  return ACTIVE_CONTENT_TYPES.has(type) || (type.startsWith("application/") && type.endsWith("+xml"));
+}

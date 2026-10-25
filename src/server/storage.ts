@@ -1,6 +1,6 @@
 import { PRIVATE_PART_BYTES, writePrivateParts, readPrivateParts, privatePartPaths } from "./private-media-parts";
 import { bufferR2UploadBody } from "./r2-upload-body";
-import { MEDIA_TYPES, normalizeMediaType } from "@/lib/media-types";
+import { isActiveContentType, MEDIA_TYPES, normalizeMediaType } from "@/lib/media-types";
 import { IMAGE_MAX_BYTES, MEDIA_MAX_BYTES } from "@/lib/media-limits";
 import { randomUUID } from "crypto";
 import { createReadStream, createWriteStream } from "fs";
@@ -247,6 +247,9 @@ export function validateUpload(
   }
 
   const type = normalizeMediaType(originalName, mimeType);
+  if (isActiveContentType(type)) {
+    return { ok: false, error: "That file type is not allowed." };
+  }
   const isImage = Object.prototype.hasOwnProperty.call(IMAGE_TYPES, type);
   const isDoc = Object.prototype.hasOwnProperty.call(DOCUMENT_TYPES, type);
   const isAudio = Object.prototype.hasOwnProperty.call(AUDIO_TYPES, type);

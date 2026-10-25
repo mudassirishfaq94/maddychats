@@ -21,6 +21,7 @@ import {
 import { useAuth } from "@/components/providers/auth-provider";
 import { createMediaResourceCache } from "@/lib/media-resource-cache";
 import type { AttachmentDTO } from "@/lib/types";
+import { isActiveContentType } from "@/lib/media-types";
 import {useExpiredAt} from "@/hooks/use-expired-at";
 import { registerLocalAudio, forgetLocalAudio } from "@/lib/audio-analysis";
 
@@ -94,18 +95,20 @@ export function useEncryptedAttachmentUrl(
   const { user } = useAuth();
   const userId = user?.id;
   const { id, url, encrypted, encKey, mimeType, expiresAt } = attachment ?? {};
+  const activeContent = isActiveContentType(mimeType ?? "");
   const expired=useExpiredAt(expiresAt);
   useEffect(()=>{if(expired && id)forgetDecryptedAttachments([id]);},[expired,id]);
   const request = useMemo(
-    () => ({ id, url, encrypted, encKey, mimeType, ctx, expired, enabled, userId }),
-    [id, url, encrypted, encKey, mimeType, ctx, expired, enabled, userId],
+    () => ({ id, url, encrypted, encKey, mimeType, ctx, expired, enabled, userId, activeContent }),
+    [id, url, encrypted, encKey, mimeType, ctx, expired, enabled, userId, activeContent],
   );
   const [state, setState] = useState<{
     request: typeof request | null; url: string | null; failed: boolean;
   }>({ request: null, url: null, failed: false });
 
   useEffect(() => {
-    const { id, url, encrypted, encKey, mimeType, ctx, expired, enabled, userId } = request;
+    const { id, url, encrypted, encKey, mimeType, ctx, expired, enabled, userId, activeContent } = request;
+    if (activeContent) return;
     if (!id || !url || !encrypted || !encKey || expired || !enabled || !userId ||
         !ctx?.initialized || ctx.initializationError) return;
     let active = true;
@@ -147,6 +150,7 @@ export function useEncryptedAttachmentUrl(
   }, [request, expiresAt]);
 
   if (!id) return { url: null, failed: false };
+  if (activeContent) return { url: null, failed: true };
   if (expired) return { url: null, failed: true };
   if (!encrypted) return { url: url ?? null, failed: false };
   if (!ctx || !encKey || ctx.initializationError) return { url: null, failed: true };

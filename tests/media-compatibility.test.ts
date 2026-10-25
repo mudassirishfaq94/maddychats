@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { normalizeMediaType } from "../src/lib/media-types";
+import { isActiveContentType, normalizeMediaType } from "../src/lib/media-types";
 import { validateUpload } from "../src/server/storage";
 import { stageToken,readStage,createStage,appendStage,stageOffset,claimStage,abandonStage } from "../src/server/staged-media";
 test("Android JPEG aliases and missing picker MIME are accepted without permitting mismatched or active files",()=>{
@@ -9,6 +9,14 @@ test("Android JPEG aliases and missing picker MIME are accepted without permitti
   assert.equal(normalizeMediaType("photo.heif",""),"image/heif");
   assert.equal(validateUpload("photo.jpg","image/png",128000,"message").ok,false);
   assert.equal(validateUpload("payload.svg","image/svg+xml",128000,"message").ok,false);
+  for (const [name, mime] of [
+    ["notes.pdf", "text/html; charset=utf-8"],
+    ["notes.txt", "application/xhtml+xml"],
+    ["photo.png", "image/svg+xml"],
+    ["script.txt", "text/javascript"],
+  ]) assert.equal(validateUpload(name, mime, 128000, "message").ok, false, `${name} / ${mime}`);
+  assert.equal(isActiveContentType(" Text/HTML ; charset=UTF-8 "), true);
+  assert.equal(isActiveContentType("application/pdf"), false);
   assert.equal(validateUpload("payload.exe.jpg","image/jpeg",128000,"message").ok,false);
   for (const name of ["Screenshot2_123.circlo.app.jpg", "Screenshot_example.com.JPG"]) {
     assert.equal(validateUpload(name,"image/jpeg",128000,"message").ok,true,name);
