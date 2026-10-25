@@ -303,17 +303,13 @@ export function AttachmentList({
 /** A downloadable file chip that transparently decrypts E2EE files. */
 function FileChip({ file, own }: { file: AttachmentDTO; own: boolean }) {
   const [requested, setRequested] = useState(false);
-  const autoDownload = useRef(false);
   const { url, failed } = useEncryptedAttachmentUrl(file, requested);
-  useEffect(() => {
-    if (!url || !autoDownload.current) return;
-    autoDownload.current = false;
-    const link = document.createElement("a");
-    link.href = url; link.download = file.originalName;
-    document.body.appendChild(link); link.click(); link.remove();
-  }, [url, file.originalName]);
   const expired = useExpiredAt(file.expiresAt);
   const unavailable = expired || Boolean(file.encrypted && failed);
+  const textClass = cn(
+    "block min-w-0 flex-1 truncate text-left text-xs font-semibold",
+    own ? "text-[var(--bubble-own-fg)]" : "text-[var(--text)]",
+  );
   return (
     <span
       className={cn(
@@ -339,18 +335,41 @@ function FileChip({ file, own }: { file: AttachmentDTO; own: boolean }) {
         />
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-xs font-semibold">
-          {expired ? "Attachment expired" : file.originalName}
-        </span>
+        {unavailable ? (
+          <span className={textClass}>{expired ? "Attachment expired" : file.originalName}</span>
+        ) : url ? (
+          <a
+            href={url}
+            aria-label={`Open ${file.originalName}`}
+            className={cn(textClass, "cursor-pointer underline decoration-transparent underline-offset-2 hover:decoration-current focus-visible:outline-2 focus-visible:outline-[var(--accent)]")}
+            onClick={(event) => event.stopPropagation()}
+          >
+            {file.originalName}
+          </a>
+        ) : (
+          <button
+            type="button"
+            className={cn(textClass, "min-h-11 cursor-pointer")}
+            aria-label={`Prepare ${file.originalName} to open`}
+            disabled={requested}
+            onClick={(event) => { event.stopPropagation(); setRequested(true); }}
+          >
+            {file.originalName}
+          </button>
+        )}
         <span
           className={cn(
             "block text-[0.68rem]",
             own ? "text-[var(--bubble-own-sub)]" : "text-[var(--muted)]",
           )}
         >
-          {file.encrypted && unavailable
+          {unavailable
             ? "Couldn't open"
-            : `${humanSize(file.size)}${file.encrypted ? " · end-to-end encrypted" : ""}`}
+            : !url && requested
+              ? "Preparing to open…"
+              : url
+                ? `${humanSize(file.size)} · Tap the name to open`
+                : `${humanSize(file.size)}${file.encrypted ? " · end-to-end encrypted" : ""}`}
         </span>
       </span>
       {unavailable ? (
@@ -362,7 +381,7 @@ function FileChip({ file, own }: { file: AttachmentDTO; own: boolean }) {
         />
       ) : !url ? (
         <button type="button" aria-label={`Download ${file.originalName}`}
-          disabled={requested} onClick={event => { event.stopPropagation(); autoDownload.current = true; setRequested(true); }}
+          disabled={requested} onClick={event => { event.stopPropagation(); setRequested(true); }}
           className="flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-full">
           {requested ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
         </button>
@@ -370,7 +389,6 @@ function FileChip({ file, own }: { file: AttachmentDTO; own: boolean }) {
         <a
           href={url ?? undefined}
           download={expired ? "Attachment expired" : file.originalName}
-          aria-disabled={!url}
           aria-label={`Download ${file.originalName}`}
           className="flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-full focus-visible:outline-2 focus-visible:outline-[var(--accent)]"
           onClick={(e) => e.stopPropagation()}
