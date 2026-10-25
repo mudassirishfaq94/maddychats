@@ -9,9 +9,10 @@ const securityHeaders = [
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   {
     key: "Permissions-Policy",
-    // Voice messages need microphone access in the first-party app. Keep it
-    // unavailable to cross-origin frames and continue disabling unused APIs.
-    value: "camera=(), microphone=(self), geolocation=(), interest-cohort=()",
+    // QR scanning and voice recording require first-party capture. This must
+    // also work after client navigation from Chats to Profile; document policy
+    // persists across SPA navigation. Cross-origin frames remain excluded.
+    value: "camera=(self), microphone=(self), geolocation=(), interest-cohort=()",
   },
   { key: "X-DNS-Prefetch-Control", value: "on" },
   { key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains" },

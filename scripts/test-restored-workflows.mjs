@@ -17,6 +17,7 @@ import { testProfilePhotos } from "./test-profile-photos.mjs";
 import { resolve } from "node:path";
 import { unlink } from "node:fs/promises";
 import { testComposerMedia } from "./test-composer-media.mjs";
+import { testLocalChatBackup } from "./test-local-chat-backup.mjs";
 
 /** Positive workflows use actual browser keys, recording, storage and database delivery. */
 export async function testRestoredWorkflows(base, pool, owner, peer, password, conversationId, ownedLive = false, jwtSecret) {
@@ -268,6 +269,7 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     const committed=(await pool.query("select id from messages where conversation_id=$1",[conversationId])).rows;
     assert.equal(committed.length,1,"Retries persist one message");
     assert.equal((await pool.query("select count(*)::int as count from realtime_events where payload->>'type'='message:new' and payload->'message'->>'id'=$1",[committed[0].id])).rows[0].count,2,"Each member receives exactly one durable new-message event");
+    if (!ownedLive) await testLocalChatBackup(base, pool, source, owner, password, conversationId);
     const mobileChecks = await testMobilePerformance(base, pool, source, owner, conversationId);
     const sourceSession = await renewSession(source);
     for (let attempt = 0; attempt < 50; attempt++) {
@@ -306,7 +308,7 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
       Object.defineProperty(navigator.mediaDevices, "getUserMedia", { configurable: true, value: async () => new MediaStream() });
       HTMLMediaElement.prototype.play = async () => {};
     })()`);
-    await source.page.getByRole("button", { name: "Scan QR from your old device", exact: true }).click();
+    await source.page.getByRole("button", { name: "Scan QR on your new device", exact: true }).click();
     await source.page.getByText("Safety number:").waitFor();
     await target.page.getByLabel("This device safety number").waitFor({ state: "visible" });
     await source.page.getByText("Show full safety number", { exact: true }).click();
@@ -351,6 +353,21 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     assert.equal((await fetch(base + "/api/media/" + stored, { headers: { Cookie: unrelatedCookie } })).status, 404);
     // A decrypted photo must open outside message-row containment and fit every viewport.
     console.log("PASS encrypted attachment upload, download, and access control");
+    await recipient.page.getByRole("button", { name: "Chat options", exact: true }).click();
+    await recipient.page.getByRole("menuitem", { name: "Contact info", exact: true }).click();
+    const sharedFiles = recipient.page.getByRole("complementary", { name: "Conversation details", exact: true });
+    await sharedFiles.getByRole("button", { name: "files", exact: true }).click();
+    await sharedFiles.getByLabel("Find a shared file", { exact: true }).fill("workflow-check");
+    await sharedFiles.getByRole("button", { name: "files", exact: true }).click();
+    await sharedFiles.getByRole("button", { name: "Prepare workflow-check.txt to open", exact: true }).click();
+    const savedFile = sharedFiles.getByRole("link", { name: "Download workflow-check.txt", exact: true });
+    await savedFile.waitFor();
+    const [fileAgain] = await Promise.all([recipient.page.waitForEvent("download"), savedFile.click()]);
+    assert.equal(await readFile(await fileAgain.path(), "utf8"), fileContent);
+    await sharedFiles.getByLabel("Find a shared file", { exact: true }).fill("no-file-matches-this");
+    await sharedFiles.getByText("No files match your search.", { exact: true }).waitFor();
+    await sharedFiles.getByRole("button", { name: "Close details", exact: true }).click();
+    console.log("PASS shared-files search, repeated active-tab click, lazy decryption and actual downloaded file bytes");
     const photo = await sharp({ create: { width: 1200, height: 900, channels: 3, background: "#343042" } }).png().toBuffer();
     await source.page.locator('input[type="file"]').first().setInputFiles({ name: "viewer-check.png", mimeType: "image/png", buffer: photo });
     await source.page.getByRole("textbox", { name: "Attachment caption", exact: true }).fill("An encrypted photo caption");

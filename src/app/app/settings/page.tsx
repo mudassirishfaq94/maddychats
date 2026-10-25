@@ -113,6 +113,7 @@ export default async function SettingsPage() {
 
           {/* Data */}
           <section id="data">
+            <Link href="/app/profile#local-chat-backup" className="mb-4 flex min-h-16 items-center gap-3 rounded-2xl border border-[var(--border)] p-4"><Download className="h-5 w-5 shrink-0 text-[var(--accent-fg)]"/><span className="min-w-0 flex-1"><span className="block text-sm font-semibold">Chat backup & restore</span><span className="block text-xs text-[var(--muted)]">Daily encrypted copies on your device and portable recovery files</span></span><ChevronRight className="h-4 w-4 shrink-0"/></Link>
             <h2 className="mb-3 flex items-center gap-2 text-sm font-bold">
               <Download className="h-4 w-4 text-[var(--accent)]" />
               Your Data

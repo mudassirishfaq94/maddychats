@@ -26,7 +26,9 @@ class HostedPushBridge(private val activity: MainActivity, private val requestPe
             val raw = runCatching { message.data }.getOrNull() ?: return@addWebMessageListener
             if (raw.length > 28 * 1024 * 1024) return@addWebMessageListener
             val data = runCatching { JSONObject(raw) }.getOrNull() ?: return@addWebMessageListener
-            if (data.optString("command") != "open-file" && raw.length > 4096) return@addWebMessageListener
+            val command = data.optString("command")
+            if (command == "backup-chunk" && raw.length > 270000) return@addWebMessageListener
+            if (command !in setOf("open-file", "backup-chunk") && raw.length > 4096) return@addWebMessageListener
             val id = data.optString("id")
             if (!Regex("[a-zA-Z0-9-]{1,64}").matches(id)) return@addWebMessageListener
             fun respond(token: String? = null, error: String? = null, status: JSONObject? = null, audio: JSONObject? = null) {
@@ -47,6 +49,17 @@ class HostedPushBridge(private val activity: MainActivity, private val requestPe
                 }.onFailure { respond(error = "Notifications are not configured for this Android build.") }
             }
             when (data.optString("command")) {
+                "backup-start" -> runCatching { val file = data.getJSONObject("file"); activity.backupExport.start(file.getString("name"), file.getLong("size")) }
+                    .onSuccess { respond(token = it) }.onFailure { respond(error = it.message ?: "Could not start backup export.") }
+                "backup-chunk" -> runCatching { val file = data.getJSONObject("file"); activity.backupExport.append(file.getString("transfer"), file.getLong("offset"), file.getString("data")) }
+                    .onSuccess { respond(token = "chunk") }.onFailure { respond(error = "Backup transfer failed. Please retry.") }
+                "backup-finish" -> runCatching { activity.backupExport.finish(data.getJSONObject("file").getString("transfer")) { error -> if (error == null) respond(token = "saved") else respond(error = error) } }
+                    .onFailure { respond(error = "Could not save this backup. Please retry.") }
+                "backup-cancel" -> { activity.backupExport.cancel(data.optJSONObject("file")?.optString("transfer").orEmpty()); respond() }
+                "camera-settings" -> runCatching {
+                    activity.startActivity(Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        android.net.Uri.parse("package:${activity.packageName}")))
+                }.onSuccess { respond() }.onFailure { respond(error = "Open Android Settings > Apps > Circlo > Permissions > Camera.") }
                 "call-answer" -> {
                     val accepted = NativeCallActions.valid(activity, data.optString("callId"), data.optString("actionToken"), true)
                     android.util.Log.i("CircloCall", "Answer proof consumed=$accepted")

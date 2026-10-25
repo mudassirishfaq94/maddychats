@@ -107,7 +107,9 @@ try {
  assert.equal(await member.page.getByRole("region",{name:"Messages",exact:true}).getByText(note,{exact:true}).count(),0);
  assert.equal((await pool.query("select expires_at from messages where id=$1",[lifetime.id])).rows[0].expires_at.getTime(),lifetime.expires_at.getTime());
  await member.page.reload();await member.page.getByRole("region",{name:"Messages",exact:true}).getByText("Message expired",{exact:true}).waitFor();
- const exported=await api(member,`/api/conversations/${group}/export`,null,"GET");assert.equal(exported.status(),200);assert.equal((await exported.text()).includes(lifetime.id),false);
+ await pool.query("insert into message_deletions(user_id,message_id) values($1,$2)",[member.id,cachedMessage.id]);
+ const exported=await api(member,`/api/conversations/${group}/export`,null,"GET");assert.equal(exported.status(),200);const exportedText=await exported.text();assert.equal(exportedText.includes(lifetime.id),false);assert.equal(exportedText.includes(cachedMessage.id),false,"Export excludes messages deleted only for this viewer");
+ await pool.query("delete from message_deletions where user_id=$1 and message_id=$2",[member.id,cachedMessage.id]);
  console.log("PASS: explicit reveal, fixed countdown, reload persistence and export exclusion");
  const scheduled=await api(owner,`/api/conversations/${group}/scheduled`,{text:await encryptMessage("Scheduled editable note",key),encrypted:true,scheduledFor:new Date(Date.now()+120000).toISOString()});assert.equal(scheduled.status(),201);
  await owner.page.getByRole("button",{name:"Open group settings",exact:true}).click();

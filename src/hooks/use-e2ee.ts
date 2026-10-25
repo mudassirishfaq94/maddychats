@@ -1,5 +1,5 @@
 "use client";
-import { restoredBundle, storedChatKeys } from "@/lib/device-recovery-file";
+import { latestSendingKey, restoredBundle, storedChatKeys } from "@/lib/device-recovery-file";
 import { waitForBackgroundSlot } from "@/lib/background-work";
 
 import { useCallback, useEffect, useRef, useState, useMemo } from "react";
@@ -333,14 +333,18 @@ export function useE2EE(userId: string | undefined) {
 
   // Preserve our own sending keys across app/browser restarts. These backups
   // are wrapped to this device's RSA key; localStorage never receives raw keys.
-  const rememberSendingKey = useCallback(async (conversationId: string, key: CryptoKey) => {
+  const rememberSendingKey = useCallback(async (conversationId: string, key: CryptoKey, historical = false) => {
     if (!userId || !keyPairRef.current) throw new Error("Device keys are not ready");
     const storageKey = `e2ee_sentkeys_${userId}_${conversationId}`;
     const saved = storedChatKeys(userId, storageKey);
     const fingerprint = await conversationFingerprint(key);
-    if (saved.some(entry => entry.fingerprint === fingerprint)) return;
+    const previous = saved.find(entry => entry.fingerprint === fingerprint);
+    if (previous) {
+      if (!historical && previous.historical) localStorage.setItem(storageKey, JSON.stringify(saved.map(entry => entry.fingerprint === fingerprint ? { ...entry, historical: false } : entry)));
+      return;
+    }
     const wrapped = await encryptKeyForUser(key, keyPairRef.current.publicKey);
-    localStorage.setItem(storageKey, JSON.stringify([...saved, { fingerprint, wrapped }]));
+    localStorage.setItem(storageKey, JSON.stringify([...saved, { fingerprint, wrapped, ...(historical ? { historical: true } : {}) }]));
     window.dispatchEvent(new Event("maddy:recovery-keys-changed"));
   }, [userId]);
 
@@ -408,11 +412,15 @@ export function useE2EE(userId: string | undefined) {
 
       // A previously established key is already wrapped to this device. Use
       // it immediately rather than waiting on a server lookup after reload.
-      const localKeys = await loadLocalConversationKeys(conversationId);
-      const newestLocalKey = localKeys.at(-1);
-      if (newestLocalKey) {
-        conversationKeysRef.current.set(conversationId, newestLocalKey);
-        return { key: newestLocalKey, shared: true };
+      if (userId && keyPairRef.current) {
+        try {
+          const active = latestSendingKey(storedChatKeys(userId, `e2ee_sentkeys_${userId}_${conversationId}`));
+          if (active) {
+          const key = await decryptKeyFromSender(active.wrapped, keyPairRef.current.privateKey);
+          conversationKeysRef.current.set(conversationId, key);
+          return { key, shared: true };
+          }
+        } catch { /* A corrupt local sending key must fall back to the authorized current share. */ }
       }
 
       // Try to load a shared key from the server
@@ -425,7 +433,7 @@ export function useE2EE(userId: string | undefined) {
 
       throw new Error("E2EE_SESSION_NOT_READY");
     },
-    [fetchSharedKey, loadLocalConversationKeys, rememberSendingKey],
+    [fetchSharedKey, rememberSendingKey, userId],
   );
 
   /** Encrypt a message before sending */
@@ -492,6 +500,9 @@ export function useE2EE(userId: string | undefined) {
           const fingerprint = await conversationFingerprint(key);
           if (!fingerprints.has(fingerprint)) {
             fingerprints.add(fingerprint);
+            // Recovery must retain receiving/rotation keys too, not only the
+            // latest sending key. Persist a self-wrapped copy, never raw AES.
+            await rememberSendingKey(conversationId, key, true).catch(() => {});
             keys.push(key);
           }
         } catch { /* This legacy share was wrapped for a different device. */ }
@@ -508,7 +519,7 @@ export function useE2EE(userId: string | undefined) {
         decryptionLoadRef.current.delete(loadId);
       }
     }
-  }, [loadLocalConversationKeys, state.deviceId]);
+  }, [loadLocalConversationKeys, rememberSendingKey, state.deviceId]);
 
   /** Receiving never generates or replaces a sending key. Try cached keys,
    * then current/device/history shares, retaining all recoverable keys. */
