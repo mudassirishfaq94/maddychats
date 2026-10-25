@@ -1,5 +1,5 @@
 import { Readable } from "node:stream";
-import { ENCRYPTED_MEDIA_OVERHEAD, INLINE_MEDIA_MAX_BYTES } from "../lib/media-limits";
+import { ENCRYPTED_MEDIA_OVERHEAD, INLINE_MEDIA_MAX_BYTES } from "@/lib/media-limits";
 
 /** R2 PutObject needs replayable bytes for request signing. Keep buffering bounded. */
 export const MAX_R2_PUT_BYTES = INLINE_MEDIA_MAX_BYTES + ENCRYPTED_MEDIA_OVERHEAD;

@@ -141,7 +141,6 @@ export const LIMITS = {
   get file() {
     return envBytes("MAX_FILE_MB", 10);
   },
-  status: 10 * 1024 * 1024,
 };
 
 /** Allow-list: MIME type → permitted extensions. Anything else is rejected. */
