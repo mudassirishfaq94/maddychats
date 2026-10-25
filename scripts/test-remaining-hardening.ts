@@ -126,7 +126,7 @@ async function main() {
           const response = await page.goto(base + path, { waitUntil: "load" });
           assert.equal(response?.status(), 200);
           await page.getByRole("heading", { level: 1 }).waitFor();
-          if (["users", "reports", "messages"].some(segment => path.endsWith("/" + segment))) await page.getByRole("main").getByText("Administrative changes require two-factor authentication and a recent sign-in.").waitFor();
+          if (["users", "reports", "messages"].some(segment => path.endsWith("/" + segment))) await page.getByRole("main").getByText(/Enable two-factor authentication first/).waitFor();
           if (path.endsWith("users")) {
             await page.getByText(htmlName, { exact: true }).waitFor();
             assert.equal(await page.locator('img[src="x"]').count(), 0, "Profile markup is rendered as text");
