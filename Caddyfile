@@ -1,3 +1,7 @@
+www.circlo.chat {
+	redir https://circlo.chat{uri} permanent
+}
+
 circlo.chat {
 	encode zstd gzip
 	reverse_proxy 127.0.0.1:3000
