@@ -91,7 +91,7 @@ class HostedPushBridge(private val activity: MainActivity, private val requestPe
                             uriResult.onSuccess { uri ->
                                 val viewIntent = Intent(Intent.ACTION_VIEW).setDataAndType(uri, mime)
                                     .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                    .setClipData(ClipData.newUri(activity.contentResolver, name, uri))
+                                viewIntent.clipData = ClipData.newUri(activity.contentResolver, name, uri)
                                 runCatching { activity.startActivity(Intent.createChooser(viewIntent, "Open $name")) }
                                     .onSuccess { respond(token = "opened") }
                                     .onFailure { respond(error = "No app on this device can open this file type.") }

@@ -147,8 +147,11 @@ try {
  await member.page.getByRole("button",{name:"Download on-demand-performance.txt",exact:true}).waitFor();
  await member.page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
  assert.equal(downloads.filter(url=>new URL(url).pathname===`/api/media/${fileAttachment.id}`).length,0,"File chips must not eagerly download encrypted bytes");
- const download = member.page.waitForEvent("download");
  await member.page.getByRole("button",{name:"Download on-demand-performance.txt",exact:true}).click();
+ const openLink = member.page.getByRole("link",{name:"Download on-demand-performance.txt",exact:true});
+ await openLink.waitFor({timeout:60000});
+ const download = member.page.waitForEvent("download");
+ await openLink.click();
  assert.equal((await download).suggestedFilename(),"on-demand-performance.txt");
  assert.equal(downloads.filter(url=>new URL(url).pathname===`/api/media/${fileAttachment.id}`).length,1,"Requested file downloads once");
  member.page.off("request",observeMedia);

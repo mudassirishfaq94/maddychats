@@ -339,7 +339,10 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     await download.waitFor();
     await download.scrollIntoViewIfNeeded();
     assert(await download.evaluate(element => {const box=element.getBoundingClientRect();return element.contains(document.elementFromPoint(box.x+box.width/2,box.y+box.height/2));}), "Encrypted download target cannot be covered by message actions");
-    const [downloaded] = await Promise.all([recipient.page.waitForEvent("download"), download.click()]);
+    await download.click(); // First tap authorizes fetching and decrypting the attachment.
+    const openLink = recipient.page.getByRole("link", { name: "Download workflow-check.txt", exact: true });
+    await openLink.waitFor({ timeout: 60000 });
+    const [downloaded] = await Promise.all([recipient.page.waitForEvent("download"), openLink.click()]);
     assert.equal(await readFile(await downloaded.path(), "utf8"), fileContent);
     const stored = (await pool.query("select id from message_attachments where message_id=$1", [fileMessage.id])).rows[0].id;
     assert.equal((await fetch(base + "/api/media/" + stored)).status, 401);

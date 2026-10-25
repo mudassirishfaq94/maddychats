@@ -13,6 +13,9 @@ export function splitMessageLinks(text: string): MessageTextPart[] {
   for (const match of text.matchAll(LINK_PATTERN)) {
     const raw = match[0];
     const start = match.index ?? 0;
+    // Do not turn the host portion of an unsupported scheme (e.g. ftp://www.)
+    // into a misleading HTTPS link. Leave the entire unsupported URL as text.
+    if (/^[a-z][a-z\d+.-]*:\/\/$/i.test(text.slice(0, start).match(/[^\s<>"]*$/)?.[0] ?? "")) continue;
     let value = raw.replace(TRAILING_PUNCTUATION, "");
     while (value.endsWith(")") && (value.match(/\(/g)?.length ?? 0) < (value.match(/\)/g)?.length ?? 0)) {
       value = value.slice(0, -1);

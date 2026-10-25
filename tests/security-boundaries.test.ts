@@ -6,7 +6,7 @@ import { notificationPath } from "../src/lib/notification-navigation";
 import { registerSchema, resetPasswordSchema } from "../src/lib/schemas";
 import { safeError } from "../src/server/safe-error";
 import { hashPassword, verifyPassword, DUMMY_PASSWORD_HASH } from "../src/server/password";
-import { contentDisposition } from "../src/server/content-disposition";
+import { contentDisposition, isSafeInlineDocumentType } from "../src/server/content-disposition";
 
 test("production CSRF guard uses the full configured origin and ignores forged host headers", () => {
   const previous = { CLIENT_URL: process.env.CLIENT_URL, NODE_ENV: process.env.NODE_ENV, RENDER_EXTERNAL_URL: process.env.RENDER_EXTERNAL_URL };
@@ -66,4 +66,12 @@ test("download headers preserve international filenames and reject delimiter inj
   assert(value.includes("%C3%A9.png"));
   assert.equal(new Headers({ "Content-Disposition": value }).get("Content-Disposition"), value);
   assert.doesNotThrow(() => contentDisposition("unpaired\ud800.png", true));
+});
+
+test("only explicitly safe document MIME types are eligible for inline disposition", () => {
+  assert.equal(isSafeInlineDocumentType("application/pdf"), true);
+  assert.equal(isSafeInlineDocumentType(" Text/Plain; charset=utf-8 "), true);
+  for (const mime of ["text/html", "application/xhtml+xml", "image/svg+xml", "application/zip", "application/octet-stream"]) {
+    assert.equal(isSafeInlineDocumentType(mime), false, mime);
+  }
 });

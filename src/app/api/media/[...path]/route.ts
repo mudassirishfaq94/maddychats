@@ -15,6 +15,8 @@ import { readStored } from "@/server/storage";
 import path from "path";
 import { canViewStatus } from "@/server/status";
 import { messageVisibleTo } from "@/server/message-visibility";
+import { isActiveContentType } from "@/lib/media-types";
+import { isSafeInlineDocumentType } from "@/server/content-disposition";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -114,8 +116,12 @@ export async function GET(
     } else {
       mimeType = found.attachment.mimeType;
       downloadName = found.attachment.originalName;
-      inline =
-        found.attachment.kind === "image" || found.attachment.kind === "video";
+      const normalizedMime = mimeType.split(";")[0].trim().toLowerCase();
+      inline = isActiveContentType(normalizedMime)
+        ? false
+        : found.attachment.kind === "image" || found.attachment.kind === "video"
+          ? true
+          : found.attachment.kind === "file" && isSafeInlineDocumentType(normalizedMime);
     }
 
   } else {
