@@ -18,7 +18,8 @@ export default function ApplicationLayout({ children }: { children: ReactNode })
   const pathname = usePathname();
   const { user } = useAuth();
   const setupOnly = pathname === "/app/device-access";
+  const notificationPreviewOnly = pathname === "/app/notification-preview";
   const sharedShell = user && pathname !== "/app/call" && !pathname.startsWith("/app/admin") && !setupOnly;
   const content = sharedShell ? <AppShell user={user}>{children}</AppShell> : children;
-  return <E2EEProvider setupOnly={setupOnly}>{setupOnly ? children : <RealtimeProvider><AudioCallProvider><ConversationListProvider>{content}<ForegroundMessageBanner /><CloudRecoverySync /><PwaNotificationPrompt /><OfflineComposeProvider /></ConversationListProvider></AudioCallProvider></RealtimeProvider>}</E2EEProvider>;
+  return <E2EEProvider setupOnly={setupOnly || notificationPreviewOnly}>{setupOnly || notificationPreviewOnly ? children : <RealtimeProvider><AudioCallProvider><ConversationListProvider>{content}<ForegroundMessageBanner /><CloudRecoverySync /><PwaNotificationPrompt /><OfflineComposeProvider /></ConversationListProvider></AudioCallProvider></RealtimeProvider>}</E2EEProvider>;
 }

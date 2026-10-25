@@ -42,8 +42,8 @@ export function messageNotificationPresentation(input: {
   messageKind?: NotificationMessageKind;
 }): NotificationPresentation {
   if (input.locked) return { title: "Circlo", body: "Open Circlo to view your message." };
-  if (input.messageRequest) return { title: "New Message Request", body: "You have received a new message request." };
   if (!input.showDetails) {
+    if (input.messageRequest) return { title: "New Message Request", body: "You have received a new message request." };
     return { title: "Circlo", body: "You have a new message. Open Circlo to read it." };
   }
 
@@ -51,6 +51,10 @@ export function messageNotificationPresentation(input: {
   const message = input.encrypted
     ? safeMessageFallback(input.messageKind ?? "text")
     : cleanText(input.preview, "New message. Open Circlo to read it.", MAX_BODY_LENGTH);
+
+  if (input.messageRequest && !input.encrypted) {
+    return { title: `${actor} ${BRAND}`, body: cleanText(input.preview, "Sent you a message request.", MAX_BODY_LENGTH) };
+  }
 
   return input.isGroup
     ? {

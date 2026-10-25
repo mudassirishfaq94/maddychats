@@ -1,9 +1,8 @@
 package app.ziptalks.android
 
-/** FCM cannot establish permission to show local plaintext or sender identity. */
+/** FCM carries identity and safe fallback text; plaintext is added only after device-side decryption. */
 object NativeMessagePrivacy {
-    @JvmStatic @JvmOverloads fun body(request: Boolean, locked: Boolean, kind: String = "text", senderName: String? = null, group: Boolean = false, showDetails: Boolean = true): String {
-        if (locked) return "Open Circlo to view your message."
+    @JvmStatic @JvmOverloads fun body(request: Boolean, @Suppress("UNUSED_PARAMETER") locked: Boolean, kind: String = "text", senderName: String? = null, group: Boolean = false, showDetails: Boolean = true): String {
         if (request) return "You have received a new message request."
         if (!showDetails) return "You have a new message. Open Circlo to read it."
         val message = when (kind) {
@@ -17,9 +16,8 @@ object NativeMessagePrivacy {
         else message.replaceFirstChar { it.uppercase() }
     }
 
-    @JvmStatic @JvmOverloads fun title(request: Boolean, locked: Boolean, senderName: String? = null, groupName: String? = null): String = when {
-        request && !locked -> "New Message Request"
-        locked -> "Circlo"
+    @JvmStatic @JvmOverloads fun title(request: Boolean, @Suppress("UNUSED_PARAMETER") locked: Boolean, senderName: String? = null, groupName: String? = null): String = when {
+        request && senderName.isNullOrBlank() -> "New Message Request"
         !groupName.isNullOrBlank() && !senderName.isNullOrBlank() -> "${NativeNotificationText.title(mapOf("title" to groupName))} · Circlo"
         !senderName.isNullOrBlank() -> "${NativeNotificationText.title(mapOf("title" to senderName))} · Circlo"
         else -> "Circlo"

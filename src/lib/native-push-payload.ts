@@ -15,7 +15,7 @@ function safeNotificationText(value: string | undefined, fallback: string, limit
 export function nativePushPayload(input: { callCancelled?: boolean; messageRequest?: boolean; recipientId: string; notificationId: string; conversationId: string; messageId: string; actorName?: string; preview?: string; showDetails?: boolean; isGroup?: boolean; groupName?: string | null; encrypted?: boolean; messageKind?: NotificationMessageKind; title?: string; body?: string; callId?: string; silent?: boolean; callTtl?: number }, now = Date.now()) {
   const ttl = input.callId ? Math.min(45, Math.max(1, input.callTtl ?? 45)) : 3600;
   const showDetails = input.showDetails === true;
-  const showSender = showDetails && !input.callId && !input.messageRequest;
+  const showSender = showDetails && !input.callId;
   // Encrypted is the safe default: an unknown message must never leak text.
   const encrypted = input.encrypted !== false;
   const presentation = input.callId && input.title && input.body
