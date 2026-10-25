@@ -78,13 +78,15 @@ class HostedPushBridge(private val activity: MainActivity, private val requestPe
                     }
                     Thread {
                         val uriResult = runCatching {
-                        val bytes = Base64.decode(encoded, Base64.DEFAULT)
-                        if (bytes.isEmpty() || bytes.size > 20 * 1024 * 1024) throw IllegalArgumentException("File exceeds the supported size.")
-                        val folder = File(activity.cacheDir, "attachments").apply { mkdirs() }
-                        val output = File.createTempFile("circlo_", "_$name", folder)
-                        output.writeBytes(bytes)
-                        FileProvider.getUriForFile(activity, "${BuildConfig.APPLICATION_ID}.fileprovider", output)
-                    }
+                            val bytes = Base64.decode(encoded, Base64.DEFAULT)
+                            if (bytes.isEmpty() || bytes.size > 20 * 1024 * 1024) throw IllegalArgumentException("File exceeds the supported size.")
+                            val folder = File(activity.cacheDir, "attachments").apply { mkdirs() }
+                            val expiry = System.currentTimeMillis() - 24 * 60 * 60 * 1000L
+                            folder.listFiles()?.filter { it.lastModified() < expiry }?.forEach { it.delete() }
+                            val output = File.createTempFile("circlo_", "_$name", folder)
+                            output.writeBytes(bytes)
+                            FileProvider.getUriForFile(activity, "${BuildConfig.APPLICATION_ID}.fileprovider", output)
+                        }
                         activity.runOnUiThread {
                             uriResult.onSuccess { uri ->
                                 val viewIntent = Intent(Intent.ACTION_VIEW).setDataAndType(uri, mime)
