@@ -94,7 +94,7 @@ class HostedPushBridge(private val activity: MainActivity, private val requestPe
                                     .setClipData(ClipData.newUri(activity.contentResolver, name, uri))
                                 runCatching { activity.startActivity(Intent.createChooser(viewIntent, "Open $name")) }
                                     .onSuccess { respond(token = "opened") }
-                                    .onFailure { respond(error = "No Android app can open this file. Try downloading it first.") }
+                                    .onFailure { respond(error = "No app on this device can open this file type.") }
                             }.onFailure { respond(error = "Couldn't prepare this file to open. Please try again.") }
                         }
                     }.start()
