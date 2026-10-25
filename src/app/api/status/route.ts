@@ -11,6 +11,7 @@ import { publishToUsers } from "@/server/realtime";
 import { getSessionUser } from "@/server/session";
 import { createStatus, listVisibleStatuses, visibleRecipientIds } from "@/server/status";
 import { deleteStored, generateStoredName, saveBuffer } from "@/server/storage";
+import { STATUS_MEDIA_OUTPUT_MAX_BYTES } from "@/lib/media-limits";
 
 export const runtime = "nodejs";
 export async function GET() {
@@ -44,6 +45,7 @@ export async function POST(req: NextRequest) {
     }
     catch (error) { return jsonError(error instanceof UploadSafetyError ? error.status : 500, error instanceof UploadSafetyError ? error.message : "Upload failed."); }
     if (prepared.kind !== "image" && prepared.kind !== "video") return jsonError(422, "Status media must be an image or video.");
+    if (prepared.buffer.byteLength > STATUS_MEDIA_OUTPUT_MAX_BYTES) return jsonError(413, "Status media must be 10 MB or smaller after processing.");
     type = prepared.kind;
     const storedName = generateStoredName(prepared.extension);
     try {
@@ -51,7 +53,7 @@ export async function POST(req: NextRequest) {
         await tx.execute(sql`select pg_advisory_xact_lock(847221905)`);
         const inventory = await tx.execute<{ count: string }>(sql`select count(*)::text as count from stored_uploads where path like 'statuses/%'`);
         // Reconstructed photos remain capped at 3 MB; scanner-backed media can
-        // use the 10 MB input budget. Keep a separate bounded inventory from chat.
+        // use the 10 MB output budget. Keep a separate bounded inventory from chat.
         if (Number(inventory.rows[0]?.count ?? 0) >= 50) throw new UploadSafetyError(503, "Photo status storage is full. Try again after older updates expire.");
         return saveBuffer("statuses", storedName, prepared.buffer);
       });
