@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { bufferR2UploadBody } from "../src/server/r2-upload-body";
+import { bufferR2UploadBody, MAX_R2_PUT_BYTES } from "../src/server/r2-upload-body";
 
 test("R2 upload body materializes Web streams into bytes for request signing", async () => {
   const expected = Buffer.from("encrypted-image-payload");
@@ -22,6 +22,11 @@ test("R2 upload body rejects truncated streams", async () => {
 });
 
 test("R2 upload body rejects streams beyond the bounded single-object size", async () => {
-  const stream = new Blob([Buffer.alloc(10 * 1024 * 1024 + 1)]).stream();
+  const stream = new Blob([Buffer.alloc(MAX_R2_PUT_BYTES + 1)]).stream();
   await assert.rejects(bufferR2UploadBody(stream), /r2_object_too_large/);
+});
+
+test("R2 upload body allows encrypted inline media overhead at the size limit", async () => {
+  const payload = Buffer.alloc(MAX_R2_PUT_BYTES);
+  assert.equal((await bufferR2UploadBody(payload)).byteLength, MAX_R2_PUT_BYTES);
 });

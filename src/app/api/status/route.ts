@@ -11,6 +11,7 @@ import { publishToUsers } from "@/server/realtime";
 import { getSessionUser } from "@/server/session";
 import { createStatus, listVisibleStatuses, visibleRecipientIds } from "@/server/status";
 import { deleteStored, generateStoredName, saveBuffer } from "@/server/storage";
+import { STATUS_MEDIA_OUTPUT_MAX_BYTES } from "@/lib/media-limits";
 
 export const runtime = "nodejs";
 export async function GET() {
@@ -44,6 +45,7 @@ export async function POST(req: NextRequest) {
     }
     catch (error) { return jsonError(error instanceof UploadSafetyError ? error.status : 500, error instanceof UploadSafetyError ? error.message : "Upload failed."); }
     if (prepared.kind !== "image" && prepared.kind !== "video") return jsonError(422, "Status media must be an image or video.");
+    if (prepared.buffer.byteLength > STATUS_MEDIA_OUTPUT_MAX_BYTES) return jsonError(413, "Status media must be 10 MB or smaller.");
     type = prepared.kind;
     const storedName = generateStoredName(prepared.extension);
     try {
