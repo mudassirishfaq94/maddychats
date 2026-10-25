@@ -2,7 +2,7 @@
 import { useEffect } from "react";
 import { useAuth } from "@/components/providers/auth-provider";
 import { useSharedE2EE } from "@/components/providers/e2ee-provider";
-import { BACKUP_DAY } from "@/lib/local-chat-backup";
+const BACKUP_DAY = 86_400_000;
 
 /** Daily, opt-in local work. Never runs on the send/typing or first-paint path. */
 export function LocalBackupSync() {
@@ -14,6 +14,9 @@ export function LocalBackupSync() {
       if (running || controller.signal.aborted || document.visibilityState !== "visible" || !navigator.onLine) return;
       running = true;
       try {
+        // A nonsecret hint avoids loading archive/crypto code for accounts
+        // which have never opted in. IndexedDB remains the actual setting.
+        if (localStorage.getItem(`circlo:local-backup-enabled:${user.id}`) !== "1") return;
         const { readBackupRecord, refreshLocalBackup, writeBackupRecords } = await import("@/lib/local-chat-backup-store");
         const settings = await readBackupRecord(user.id, "settings");
         if (!settings?.enabled || (settings.savedAt && Date.now() - Date.parse(settings.savedAt) < BACKUP_DAY)) return;

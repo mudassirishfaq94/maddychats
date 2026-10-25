@@ -23,6 +23,7 @@ export async function writeBackupRecords(userId: string, values: Records): Promi
   const db = await database(userId);
   try { await new Promise<void>((resolve, reject) => { const tx = db.transaction("backup", "readwrite"); for (const [id, value] of Object.entries(values)) tx.objectStore("backup").put(value, id); tx.oncomplete = () => resolve(); tx.onerror = tx.onabort = () => reject(new Error("Backup could not be saved. Your previous backup is unchanged.")); }); }
   finally { db.close(); }
+  if (values.settings) { try { localStorage.setItem(`circlo:local-backup-enabled:${userId}`, values.settings.enabled ? "1" : "0"); } catch { /* Scheduling is optional when localStorage is full. Manual backups still work. */ } }
   window.dispatchEvent(new Event("circlo:local-backup"));
 }
 

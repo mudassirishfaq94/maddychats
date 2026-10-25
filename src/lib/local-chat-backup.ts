@@ -4,7 +4,6 @@ import { isActiveContentType } from "./media-types";
 import type { MessageDTO } from "./types";
 
 export const BACKUP_MAX_BYTES = 128 * 1024 * 1024;
-export const BACKUP_DAY = 86_400_000;
 const string = z.string().max(4000);
 const attachment = z.object({ id: z.uuid(), originalName: string, mimeType: string, size: z.number().nonnegative(), kind: z.enum(["image", "video", "file", "audio"]), encrypted: z.boolean(), encKey: z.string().max(10000).nullable(), data: z.string().max(BACKUP_MAX_BYTES).optional() });
 const message = z.object({ id: z.uuid(), senderId: z.uuid(), senderName: string, createdAt: z.iso.datetime(), text: z.string().max(100000), ciphertext: z.string().max(100000).optional(), attachments: z.array(attachment).max(20) });

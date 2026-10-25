@@ -325,8 +325,8 @@ export function FileChip({ file, own, initiallyRequested = false }: { file: Atta
         if (!response.ok) throw new Error("Attachment download failed");
         const opened = await openHostedFile(await response.blob(), file.originalName);
         if (!opened) setOpenError("Couldn't open this file in Circlo. Check that it is 20 MB or smaller.");
-      } catch {
-        setOpenError("Couldn't open this file. Please try again.");
+      } catch (cause) {
+        setOpenError(cause instanceof Error ? cause.message : "Couldn't open this file. Please try again.");
       } finally {
         setOpening(false);
       }
