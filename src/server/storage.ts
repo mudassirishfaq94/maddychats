@@ -1,4 +1,5 @@
 import { PRIVATE_PART_BYTES, writePrivateParts, readPrivateParts, privatePartPaths } from "./private-media-parts";
+import { bufferR2UploadBody } from "./r2-upload-body";
 import { MEDIA_TYPES, normalizeMediaType } from "@/lib/media-types";
 import { IMAGE_MAX_BYTES, MEDIA_MAX_BYTES } from "@/lib/media-limits";
 import { randomUUID } from "crypto";
@@ -66,11 +67,12 @@ function storageBackend(): StorageBackend {
 
 async function putR2Object(key: string, body: Buffer | ReadableStream<Uint8Array> | NodeJS.ReadableStream, size?: number) {
   if (!r2Storage) throw new Error("Cloudflare R2 storage is not configured.");
+  const payload = await bufferR2UploadBody(body, size);
   await r2Storage.send(new PutObjectCommand({
     Bucket: R2_MEDIA_BUCKET,
     Key: key,
-    Body: body as PutObjectCommand["input"]["Body"],
-    ...(size !== undefined ? { ContentLength: size } : {}),
+    Body: payload,
+    ContentLength: payload.byteLength,
     ContentType: "application/octet-stream",
   }));
 }
