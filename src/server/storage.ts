@@ -175,6 +175,10 @@ const AUDIO_TYPES: Record<string, string[]> = {
   "audio/x-m4a": [".m4a"],
 };
 
+const ANDROID_PACKAGE_TYPES: Record<string, string[]> = {
+  "application/vnd.android.package-archive": [".apk"],
+};
+
 /** Extensions that must never be accepted, whatever MIME type is claimed. */
 const BLOCKED_EXTENSIONS = new Set([
   ".exe", ".dll", ".bat", ".cmd", ".com", ".msi", ".scr", ".ps1", ".sh",
@@ -244,6 +248,7 @@ export function validateUpload(
   const isImage = Object.prototype.hasOwnProperty.call(IMAGE_TYPES, type);
   const isDoc = Object.prototype.hasOwnProperty.call(DOCUMENT_TYPES, type);
   const isAudio = Object.prototype.hasOwnProperty.call(AUDIO_TYPES, type);
+  const isAndroidPackage = Object.prototype.hasOwnProperty.call(ANDROID_PACKAGE_TYPES, type);
   const isVideo = type.startsWith("video/");
 
   if (mode === "avatar") {
@@ -262,8 +267,14 @@ export function validateUpload(
     return { ok: true, kind: "image", extension, safeName };
   }
 
-  if (!isImage && !isDoc && !isVideo && !isAudio) {
-    return { ok: false, error: "That file type is not supported." };
+  // Encrypted attachments are opaque to the server. Permit other ordinary
+  // file formats by extension, while the blocked executable/script list above
+  // continues to reject active content. This also covers formats whose MIME
+  // type differs across Android, desktop browsers, and file managers.
+  if (isAndroidPackage) {
+    if (!ANDROID_PACKAGE_TYPES[type].includes(extension)) return { ok: false, error: "File extension does not match its content type." };
+    if (size > LIMITS.file) return { ok: false, error: `That file is too large (max ${Math.round(LIMITS.file / 1024 / 1024)} MB).` };
+    return { ok: true, kind: "file", extension, safeName };
   }
 
   if (isImage) {
@@ -296,6 +307,16 @@ export function validateUpload(
       return { ok: false, error: "Videos must be 250 MB or smaller." };
     }
     return { ok: true, kind: "video", extension, safeName };
+  }
+
+  if (!isDoc) {
+    if (!/^[a-z0-9.+-]+\/[a-z0-9.+-]+$/.test(type) || type.length > 100) {
+      return { ok: false, error: "This file has an invalid format label." };
+    }
+    if (size > LIMITS.file) {
+      return { ok: false, error: `That file is too large (max ${Math.round(LIMITS.file / 1024 / 1024)} MB).` };
+    }
+    return { ok: true, kind: "file", extension, safeName };
   }
 
   const allowed = DOCUMENT_TYPES[type];

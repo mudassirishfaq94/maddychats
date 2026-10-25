@@ -202,7 +202,7 @@ export default function AdminUsersPage() {
                       className="ml-2 rounded-lg p-1.5 text-[var(--danger)] hover:bg-[color-mix(in_srgb,var(--danger)_10%,transparent)] disabled:opacity-50"
                       aria-label={`Delete ${user.displayName}`}
                       title="Permanently delete user"
-                    ><Trash2 className="h-3.5 w-3.5" /></button>
+                    ><Trash2 className="mr-1 inline h-3.5 w-3.5" />Delete</button>
                   </td>
                 </tr>
               ))}
