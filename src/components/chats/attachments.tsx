@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type MouseEvent } from "react";
 import { createPortal } from "react-dom";
 import {
   AlertTriangle,
@@ -22,6 +22,8 @@ import { useExpiredAt } from "@/hooks/use-expired-at";
 import { useNearViewport } from "@/hooks/use-near-viewport";
 import { useEncryptedAttachmentUrl } from "./e2ee-context";
 import { useRetainHistoryRow } from "./history-row-retention";
+import { isNativeApp } from "@/lib/native-platform";
+import { openHostedFile } from "@/lib/native-push-bridge";
 
 export function humanSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -303,9 +305,31 @@ export function AttachmentList({
 /** A downloadable file chip that transparently decrypts E2EE files. */
 function FileChip({ file, own }: { file: AttachmentDTO; own: boolean }) {
   const [requested, setRequested] = useState(false);
+  const [openError, setOpenError] = useState<string | null>(null);
+  const [opening, setOpening] = useState(false);
   const { url, failed } = useEncryptedAttachmentUrl(file, requested);
   const expired = useExpiredAt(file.expiresAt);
   const unavailable = expired || Boolean(file.encrypted && failed);
+  const handleNativeOpen = (event: MouseEvent<HTMLAnchorElement>) => {
+    if (!isNativeApp() || !url) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (opening) return;
+    setOpenError(null);
+    setOpening(true);
+    void (async () => {
+      try {
+        const response = await fetch(url, { credentials: "include" });
+        if (!response.ok) throw new Error("Attachment download failed");
+        const opened = await openHostedFile(await response.blob(), file.originalName);
+        if (!opened) setOpenError("Couldn't open this file in Circlo. Check that it is 20 MB or smaller.");
+      } catch {
+        setOpenError("Couldn't open this file. Please try again.");
+      } finally {
+        setOpening(false);
+      }
+    })();
+  };
   const textClass = cn(
     "block min-w-0 flex-1 truncate text-left text-xs font-semibold",
     own ? "text-[var(--bubble-own-fg)]" : "text-[var(--text)]",
@@ -342,7 +366,7 @@ function FileChip({ file, own }: { file: AttachmentDTO; own: boolean }) {
             href={url}
             aria-label={`Open ${file.originalName}`}
             className={cn(textClass, "cursor-pointer underline decoration-transparent underline-offset-2 hover:decoration-current focus-visible:outline-2 focus-visible:outline-[var(--accent)]")}
-            onClick={(event) => event.stopPropagation()}
+            onClick={handleNativeOpen}
           >
             {file.originalName}
           </a>
@@ -365,6 +389,10 @@ function FileChip({ file, own }: { file: AttachmentDTO; own: boolean }) {
         >
           {unavailable
             ? "Couldn't open"
+            : openError
+              ? openError
+              : opening
+                ? "Opening on this device…"
             : !url && requested
               ? "Preparing to open…"
               : url
@@ -391,7 +419,7 @@ function FileChip({ file, own }: { file: AttachmentDTO; own: boolean }) {
           download={expired ? "Attachment expired" : file.originalName}
           aria-label={`Download ${file.originalName}`}
           className="flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-full focus-visible:outline-2 focus-visible:outline-[var(--accent)]"
-          onClick={(e) => e.stopPropagation()}
+          onClick={handleNativeOpen}
         >
           <Download
             className={cn(

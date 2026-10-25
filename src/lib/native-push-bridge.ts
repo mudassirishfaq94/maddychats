@@ -7,7 +7,8 @@ declare global { interface Window { CircloPush?: Port } }
 const pending = new Map<string, (reply: Reply) => void>();
 export function hasHostedPushBridge(): boolean { return typeof window !== "undefined" && Boolean(window.CircloPush); }
 type CallSession = { callId: string; userId: string; clientId?: string; conversationId?: string; actionToken?: string; connected?: boolean; muted?: boolean; deviceId?: string };
-async function request(command: "token" | "request" | "bind" | "reconcile" | "clear" | "settings" | "status" | "dismiss" | "preview" | "preview-finished" | "privacy" | "call-start" | "call-renew" | "call-stop" | "call-settings" | "call-answer" | "call-audio", userId?: string, notification?: LocalNotification, lockedChats?: string[] | null, call?: CallSession, notificationId?: string): Promise<Reply | null> {
+type NativeFile = { name: string; mime: string; data: string };
+async function request(command: "token" | "request" | "bind" | "reconcile" | "clear" | "settings" | "status" | "dismiss" | "preview" | "preview-finished" | "privacy" | "call-start" | "call-renew" | "call-stop" | "call-settings" | "call-answer" | "call-audio" | "open-file", userId?: string, notification?: LocalNotification, lockedChats?: string[] | null, call?: CallSession, notificationId?: string, file?: NativeFile): Promise<Reply | null> {
   const port = window.CircloPush;
   if (!port) return null;
   port.onmessage = event => {
@@ -15,12 +16,12 @@ async function request(command: "token" | "request" | "bind" | "reconcile" | "cl
   };
   const id = crypto.randomUUID();
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => { pending.delete(id); reject(new Error("Notifications did not respond. Please retry.")); }, 15000);
+    const timer = setTimeout(() => { pending.delete(id); reject(new Error("Native action did not respond. Please retry.")); }, command === "open-file" ? 60_000 : 15_000);
     pending.set(id, reply => {
       clearTimeout(timer); pending.delete(id);
       if (reply.error) reject(new Error(reply.error)); else resolve(reply);
     });
-    try { port.postMessage(JSON.stringify({ id, command, userId, notification, notificationId, lockedChats, ...call })); }
+    try { port.postMessage(JSON.stringify({ id, command, userId, notification, notificationId, lockedChats, file, ...call })); }
     catch { clearTimeout(timer); pending.delete(id); reject(new Error("Notification bridge unavailable.")); }
   });
 }
@@ -48,6 +49,23 @@ export async function androidNotificationStatus(): Promise<AndroidNotificationSt
   return status;
 }
 export async function androidCallSettings(): Promise<void> { await request("call-settings"); }
+
+/** Open an already-decrypted attachment with Android's registered file viewer. */
+export async function openHostedFile(blob: Blob, name: string): Promise<boolean> {
+  if (!hasHostedPushBridge() || blob.size > 20 * 1024 * 1024) return false;
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(offset, Math.min(offset + chunkSize, bytes.length)));
+  }
+  const reply = await request("open-file", undefined, undefined, undefined, undefined, undefined, {
+    name,
+    mime: blob.type || "application/octet-stream",
+    data: btoa(binary),
+  });
+  return reply?.token === "opened";
+}
 
 interface LocalNotification { recipientId: string; notificationId: string; conversationId: string; messageId: string; title: string; body: string; silent: boolean; messagePreview?: boolean; senderName?: string; messageText?: string; isGroup?: boolean }
 /** Plaintext crosses only the exact-origin on-device WebView bridge. */
