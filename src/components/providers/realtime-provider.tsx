@@ -96,7 +96,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
       if (!payload || payload.recipientId !== user.id || (!payload.backgroundPreview && document.visibilityState === "visible")) return;
       const epoch = privacyEpoch;
       void resolve(payload.notificationId).then(async detail => {
-        if (!detail || !active || epoch !== privacyEpoch || document.visibilityState === "visible") return;
+        if (!detail || !active || epoch !== privacyEpoch || (!payload.backgroundPreview && document.visibilityState === "visible")) return;
         const bridge = await import("@/lib/native-push-bridge");
         if (!active || epoch !== privacyEpoch) return;
         await bridge.showLocalNotification({ ...detail, recipientId: user.id, notificationId: payload.notificationId });
