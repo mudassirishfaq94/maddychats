@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { Readable } from "node:stream";
 import { bufferR2UploadBody } from "../src/server/r2-upload-body";
 
 test("R2 upload body materializes Web streams into bytes for request signing", async () => {
@@ -22,6 +23,23 @@ test("R2 upload body rejects truncated streams", async () => {
 });
 
 test("R2 upload body rejects streams beyond the bounded single-object size", async () => {
-  const stream = new Blob([Buffer.alloc(10 * 1024 * 1024 + 1)]).stream();
+  const stream = new Blob([Buffer.alloc(10 * 1024 * 1024 + 29)]).stream();
   await assert.rejects(bufferR2UploadBody(stream), /r2_object_too_large/);
+});
+
+test("R2 upload body accepts the full encrypted inline limit for buffers and streams", async () => {
+  const expected = Buffer.alloc(10 * 1024 * 1024 + 28, 7);
+  for (const body of [expected, new Blob([expected]).stream(), Readable.from([expected])]) {
+    assert.deepEqual(await bufferR2UploadBody(body, expected.byteLength), expected);
+  }
+});
+
+test("R2 upload body preserves buffer and Node stream size checks", async () => {
+  const oversized = Buffer.alloc(10 * 1024 * 1024 + 29);
+  for (const body of [oversized, Readable.from([oversized.subarray(0, 10 * 1024 * 1024), oversized.subarray(10 * 1024 * 1024)])]) {
+    await assert.rejects(bufferR2UploadBody(body), /r2_object_too_large/);
+  }
+  for (const body of [Buffer.from("short"), Readable.from([Buffer.from("short")])]) {
+    await assert.rejects(bufferR2UploadBody(body, 8), /r2_object_size_mismatch/);
+  }
 });
