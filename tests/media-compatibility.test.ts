@@ -17,6 +17,12 @@ test("Android JPEG aliases and missing picker MIME are accepted without permitti
   assert.equal(validateUpload("payload.com","image/jpeg",128000,"message").ok,false);
   assert.equal(validateUpload("clip.mkv","application/octet-stream",1024,"message").ok,true);
 });
+test("APK and ordinary unknown file formats can be shared as encrypted attachments",()=>{
+  assert.equal(validateUpload("app-debug.apk","application/vnd.android.package-archive",5*1024*1024,"message").ok,true);
+  assert.equal(validateUpload("app-debug.apk","application/octet-stream",5*1024*1024,"message").ok,true);
+  assert.equal(validateUpload("archive.custom","application/x-custom-format",1024,"message").ok,true);
+  assert.equal(validateUpload("payload.exe","application/octet-stream",1024,"message").ok,false);
+});
 test("larger media budgets preserve bounded image, video and document limits",()=>{
   assert.equal(validateUpload("image.jpg","image/jpeg",50*1024*1024,"message").ok,true);
   assert.equal(validateUpload("image.jpg","image/jpeg",50*1024*1024+1,"message").ok,false);

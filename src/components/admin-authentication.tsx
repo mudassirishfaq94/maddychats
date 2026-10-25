@@ -13,7 +13,7 @@ export function useAdminProof() {
     proof: { password, mfaCode: code },
     clearProof: () => { setPassword(""); setCode(""); },
     form: <section className="card-flat rounded-xl p-4">
-      <p className="text-sm">Administrative changes require two-factor authentication and a recent sign-in.</p>
+      <p className="text-sm">Enable two-factor authentication first. If your sign-in is older than five minutes, enter your password and current authenticator or recovery code, then click the action you want below. There is no separate save step.</p>
       <Link href="/app/profile" className="text-xs text-[var(--accent)]">Manage two-factor authentication</Link>
       <FreshAuthentication password={password} code={code} onPassword={setPassword} onCode={setCode} returnTo={pathname} />
     </section>,

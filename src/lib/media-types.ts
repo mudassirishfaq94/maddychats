@@ -12,10 +12,11 @@ export const MEDIA_TYPES: Record<string, string[]> = {
   "image/x-nikon-nef": ["nef"], "image/x-sony-arw": ["arw"], "image/vnd.adobe.photoshop": ["psd"],
   "image/x-fuji-raf": ["raf"], "image/x-panasonic-rw2": ["rw2"], "image/x-olympus-orf": ["orf"],
   "audio/mpeg": ["mp3"], "audio/wav": ["wav"], "audio/mp4": ["m4a"], "audio/aac": ["aac"], "audio/ogg": ["ogg", "opus"],
+  "application/vnd.android.package-archive": ["apk"],
 };
 export function normalizeMediaType(name: string, supplied: string): string {
   const type=supplied.split(";")[0].trim().toLowerCase();
-  const aliases: Record<string,string>={"image/jpg":"image/jpeg","image/pjpeg":"image/jpeg","image/x-png":"image/png","video/x-m4v":"video/mp4","video/avi":"video/x-msvideo","image/vnd.microsoft.icon":"image/x-icon"};
+  const aliases: Record<string,string>={"image/jpg":"image/jpeg","image/pjpeg":"image/jpeg","image/x-png":"image/png","video/x-m4v":"video/mp4","video/avi":"video/x-msvideo","image/vnd.microsoft.icon":"image/x-icon","application/x-android-package-archive":"application/vnd.android.package-archive"};
   if(aliases[type]) return aliases[type];
   if(type && !["application/octet-stream","binary/octet-stream","image/*","video/*"].includes(type)) return type;
   const ext=name.split(".").pop()?.toLowerCase() ?? "";

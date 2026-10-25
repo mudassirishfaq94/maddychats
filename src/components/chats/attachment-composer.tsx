@@ -231,7 +231,9 @@ export function AttachButton({
         type="file"
         multiple
         // Mobile browsers show camera/photo/file options for these types.
-        accept="image/*,video/*,audio/*,.heic,.heif,.avif,.jpg,.jpeg,.pdf,.txt,.md,.csv,.json,.zip,.doc,.docx,.xls,.xlsx,.ppt,.pptx"
+        // Do not constrain the picker to a short MIME list: APKs and other
+        // ordinary document/file formats must remain selectable.
+        accept="*/*"
         className="hidden"
         onChange={(e) => {
           if (e.target.files?.length) onFiles(e.target.files);
