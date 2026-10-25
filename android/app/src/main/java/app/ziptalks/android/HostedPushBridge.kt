@@ -79,6 +79,7 @@ class HostedPushBridge(private val activity: MainActivity, private val requestPe
                     if (notice != null) LocalMessageNotification.show(activity, notice)
                     respond()
                 }
+                "preview-finished" -> respond()
                 "clear" -> { NativePushState.clear(activity); respond() }
                 "reconcile" -> {
                     val user = data.optString("userId")

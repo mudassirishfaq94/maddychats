@@ -47,6 +47,13 @@ test("private notifications suppress both sender and preview", () => {
   }), { title: "Circlo", body: "You have a new message. Open Circlo to read it." });
 });
 
+test("opted-in message requests include the sender and locally readable preview", () => {
+  assert.deepEqual(messageNotificationPresentation({
+    showDetails: true, messageRequest: true, isGroup: false, groupName: null,
+    actorName: "Ayesha", preview: "Can we talk?", encrypted: false,
+  }), { title: "Ayesha · Circlo", body: "Can we talk?" });
+});
+
 test("group alerts name the group and keep the sender with the message", () => {
   assert.deepEqual(messageNotificationPresentation({
     showDetails: true,

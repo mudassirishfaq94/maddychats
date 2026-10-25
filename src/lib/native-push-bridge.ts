@@ -7,7 +7,7 @@ declare global { interface Window { CircloPush?: Port } }
 const pending = new Map<string, (reply: Reply) => void>();
 export function hasHostedPushBridge(): boolean { return typeof window !== "undefined" && Boolean(window.CircloPush); }
 type CallSession = { callId: string; userId: string; clientId?: string; conversationId?: string; actionToken?: string; connected?: boolean; muted?: boolean; deviceId?: string };
-async function request(command: "token" | "request" | "bind" | "reconcile" | "clear" | "settings" | "status" | "dismiss" | "preview" | "privacy" | "call-start" | "call-renew" | "call-stop" | "call-settings" | "call-answer" | "call-audio", userId?: string, notification?: LocalNotification, lockedChats?: string[] | null, call?: CallSession): Promise<Reply | null> {
+async function request(command: "token" | "request" | "bind" | "reconcile" | "clear" | "settings" | "status" | "dismiss" | "preview" | "preview-finished" | "privacy" | "call-start" | "call-renew" | "call-stop" | "call-settings" | "call-answer" | "call-audio", userId?: string, notification?: LocalNotification, lockedChats?: string[] | null, call?: CallSession, notificationId?: string): Promise<Reply | null> {
   const port = window.CircloPush;
   if (!port) return null;
   port.onmessage = event => {
@@ -20,7 +20,7 @@ async function request(command: "token" | "request" | "bind" | "reconcile" | "cl
       clearTimeout(timer); pending.delete(id);
       if (reply.error) reject(new Error(reply.error)); else resolve(reply);
     });
-    try { port.postMessage(JSON.stringify({ id, command, userId, notification, lockedChats, ...call })); }
+    try { port.postMessage(JSON.stringify({ id, command, userId, notification, notificationId, lockedChats, ...call })); }
     catch { clearTimeout(timer); pending.delete(id); reject(new Error("Notification bridge unavailable.")); }
   });
 }
@@ -52,7 +52,12 @@ export async function androidCallSettings(): Promise<void> { await request("call
 interface LocalNotification { recipientId: string; notificationId: string; conversationId: string; messageId: string; title: string; body: string; silent: boolean; messagePreview?: boolean; senderName?: string; messageText?: string; isGroup?: boolean }
 /** Plaintext crosses only the exact-origin on-device WebView bridge. */
 export async function showLocalNotification(notification: LocalNotification): Promise<void> {
-  if (hasHostedPushBridge()) await request("preview", undefined, notification);
+  if (hasHostedPushBridge()) await request("preview", notification.recipientId, notification, undefined, undefined, notification.notificationId);
+}
+
+/** Tell the hidden notification WebView it may be released. No text is sent. */
+export async function finishLocalNotificationPreview(notificationId: string): Promise<void> {
+  if (hasHostedPushBridge()) await request("preview-finished", undefined, undefined, undefined, undefined, notificationId);
 }
 
 export async function syncNotificationPrivacy(userId: string, lockedChats: string[] | null): Promise<void> {

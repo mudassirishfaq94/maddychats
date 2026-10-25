@@ -92,8 +92,8 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
       }).catch(() => { event.ports[0].postMessage(null); event.ports[0].close(); });
     };
     const nativeMessage = (event: Event) => {
-      const payload = (event as CustomEvent<{ recipientId: string; notificationId: string }>).detail;
-      if (!payload || payload.recipientId !== user.id || document.visibilityState === "visible") return;
+      const payload = (event as CustomEvent<{ recipientId: string; notificationId: string; backgroundPreview?: boolean }>).detail;
+      if (!payload || payload.recipientId !== user.id || (!payload.backgroundPreview && document.visibilityState === "visible")) return;
       const epoch = privacyEpoch;
       void resolve(payload.notificationId).then(async detail => {
         if (!detail || !active || epoch !== privacyEpoch || document.visibilityState === "visible") return;

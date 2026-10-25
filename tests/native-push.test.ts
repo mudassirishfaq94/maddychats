@@ -32,7 +32,7 @@ test("remote Android alerts keep message text private when sender details are en
   assert.equal(payload.data.title, "Alex · Circlo");
 });
 
-test("opted-in Android push carries only a sender name, never message text", () => {
+test("opted-in Android push carries the sender name, never message text", () => {
   const input = { recipientId: "recipient", notificationId: "event", conversationId: "chat", messageId: "message", actorName: "Alex", preview: "Are you free later?", encrypted: true, showDetails: true };
   const payload = nativePushPayload(input, 1000);
   assert.equal(payload.data.actorName, "Alex");
@@ -40,8 +40,8 @@ test("opted-in Android push carries only a sender name, never message text", () 
   assert.equal(payload.data.body, "Sent you a message. Open Circlo to read it.");
   assert.equal(JSON.stringify(payload).includes("Are you free later?"), false);
   const request = nativePushPayload({ ...input, messageRequest: true }, 1000);
-  assert.equal(request.data.actorName, "Circlo", "Message requests keep the sender private");
-  assert.equal(request.data.showDetails, "false");
+  assert.equal(request.data.actorName, "Alex");
+  assert.equal(request.data.showDetails, "true");
 });
 
 test("a private account still receives the generic alert and no sender", () => {

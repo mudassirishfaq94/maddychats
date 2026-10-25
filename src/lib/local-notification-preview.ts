@@ -30,18 +30,20 @@ export async function resolveLocalNotification(
   if (detail.recipientId !== recipientId || !active() || typeof detail.conversationId !== "string" || typeof detail.messageId !== "string") return null;
   const id = detail.conversationId;
   let preview = "";
-  if (!notificationChatLocked(id) && !detail.messageRequest && detail.previewAllowed === true && typeof detail.ciphertext === "string") {
+  // Notification previews follow the user's notification preference even when
+  // a conversation is marked locked. The ciphertext is fetched for this
+  // recipient only and is decrypted locally; plaintext never goes through FCM.
+  if (detail.previewAllowed === true && typeof detail.ciphertext === "string") {
     try { preview = detail.encrypted ? await decrypt(detail.ciphertext, id) : detail.ciphertext; } catch { /* Device cannot decrypt: keep a private fallback. */ }
   }
   if (!active()) return null;
-  // Recheck after asynchronous decryption: locking must win an in-flight preview.
   const presentation = messageNotificationPresentation({
-    locked: notificationChatLocked(id), messageRequest: detail.messageRequest === true,
+    messageRequest: detail.messageRequest === true,
     showDetails: detail.previewAllowed === true && Boolean(preview),
     encrypted: false, preview, actorName: detail.actorName ?? "Someone",
     isGroup: detail.isGroup === true, groupName: detail.groupName ?? null,
   });
-  const messagePreview = !notificationChatLocked(id) && !detail.messageRequest && detail.previewAllowed === true && Boolean(preview);
+  const messagePreview = detail.previewAllowed === true && Boolean(preview);
   return { ...presentation, conversationId: id, messageId: detail.messageId, silent: Boolean(detail.silent),
     ...(messagePreview ? { messagePreview: true, senderName: String(detail.actorName ?? "Someone").slice(0,80),
       messageText: Array.from(preview).slice(0,140).join(""), isGroup: detail.isGroup === true } : {}) };

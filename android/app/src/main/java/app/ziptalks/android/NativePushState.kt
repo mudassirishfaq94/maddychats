@@ -7,13 +7,15 @@ import android.content.Context
 object NativePushState {
     @Volatile var foreground = false
     @Volatile var previewWebView: java.lang.ref.WeakReference<android.webkit.WebView>? = null
-    fun requestPreview(recipient: String?, event: String?) {
+    fun requestPreview(context: Context, recipient: String?, event: String?) {
         if (recipient == null || event == null) return
-        val view = previewWebView?.get() ?: return
+        val view = previewWebView?.get()
+        if (view == null) { BackgroundNotificationPreview.start(context, recipient, event); return }
         view.post {
-            if (!WebOriginPolicy.isAllowed(view.url.orEmpty(), BuildConfig.API_BASE_URL)) return@post
-            val detail = org.json.JSONObject().put("recipientId", recipient).put("notificationId", event)
-            view.evaluateJavascript("window.dispatchEvent(new CustomEvent('circlo:native-notification', {detail: $detail}))", null)
+            if (view.isAttachedToWindow && WebOriginPolicy.isAllowed(view.url.orEmpty(), BuildConfig.API_BASE_URL)) {
+                val detail = org.json.JSONObject().put("recipientId", recipient).put("notificationId", event).put("backgroundPreview", true)
+                view.evaluateJavascript("window.dispatchEvent(new CustomEvent('circlo:native-notification', {detail: $detail}))", null)
+            } else BackgroundNotificationPreview.start(context, recipient, event)
         }
     }
     fun dismiss(context: Context) {
@@ -31,6 +33,7 @@ object NativePushState {
         }
     }
     fun clear(context: Context) {
+        BackgroundNotificationPreview.cancel()
         NativeCallSessionService.stop(context)
         context.getSharedPreferences("circlo_push", Context.MODE_PRIVATE).edit().remove("user").apply()
         context.getSystemService(NotificationManager::class.java)?.cancelAll()
@@ -38,6 +41,7 @@ object NativePushState {
     fun bind(context: Context, user: String) {
         val previous = context.getSharedPreferences("circlo_push", Context.MODE_PRIVATE).getString("user", null)
         if (previous != user) {
+            BackgroundNotificationPreview.cancel()
             NativeCallSessionService.stop(context)
             context.getSystemService(NotificationManager::class.java)?.cancelAll()
         }
@@ -46,6 +50,7 @@ object NativePushState {
     fun prepareUser(context: Context, user: String) {
         val previous = context.getSharedPreferences("circlo_push", Context.MODE_PRIVATE).getString("user", null)
         if (PushPolicy.switchesAccount(previous, user)) clear(context)
+        else if (previous == null) BackgroundNotificationPreview.cancel()
     }
     fun callClosed(context: Context, call: String): Boolean {
         val prefs=context.getSharedPreferences("circlo_push",Context.MODE_PRIVATE)

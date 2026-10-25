@@ -42,14 +42,15 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         val isCall = remoteMessage.data["url"]?.contains("?call=") == true
         val chat = android.net.Uri.parse(remoteMessage.data["url"].orEmpty()).pathSegments.firstOrNull().orEmpty()
         val request = remoteMessage.data["messageRequest"] == "true"
-        val locked = NativePushState.locked(this, chat)
+        // Message preview settings are explicit: chat-lock UI state must not
+        // silently hide previews from the system notification.
         val senderName = remoteMessage.data["actorName"]
-            ?.takeIf { remoteMessage.data["showDetails"] == "true" && !request && !locked }
-        val groupName = remoteMessage.data["groupName"]?.takeIf { remoteMessage.data["showDetails"] == "true" && !request && !locked }
-        val title = if (isCall) NativeNotificationText.title(remoteMessage.data) else NativeMessagePrivacy.title(request, locked, senderName, groupName)
-        val showDetails = remoteMessage.data["showDetails"] == "true" && !request
-        val messageKind = remoteMessage.data["messageKind"]?.takeIf { showDetails && !locked } ?: "text"
-        val body = if (isCall) NativeNotificationText.body(remoteMessage.data) else NativeMessagePrivacy.body(request, locked, messageKind, senderName, remoteMessage.data["isGroup"] == "true", showDetails)
+            ?.takeIf { remoteMessage.data["showDetails"] == "true" }
+        val groupName = remoteMessage.data["groupName"]?.takeIf { remoteMessage.data["showDetails"] == "true" }
+        val title = if (isCall) NativeNotificationText.title(remoteMessage.data) else NativeMessagePrivacy.title(request, false, senderName, groupName)
+        val showDetails = remoteMessage.data["showDetails"] == "true"
+        val messageKind = remoteMessage.data["messageKind"]?.takeIf { showDetails } ?: "text"
+        val body = if (isCall) NativeNotificationText.body(remoteMessage.data) else NativeMessagePrivacy.body(request, false, messageKind, senderName, remoteMessage.data["isGroup"] == "true", showDetails)
         val url = remoteMessage.data["url"]
         val tag = remoteMessage.data["tag"]
         val message = android.net.Uri.parse(url.orEmpty()).getQueryParameter("message")
@@ -86,7 +87,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             builder.build()
         )
         android.util.Log.i("CircloPushMetrics", "android_callback_to_notify_ms=${SystemClock.elapsedRealtime() - callbackStartedAt}")
-        if (!isCall) NativePushState.requestPreview(remoteMessage.data["recipientId"], remoteMessage.data["eventId"])
+        if (!isCall && showDetails) NativePushState.requestPreview(this, remoteMessage.data["recipientId"], remoteMessage.data["eventId"])
         } finally { NativeMessageReceipt.receive(this, remoteMessage.data["recipientId"], remoteMessage.data["url"]) }
     }
 

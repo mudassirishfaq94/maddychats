@@ -19,8 +19,7 @@ object LocalMessageNotification {
         val message = notice.optString("messageId")
         val uuid = Regex("[a-fA-F0-9-]{36}")
         if (!uuid.matches(chat) || !uuid.matches(message)) return
-        val locked = NativePushState.locked(context, chat)
-        val text = if (locked) mapOf("title" to "Circlo", "body" to NativeMessagePrivacy.body(false, true)) else mapOf("title" to notice.optString("title"), "body" to notice.optString("body"))
+        val text = mapOf("title" to notice.optString("title"), "body" to notice.optString("body"))
         val intent = Intent(context, MainActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
             putExtra("notification_url", "ziptalks://chat/$chat?message=$message")
@@ -31,7 +30,7 @@ object LocalMessageNotification {
         val tag = "circlo-chat-$chat"
         val previous = manager?.activeNotifications?.firstOrNull { it.tag == tag }
         val sameMessage = previous?.notification?.extras?.getString("circlo.message") == message
-        val preview = !locked && notice.optBoolean("messagePreview")
+        val preview = notice.optBoolean("messagePreview")
         val style: NotificationCompat.Style = if (preview) NotificationCompat.MessagingStyle(Person.Builder().setName("You").build()).also { conversation ->
             val group = notice.optBoolean("isGroup")
             conversation.setGroupConversation(group)

@@ -4,7 +4,7 @@ import { notificationChatLocked, resolveLocalNotification } from "../src/lib/loc
 
 const notice = "11111111-1111-4111-8111-111111111111";
 const chat = "22222222-2222-4222-8222-222222222222";
-test("recipient-only previews enforce request, lock, preference and decryption gates", async () => {
+test("recipient-only previews follow the setting across locked chats and require successful local decryption", async () => {
   const previousFetch = globalThis.fetch;
   const previousStorage = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
   let locks = "[]";
@@ -21,17 +21,17 @@ test("recipient-only previews enforce request, lock, preference and decryption g
     detail.isGroup = true; detail.groupName = "Weekend";
     assert.equal((await resolve())?.body, "Alex: Are we meeting tonight?");
     locks = JSON.stringify([chat]); decryptions = 0;
-    assert.deepEqual(await resolve(), { title: "Circlo", body: "Open Circlo to view your message.", conversationId: chat, messageId: notice, silent: false });
-    assert.equal(decryptions, 0);
+    assert.equal((await resolve())?.body, "Alex: Are we meeting tonight?");
+    assert.equal(decryptions, 1, "chat-lock UI state does not suppress an opted-in notification preview");
     locks = "[]"; detail.messageRequest = true;
-    assert.equal((await resolve())?.title, "New Message Request");
-    assert.equal((await resolve())?.body, "You have received a new message request.");
-    assert.equal(decryptions, 0);
-    detail.messageRequest = false; detail.previewAllowed = false;
+    assert.equal((await resolve())?.title, "Alex · Circlo");
+    assert.equal((await resolve())?.body, "Are we meeting tonight?");
+    assert.equal(decryptions, 3, "opted-in message requests are decrypted on the recipient device");
+    detail.messageRequest = false; detail.previewAllowed = false; decryptions = 0;
     assert.equal((await resolve())?.title, "Circlo"); assert.equal(decryptions, 0);
     detail.previewAllowed = true;
     assert.equal((await resolve(async () => { throw new Error("no key"); }))?.title, "Circlo");
-    assert.equal((await resolve(async () => { locks = JSON.stringify([chat]); return "must not escape"; }))?.body, "Open Circlo to view your message.");
+    assert.equal((await resolve(async () => { locks = JSON.stringify([chat]); return "must not escape"; }))?.body, "Alex: must not escape");
     locks = "broken"; assert.equal(notificationChatLocked(chat), true);
     locks = "[]";
     assert.equal(await resolve(decrypt, () => false), null);

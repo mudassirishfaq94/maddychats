@@ -50,7 +50,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ recipientId: user.id, conversationId, messageId,
     ...presentation,
     messageRequest,
-    ...(preferences.showNotificationDetails && !messageRequest && !context.selfDestruct ? {
+    ...(preferences.showNotificationDetails && !context.selfDestruct ? {
       previewAllowed: true, encrypted: Boolean(context.encrypted), ciphertext: context.ciphertext,
       actorName: typeof notice.data?.actorName === "string" ? notice.data.actorName : "Someone",
       isGroup: context.type === "group", groupName: context.name,
