@@ -424,9 +424,11 @@ class MainActivity : ComponentActivity() {
         cookieManager.setAcceptThirdPartyCookies(this, false)
         // Migrate legacy native sessions only when WebView has no session.
         // Never overwrite the current WebView login with an older saved cookie.
-        WebSessionCookieMigration.cookiesToImport(cookieManager.getCookie(BuildConfig.API_BASE_URL), api.cookiesForWeb())
-            .forEach { cookieManager.setCookie(BuildConfig.API_BASE_URL, it) }
-        cookieManager.flush()
+        val migrated = WebSessionCookieMigration.cookiesToImport(cookieManager.getCookie(BuildConfig.API_BASE_URL)) { api.cookiesForWeb() }
+        if (migrated.isNotEmpty()) {
+            migrated.forEach { cookieManager.setCookie(BuildConfig.API_BASE_URL, it) }
+            cookieManager.flush()
+        }
         HostedPushBridge(this@MainActivity) { done -> requestNotifications(done) }.install(this)
         webChromeClient = hostedWebChromeClient()
         webViewClient = hostedWebClient()

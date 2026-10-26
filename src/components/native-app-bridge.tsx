@@ -4,7 +4,7 @@ import { navigateWithReload } from "@/lib/navigation";
 
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
-import { isNativeApp } from "@/lib/native-platform";
+import { isNativeApp, hasCapacitorRuntime } from "@/lib/native-platform";
 
 declare global { interface Window { __circloNavigate?: (destination: string) => boolean } }
 
@@ -30,6 +30,9 @@ export function NativeAppBridge() {
     const removeListeners: Array<() => Promise<void>> = [];
 
     void (async () => {
+      // MainActivity already handles bars, keyboard, back and deep links in
+      // the hosted shell. Do not download plugins which cannot run there.
+      if (!hasCapacitorRuntime()) return;
       try {
         const [{ App }, { StatusBar, Style }, { Keyboard, KeyboardResize }] = await Promise.all([
           import("@capacitor/app"),

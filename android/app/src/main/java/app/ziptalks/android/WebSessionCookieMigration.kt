@@ -7,9 +7,13 @@ package app.ziptalks.android
  */
 internal object WebSessionCookieMigration {
     fun cookiesToImport(webViewCookieHeader: String?, legacyCookies: List<String>): List<String> {
+        return cookiesToImport(webViewCookieHeader) { legacyCookies }
+    }
+
+    fun cookiesToImport(webViewCookieHeader: String?, legacyCookies: () -> List<String>): List<String> {
         val hasWebSession = webViewCookieHeader.orEmpty()
             .split(';')
             .any { part -> part.substringBefore('=').trim() in setOf("maddy_session", "maddy_refresh") && part.substringAfter('=', "").isNotBlank() }
-        return if (hasWebSession) emptyList() else legacyCookies
+        return if (hasWebSession) emptyList() else legacyCookies()
     }
 }
