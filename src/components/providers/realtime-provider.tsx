@@ -332,6 +332,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
 
     let disposed = false;
     const es = new EventSource("/api/realtime/stream");
+    let lastStreamActivityAt = 0;
     const acknowledgments = new Set<string>();
     let ackTimer: ReturnType<typeof setTimeout> | undefined;
     let syncingDelivery = false;
@@ -366,17 +367,33 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
       finally { syncingDelivery = false; }
     };
     const deliveryTimer = setInterval(() => { if (es.readyState === EventSource.OPEN) void syncDelivery(); }, 60000);
+    const streamWatchdog = setInterval(() => {
+      if (es.readyState === EventSource.OPEN && lastStreamActivityAt && Date.now() - lastStreamActivityAt > 45000) {
+        setConnected(false);
+      }
+    }, 10000);
     let hadConnection = false;
     es.onopen = () => {
+      lastStreamActivityAt = Date.now();
       setConnected(true);
       void syncDelivery();
       window.dispatchEvent(new Event("maddy:message-request-keys"));
       hadConnection = true;
     };
-    es.addEventListener("resync", () => { /* resync events are handled by connected components via the SSE stream */ });
+    es.addEventListener("heartbeat", () => {
+      lastStreamActivityAt = Date.now();
+      setConnected(true);
+    });
+    es.addEventListener("resync", () => {
+      listeners.current.forEach(fn => {
+        try { fn({ type: "realtime:resync" }); } catch { /* a broken subscriber must not sink the stream */ }
+      });
+    });
     es.onerror = () => setConnected(false);
     const received = new Set<string>();
     es.onmessage = (e) => {
+      lastStreamActivityAt = Date.now();
+      setConnected(true);
       if (e.lastEventId) {
         if (received.has(e.lastEventId)) return;
         received.add(e.lastEventId);
@@ -458,7 +475,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
 
     return () => {
       disposed = true;
-      clearInterval(deliveryTimer); clearTimeout(ackTimer); es.close();
+      clearInterval(deliveryTimer); clearInterval(streamWatchdog); clearTimeout(ackTimer); es.close();
       setConnected(false);
       presenceStore.clear();
     };

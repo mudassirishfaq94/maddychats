@@ -59,6 +59,7 @@ import {
   Copy,
 } from "lucide-react";
 import type { ConversationDetail, MessageDTO, MessagePage, PublicUser, SafeUser } from "@/lib/types";
+import { mergeRecentMessages } from "@/lib/chat-realtime-recovery";
 import { recordApplicationTiming } from "@/components/performance-monitor";
 import { Avatar } from "@/components/avatar";
 import { useRealtime, usePresence } from "@/components/providers/realtime-provider";
@@ -252,6 +253,8 @@ export function ChatView({
   const selfDestructDraft = useRef(false);
   const serverClockOffset = useRef(initial.serverNow ? Date.parse(initial.serverNow)-Date.now() : 0);
   const [items, setItems] = useState<MessageDTO[]>(initial.messages);
+  const itemsRef = useRef(items);
+  useEffect(() => { itemsRef.current = items; }, [items]);
   // One timer for the nearest server deadline; foreground/resume also rechecks.
   useEffect(() => {
     const now = () => Date.now() + serverClockOffset.current;
@@ -857,6 +860,22 @@ export function ChatView({
     }
   }, [conversationId, requestAccepted]);
 
+  const reconcileRecentMessages = useCallback(async (signal?: AbortSignal) => {
+    const response = await fetch(`/api/conversations/${conversationId}/messages`, {
+      cache: "no-store",
+      signal,
+    });
+    if (!response.ok) return false;
+    const page = await response.json() as MessagePage;
+    if (signal?.aborted || !Array.isArray(page.messages)) return false;
+
+    const current = itemsRef.current;
+    const merged = mergeRecentMessages(current, page.messages, conversationId);
+    setItems(previous => mergeRecentMessages(previous, page.messages, conversationId));
+    if (merged !== current && document.visibilityState === "visible") void markRead();
+    return merged !== current;
+  }, [conversationId, markRead]);
+
   async function acceptMessageRequest() {
     setAcceptingRequest(true);
     setError(null);
@@ -887,23 +906,81 @@ export function ChatView({
     const timeout = window.setTimeout(() => controller.abort(), 10000);
     void (async () => {
       try {
-        const response = await fetch(`/api/conversations/${conversationId}/messages`, { cache: "no-store", signal: controller.signal });
-        if (!response.ok) return;
-        const page = await response.json() as MessagePage;
-        if (controller.signal.aborted || !Array.isArray(page.messages)) return;
-        setItems(current => {
-          const ids = new Set(current.map(message => message.id));
-          const pending = new Set(current.filter(message => message.sendStatus).map(message => message.clientMessageId).filter(Boolean));
-          const missing = page.messages.filter(message => message.conversationId === conversationId && !ids.has(message.id) && !(message.clientMessageId && pending.has(message.clientMessageId)));
-          if (!missing.length) return current;
-          return [...current, ...missing].sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
-        });
-        if (page.messages.length && document.visibilityState === "visible") void markRead();
+        await reconcileRecentMessages(controller.signal);
       } catch { /* A reconnect retries; cached private history is never used. */ }
       finally { window.clearTimeout(timeout); }
     })();
     return () => { controller.abort(); window.clearTimeout(timeout); };
-  }, [connected, conversationId, me.id, markRead]);
+  }, [connected, conversationId, me.id, reconcileRecentMessages]);
+
+  // Mobile WebViews can temporarily lose DNS/network access while EventSource
+  // is reconnecting. Keep the visible chat current with bounded authenticated
+  // history reads until SSE recovers; never poll in the background or overlap
+  // requests. SSE remains the primary realtime transport.
+  useEffect(() => {
+    if (connected || !requestAccepted) return;
+
+    const retryDelays = [1500, 3000, 7000, 15000, 30000] as const;
+    let retryIndex = 0;
+    let timer: number | undefined;
+    let controller: AbortController | undefined;
+    let stopped = false;
+    let inFlight = false;
+
+    const clearTimer = () => {
+      if (timer !== undefined) window.clearTimeout(timer);
+      timer = undefined;
+    };
+    const schedule = (delay: number) => {
+      clearTimer();
+      if (stopped || connected || document.visibilityState !== "visible" || !navigator.onLine) return;
+      timer = window.setTimeout(() => { void catchUp(); }, delay);
+    };
+    const catchUp = async () => {
+      if (stopped || connected || inFlight || document.visibilityState !== "visible" || !navigator.onLine) return;
+      inFlight = true;
+      controller = new AbortController();
+      const timeout = window.setTimeout(() => controller?.abort(), 10000);
+      try {
+        const foundNewMessages = await reconcileRecentMessages(controller.signal);
+        if (stopped || controller.signal.aborted) return;
+        if (foundNewMessages) {
+          retryIndex = 0;
+        } else {
+          retryIndex = Math.min(retryIndex + 1, retryDelays.length - 1);
+        }
+      } catch {
+        retryIndex = Math.min(retryIndex + 1, retryDelays.length - 1);
+      } finally {
+        window.clearTimeout(timeout);
+        controller = undefined;
+        inFlight = false;
+        schedule(retryDelays[retryIndex]);
+      }
+    };
+    const resume = () => {
+      if (document.visibilityState === "visible" && navigator.onLine) {
+        retryIndex = 0;
+        schedule(0);
+      } else {
+        clearTimer();
+        controller?.abort();
+      }
+    };
+
+    schedule(retryDelays[retryIndex]);
+    document.addEventListener("visibilitychange", resume);
+    window.addEventListener("online", resume);
+    window.addEventListener("offline", resume);
+    return () => {
+      stopped = true;
+      clearTimer();
+      controller?.abort();
+      document.removeEventListener("visibilitychange", resume);
+      window.removeEventListener("online", resume);
+      window.removeEventListener("offline", resume);
+    };
+  }, [connected, conversationId, me.id, reconcileRecentMessages, requestAccepted]);
 
   /* ---------------------------- typing state ----------------------------- */
 
@@ -947,6 +1024,12 @@ export function ChatView({
       if (event.type === "message:lifetime" && event.conversationId === conversationId) {
         if(event.serverNow) serverClockOffset.current=Date.parse(event.serverNow)-Date.now();
         setItems(current => current.map(message => message.id === event.messageId ? { ...message, expiresAt: event.expiresAt, revealedAt: event.revealedAt ?? message.revealedAt } : message));
+        return;
+      }
+      if (event.type === "realtime:resync") {
+        const controller = new AbortController();
+        const timeout = window.setTimeout(() => controller.abort(), 10000);
+        void reconcileRecentMessages(controller.signal).catch(() => undefined).finally(() => window.clearTimeout(timeout));
         return;
       }
       if (event.type === "typing:update" && event.conversationId === conversationId && event.userId !== me.id) {
@@ -1081,7 +1164,7 @@ export function ChatView({
         setItems((prev) => prev.map((m) => (m.id === msg.id ? msg : m)));
       }
     });
-  }, [subscribe, conversationId, router, me.id, markRead]);
+  }, [subscribe, conversationId, router, me.id, markRead, reconcileRecentMessages]);
 
   /* ----------------------------- scroll helpers ---------------------------- */
 

@@ -142,7 +142,10 @@ export async function GET(req: NextRequest) {
           checking = true;
           void resolveSessionToken(token).then((user) => { if (!user) cleanup(); }).catch(cleanup).finally(() => { checking = false; });
         }, 5000);
-        heartbeat = setInterval(() => { send(": ping\n\n"); void touch(me.id).catch(cleanup); }, 25000);
+        // Use an observable SSE event instead of a comment: EventSource hides
+        // comment keepalives from clients, so a mobile WebView cannot detect a
+        // half-open connection and trigger its authenticated chat catch-up.
+        heartbeat = setInterval(() => { send("event: heartbeat\ndata: {}\n\n"); void touch(me.id).catch(cleanup); }, 25000);
         lifetime = setTimeout(cleanup, 280000);
 
       } catch { cleanup(); }
