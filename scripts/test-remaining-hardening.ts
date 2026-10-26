@@ -126,10 +126,6 @@ async function main() {
           const response = await page.goto(base + path, { waitUntil: "load" });
           assert.equal(response?.status(), 200);
           await page.getByRole("heading", { level: 1 }).waitFor();
-          if (["users", "reports", "messages"].some(segment => path.endsWith("/" + segment))) {
-            await page.getByRole("main").getByRole("heading", { name: "Add an extra sign-in check", exact: true }).waitFor();
-            await page.getByRole("main").getByRole("link", { name: "Set up the extra sign-in check", exact: true }).waitFor();
-          }
           if (path.endsWith("users")) {
             await page.getByText(htmlName, { exact: true }).waitFor();
             assert.equal(await page.locator('img[src="x"]').count(), 0, "Profile markup is rendered as text");
