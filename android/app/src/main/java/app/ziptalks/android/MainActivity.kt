@@ -403,6 +403,13 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * Creates the hosted app WebView and starts loading the intent destination
+     * or the chat list, with native bridge, permission and navigation handlers.
+     * Imports and flushes legacy cookies only when neither session cookie has a
+     * nonblank value and legacy cookies are available. Setup and migration
+     * failures propagate to the caller.
+     */
     private fun createHostedWebView(): WebView = WebView(this).apply {
         setBackgroundColor(AndroidColor.WHITE)
         settings.javaScriptEnabled = true
