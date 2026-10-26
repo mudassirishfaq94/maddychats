@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { isNativeApp } from "@/lib/native-platform";
+import { hasCapacitorRuntime } from "@/lib/native-platform";
 
 function toAppPath(url: string): string | null {
   try {
@@ -18,7 +18,7 @@ function toAppPath(url: string): string | null {
 /** Keeps native notification and app links inside the Capacitor WebView. */
 export function CapacitorDeepLinks() {
   useEffect(() => {
-    if (!isNativeApp()) return;
+    if (!hasCapacitorRuntime()) return;
     let disposed = false;
     let remove: (() => Promise<void>) | undefined;
     void import("@capacitor/app")

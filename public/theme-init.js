@@ -1,5 +1,5 @@
 (function(){try{
-if(window.matchMedia('(display-mode: standalone)').matches||navigator.standalone===true)document.documentElement.dataset.installedApp='true';
+if(window.matchMedia('(display-mode: standalone)').matches||navigator.standalone===true||/ZipTalkAndroid\//.test(navigator.userAgent))document.documentElement.dataset.installedApp='true';
 var t=localStorage.getItem('maddy-theme')||'dark';
 var mq=window.matchMedia('(prefers-color-scheme: light)');
 var apply=function(light){document.documentElement.classList.toggle('light',light)};

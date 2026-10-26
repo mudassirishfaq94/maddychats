@@ -25,7 +25,7 @@ export function MessagePopover({ anchor, label, onClose, children, className = "
       setPosition({ left: Math.max(left, Math.min(rect.right - popup.offsetWidth, right - popup.offsetWidth)),
         top: Math.max(top, Math.min(above >= top ? above : rect.bottom + 8, bottom - height)), maxHeight: bottom - top, visibility: "visible" });
     };
-    place(); ref.current?.querySelector<HTMLButtonElement>("button")?.focus();
+    place(); ref.current?.querySelector<HTMLButtonElement>("button")?.focus({ preventScroll: true });
     const outside = (event: PointerEvent) => { if (!ref.current?.contains(event.target as Node) && !anchor.current?.contains(event.target as Node)) close.current(); };
     const key = (event: KeyboardEvent) => {
       if (event.key === "Escape") { event.preventDefault(); close.current(); anchor.current?.focus(); }
@@ -37,7 +37,20 @@ export function MessagePopover({ anchor, label, onClose, children, className = "
         event.preventDefault(); buttons[next]?.focus();
       }
     };
-    const scroll = (event: Event) => { if (!ref.current?.contains(event.target as Node)) close.current(); };
+    const scroll = (event: Event) => {
+      if (ref.current?.contains(event.target as Node)) return;
+      const trigger = anchor.current;
+      if (!trigger?.isConnected) { close.current(); return; }
+      const rect = trigger.getBoundingClientRect(), viewport = window.visualViewport;
+      const top = viewport?.offsetTop ?? 0, left = viewport?.offsetLeft ?? 0;
+      if (rect.bottom <= top || rect.top >= top + (viewport?.height ?? innerHeight)
+        || rect.right <= left || rect.left >= left + (viewport?.width ?? innerWidth)) {
+        close.current(); return;
+      }
+      // Virtualized row measurement and unrelated sidebar scrolling can emit
+      // a late scroll after the click. Keep a visible anchor's menu usable.
+      place();
+    };
     document.addEventListener("pointerdown", outside); document.addEventListener("keydown", key);
     document.addEventListener("scroll", scroll, true); window.addEventListener("resize", place);
     const observer = new ResizeObserver(place); if (ref.current) observer.observe(ref.current);

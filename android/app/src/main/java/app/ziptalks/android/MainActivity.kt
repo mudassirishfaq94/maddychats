@@ -403,6 +403,13 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * Creates the hosted app WebView and starts loading the intent destination
+     * or the chat list, with native bridge, permission and navigation handlers.
+     * Imports and flushes legacy cookies only when neither session cookie has a
+     * nonblank value and legacy cookies are available. Setup and migration
+     * failures propagate to the caller.
+     */
     private fun createHostedWebView(): WebView = WebView(this).apply {
         setBackgroundColor(AndroidColor.WHITE)
         settings.javaScriptEnabled = true
@@ -424,9 +431,11 @@ class MainActivity : ComponentActivity() {
         cookieManager.setAcceptThirdPartyCookies(this, false)
         // Migrate legacy native sessions only when WebView has no session.
         // Never overwrite the current WebView login with an older saved cookie.
-        WebSessionCookieMigration.cookiesToImport(cookieManager.getCookie(BuildConfig.API_BASE_URL), api.cookiesForWeb())
-            .forEach { cookieManager.setCookie(BuildConfig.API_BASE_URL, it) }
-        cookieManager.flush()
+        val migrated = WebSessionCookieMigration.cookiesToImport(cookieManager.getCookie(BuildConfig.API_BASE_URL)) { api.cookiesForWeb() }
+        if (migrated.isNotEmpty()) {
+            migrated.forEach { cookieManager.setCookie(BuildConfig.API_BASE_URL, it) }
+            cookieManager.flush()
+        }
         HostedPushBridge(this@MainActivity) { done -> requestNotifications(done) }.install(this)
         webChromeClient = hostedWebChromeClient()
         webViewClient = hostedWebClient()

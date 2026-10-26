@@ -35,6 +35,10 @@ export async function testPublicPages(base, { live = false } = {}) {
     }
     const alias = await page.request.get(origin + "/register", { maxRedirects: 0 }); assert.equal(alias.status(), 308);
     assert.equal(new URL(alias.headers().location, origin).pathname, "/signup");
+    const spoofed = await page.request.get(origin + "/register", { maxRedirects: 0, headers: { "x-circlo-pathname": "/app/chats" } });
+    assert.equal(spoofed.status(), 308, "An incoming rendering hint cannot change redirect semantics");
+    const spoofedMissing = await page.request.get(origin + "/not-a-real-circlo-page", { headers: { "x-circlo-pathname": "/app/chats" } });
+    assert.equal(spoofedMissing.status(), 404, "A rendering hint cannot turn a missing page into a successful inbox");
     const preview = await page.request.get(origin + "/circlo-landing.html", { maxRedirects: 0 }); assert.equal(preview.status(), 308);
     assert.equal(new URL(preview.headers().location, origin).pathname, "/");
     assert.match((await page.request.get(origin + "/offline.html")).headers()["x-robots-tag"] ?? "", /noindex/i);

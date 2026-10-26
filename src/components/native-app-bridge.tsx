@@ -4,13 +4,15 @@ import { navigateWithReload } from "@/lib/navigation";
 
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
-import { isNativeApp } from "@/lib/native-platform";
+import { isNativeApp, hasCapacitorRuntime } from "@/lib/native-platform";
 
 declare global { interface Window { __circloNavigate?: (destination: string) => boolean } }
 
 /**
- * Makes the installed build behave like an Android application instead of a
- * browser tab. This is deliberately not mounted on the public web site.
+ * Installs `window.__circloNavigate` for same-origin `/app` and `/app/` routes
+ * in native runtimes. Only Capacitor runtimes configure system bars, keyboard
+ * resizing, deep links and back handling; plugin setup failures are ignored.
+ * Renders no UI.
  */
 export function NativeAppBridge() {
   const router = useRouter();
@@ -30,6 +32,9 @@ export function NativeAppBridge() {
     const removeListeners: Array<() => Promise<void>> = [];
 
     void (async () => {
+      // MainActivity already handles bars, keyboard, back and deep links in
+      // the hosted shell. Do not download plugins which cannot run there.
+      if (!hasCapacitorRuntime()) return;
       try {
         const [{ App }, { StatusBar, Style }, { Keyboard, KeyboardResize }] = await Promise.all([
           import("@capacitor/app"),

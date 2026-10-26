@@ -115,9 +115,11 @@ export async function testAudioContacts(base, pool, owner, peer, password, conve
     const active = (await (await ca.request.get(base + "/api/calls")).json()).call;
     assert.equal((await post(cb, "/api/calls", { action: "end", id: active.id, clientId: crypto.randomUUID() })).status(), 409, "Another browser cannot end an answered call");
     await a.getByRole("button", { name: "Open call controls", exact: true }).click();
+    await a.waitForURL("**/app/call?call=*");
     const expanded = await a.getByRole("region", { name: "Audio call", exact: true }).boundingBox();
     assert(expanded && expanded.y >= 0 && expanded.y + expanded.height <= 390, "Expanded landscape call controls fit");
     await a.getByRole("button", { name: "Minimize call controls", exact: true }).click();
+    await a.waitForURL(base + "/app/chats/" + conversationId);
     await a.getByRole("button", { name: "End call", exact: true }).click();
     assert.equal(await a.getByRole("textbox", { name: "Message text", exact: true }).inputValue(), "Draft while calling");
     await b.getByText("Call ended or was not answered.", { exact: true }).waitFor();
@@ -160,12 +162,26 @@ export async function testAudioContacts(base, pool, owner, peer, password, conve
     for (const size of [{ width: 320, height: 640 }, { width: 390, height: 844 }, { width: 844, height: 390 }, { width: 1280, height: 800 }]) {
       await a.setViewportSize(size); await a.goto(base + "/app/profile");
       await a.getByRole("heading", { name: "W".repeat(50), exact: true }).waitFor();
+      // Lazy sections and device requests must finish before enumerating their
+      // nested disclosures. A heading alone does not mean they have mounted.
+      const encryptionSummary = a.locator("summary:visible").filter({ has: a.getByText("Encryption & trusted devices", { exact: true }) });
+      await encryptionSummary.click();
+      const encryptionPanel = encryptionSummary.locator("..");
+      await encryptionPanel.getByLabel("This device safety number", { exact: true }).waitFor({ state: "attached" });
+      await encryptionPanel.locator("#local-chat-backup").waitFor({ state: "attached" });
       // Opening lazy sections inserts nested disclosures. Re-query each time
       // instead of retaining positional locators that can move to hidden children.
       for (let opened = 0; opened < 40; opened++) {
         const summary = a.locator("details:not([open]) > summary:visible").first();
         if (!(await summary.count())) break;
-        await summary.click();
+        // Pin the actual element: the :not([open]) locator resolves to the
+        // next disclosure as soon as this one is clicked.
+        const parent = await summary.locator("..").elementHandle();
+        try {
+          const controlled = await parent.getAttribute("data-profile-disclosure-ready") === "true";
+          await summary.click();
+          if (controlled) await parent.waitForSelector(":scope > div", { state: "attached" });
+        } finally { await parent.dispose(); }
       }
       assert.equal(await a.locator("details:not([open]) > summary:visible").count(), 0);
       assert(await a.evaluate(() => document.documentElement.scrollWidth <= innerWidth), "Profile must not overflow horizontally");

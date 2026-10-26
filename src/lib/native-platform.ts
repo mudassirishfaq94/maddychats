@@ -14,3 +14,11 @@ export function isNativeApp(): boolean {
   // receives native-safe behaviour (no PWA worker or browser update loop).
   return Capacitor.isNativePlatform() || /ZipTalkAndroid\//.test(navigator.userAgent);
 }
+
+/**
+ * Returns whether a browser window has a native Capacitor runtime.
+ * Returns false during server rendering and in the hosted Android shell without Capacitor.
+ */
+export function hasCapacitorRuntime(): boolean {
+  return typeof window !== "undefined" && Capacitor.isNativePlatform();
+}

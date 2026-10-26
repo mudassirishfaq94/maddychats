@@ -30,6 +30,8 @@ export async function testChatPolish(page, recipient) {
       const row = rows.nth(index); await row.scrollIntoViewIfNeeded(); await row.hover();
       await row.getByRole("button", { name: "More actions", exact: true }).click();
       const menu = page.getByRole("dialog", { name: "Message actions", exact: true }); await menu.waitFor(); await hitTest(menu);
+      await page.getByRole("complementary", { name: "Conversations", exact: true }).dispatchEvent("scroll");
+      await menu.waitFor(); await hitTest(menu);
       await page.keyboard.press("Escape"); await menu.waitFor({ state: "detached" });
       await row.getByRole("button", { name: "Add reaction", exact: true }).click();
       const reactions = page.getByRole("dialog", { name: "Message reactions", exact: true }); await reactions.waitFor(); await hitTest(reactions);
