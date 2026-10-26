@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { publicMetadata } from "@/lib/public-metadata";
-import { ArrowDown, ArrowUpRight, CheckCheck, Fingerprint, KeyRound, LockKeyhole, MessageCircle, Send, ShieldCheck } from "lucide-react";
+import { ArrowDown, ArrowUpRight, KeyRound, LockKeyhole, MessageCircle, ShieldCheck } from "lucide-react";
 import { getSessionUser } from "@/server/session";
 import { LogoWordmark, LogoMark } from "@/components/brand/logo";
+import { LandingChatPreview } from "@/components/landing/chat-preview";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 export const metadata = publicMetadata("/", "Circlo — Private messaging with end-to-end encryption", "Privacy-first messaging for your circle. Discover encrypted chats, voice messages, groups, sharing and trusted-device controls on mobile and desktop.");
@@ -47,7 +48,7 @@ export default async function LandingPage() {
         <nav aria-label="Main navigation" className="mx-auto flex h-20 max-w-7xl items-center justify-between gap-2 px-4 sm:px-10">
           <Link href="/" aria-label="Circlo home"><LogoWordmark size={38} /></Link>
           <div className="flex items-center gap-3 sm:gap-5">
-            <Link href="#features" className="hidden text-sm text-[var(--muted)] hover:text-[var(--text)] lg:block">Features</Link><Link href="#privacy" className="hidden text-sm text-[var(--muted)] hover:text-[var(--text)] md:block">Privacy</Link><Link href="#roadmap" className="hidden text-sm text-[var(--muted)] hover:text-[var(--text)] lg:block">What’s next</Link>
+            <Link href="#features" className="hidden text-sm text-[var(--muted)] hover:text-[var(--text)] lg:block">Features</Link><Link href="/privacy" className="hidden text-sm text-[var(--muted)] hover:text-[var(--text)] md:block">Privacy</Link><Link href="/terms" className="hidden text-sm text-[var(--muted)] hover:text-[var(--text)] md:block">Terms</Link><Link href="#roadmap" className="hidden text-sm text-[var(--muted)] hover:text-[var(--text)] lg:block">What’s next</Link>
             <ThemeToggle />
             <Link href="/login" className="hidden text-sm font-semibold sm:block">Log in</Link>
             <Link href="/signup" className="btn btn-primary min-h-11! px-3! text-xs! sm:px-5! sm:text-sm!"><span className="sm:hidden">Join</span><span className="hidden sm:inline">Get started</span><ArrowUpRight className="hidden h-4 w-4 sm:block" /></Link>
@@ -66,23 +67,7 @@ export default async function LandingPage() {
           <p className="mt-5 flex items-center gap-2 text-xs text-[var(--muted)]"><ShieldCheck className="h-4 w-4 text-[var(--accent-fg)]" /> Encrypted messages. Thoughtful connections.</p>
           <Link href="#privacy" className="mt-10 inline-flex items-center gap-2 text-xs text-[var(--muted)]"><ArrowDown className="h-3.5 w-3.5" /> Meet your quieter corner of the internet</Link>
         </div>
-        <div className="relative mx-auto w-full max-w-[460px]" aria-hidden="true">
-          <div className="brand-orbit absolute -inset-5 sm:-inset-9" />
-          <div className="relative overflow-hidden rounded-[2rem] border border-[var(--border-strong)] bg-[var(--surface)] shadow-[0_30px_90px_-35px_rgba(0,0,0,.5)]">
-            <div className="flex items-center justify-between border-b border-[var(--border)] px-5 py-5">
-              <div className="flex items-center gap-3"><span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[var(--accent-soft)]"><LogoMark size={30} /></span><div><span className="block text-sm font-semibold">The inner circle</span><span className="text-xs text-[var(--muted)]">Just you and your people</span></div></div>
-              <LockKeyhole className="h-5 w-5 text-[var(--accent-fg)]" />
-            </div>
-            <div className="space-y-5 px-5 py-7">
-              <div className="flex items-center justify-center gap-1.5 text-[10px] text-[var(--muted)]"><LockKeyhole className="h-3 w-3" /> End-to-end encrypted</div>
-              <div className="flex items-end gap-2"><span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--accent-soft)] text-[10px] text-[var(--accent-fg)]">A</span><div className="max-w-[85%] rounded-2xl rounded-bl-md border border-[var(--border)] bg-[var(--bubble-other-bg)] px-4 py-3 text-sm">Same place. Same people?<span className="mt-2 block text-[10px] text-[var(--muted)]">18:41</span></div></div>
-              <div className="ml-auto max-w-[85%] rounded-2xl rounded-br-md bg-[var(--bubble-own-bg)] px-4 py-3 text-sm text-[var(--bubble-own-fg)]">Always. Some things are just ours.<span className="mt-2 flex items-center justify-end gap-1 text-[10px] text-[var(--bubble-own-sub)]">18:42 <CheckCheck className="h-3 w-3" /></span></div>
-              <div className="flex items-end gap-2"><span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--accent-soft)] text-[10px] text-[var(--accent-fg)]">A</span><div className="rounded-2xl rounded-bl-md border border-[var(--border)] bg-[var(--bubble-other-bg)] px-4 py-3 text-sm">That’s our circle.<span className="mt-2 block text-[10px] text-[var(--muted)]">18:42</span></div></div>
-            </div>
-            <div className="flex items-center gap-3 border-t border-[var(--border)] px-5 py-4"><span className="flex-1 rounded-full bg-[var(--input-bg)] px-4 py-3 text-xs text-[var(--muted)]">A little hello…</span><span className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--action)] text-[var(--action-fg)]"><Send className="h-4 w-4" /></span></div>
-          </div>
-          <div className="relative mx-auto mt-6 flex w-fit items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-4 py-2 text-[11px] text-[var(--muted)]"><Fingerprint className="h-4 w-4 text-[var(--accent-fg)]" /> Personal by design. Private by default.</div>
-        </div>
+        <LandingChatPreview />
       </section>
       <section id="privacy" className="relative scroll-mt-6 border-y border-[var(--border)] bg-[var(--surface)]">
         <div className="mx-auto max-w-7xl px-5 py-16 sm:px-10">
