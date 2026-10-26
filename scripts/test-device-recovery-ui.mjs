@@ -87,7 +87,7 @@ export async function testDeviceRecoveryUI(base, pool) {
     const target = await open(); await target.page.getByText("This device: Waiting for approval", { exact: true }).waitFor();
     await source.page.getByRole("button", { name: "Refresh device list", exact: true }).click();
     const linkResponse = target.page.waitForResponse(response => response.url().endsWith("/api/e2ee/devices/link") && response.request().method() === "POST");
-    await target.page.getByRole("button", { name: "Show a device-link QR code", exact: true }).click();
+    await target.page.getByRole("button", { name: "Show a QR code to link this device", exact: true }).click();
     const created = await linkResponse; assert.equal(created.status(), 201);
     const { id: requestId, token } = await created.json(); assert.match(token, /^[A-Za-z0-9_-]{43}$/);
     const qrPayload = JSON.stringify({ kind: "circlo-device-link", version: 1, requestId, token });
