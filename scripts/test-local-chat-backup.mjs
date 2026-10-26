@@ -48,6 +48,9 @@ export async function testLocalChatBackup(base, pool, source, owner, password, c
     }, owner.id);
     assert.equal(current.enabled, false); assert.equal(current.savedAt, saved.savedAt);
   } finally { release(); await page.unroute(detailPath); await settingsPage.close(); }
+  await section.getByRole("button", { name: "Back up now", exact: true }).click();
+  await section.getByRole("status").filter({ hasText: "Backup saved on this device." }).waitFor();
+  await section.getByRole("button", { name: "Enable daily backup", exact: true }).waitFor();
   const context = await page.context().browser().newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: "block" });
   let targetId;
   try {
@@ -72,6 +75,7 @@ export async function testLocalChatBackup(base, pool, source, owner, password, c
     assert.equal((await pool.query("select trusted_at from e2ee_keys where user_id=$1 and device_id=$2", [owner.id, targetId])).rows[0].trusted_at, null, "A backup never auto-approves or revives a device");
     const conversations = await context.request.get(base + "/api/conversations");
     assert.equal(conversations.status(), 401, "Online history stays behind device verification after local restore");
+    await target.evaluate(() => { window.dispatchEvent(new Event("maddy:locked-chats")); window.dispatchEvent(new StorageEvent("storage", { key: "unrelated-preference" })); });
     await restore.getByLabel("Choose a saved chat", { exact: true }).selectOption(conversationId);
     await restore.getByText("Real encrypted delivery baseline", { exact: true }).waitFor();
     assert(await target.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), "Local recovery fits a mobile viewport");

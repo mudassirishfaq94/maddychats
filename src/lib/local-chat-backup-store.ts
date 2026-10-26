@@ -120,17 +120,17 @@ export async function collectChatBackup(input: { userId: string; deviceId: strin
 }
 
 const pending = new Map<string, Promise<ChatBackup>>();
-export function refreshLocalBackup(input: Parameters<typeof collectChatBackup>[0]): Promise<ChatBackup> {
+export function refreshLocalBackup(input: Parameters<typeof collectChatBackup>[0] & { manual?: boolean }): Promise<ChatBackup> {
   const previous = pending.get(input.userId); if (previous) return previous;
   const work = (async () => {
     const settings = await readBackupRecord(input.userId, "settings");
-    if (!settings?.enabled) throw new Error("Enable local backups first.");
+    if (!settings || (!settings.enabled && !input.manual)) throw new Error("Enable local backups first.");
     const snapshot = await collectChatBackup(input);
     await validateChatBackup(snapshot, input.userId);
     const archive = await sealChatBackup(snapshot, settings.key);
     input.signal.throwIfAborted();
     await updateBackupRecords(input.userId, current => {
-      if (!current.enabled) throw new Error("Daily backup is paused. Your previous backup is unchanged.");
+      if (!current.enabled && (!input.manual || settings.enabled)) throw new Error("Daily backup is paused. Your previous backup is unchanged.");
       return { archive, settings: { ...current, failedAt: undefined, savedAt: snapshot.createdAt, error: snapshot.missingMedia || snapshot.unreadableMessages ? `Backup saved with ${snapshot.missingMedia} uncopied media files and ${snapshot.unreadableMessages} unreadable messages. Keep the originals and retry recovery.` : undefined } };
     });
     return snapshot;

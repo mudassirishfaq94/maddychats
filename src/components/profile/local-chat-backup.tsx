@@ -14,7 +14,14 @@ import { E2EEMediaProvider } from "@/components/chats/e2ee-context";
 import type { AttachmentDTO } from "@/lib/types";
 import { chatLocked } from "../../../public/offline-store.js";
 
+const unlockedBackup = (data: ChatBackup): ChatBackup => ({ ...data, chats: data.chats.filter(chat => !chatLocked(chat.id)), calls: data.calls.filter(call => !call.conversationId || !chatLocked(call.conversationId)) });
+
 export function LocalChatBackupSettings({ restoreOnly = false }: { restoreOnly?: boolean }) {
+  const { user } = useAuth();
+  return <LocalChatBackupContent key={user?.id ?? "signed-out"} restoreOnly={restoreOnly}/>;
+}
+
+function LocalChatBackupContent({ restoreOnly = false }: { restoreOnly?: boolean }) {
   const { user } = useAuth(); const encryption = useSharedE2EE();
   const [settings, setSettings] = useState<BackupSettings>();
   const [hasImported, setHasImported] = useState(false);
@@ -23,9 +30,14 @@ export function LocalChatBackupSettings({ restoreOnly = false }: { restoreOnly?:
   const [busy, setBusy] = useState(false), [status, setStatus] = useState("");
   const [snapshot, setSnapshot] = useState<ChatBackup | null>(null), [selected, setSelected] = useState("");
   const work = useRef<AbortController | null>(null);
-  const presentBackup = (data: ChatBackup) => setSnapshot({ ...data, chats: data.chats.filter(chat => !chatLocked(chat.id)), calls: data.calls.filter(call => !call.conversationId || !chatLocked(call.conversationId)) });
+  const presentBackup = (data: ChatBackup) => setSnapshot(unlockedBackup(data));
   useEffect(() => { return () => work.current?.abort(); }, []);
-  useEffect(() => { const hide = () => { setSnapshot(null); setSelected(""); }; window.addEventListener("maddy:locked-chats", hide); window.addEventListener("storage", hide); return () => { window.removeEventListener("maddy:locked-chats", hide); window.removeEventListener("storage", hide); }; }, []);
+  useEffect(() => {
+    const locksChanged = () => { setSnapshot(value => value ? unlockedBackup(value) : null); setSelected(value => value && chatLocked(value) ? "" : value); };
+    const storageChanged = (event: StorageEvent) => { if (event.key === null || event.key === "maddy:locked-chats") locksChanged(); };
+    window.addEventListener("maddy:locked-chats", locksChanged); window.addEventListener("storage", storageChanged);
+    return () => { window.removeEventListener("maddy:locked-chats", locksChanged); window.removeEventListener("storage", storageChanged); };
+  }, []);
   useEffect(() => {
     if (!user) return;
     let active = true;
@@ -44,7 +56,7 @@ export function LocalChatBackupSettings({ restoreOnly = false }: { restoreOnly?:
     if (!user) return;
     await encryption.waitForDeviceRegistration(); signal.throwIfAborted();
     setStatus("Saving your encrypted chats on this device… You can cancel at any time.");
-    const result = await refreshLocalBackup({ userId: user.id, deviceId: encryption.deviceId, signal, decrypt: encryption.decrypt });
+    const result = await refreshLocalBackup({ userId: user.id, deviceId: encryption.deviceId, signal, decrypt: encryption.decrypt, manual: true });
     presentBackup(result);
     setStatus(`Backup saved on this device. ${result.chats.length} chats. ${result.missingMedia ? `${result.missingMedia} media files could not be copied; keep their originals.` : "Available media copied."}${result.unreadableMessages ? ` ${result.unreadableMessages} older messages still need recovery.` : ""}`);
   }
@@ -84,7 +96,7 @@ export function LocalChatBackupSettings({ restoreOnly = false }: { restoreOnly?:
       <p className="mt-3 text-sm">{settings?.savedAt ? `Last saved: ${new Date(settings.savedAt).toLocaleString()}` : "No local backup saved yet."}{settings?.enabled ? " · Daily backup on" : " · Daily backup off"}</p>
       {!settings && !generated ? <button type="button" className="btn btn-primary mt-3 min-h-11" disabled={busy || !encryption.initialized} onClick={() => setGenerated(backupCode())}>Set up local backup</button> : null}
       {generated ? <div className="mt-3 space-y-3 text-sm"><p>Save this code in your password manager, separately from the backup file.</p><code aria-label="Local backup code" className="block select-all break-all rounded-lg bg-[var(--card-2)] p-3">{generated}</code><label className="block">Confirm your saved backup code<input type="password" autoComplete="off" className="field-input mt-1 w-full" value={code} onChange={event => setCode(event.target.value)}/></label><button type="button" className="btn btn-primary min-h-11" disabled={busy || code.trim() !== generated} onClick={() => void run(async signal => { if (!user) return; const key = await backupKey(generated); await writeBackupRecords(user.id, { settings: { enabled: true, key } }); setGenerated(""); setCode(""); await navigator.storage?.persist?.().catch(() => false); await backup(signal); })}>I saved the code · Create backup</button></div> : null}
-      {settings ? <div className="mt-3 flex flex-wrap gap-2"><button type="button" className="btn btn-primary min-h-11" disabled={busy || !encryption.initialized} onClick={() => void run(async signal => { if (user && !settings.enabled) await patchBackupSettings(user.id, { enabled: true }); await backup(signal); })}>Back up now</button><button type="button" className="btn btn-secondary min-h-11" disabled={busy || !settings.savedAt} onClick={() => void run(download)}><Download className="h-4 w-4"/>Export backup file</button><button type="button" className="btn btn-secondary min-h-11" disabled={busy || !settings.savedAt} onClick={() => void run(async () => { if (!user) return; const archive = await readBackupRecord(user.id, "archive"); if (archive) presentBackup(await openChatBackup(archive, settings.key, user.id)); })}>View saved chats</button><button type="button" className="btn btn-secondary min-h-11" disabled={busy} onClick={() => void run(async () => { if (user) await patchBackupSettings(user.id, { enabled: !settings.enabled }); })}>{settings.enabled ? "Pause daily backup" : "Enable daily backup"}</button></div> : null}
+      {settings ? <div className="mt-3 flex flex-wrap gap-2"><button type="button" className="btn btn-primary min-h-11" disabled={busy || !encryption.initialized} onClick={() => void run(async signal => { await backup(signal); })}>Back up now</button><button type="button" className="btn btn-secondary min-h-11" disabled={busy || !settings.savedAt} onClick={() => void run(download)}><Download className="h-4 w-4"/>Export backup file</button><button type="button" className="btn btn-secondary min-h-11" disabled={busy || !settings.savedAt} onClick={() => void run(async () => { if (!user) return; const archive = await readBackupRecord(user.id, "archive"); if (archive) presentBackup(await openChatBackup(archive, settings.key, user.id)); })}>View saved chats</button><button type="button" className="btn btn-secondary min-h-11" disabled={busy} onClick={() => void run(async () => { if (user) await patchBackupSettings(user.id, { enabled: !settings.enabled }); })}>{settings.enabled ? "Pause daily backup" : "Enable daily backup"}</button></div> : null}
       {settings?.error ? <p role="alert" className="mt-2 text-sm text-[var(--danger)]">{settings.error}</p> : null}
     </> : null}
     <details className="mt-4" open={restoreOnly}><summary className="min-h-11 cursor-pointer py-2 font-semibold">Restore from a backup file</summary><p className="text-xs text-[var(--muted)]">Sign in to the same account, choose your exported file and enter its saved code. Email sign-in alone cannot decrypt old chats.</p><label className="mt-3 block text-sm">Circlo backup file<input className="mt-2 block max-w-full" type="file" accept=".circlo,application/octet-stream" onChange={event => setFile(event.target.files?.[0] ?? null)}/></label><label className="mt-3 block text-sm">Saved backup code<input type="password" autoComplete="off" className="field-input mt-1 w-full" value={code} onChange={event => setCode(event.target.value)}/></label><label className="mt-3 flex gap-2 text-sm"><input type="checkbox" checked={confirmed} onChange={event => setConfirmed(event.target.checked)}/>I want to add this saved history to my current device. Existing chats are kept.</label><button type="button" className="btn btn-primary mt-3 min-h-11" disabled={busy || !file || !code || !confirmed} onClick={() => void run(restore)}><ShieldCheck className="h-4 w-4"/>Restore my chats</button></details>
