@@ -180,12 +180,6 @@ export function ChatsLayout({
   children: ReactNode;
 }) {
   const hydrated = useHydrated();
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (document.visibilityState === "visible") void warmChatCode();
-    }, 300);
-    return () => clearTimeout(timer);
-  }, []);
   const [liveList, setLiveList] = useState<{
     source: ConversationSummary[]; items: ConversationSummary[];
   } | null>(null);

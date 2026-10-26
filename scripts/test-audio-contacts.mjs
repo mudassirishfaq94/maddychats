@@ -115,9 +115,11 @@ export async function testAudioContacts(base, pool, owner, peer, password, conve
     const active = (await (await ca.request.get(base + "/api/calls")).json()).call;
     assert.equal((await post(cb, "/api/calls", { action: "end", id: active.id, clientId: crypto.randomUUID() })).status(), 409, "Another browser cannot end an answered call");
     await a.getByRole("button", { name: "Open call controls", exact: true }).click();
+    await a.waitForURL("**/app/call?call=*");
     const expanded = await a.getByRole("region", { name: "Audio call", exact: true }).boundingBox();
     assert(expanded && expanded.y >= 0 && expanded.y + expanded.height <= 390, "Expanded landscape call controls fit");
     await a.getByRole("button", { name: "Minimize call controls", exact: true }).click();
+    await a.waitForURL(base + "/app/chats/" + conversationId);
     await a.getByRole("button", { name: "End call", exact: true }).click();
     assert.equal(await a.getByRole("textbox", { name: "Message text", exact: true }).inputValue(), "Draft while calling");
     await b.getByText("Call ended or was not answered.", { exact: true }).waitFor();

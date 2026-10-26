@@ -1,7 +1,7 @@
 "use client";
 import { createConditionalInterval } from "@/lib/conditional-interval";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useTransition, type ReactNode } from "react";
 import { Phone, PhoneOff, Mic, MicOff, Volume2, X, Minus, ShieldCheck, Headphones } from "lucide-react";
 import { useAuth } from "./auth-provider";
 import { useRealtime } from "./realtime-provider";
@@ -35,6 +35,7 @@ async function description(pc: RTCPeerConnection) {
 export function AudioCallProvider({ children }: { children: ReactNode }) {
   const dedicated = usePathname() === "/app/call";
   const router = useRouter();
+  const [navigationPending, startNavigation] = useTransition();
   const { user } = useAuth();
   const userId = user?.id;
   const { subscribe, connected } = useRealtime();
@@ -317,7 +318,7 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
     {children}
     <audio ref={audio} autoPlay className="hidden" />
     {!dedicated && minimized && phase === "connected" && !error && !needsPlay ? <section role="region" aria-label="Audio call" className="fixed left-3 top-[max(0.375rem,env(safe-area-inset-top))] z-[200] flex w-[calc(100%_-_8rem)] max-w-sm sm:left-auto sm:right-4 sm:top-16 sm:w-72 items-center gap-1 rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-2 shadow-xl">
-      <button type="button" aria-label="Open call controls" className="min-h-11 min-w-0 flex-1 text-left" onClick={() => { setMinimized(false); if (call) router.push(`/app/call?call=${call.id}`); }}><span className="block truncate text-xs font-semibold">{name}</span><span className="block text-[10px] text-[var(--muted)]"><span>Audio connected</span><span className="ml-1 font-mono tabular-nums">{formatCallDuration(elapsed)}</span></span></button>
+      <button type="button" aria-label="Open call controls" disabled={navigationPending} aria-busy={navigationPending} className="min-h-11 min-w-0 flex-1 text-left" onClick={() => startNavigation(() => { setMinimized(false); if (call) router.push(`/app/call?call=${call.id}`); })}><span className="block truncate text-xs font-semibold">{name}</span><span className="block text-[10px] text-[var(--muted)]"><span>Audio connected</span><span className="ml-1 font-mono tabular-nums">{formatCallDuration(elapsed)}</span></span></button>
       <button type="button" aria-label={muted ? "Unmute" : "Mute"} aria-pressed={muted} className="flex h-11 w-11 shrink-0 items-center justify-center" onClick={toggleMute}>{muted ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}</button>
       <button type="button" aria-label="End call" className="flex h-11 w-11 shrink-0 items-center justify-center text-[var(--danger)]" onClick={() => end()}><PhoneOff className="h-4 w-4" /></button>
     </section> : phase !== "idle" || error ? <section role="region" aria-label="Audio call" className={dedicated ? "fixed inset-0 z-[250] flex flex-col justify-center overflow-y-auto bg-[var(--bg)] px-6 py-[max(2rem,env(safe-area-inset-top))] sm:px-[max(1.5rem,calc((100vw-28rem)/2))]" : "fixed inset-x-3 bottom-[max(1rem,env(safe-area-inset-bottom))] z-[200] mx-auto max-h-[85dvh] max-w-sm overflow-y-auto rounded-3xl border border-[var(--border)] bg-[var(--surface)] p-5 shadow-2xl"}>
@@ -328,7 +329,7 @@ export function AudioCallProvider({ children }: { children: ReactNode }) {
           <p role="status" className="mt-3 text-sm text-[var(--muted)]">{error || (answerPending ? "Connecting audio…" : { idle: "", preparing: "Preparing microphone…", incoming: "Incoming audio call", outgoing: "Calling…", connecting: "Connecting audio…", connected: "Audio connected" }[phase])}</p>
           {phase === "connected" || elapsed > 0 ? <p aria-label="Call duration" className="mt-3 font-mono text-2xl tabular-nums tracking-wider text-[var(--accent)]">{formatCallDuration(elapsed)}</p> : null}
         </div>
-        {phase === "connected" ? <button type="button" aria-label="Minimize call controls" className={dedicated ? "absolute top-4 right-4 min-h-11 min-w-11" : "min-h-11 min-w-11"} onClick={() => { setMinimized(true); if (dedicated) router.push(call ? `/app/chats/${call.conversation_id}` : "/app/chats"); }}><Minus className="mx-auto h-5 w-5" /></button> : null}
+        {phase === "connected" ? <button type="button" aria-label="Minimize call controls" disabled={navigationPending} className={dedicated ? "absolute top-4 right-4 min-h-11 min-w-11" : "min-h-11 min-w-11"} onClick={() => startNavigation(() => { setMinimized(true); if (dedicated) router.push(call ? `/app/chats/${call.conversation_id}` : "/app/chats"); })}><Minus className="mx-auto h-5 w-5" /></button> : null}
         {phase === "idle" ? <button aria-label="Dismiss call notice" className={dedicated ? "absolute top-4 right-4 min-h-11 min-w-11" : "min-h-11 min-w-11"} onClick={() => { setError(""); if (dedicated) router.replace("/app/chats"); }}><X className="mx-auto h-5 w-5" /></button> : null}
       </div>
       {phase === "incoming" ? <p className="mt-3 text-xs text-[var(--muted)]">Answer to share your microphone and establish a direct encrypted audio connection. Direct calls can reveal your network address to the other person.</p> : null}
