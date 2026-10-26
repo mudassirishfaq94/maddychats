@@ -1412,6 +1412,15 @@ export function ChatView({
     chatPerf("send-click-to-optimistic", sendStarted);
     const replyId = replyTo?.id ?? null;
     let clearedDraftRevision: number | null = null;
+    const restoreSubmittedDraft = async () => {
+      if (selfDestruct || clearedDraftRevision === null || draftRef.current || draftRevision.current !== clearedDraftRevision) return;
+      setDraft(submittedDraft);
+      const restoredRevision = draftRevision.current;
+      await saveChatDraft(me.id, conversationId, submittedDraft).catch(() => undefined);
+      if (draftRevision.current !== restoredRevision) {
+        await saveChatDraft(me.id, conversationId, draftRef.current).catch(() => undefined);
+      }
+    };
     nearBottomRef.current = true;
     requestAnimationFrame(() => scrollToBottom(true));
     setSendPending(true);
@@ -1457,7 +1466,7 @@ export function ChatView({
       if (res.status >= 500 || res.status === 429) throw new SecureDeliveryWaiting("Connection problem. This will send by itself in a moment.");
       if (!res.ok || !data?.message) {
         await removeQueuedMessage(me.id, conversationId, clientMessageId).catch(() => undefined);
-        if (!selfDestruct && clearedDraftRevision !== null && !draftRef.current && draftRevision.current === clearedDraftRevision) setDraft(submittedDraft);
+        await restoreSubmittedDraft();
         setError(data?.error ?? "Couldn't send. Tap to retry.");
         setItems((prev) => prev.map((m) => m.id === optimisticId ? { ...m, sendStatus: "failed" } : m));
         return;
@@ -1500,7 +1509,7 @@ export function ChatView({
       }
       if (!waiting) {
         await removeQueuedMessage(me.id, conversationId, clientMessageId).catch(() => undefined);
-        if (!selfDestruct && clearedDraftRevision !== null && !draftRef.current && draftRevision.current === clearedDraftRevision) setDraft(submittedDraft);
+        await restoreSubmittedDraft();
         setError(cause instanceof Error ? cause.message : "No connection. Message not sent.");
       }
       setItems((prev) => prev.map((m) => m.id === optimisticId ? { ...m, sendStatus: waiting ? "queued" : "failed", queueReason: waiting ? cause.message : undefined } : m));
