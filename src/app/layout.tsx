@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
 import Script from "next/script";
 import { headers } from "next/headers";
 import { Inter, Sora } from "next/font/google";
@@ -9,7 +9,7 @@ import { CapacitorDeepLinks } from "@/components/capacitor-deep-links";
 import { PwaUpdatePrompt } from "@/components/pwa-update-prompt";
 import { NativeAppBridge } from "@/components/native-app-bridge";
 import { PerformanceMonitor } from "@/components/performance-monitor";
-import { InstalledLaunch } from "@/components/installed-launch";
+import { InstalledLaunch, LaunchScreen } from "@/components/installed-launch";
 import { getDeviceSetupUser } from "@/server/session";
 import "./globals.css";
 
@@ -54,7 +54,7 @@ export const viewport: Viewport = {
 };
 
 export default async function RootLayout({ children }: { children: ReactNode }) {
-  const [requestHeaders, initialUser] = await Promise.all([headers(), getDeviceSetupUser()]);
+  const requestHeaders = await headers();
   const nonce = requestHeaders.get("x-nonce") ?? undefined;
   return (
     <html
@@ -63,16 +63,20 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
       suppressHydrationWarning
     >
       <body>
-        <InstalledLaunch />
         <Script src="/theme-init.js" strategy="beforeInteractive" nonce={nonce} />
-        <AuthProvider initialUser={initialUser}>
+        <Suspense fallback={<LaunchScreen />}><SessionProviders>{children}</SessionProviders></Suspense>
+      </body>
+    </html>
+  );
+}
+
+async function SessionProviders({ children }: { children: ReactNode }) {
+  const initialUser = await getDeviceSetupUser();
+  return <><InstalledLaunch /><AuthProvider initialUser={initialUser}>
           <PerformanceMonitor>{children}</PerformanceMonitor>
           <CapacitorDeepLinks />
           <PwaUpdatePrompt />
           <HostedAppUpdates />
           <NativeAppBridge />
-        </AuthProvider>
-      </body>
-    </html>
-  );
+        </AuthProvider></>;
 }

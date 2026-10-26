@@ -196,10 +196,9 @@ export function ChatsLayout({
   useEffect(() => {
     if (!user?.id) return;
     retainChatRouteAccount(user.id);
-    for (const conversation of sourceConversations.slice(0, 5)) {
-      void prefetchChatRouteData(user.id, conversation.id).catch(() => undefined);
-    }
-  }, [sourceConversations, user?.id]);
+    // History prefetch belongs to row interaction, not every inbox refresh.
+    // Opening the app must not fetch messages for five unopened conversations.
+  }, [user?.id]);
   const conversations = liveList?.source === sourceConversations
     ? liveList.items : sourceConversations;
   const { initialized, decrypt, getCachedDecryptedMessage, cacheDecryptedMessage, loadCachedDecryptedMessages } = useSharedE2EE();

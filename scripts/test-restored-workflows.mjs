@@ -18,6 +18,7 @@ import { resolve } from "node:path";
 import { unlink } from "node:fs/promises";
 import { testComposerMedia } from "./test-composer-media.mjs";
 import { testLocalChatBackup } from "./test-local-chat-backup.mjs";
+import { testStartupInbox } from "./test-startup-inbox.mjs";
 
 /** Positive workflows use actual browser keys, recording, storage and database delivery. */
 export async function testRestoredWorkflows(base, pool, owner, peer, password, conversationId, ownedLive = false, jwtSecret) {
@@ -270,6 +271,7 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     assert.equal(committed.length,1,"Retries persist one message");
     assert.equal((await pool.query("select count(*)::int as count from realtime_events where payload->>'type'='message:new' and payload->'message'->>'id'=$1",[committed[0].id])).rows[0].count,2,"Each member receives exactly one durable new-message event");
     if (!ownedLive) await testLocalChatBackup(base, pool, source, owner, password, conversationId);
+    if (!ownedLive) await testStartupInbox(base, source, conversationId);
     const mobileChecks = await testMobilePerformance(base, pool, source, owner, conversationId);
     const sourceSession = await renewSession(source);
     for (let attempt = 0; attempt < 50; attempt++) {

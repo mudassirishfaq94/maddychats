@@ -160,12 +160,20 @@ export async function testAudioContacts(base, pool, owner, peer, password, conve
     for (const size of [{ width: 320, height: 640 }, { width: 390, height: 844 }, { width: 844, height: 390 }, { width: 1280, height: 800 }]) {
       await a.setViewportSize(size); await a.goto(base + "/app/profile");
       await a.getByRole("heading", { name: "W".repeat(50), exact: true }).waitFor();
+      // Lazy sections and device requests must finish before enumerating their
+      // nested disclosures. A heading alone does not mean they have mounted.
+      await a.getByText("Encryption & trusted devices", { exact: true }).click();
+      await a.getByLabel("This device safety number", { exact: true }).waitFor({ state: "attached" });
+      await a.locator("#local-chat-backup").waitFor({ state: "attached" });
       // Opening lazy sections inserts nested disclosures. Re-query each time
       // instead of retaining positional locators that can move to hidden children.
       for (let opened = 0; opened < 40; opened++) {
         const summary = a.locator("details:not([open]) > summary:visible").first();
         if (!(await summary.count())) break;
+        const parent = summary.locator("..");
+        const controlled = await parent.getAttribute("data-profile-disclosure-ready") === "true";
         await summary.click();
+        if (controlled) await parent.locator(":scope > div").waitFor({ state: "attached" });
       }
       assert.equal(await a.locator("details:not([open]) > summary:visible").count(), 0);
       assert(await a.evaluate(() => document.documentElement.scrollWidth <= innerWidth), "Profile must not overflow horizontally");
