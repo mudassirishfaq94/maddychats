@@ -5,6 +5,12 @@ import { e2eeRequest } from "@/lib/e2ee-request";
 import { DeviceIdentityEditor } from "./device-identity-editor";
 import { CloudRecoverySettings } from "./cloud-recovery";
 import { DeviceRecovery } from "./device-recovery";
+import dynamic from "next/dynamic";
+const LocalChatBackupSettings = dynamic(() => import("./local-chat-backup").then(module => module.LocalChatBackupSettings));
+function BackupRestoreOption() {
+  const [open, setOpen] = useState(false);
+  return <details className="mt-4 rounded-xl border border-[var(--border)] p-3" onToggle={event => setOpen(event.currentTarget.open)}><summary className="min-h-11 cursor-pointer py-2 text-sm font-semibold">Restore a saved backup instead</summary>{open ? <LocalChatBackupSettings restoreOnly /> : null}</details>;
+}
 import { browserLabel, countryName } from "@/server/device-meta";
 import { FreshAuthentication } from "./fresh-authentication";
 import { DeviceLinkQr } from "./device-link-qr";
@@ -202,6 +208,8 @@ export function EncryptionDevices({ recoveryEmail, openRecovery = false, setup =
 
     {!setup && devices.some(device => device.trustedAt && device.deviceId !== encryption.deviceId && !device.sessionRevokedAt && device.sessionState !== "expired") && <details className="mt-4 rounded-xl border border-[var(--border)] p-3"><summary className="cursor-pointer min-h-11 py-2 text-sm font-semibold">Other linked devices ({devices.filter(device => device.trustedAt && device.deviceId !== encryption.deviceId && !device.sessionRevokedAt && device.sessionState !== "expired").length})</summary><ul className="space-y-2">{devices.filter(device => device.trustedAt && device.deviceId !== encryption.deviceId && !device.sessionRevokedAt && device.sessionState !== "expired").map(device => <li key={device.deviceId} className="border-t border-[var(--border)] py-3 text-sm"><p className="font-medium">{device.deviceName || browserLabel(device.browser) || "Linked device"}</p><p className="mt-1 text-xs text-[var(--muted)]">Linked{device.country ? ` · ${countryName(device.country)}` : ""}{device.lastUsedAt ? ` · Last used ${new Date(device.lastUsedAt).toLocaleDateString()}` : ""}</p></li>)}</ul></details>}
     {!setup && !devices.some(device => device.trustedAt) && current && <p className="mt-3 text-sm">No linked device is available. Use a recovery file or account recovery below.</p>}
+    {!setup && <LocalChatBackupSettings />}
+    {setup && recoveryOpen ? <BackupRestoreOption /> : null}
     {!setup && <CloudRecoverySettings />}
     {!setup && <details className="mt-4 rounded-xl border border-[var(--border)] p-3"><summary className="cursor-pointer min-h-11 py-2 text-sm font-semibold">Back up or restore chats</summary><DeviceRecovery /></details>}
     {!setup && current && !current.trustedAt && <div className="mt-4 rounded-xl border border-[var(--border)] p-3">

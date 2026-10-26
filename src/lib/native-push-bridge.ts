@@ -7,8 +7,8 @@ declare global { interface Window { CircloPush?: Port } }
 const pending = new Map<string, (reply: Reply) => void>();
 export function hasHostedPushBridge(): boolean { return typeof window !== "undefined" && Boolean(window.CircloPush); }
 type CallSession = { callId: string; userId: string; clientId?: string; conversationId?: string; actionToken?: string; connected?: boolean; muted?: boolean; deviceId?: string };
-type NativeFile = { name: string; mime: string; data: string };
-async function request(command: "token" | "request" | "bind" | "reconcile" | "clear" | "settings" | "status" | "dismiss" | "preview" | "preview-finished" | "privacy" | "call-start" | "call-renew" | "call-stop" | "call-settings" | "call-answer" | "call-audio" | "open-file", userId?: string, notification?: LocalNotification, lockedChats?: string[] | null, call?: CallSession, notificationId?: string, file?: NativeFile): Promise<Reply | null> {
+type NativeFile = { name: string; mime: string; data: string; size?: number; transfer?: string; offset?: number };
+async function request(command: "token" | "request" | "bind" | "reconcile" | "clear" | "settings" | "status" | "dismiss" | "preview" | "preview-finished" | "privacy" | "call-start" | "call-renew" | "call-stop" | "call-settings" | "call-answer" | "call-audio" | "open-file" | "camera-settings" | "backup-start" | "backup-chunk" | "backup-finish" | "backup-cancel", userId?: string, notification?: LocalNotification, lockedChats?: string[] | null, call?: CallSession, notificationId?: string, file?: NativeFile): Promise<Reply | null> {
   const port = window.CircloPush;
   if (!port) return null;
   port.onmessage = event => {
@@ -16,7 +16,7 @@ async function request(command: "token" | "request" | "bind" | "reconcile" | "cl
   };
   const id = crypto.randomUUID();
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => { pending.delete(id); reject(new Error("Native action did not respond. Please retry.")); }, command === "open-file" ? 60_000 : 15_000);
+    const timer = setTimeout(() => { pending.delete(id); reject(new Error("Native action did not respond. Please retry.")); }, command === "backup-finish" ? 180_000 : command === "open-file" ? 60_000 : 15_000);
     pending.set(id, reply => {
       clearTimeout(timer); pending.delete(id);
       if (reply.error) reject(new Error(reply.error)); else resolve(reply);
@@ -49,6 +49,32 @@ export async function androidNotificationStatus(): Promise<AndroidNotificationSt
   return status;
 }
 export async function androidCallSettings(): Promise<void> { await request("call-settings"); }
+export async function openHostedCameraSettings(): Promise<void> {
+  if (!hasHostedPushBridge()) throw new Error("Camera settings are unavailable in this app version.");
+  await request("camera-settings");
+}
+
+/** Copy only an encrypted Circlo archive to Android's user-selected document. */
+export async function saveHostedFile(blob: Blob, name: string): Promise<boolean> {
+  if (!hasHostedPushBridge()) return false;
+  const file = { name, mime: "application/octet-stream", data: "", size: blob.size };
+  let transfer: string | undefined;
+  try { transfer = (await request("backup-start", undefined, undefined, undefined, undefined, undefined, file))?.token; }
+  catch (cause) { if (cause instanceof Error && cause.message === "Unsupported notification command.") return false; throw cause; }
+  if (!transfer) return false;
+  try {
+    for (let offset = 0; offset < blob.size; offset += 192 * 1024) {
+      const bytes = new Uint8Array(await blob.slice(offset, offset + 192 * 1024).arrayBuffer());
+      let binary = "";
+      for (let i = 0; i < bytes.length; i += 32768) binary += String.fromCharCode(...bytes.subarray(i, i + 32768));
+      await request("backup-chunk", undefined, undefined, undefined, undefined, undefined, { ...file, transfer, offset, data: btoa(binary) });
+    }
+    return (await request("backup-finish", undefined, undefined, undefined, undefined, undefined, { ...file, transfer }))?.token === "saved";
+  } catch (cause) {
+    await request("backup-cancel", undefined, undefined, undefined, undefined, undefined, { ...file, transfer }).catch(() => {});
+    throw cause;
+  }
+}
 
 /** Open an already-decrypted attachment with Android's registered file viewer. */
 export async function openHostedFile(blob: Blob, name: string): Promise<boolean> {

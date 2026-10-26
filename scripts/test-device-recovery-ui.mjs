@@ -105,7 +105,7 @@ export async function testDeviceRecoveryUI(base, pool) {
       Object.defineProperty(navigator.mediaDevices, "getUserMedia", { configurable: true, value: async () => new MediaStream() });
       HTMLMediaElement.prototype.play = async () => {};
     })()`);
-    await source.page.getByRole("button", { name: "Scan QR from your old device", exact: true }).click();
+    await source.page.getByRole("button", { name: "Scan QR on your new device", exact: true }).click();
     await source.page.getByText("Safety number:").waitFor();
     await target.page.getByLabel("This device safety number").waitFor({ state: "visible" });
     await source.page.getByText("Show full safety number", { exact: true }).click();

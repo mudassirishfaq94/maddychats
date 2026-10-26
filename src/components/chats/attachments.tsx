@@ -24,6 +24,7 @@ import { useEncryptedAttachmentUrl } from "./e2ee-context";
 import { useRetainHistoryRow } from "./history-row-retention";
 import { isNativeApp } from "@/lib/native-platform";
 import { openHostedFile } from "@/lib/native-push-bridge";
+import { isActiveContentType } from "@/lib/media-types";
 
 export function humanSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -303,13 +304,14 @@ export function AttachmentList({
 }
 
 /** A downloadable file chip that transparently decrypts E2EE files. */
-function FileChip({ file, own }: { file: AttachmentDTO; own: boolean }) {
-  const [requested, setRequested] = useState(false);
+export function FileChip({ file, own, initiallyRequested = false }: { file: AttachmentDTO; own: boolean; initiallyRequested?: boolean }) {
+  const [requested, setRequested] = useState(initiallyRequested);
   const [openError, setOpenError] = useState<string | null>(null);
   const [opening, setOpening] = useState(false);
   const { url, failed } = useEncryptedAttachmentUrl(file, requested);
   const expired = useExpiredAt(file.expiresAt);
-  const unavailable = expired || Boolean(file.encrypted && failed);
+  const unsafe = isActiveContentType(file.mimeType);
+  const unavailable = expired || failed;
   const handleNativeOpen = (event: MouseEvent<HTMLAnchorElement>) => {
     if (!isNativeApp() || !url) return;
     event.preventDefault();
@@ -323,8 +325,8 @@ function FileChip({ file, own }: { file: AttachmentDTO; own: boolean }) {
         if (!response.ok) throw new Error("Attachment download failed");
         const opened = await openHostedFile(await response.blob(), file.originalName);
         if (!opened) setOpenError("Couldn't open this file in Circlo. Check that it is 20 MB or smaller.");
-      } catch {
-        setOpenError("Couldn't open this file. Please try again.");
+      } catch (cause) {
+        setOpenError(cause instanceof Error ? cause.message : "Couldn't open this file. Please try again.");
       } finally {
         setOpening(false);
       }
@@ -364,6 +366,9 @@ function FileChip({ file, own }: { file: AttachmentDTO; own: boolean }) {
         ) : url ? (
           <a
             href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            title={file.originalName}
             aria-label={`Open ${file.originalName}`}
             className={cn(textClass, "cursor-pointer underline decoration-transparent underline-offset-2 hover:decoration-current focus-visible:outline-2 focus-visible:outline-[var(--accent)]")}
             onClick={handleNativeOpen}
@@ -388,7 +393,7 @@ function FileChip({ file, own }: { file: AttachmentDTO; own: boolean }) {
           )}
         >
           {unavailable
-            ? "Couldn't open"
+            ? unsafe ? "This file can't be opened safely" : expired ? "Attachment expired" : "Couldn't prepare this file"
             : openError
               ? openError
               : opening
@@ -401,7 +406,7 @@ function FileChip({ file, own }: { file: AttachmentDTO; own: boolean }) {
         </span>
       </span>
       {unavailable ? (
-        <AlertTriangle
+        !expired && !unsafe ? <button type="button" aria-label={`Retry ${file.originalName}`} className="btn btn-secondary min-h-11 shrink-0" onClick={() => setRequested(false)}>Retry</button> : <AlertTriangle
           className={cn(
             "h-4 w-4 shrink-0",
             own ? "text-[var(--bubble-own-sub)]" : "text-[var(--muted)]",

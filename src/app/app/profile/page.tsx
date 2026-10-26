@@ -94,7 +94,7 @@ export default async function ProfilePage({
       <div className="mt-5 grid min-w-0 grid-cols-[minmax(0,1fr)] items-start gap-5 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
         <div className="min-w-0 space-y-5">
           <ProfileEditor user={user} />
-          <ProfileDisclosure title="Encryption & trusted devices" description="Manage your devices and keep access to your private chats." anchors={["encryption-devices", "cloud-recovery"]} defaultOpen={query.recovery === "1"}>
+          <ProfileDisclosure title="Encryption & trusted devices" description="Manage your devices and keep access to your private chats." anchors={["encryption-devices", "cloud-recovery", "local-chat-backup"]} defaultOpen={query.recovery === "1"}>
             <EncryptionDevices openRecovery={query.recovery === "1"} recoveryEmail={accountSecurity?.emailVerifiedAt && !user.email.endsWith("@auth.maddychats.invalid") ? user.email : undefined} />
           </ProfileDisclosure>
           <ProfileDisclosure title="Sign-in & account security" description="Google, passwords, and signed-in sessions." anchors={["account-security", "devices", "authentication-methods"]} defaultOpen={Boolean(notice)}>

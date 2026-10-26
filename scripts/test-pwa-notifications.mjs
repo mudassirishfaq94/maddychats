@@ -126,6 +126,18 @@ export async function testPwaNotifications(base, pool) {
     const tappedPage = await context.newPage();
     await tappedPage.route("**/api/conversations/*/read", route => route.fulfill({ status: 200, contentType: "application/json", body: '{"readCount":0,"messageIds":[]}' }));
     await tappedPage.goto(base + "/app/profile");
+    // A committed document is not necessarily visible to the worker's clients
+    // API yet. Wait for the real WindowClient before exercising the existing-
+    // window path; synthetic evaluate() has no notification-click activation
+    // with which Chromium would permit the no-window openWindow fallback.
+    await tappedPage.waitForFunction(() => Boolean(navigator.serviceWorker.controller));
+    await worker.evaluate(async url => {
+      for (let attempt = 0; attempt < 100; attempt++) {
+        if ((await self.clients.matchAll({ type: "window", includeUncontrolled: true })).some(client => client.url === url)) return;
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+      throw new Error("Notification target WindowClient was not registered");
+    }, tappedPage.url());
     await worker.evaluate(data => openChatFromNotification(data), tapped);
     await tappedPage.waitForURL(base + tapped.url);
     assert.equal(new URL(tappedPage.url()).searchParams.get("message"), tapped.messageIds.at(-1));

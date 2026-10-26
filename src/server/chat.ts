@@ -1785,7 +1785,7 @@ export async function listConversationFiles(
       and(
         eq(messages.conversationId, conversationId),
         isNull(messages.deletedAt), eq(messages.selfDestruct, false), sql`(${messages.expiresAt} is null or ${messages.expiresAt}>now())`,
-        eq(messageAttachments.kind, "file"),
+        inArray(messageAttachments.kind, ["file", "audio"]),
         messageVisibleTo(viewerId),
       ),
     )

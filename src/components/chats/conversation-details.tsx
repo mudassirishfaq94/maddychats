@@ -9,13 +9,9 @@ import { useEffect, useRef, useState } from "react";
 const ScheduledMessageManager = dynamic(() => import("./scheduled-message-manager").then((module) => module.ScheduledMessageManager));
 import { useRouter } from "next/navigation";
 import {
-  Download,
   Ban,
   Bell,
   BellOff,
-  FileArchive,
-  FileSpreadsheet,
-  FileText,
   File as FileIcon,
   Image as ImageIcon,
   Loader2,
@@ -29,14 +25,12 @@ import {
   Pin,
   Star,
   X,
-  AlertTriangle,
   Dices,
   MoreHorizontal,
 } from "lucide-react";
 import type { AttachmentDTO, ConversationDetail, PublicUser } from "@/lib/types";
 import { Avatar } from "@/components/avatar";
-import { InlineMedia, Lightbox, humanSize } from "./attachments";
-import { useEncryptedAttachmentUrl } from "./e2ee-context";
+import { FileChip, InlineMedia, Lightbox } from "./attachments";
 import { useRealtime } from "@/components/providers/realtime-provider";
 import { CHAT_BACKGROUNDS, isBackgroundImage } from "@/lib/chat-backgrounds";
 import { cn } from "@/lib/utils";
@@ -211,6 +205,7 @@ export function ConversationDetails({
         return response.json();
       })
       .then((data) => {
+        if (controller.signal.aborted) return;
         if (tab === "media") setMedia(data.media ?? []);
         else if (tab === "files") setFiles(data.files ?? []);
         else if (tab === "pinned") setSavedMessages(data.pins ?? []);
@@ -222,7 +217,7 @@ export function ConversationDetails({
           setError("Shared items could not be loaded.");
         }
       })
-      .finally(() => setLoading(false));
+      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
   }, [conversationId, tab, revision, localRevision]);
 
@@ -395,6 +390,7 @@ export function ConversationDetails({
               key={t}
               type="button"
               onClick={() => {
+                if (t === tab) return;
                 setLoading(true);
                 setTab(t);
               }}
@@ -501,6 +497,7 @@ function MediaGrid({ items }: { items: AttachmentDTO[] }) {
           <button
             key={item.id}
             type="button"
+            aria-label={`View ${item.originalName}`}
             onClick={() => setLightboxIdx(i)}
             className="group relative aspect-square overflow-hidden rounded-xl"
           >
@@ -526,20 +523,14 @@ function MediaGrid({ items }: { items: AttachmentDTO[] }) {
 
 /* =============================== Files List =============================== */
 
-function iconFor(mime: string) {
-  if (mime.includes("pdf")) return FileText;
-  if (mime.includes("zip")) return FileArchive;
-  if (mime.includes("sheet") || mime.includes("excel") || mime.includes("csv"))
-    return FileSpreadsheet;
-  if (mime.startsWith("text/")) return FileText;
-  return FileIcon;
-}
-
 function FilesList({
   items,
 }: {
   items: (AttachmentDTO & { createdAt: string })[];
 }) {
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState("all");
+  const visible = items.filter(item => item.originalName.toLowerCase().includes(query.toLowerCase()) && (filter === "all" || (filter === "pdf" ? item.mimeType === "application/pdf" : filter === "audio" ? item.kind === "audio" : item.kind !== "audio" && item.mimeType !== "application/pdf")));
   if (items.length === 0) {
     return (
       <div className="flex flex-col items-center py-10 text-center">
@@ -550,56 +541,13 @@ function FilesList({
   }
 
   return (
-    <div className="space-y-1.5">
-      {items.map((item) => (
-        <DetailsFileChip key={item.id} item={item} />
-      ))}
+    <div className="space-y-3">
+      <label className="block text-xs font-medium">Find a shared file<input className="field-input mt-1 w-full" type="search" placeholder="Search file names" value={query} onChange={event => setQuery(event.target.value)} /></label>
+      <div className="flex flex-wrap gap-2" role="group" aria-label="File types">{[["all", "All files"], ["pdf", "PDFs"], ["audio", "Audio"], ["other", "Documents & more"]].map(([value, label]) => <button type="button" key={value} aria-pressed={filter === value} onClick={() => setFilter(value)} className={cn("min-h-11 rounded-xl border px-3 text-xs", filter === value ? "border-[var(--accent)] bg-[var(--accent-soft)]" : "border-[var(--border)]")}>{label}</button>)}</div>
+      <p className="text-xs text-[var(--muted)]">{visible.length} {visible.length === 1 ? "file" : "files"} · Tap a file to prepare it, then open or save.</p>
+      {visible.map(item => <div key={item.id} className="space-y-1"><FileChip file={item} own={false}/><p className="px-3 text-[0.68rem] text-[var(--muted)]">{formatDate(item.createdAt)}</p></div>)}
+      {!visible.length ? <p className="py-6 text-center text-sm text-[var(--muted)]">No files match your search.</p> : null}
     </div>
-  );
-}
-
-function DetailsFileChip({
-  item,
-}: {
-  item: AttachmentDTO & { createdAt: string };
-}) {
-  const { url, failed } = useEncryptedAttachmentUrl(item);
-  const fileIcon = (() => {
-    const props = { className: "h-4.5 w-4.5 text-[var(--accent-fg)]" };
-    if (item.mimeType.includes("pdf") || item.mimeType.startsWith("text/")) return <FileText {...props} />;
-    if (item.mimeType.includes("zip")) return <FileArchive {...props} />;
-    if (item.mimeType.includes("spreadsheet") || item.mimeType.includes("excel")) return <FileSpreadsheet {...props} />;
-    return <FileIcon {...props} />;
-  })();
-  const unavailable = Boolean(item.encrypted && (failed || !url));
-  return (
-    <span className="flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2.5">
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[color-mix(in_srgb,var(--accent)_16%,transparent)]">
-        {fileIcon}
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-xs font-semibold">
-          {item.originalName}
-        </span>
-        <span className="block text-[0.68rem] text-[var(--muted)]">
-          {unavailable
-            ? "Locked — could not decrypt"
-            : `${humanSize(item.size)} · ${formatDate(item.createdAt)}`}
-        </span>
-      </span>
-      {!unavailable ? (
-        <a
-          href={url ?? undefined}
-          download={item.originalName}
-          aria-label={`Download ${item.originalName}`}
-          className="text-[var(--muted)] hover:text-[var(--text)]"
-        >
-          <Download className="h-4 w-4 shrink-0" />
-        </a>
-      ) : (
-        <AlertTriangle className="h-4 w-4 shrink-0 text-[var(--muted)]" />
-      )}
-    </span>
   );
 }
 

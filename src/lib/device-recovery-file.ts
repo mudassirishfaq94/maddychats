@@ -1,4 +1,4 @@
-import { decryptPrivateKeyFromStorage, importPrivateKey, importPublicKey } from "./crypto";
+import { conversationFingerprint, decryptKeyFromSender, decryptPrivateKeyFromStorage, encryptKeyForUser, importPrivateKey, importPublicKey } from "./crypto";
 
 export type RecoveryBundle = { version: 1; userId: string; deviceId: string; keypair: string; secret: string; keys: Record<string, string> };
 const MAX_BYTES = 8 * 1024 * 1024;
@@ -11,10 +11,58 @@ export function restoredBundle(userId: string): RecoveryBundle | null {
   return raw ? JSON.parse(raw) as RecoveryBundle : null;
 }
 
-export function storedChatKeys(userId: string, storageKey: string): Array<{ fingerprint: string; wrapped: string }> {
+export type StoredChatKey = { fingerprint: string; wrapped: string; historical?: boolean };
+export const latestSendingKey = (keys: StoredChatKey[]) => keys.filter(key => !key.historical).at(-1);
+export function storedChatKeys(userId: string, storageKey: string): StoredChatKey[] {
   const local = JSON.parse(localStorage.getItem(storageKey) ?? "[]");
   const recovered = JSON.parse(restoredBundle(userId)?.keys[storageKey] ?? "[]");
-  return [...new Map([...local, ...recovered].map((entry: { fingerprint: string; wrapped: string }) => [entry.fingerprint, entry])).values()];
+  const merged = new Map<string, StoredChatKey>();
+  for (const entry of [...local, ...recovered] as StoredChatKey[]) {
+    const previous = merged.get(entry.fingerprint);
+    if (!previous || (previous.historical && !entry.historical)) merged.set(entry.fingerprint, entry);
+  }
+  return [...merged.values()];
+}
+
+/** Publish the restored archive only after all recovered keys are durable. */
+export async function commitRecoveredHistory(userId: string, recovered: Record<string, StoredChatKey[]>, publish: () => Promise<void>, signal: AbortSignal): Promise<void> {
+  const previous = new Map<string, string | null>();
+  try {
+    signal.throwIfAborted();
+    for (const [storageKey, entries] of Object.entries(recovered)) {
+      const current = storedChatKeys(userId, storageKey), known = new Set(current.map(entry => entry.fingerprint));
+      previous.set(storageKey, localStorage.getItem(storageKey));
+      localStorage.setItem(storageKey, JSON.stringify([...entries.filter(entry => !known.has(entry.fingerprint)), ...current]));
+    }
+    signal.throwIfAborted();
+    await publish();
+  } catch (cause) {
+    for (const [storageKey, value] of previous) {
+      if (value === null) localStorage.removeItem(storageKey); else localStorage.setItem(storageKey, value);
+    }
+    throw cause;
+  }
+}
+
+/** Recover history onto the current device without reviving a revoked identity
+ * or selecting archived group keys for future sends. All output stays wrapped. */
+export async function rewrapRecoveryHistory(bundle: RecoveryBundle, userId: string, recipientPublicKey: string): Promise<Record<string, StoredChatKey[]>> {
+  await validateRecoveryBundle(bundle, userId);
+  const pair = JSON.parse(bundle.keypair);
+  const privateKey = await importPrivateKey(await decryptPrivateKeyFromStorage(pair.encryptedPrivateKey.slice(3), bundle.secret));
+  const recipient = await importPublicKey(recipientPublicKey);
+  const result: Record<string, StoredChatKey[]> = {};
+  for (const [storageKey, raw] of Object.entries(bundle.keys)) {
+    const entries: StoredChatKey[] = JSON.parse(raw);
+    result[storageKey] = [];
+    for (const entry of entries) {
+      const key = await decryptKeyFromSender(entry.wrapped, privateKey);
+      const fingerprint = await conversationFingerprint(key);
+      if (fingerprint !== entry.fingerprint) throw new Error("A recovered chat key is damaged.");
+      result[storageKey].push({ fingerprint, wrapped: await encryptKeyForUser(key, recipient), historical: true });
+    }
+  }
+  return result;
 }
 
 export function collectRecoveryBundle(userId: string, deviceId: string): RecoveryBundle {
@@ -30,7 +78,7 @@ export function collectRecoveryBundle(userId: string, deviceId: string): Recover
 }
 
 export async function validateRecoveryBundle(bundle: RecoveryBundle, userId: string) {
-  if (bundle.version !== 1 || bundle.userId !== userId || !/^[a-zA-Z0-9-]{1,100}$/.test(bundle.deviceId) ||
+  if (!bundle || typeof bundle !== "object" || bundle.version !== 1 || bundle.userId !== userId || !/^[a-zA-Z0-9-]{1,100}$/.test(bundle.deviceId) ||
       typeof bundle.secret !== "string" || !/^[a-f0-9]{64}$/.test(bundle.secret) || typeof bundle.keypair !== "string" ||
       !bundle.keys || typeof bundle.keys !== "object" || Array.isArray(bundle.keys)) throw new Error("This recovery file does not belong to the signed-in account or is invalid.");
   for (const [key, value] of Object.entries(bundle.keys)) {

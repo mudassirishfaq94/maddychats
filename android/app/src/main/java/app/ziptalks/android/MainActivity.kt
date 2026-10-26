@@ -147,6 +147,7 @@ private class ZipTalkApi(context: Context) {
 }
 
 class MainActivity : ComponentActivity() {
+    val backupExport = BackupExport(this)
     private var webView: WebView? = null
     private var hostedContent: FrameLayout? = null
     private var callTransition: android.view.View? = null
@@ -217,7 +218,7 @@ class MainActivity : ComponentActivity() {
     private val cameraPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         val request = pendingCameraPermission ?: return@registerForActivityResult
         pendingCameraPermission = null
-        if (granted && WebOriginPolicy.isAllowed(request.origin.toString(), BuildConfig.API_BASE_URL) && WebOriginPolicy.isAllowed(webView?.url.orEmpty(), BuildConfig.API_BASE_URL) && android.net.Uri.parse(webView?.url).path == "/app/people") request.grant(arrayOf(PermissionRequest.RESOURCE_VIDEO_CAPTURE)) else request.deny()
+        if (granted && CameraAccessPolicy.allows(request.origin.toString(), webView?.url.orEmpty(), BuildConfig.API_BASE_URL)) request.grant(arrayOf(PermissionRequest.RESOURCE_VIDEO_CAPTURE)) else request.deny()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -340,7 +341,7 @@ class MainActivity : ComponentActivity() {
 
     private fun createNotificationChannel() { NotificationChannels.ensure(this) }
 
-    override fun onDestroy() { NativeCallSessionService.stop(this); webView?.destroy(); webView = null; super.onDestroy() }
+    override fun onDestroy() { backupExport.close(); NativeCallSessionService.stop(this); webView?.destroy(); webView = null; super.onDestroy() }
 
     fun hostedWebChromeClient() = object : WebChromeClient() {
         override fun onPermissionRequestCanceled(request: PermissionRequest) {
@@ -352,7 +353,7 @@ class MainActivity : ComponentActivity() {
             // audio keeps its separate runtime approval. Unknown resources fail closed.
             runOnUiThread {
                 if (request.resources.size == 1 && request.resources[0] == PermissionRequest.RESOURCE_VIDEO_CAPTURE) {
-                    if (!WebOriginPolicy.isAllowed(request.origin.toString(), BuildConfig.API_BASE_URL) || !WebOriginPolicy.isAllowed(webView?.url.orEmpty(), BuildConfig.API_BASE_URL) || android.net.Uri.parse(webView?.url).path != "/app/people") { request.deny(); return@runOnUiThread }
+                    if (!CameraAccessPolicy.allows(request.origin.toString(), webView?.url.orEmpty(), BuildConfig.API_BASE_URL)) { request.deny(); return@runOnUiThread }
                     if (ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) request.grant(arrayOf(PermissionRequest.RESOURCE_VIDEO_CAPTURE))
                     else { pendingCameraPermission?.deny(); pendingCameraPermission = request; cameraPermissionLauncher.launch(Manifest.permission.CAMERA) }
                     return@runOnUiThread

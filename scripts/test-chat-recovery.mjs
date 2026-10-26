@@ -119,7 +119,7 @@ export async function testChatRecovery(base, cookieHeader, conversationId) {
       Object.defineProperty(navigator.mediaDevices, "getUserMedia", { configurable: true, value: async () => new MediaStream() });
       HTMLMediaElement.prototype.play = async () => {};
     })()`);
-    await source.getByRole("button", { name: "Scan QR from your old device", exact: true }).click();
+    await source.getByRole("button", { name: "Scan QR on your new device", exact: true }).click();
     await source.getByText("Safety number:").waitFor();
     await target.getByText("Device details", { exact: true }).click();
     await source.getByText("Show full safety number", { exact: true }).click();

@@ -12,8 +12,8 @@ android {
         applicationId "chat.circlo.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 19
-        versionName "0.9.10"
+        versionCode 20
+        versionName "0.9.11"
         manifestPlaceholders = [appLinkHost: 'circlo.chat']
         buildConfigField "String", "API_BASE_URL", '"' + appOrigin + '"'
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
