@@ -28,13 +28,32 @@ for(const width of [390,1440]) {
    await page.screenshot({path:`.freebuff/performance/${route.slice(1)}-390.png`,fullPage:true});
   }
   if(route==='/' && pass==='first' && width===390) {
-   await page.getByRole('heading',{name:'All the little ways to stay close.',exact:true}).waitFor();
-   await page.getByRole('heading',{name:'A circle with room to grow.',exact:true}).waitFor();
-   assert.equal(await page.locator('#roadmap article').count(),3);
-   assert.equal(await page.getByText('Available now',{exact:true}).count(),1);
-   assert.equal(await page.getByRole('link',{name:'Read the plain-language explanation'}).getAttribute('href'),'/privacy#encryption');
-   assert.equal(await page.getByText('We have not published an independent security review. We will update this page if that changes.',{exact:true}).count(),1);
-   assert.equal(await page.getByText('More transparency',{exact:true}).count(),0);
+   await page.getByRole('heading',{name:'Private chat for you and your people.',exact:true}).waitFor();
+   await page.getByRole('heading',{name:'What works today',exact:true}).waitFor();
+   assert.equal(await page.locator('#status li').count(),5);
+   assert.equal(await page.locator('#features article').count(),6);
+   assert.equal(await page.locator('details').count(),4,'Landing page has four short answers');
+   assert.equal(await page.getByRole('button',{name:'Android app'}).isDisabled(),true,'Android button stays disabled until a Play Store listing exists');
+   assert.equal(await page.getByText('Coming soon to Google Play',{exact:true}).count(),1);
+   assert.equal(await page.getByRole('link',{name:'Use in browser',exact:true}).count(),2);
+   assert.equal(await page.getByRole('link',{name:'Log in',exact:true}).count(),2);
+   assert.equal(await page.getByText('JoinGet started',{exact:true}).count(),0);
+   assert.equal(await page.getByText('Find your circle',{exact:true}).count(),0);
+   assert.equal(await page.getByText('Join Circlo',{exact:true}).count(),0);
+   assert.equal(await page.getByText('010',{exact:true}).count(),0);
+   assert.equal(await page.getByText('Example chats · names are made up',{exact:true}).count(),1);
+   assert.equal(await page.getByRole('heading',{name:'Weekend plans',exact:true}).count(),1);
+   assert.equal(await page.getByRole('link',{name:'Contact',exact:true}).getAttribute('href'),'/support');
+   assert.equal(await page.locator('#roadmap').count(),0,'Long roadmap section has been removed');
+   const metadata=await page.evaluate(()=>({title:document.title,canonical:document.querySelector('link[rel="canonical"]')?.getAttribute('href'),ogImage:document.querySelector('meta[property="og:image"]')?.getAttribute('content'),twitterCard:document.querySelector('meta[name="twitter:card"]')?.getAttribute('content')}));
+   assert.match(metadata.title,/Circlo — Private chat for you and your people/);
+   assert(metadata.canonical && metadata.ogImage && metadata.twitterCard,'Social and canonical metadata remains present');
+   for(const paragraph of await page.locator('main p').allTextContents()) {
+    const words=paragraph.trim().split(/\s+/).filter(Boolean);
+    const sentences=paragraph.trim().split(/[.!?]+/).filter(sentence=>sentence.trim());
+    assert(words.length<=32,`Landing paragraph should stay brief: ${paragraph}`);
+    assert(sentences.length<=2,`Landing paragraph should contain at most two sentences: ${paragraph}`);
+   }
    for(const anchor of await page.locator('a[href^="#"]').all()) assert.equal(await page.locator(await anchor.getAttribute('href')).count(),1);
    await mkdir('.freebuff/performance',{recursive:true});
    for(const size of [320,360,390,412,768,1440]) {

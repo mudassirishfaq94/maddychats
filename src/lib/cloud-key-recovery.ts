@@ -1,4 +1,6 @@
 import { collectRecoveryBundle, validateRecoveryBundle, type RecoveryBundle } from "./device-recovery-file";
+import { recoveryPhraseFromEntropy, recoveryPhraseToEntropy } from "./recovery-phrase";
+import { readDeviceKeyMaterial, writeDeviceKeyMaterial } from "./device-key-storage";
 export interface RecoveryEnvelope { format: "circlo-cloud-recovery-v1"; kdf: "HKDF-SHA-256"; salt: string; iv: string; ciphertext: string }
 export interface RecoveryIdentity { id: string; userId: string; deviceId: string }
 export const cloudRecoveryLocalKey = (userId: string, deviceId: string) => `circlo_cloud_recovery_${userId}_${deviceId}`;
@@ -9,10 +11,11 @@ const encode = (bytes: Uint8Array) => {
 };
 const decode = (value: string) => Uint8Array.from(atob(value.replaceAll("-", "+").replaceAll("_", "/")), char => char.charCodeAt(0));
 const aad = (identity: RecoveryIdentity) => new TextEncoder().encode(`circlo-cloud-recovery-v1:${identity.userId}:${identity.deviceId}:${identity.id}`);
-export const newRecoveryCode = () => encode(crypto.getRandomValues(new Uint8Array(32)));
+export const newRecoveryCode = () => recoveryPhraseFromEntropy(crypto.getRandomValues(new Uint8Array(32)));
 async function wrappingKey(code: string, salt: Uint8Array, identity: RecoveryIdentity) {
-  if (!/^[a-zA-Z0-9_-]{43}$/.test(code) || decode(code).length !== 32) throw new Error("Enter the complete saved recovery code, not your account password.");
-  const material = await crypto.subtle.importKey("raw", decode(code), "HKDF", false, ["deriveKey"]);
+  let recoveryBytes: Uint8Array;
+  try { recoveryBytes = recoveryPhraseToEntropy(code); } catch { throw new Error("Enter your 24-word recovery phrase, not your account password."); }
+  const material = await crypto.subtle.importKey("raw", recoveryBytes as BufferSource, "HKDF", false, ["deriveKey"]);
   return crypto.subtle.deriveKey({ name: "HKDF", hash: "SHA-256", salt: salt as BufferSource, info: aad(identity) }, material, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
 }
 export async function sealRecovery(bundle: RecoveryBundle, code: string, identity: RecoveryIdentity): Promise<RecoveryEnvelope> {
@@ -43,11 +46,12 @@ export async function openRecovery(envelope: RecoveryEnvelope, code: string, ide
 export interface CloudRecoveryConfig { id: string; code: string; revision: number; snapshotDigest?: string }
 /** Called away from typing/send work. The code never enters this request. */
 export async function refreshCloudRecovery(userId: string, deviceId: string): Promise<boolean> {
-  const raw = localStorage.getItem(cloudRecoveryLocalKey(userId, deviceId));
+  const localKey = cloudRecoveryLocalKey(userId, deviceId);
+  const raw = await readDeviceKeyMaterial(localKey);
   if (!raw) return false;
   const config = JSON.parse(raw) as CloudRecoveryConfig;
   const identity = { id: config.id, userId, deviceId };
-  const bundle = collectRecoveryBundle(userId, deviceId);
+  const bundle = await collectRecoveryBundle(userId, deviceId);
   const digest = encode(new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(JSON.stringify(bundle)))));
   if (config.revision>0 && config.snapshotDigest===digest) return true;
   // A response may have been lost after commit. Reconcile only after proving
@@ -67,7 +71,7 @@ export async function refreshCloudRecovery(userId: string, deviceId: string): Pr
     body: JSON.stringify({ id: config.id, deviceId, revision: config.revision, confirmed: true, envelope }) });
   const result = await response.json();
   if (!response.ok) throw new Error(result.error ?? "Recovery backup could not be refreshed.");
-  localStorage.setItem(cloudRecoveryLocalKey(userId, deviceId), JSON.stringify({ ...config, revision: result.revision, snapshotDigest: digest }));
+  await writeDeviceKeyMaterial(localKey, JSON.stringify({ ...config, revision: result.revision, snapshotDigest: digest }));
   window.dispatchEvent(new Event("circlo:recovery-status"));
   return true;
 }

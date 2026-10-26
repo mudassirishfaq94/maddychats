@@ -18,7 +18,6 @@ import { ConversationMenu } from "./conversation-menu";
 import { usePresenceMap } from "@/components/providers/realtime-provider";
 import { useConversationList } from "@/components/providers/conversation-list-provider";
 import { useAuth } from "@/components/providers/auth-provider";
-import { prefetchChatRouteData, retainChatRouteAccount } from "@/lib/chat-route-prefetch";
 import { mapWithConcurrency } from "@/lib/async";
 import { cn, timeAgo } from "@/lib/utils";
 
@@ -65,9 +64,8 @@ function stampTime(iso: string | null, hydrated: boolean): string {
   return dateStampFormatter.format(d);
 }
 
-const ConversationRow = memo(function ConversationRow({ conv, active, online, preview, timestamp, userId }: {
+const ConversationRow = memo(function ConversationRow({ conv, active, online, preview, timestamp }: {
   conv: ConversationSummary; active: boolean; online: boolean; preview: string; timestamp: string;
-  userId: string | null;
 }) {
   const name = conv.name ?? conv.otherMember?.displayName ?? "Unknown";
   return (
@@ -79,7 +77,6 @@ const ConversationRow = memo(function ConversationRow({ conv, active, online, pr
         onFocus={() => void warmChatCode()}
         onPointerDown={() => {
           void warmChatCode();
-          if (userId) void prefetchChatRouteData(userId, conv.id).catch(() => undefined);
         }}
         aria-current={active ? "page" : undefined}
         className={cn(
@@ -187,12 +184,6 @@ export function ChatsLayout({
   const { user } = useAuth();
   useEffect(() => { if (initialConversations) seed(initialConversations); }, [initialConversations, seed]);
   const sourceConversations = useMemo(() => snapshot?.conversations ?? initialConversations ?? [], [snapshot?.conversations, initialConversations]);
-  useEffect(() => {
-    if (!user?.id) return;
-    retainChatRouteAccount(user.id);
-    // History prefetch belongs to row interaction, not every inbox refresh.
-    // Opening the app must not fetch messages for five unopened conversations.
-  }, [user?.id]);
   const conversations = liveList?.source === sourceConversations
     ? liveList.items : sourceConversations;
   const { initialized, decrypt, getCachedDecryptedMessage, cacheDecryptedMessage, loadCachedDecryptedMessages } = useSharedE2EE();
@@ -397,7 +388,6 @@ export function ChatsLayout({
                 key={conv.id} conv={conv} active={conv.id === activeId}
                 timestamp={stampTime(conv.lastMessageAt ?? conv.createdAt, hydrated)}
                 online={Boolean(conv.otherMember && presence[conv.otherMember.id]?.online)}
-                userId={user?.id ?? null}
                 preview={previewText(conv, previews)}
               />)}
             </ul>

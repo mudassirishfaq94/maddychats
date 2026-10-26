@@ -26,7 +26,7 @@ const NAV_ITEMS = [
   { href: "/app/admin/reports", label: "Reports", icon: Flag },
   { href: "/app/admin/storage", label: "Storage", icon: HardDrive },
   { href: "/app/admin/security", label: "Security", icon: Lock },
-  { href: "/app/admin/audit", label: "Audit Log", icon: Activity },
+  { href: "/app/admin/audit", label: "Admin history", icon: Activity },
 ];
 
 export default function AdminShell({ children }: { children: React.ReactNode }) {

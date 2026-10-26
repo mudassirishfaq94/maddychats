@@ -114,9 +114,9 @@ export default function AdminUsersPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-bold">User Management</h1>
+        <h1 className="text-xl font-bold">Manage users</h1>
         <p className="mt-1 text-sm text-[var(--muted)]">
-          Manage user roles, suspensions, and access.
+          Change user access, pause accounts, or remove accounts.
         </p>
       </div>
 

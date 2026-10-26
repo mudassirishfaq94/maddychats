@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { createRecoveryFile, readRecoveryFile, validateRecoveryBundle, type RecoveryBundle } from "../src/lib/device-recovery-file";
 import { generateKeyPair, exportPrivateKey, exportPublicKey, encryptPrivateKeyForStorage } from "../src/lib/crypto";
 import { canonicalDestination } from "../src/server/canonical-domain";
+import { recoveryPhraseFromEntropy, recoveryPhraseToEntropy } from "../src/lib/recovery-phrase";
 
 test("recovery file authenticates owner, private key, ciphertext and separate recovery code", async () => {
   const pair = await generateKeyPair();
@@ -11,6 +12,8 @@ test("recovery file authenticates owner, private key, ciphertext and separate re
     keypair: JSON.stringify({ publicKey: await exportPublicKey(pair.publicKey), encryptedPrivateKey: "v2:" + await encryptPrivateKeyForStorage(await exportPrivateKey(pair.privateKey), secret) }),
     keys: { e2ee_sentkeys_owner_chat: JSON.stringify([{ fingerprint: "fingerprint", wrapped: "ciphertext" }]) } };
   const { file, code } = await createRecoveryFile(bundle);
+  assert.equal(code.trim().split(/\s+/).length, 24);
+  assert.deepEqual(recoveryPhraseToEntropy(code.toUpperCase()), recoveryPhraseToEntropy(code));
   assert(!file.includes(secret) && !file.includes("original-device"));
   assert.deepEqual(await readRecoveryFile(file, code, "owner"), bundle);
   await assert.rejects(readRecoveryFile(file, code, "other-account"), /signed-in account/);
@@ -20,6 +23,14 @@ test("recovery file authenticates owner, private key, ciphertext and separate re
   await assert.rejects(validateRecoveryBundle({ ...bundle, keys: { maddy_session: "credential" } }, "owner"), /Invalid chat keys/);
   const other = await generateKeyPair();
   await assert.rejects(validateRecoveryBundle({ ...bundle, keypair: JSON.stringify({ ...JSON.parse(bundle.keypair), publicKey: await exportPublicKey(other.publicKey) }) }, "owner"));
+});
+
+test("24-word recovery phrases round-trip and older 32-byte codes remain accepted", () => {
+  const entropy = new Uint8Array(32).fill(42);
+  const phrase = recoveryPhraseFromEntropy(entropy);
+  assert.deepEqual(recoveryPhraseToEntropy(phrase), entropy);
+  const olderCode = btoa(Array.from(entropy, value => String.fromCharCode(value)).join(""));
+  assert.deepEqual(recoveryPhraseToEntropy(olderCode), entropy);
 });
 
 test("old-domain navigation offers local migration and Google starts on the canonical origin", () => {

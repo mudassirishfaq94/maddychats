@@ -45,7 +45,7 @@ export function PasswordSettings({ email, google }: { email: string; google: boo
       <label className="block text-sm">New password<input className="field-input mt-1 w-full" type="password" autoComplete="new-password" minLength={8} maxLength={72} required value={password} onChange={event => setPassword(event.target.value)} /></label>
       <p className="text-xs text-[var(--muted)]">8–72 characters, including uppercase, lowercase, and a number.</p>
       <label className="block text-sm">Confirm new password<input className="field-input mt-1 w-full" type="password" autoComplete="new-password" required value={confirmPassword} onChange={event => setConfirm(event.target.value)} /></label>
-      <label className="block text-sm">Authenticator or recovery code (if enabled)<input className="field-input mt-1 w-full" autoComplete="one-time-code" value={mfaCode} onChange={event => setMfa(event.target.value)} /></label>
+      <label className="block text-sm">Code from your code app or saved backup list (if enabled)<input className="field-input mt-1 w-full" autoComplete="one-time-code" value={mfaCode} onChange={event => setMfa(event.target.value)} /></label>
       <button className="btn btn-primary" disabled={busy} type="submit">{busy ? "Please wait…" : "Change password"}</button>
     </form>
     <div className="mt-4 flex flex-wrap items-center gap-3"><button type="button" disabled={busy} className="text-sm underline" onClick={() => void emailReset()}>Forgot your current password? Send a reset email</button><Link className="text-sm underline" href="/forgot-password">Open password recovery</Link></div>

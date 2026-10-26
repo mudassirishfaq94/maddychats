@@ -48,7 +48,7 @@ function Review({ pending, progress, phase, busy, caption, error, onCaptionChang
       <header className="flex shrink-0 items-center gap-3 border-b border-[var(--border)] px-4 pb-3 pt-[max(12px,env(safe-area-inset-top))]">
         <button type="button" aria-label="Discard selected files" disabled={busy} onClick={close} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full hover:bg-[var(--surface-2)] disabled:opacity-40"><X className="h-5 w-5" /></button>
         <div className="min-w-0 flex-1"><h2 className="font-display text-lg font-semibold">A little more to share</h2><p className="truncate text-xs text-[var(--muted)]">{pending.length} of 5 files · Preview before you send</p></div>
-        <Lock aria-label="End-to-end encrypted" className="h-4 w-4 shrink-0 text-[var(--accent-fg)]" />
+        <Lock aria-label="Private before sending" className="h-4 w-4 shrink-0 text-[var(--accent-fg)]" />
       </header>
       <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-[var(--surface-2)] p-3 sm:p-6">
         {previewFailures.has(selected.id) ? <div className="max-w-xs rounded-2xl bg-[var(--surface)] p-5 text-center"><FileText className="mx-auto mb-3 h-8 w-8 text-[var(--accent-fg)]" /><p className="break-all text-sm font-semibold">{selected.file.name}</p><p className="mt-2 text-xs text-[var(--muted)]">Preview isn&apos;t supported on this device. You can still send the original file securely.</p></div> : selected.previewUrl && selected.file.type.startsWith("image/") ? (

@@ -99,7 +99,7 @@ export default function AdminMessagesPage() {
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-            placeholder="Search sender username or message ID…"
+            placeholder="Search by sender name or message reference…"
             className="field-input field-input--icon w-full py-2! text-sm!"
           />
         </div>

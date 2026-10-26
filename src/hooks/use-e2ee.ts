@@ -1,5 +1,6 @@
 "use client";
 import { latestSendingKey, restoredBundle, storedChatKeys } from "@/lib/device-recovery-file";
+import { readDeviceKeyMaterial, writeDeviceKeyMaterial } from "@/lib/device-key-storage";
 import { waitForBackgroundSlot } from "@/lib/background-work";
 
 import { useCallback, useEffect, useRef, useState, useMemo } from "react";
@@ -99,9 +100,17 @@ export function useE2EE(userId: string | undefined) {
     async function init() {
       const recovered = restoredBundle(activeUserId);
       const deviceId = recovered?.deviceId ?? generateDeviceId();
-      const stored = recovered?.keypair ?? localStorage.getItem(`e2ee_keypair_${userId}`);
+      const keypairStorageKey = `e2ee_keypair_${activeUserId}`;
+      const recoveredKeypair = recovered?.keypair ?? "";
+      const stored = recoveredKeypair || await readDeviceKeyMaterial(keypairStorageKey);
       const recoveryStorageKey = `e2ee_recovery_${userId}_${deviceId}`;
-      let recoverySecret = recovered?.secret ?? localStorage.getItem(recoveryStorageKey);
+      const recoveredSecret = recovered?.secret ?? "";
+      let recoverySecret = recoveredSecret || await readDeviceKeyMaterial(recoveryStorageKey);
+      if (recovered && (recoveredKeypair || recoveredSecret)) {
+        if (recoveredKeypair) await writeDeviceKeyMaterial(keypairStorageKey, recoveredKeypair);
+        if (recoveredSecret) await writeDeviceKeyMaterial(recoveryStorageKey, recoveredSecret);
+        localStorage.setItem(`e2ee_restored_${activeUserId}`, JSON.stringify({ ...recovered, keypair: "", secret: "" }));
+      }
 
       let keyPair: CryptoKeyPair;
       let publicKeyStr: string;
@@ -195,16 +204,13 @@ export function useE2EE(userId: string | undefined) {
       if (!recoverySecret) {
         const secretBytes = crypto.getRandomValues(new Uint8Array(32));
         recoverySecret = Array.from(secretBytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
-        localStorage.setItem(recoveryStorageKey, recoverySecret);
+        await writeDeviceKeyMaterial(recoveryStorageKey, recoverySecret);
       }
       const encryptedPrivateKey = protectedEnvelope ?? `v2:${await encryptPrivateKeyForStorage(privateKeyStr, recoverySecret)}`;
       controller.signal.throwIfAborted();
       // Never persist the raw, exportable JWK. This also migrates legacy
       // browser records after their next successful initialization.
-      localStorage.setItem(
-        `e2ee_keypair_${userId}`,
-        JSON.stringify({ publicKey: publicKeyStr, encryptedPrivateKey }),
-      );
+      await writeDeviceKeyMaterial(keypairStorageKey, JSON.stringify({ publicKey: publicKeyStr, encryptedPrivateKey }));
       // The local private key and locally wrapped conversation keys are enough
       // to authenticate existing history. Do not hold that render path behind
       // a device-directory POST. Sending still waits for this promise below.

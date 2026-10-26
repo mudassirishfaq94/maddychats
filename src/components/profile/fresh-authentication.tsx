@@ -27,15 +27,14 @@ export function FreshAuthentication({
   return (
     <div className="my-3 space-y-2">
       <p className="text-xs text-[var(--muted)]">
-        If you signed in more than five minutes ago, confirm your password and,
-        when enabled, your authenticator or recovery code. Google/phone accounts
-        can sign in again instead.
+        If you signed in more than five minutes ago, enter your password and,
+        if enabled, a code from your code app or saved backup list. Google
+        accounts can sign in again instead.
       </p>
       {submitLabel ? (
         <div className="rounded-xl border border-[color-mix(in_srgb,var(--danger)_20%,transparent)] bg-[color-mix(in_srgb,var(--danger)_5%,transparent)] p-3">
           <p className="text-xs text-[var(--danger)]">
-            Administrative actions no longer accept the password or code as
-            body fields. To proceed, sign in again using the link below.
+            For this action, sign in again using the link below.
           </p>
           <Link
             className="mt-2 block text-xs text-[var(--accent)]"
@@ -58,7 +57,7 @@ export function FreshAuthentication({
             />
           </label>
           <label className="block text-xs">
-            Authenticator or recovery code (if enabled)
+            Code from your code app or saved backup list (if enabled)
             <input
               className="field-input mt-1"
               autoComplete="one-time-code"
@@ -71,7 +70,7 @@ export function FreshAuthentication({
             className="block text-xs text-[var(--accent)]"
             href={`/login?reauth=1&next=${encodeURIComponent(returnTo)}`}
           >
-            Sign in again to confirm your identity
+            Sign in again to confirm it’s you
           </Link>
         </>
       )}

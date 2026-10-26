@@ -698,7 +698,7 @@ export function ChatView({
     }));
     if (!prepared.ready) {
       throw new SecureDeliveryWaiting(prepared.trustChanged
-        ? "Someone in this chat changed phones. Check their safety number before sending."
+        ? "Someone in this chat changed phones. Compare their check number before sending."
         : encryptionRef.current?.error ?? "Waiting for secure delivery. Your message will send automatically when encryption is ready.");
     }
   }, [conversationId]);
@@ -829,11 +829,17 @@ export function ChatView({
     if ((trimmed ? draftRef.current.trim() : draftRef.current) !== expected) return;
     const revision = ++draftRevision.current;
     draftRef.current = "";
-    if (draftPersistTimer.current) clearTimeout(draftPersistTimer.current);
     if (draftUpdateTimer.current) clearTimeout(draftUpdateTimer.current);
+    if (draftPersistTimer.current) clearTimeout(draftPersistTimer.current);
+    if (composerRef.current) composerRef.current.value = "";
+    setDraftState("");
     await saveChatDraft(me.id, conversationId, "").catch(() => undefined);
     // Preserve anything the user typed while IndexedDB was finishing.
-    if (draftRevision.current === revision) { setDraft(""); setReplyTo(null); selfDestructDraft.current=false; setSelfDestruct(false); }
+    if (draftRevision.current !== revision) {
+      await saveChatDraft(me.id, conversationId, draftRef.current).catch(() => undefined);
+      return;
+    }
+    setReplyTo(null); selfDestructDraft.current=false; setSelfDestruct(false);
   }
 
   /* ------------------------------ read receipts ----------------------------- */
@@ -1405,17 +1411,22 @@ export function ChatView({
     setItems((prev) => [...prev, optimistic]);
     chatPerf("send-click-to-optimistic", sendStarted);
     const replyId = replyTo?.id ?? null;
-    // Keep the draft until the server confirms delivery, including key failures.
+    let clearedDraftRevision: number | null = null;
     nearBottomRef.current = true;
     requestAnimationFrame(() => scrollToBottom(true));
     setSendPending(true);
     setError(null);
     try {
       // E2EE: plaintext never leaves this device — send AES-GCM ciphertext.
-      await Promise.all([
-        saveQueuedMessage(me.id, { message: { ...optimistic, sendStatus: "queued", queueReason: "Waiting for secure delivery. Your message will send automatically when encryption is ready." }, plain: text }).catch(() => undefined),
-        prepareEncryptedSend(awaitingApproval && !conversation.introductionSent),
-      ]);
+      // Clear the visible composer immediately while the durable retry copy
+      // and encrypted draft cleanup finish together. A save failure restores
+      // the draft below; encryption and network work never block the clear.
+      const queueSave = saveQueuedMessage(me.id, { message: { ...optimistic, sendStatus: "queued", queueReason: "Waiting for secure delivery. Your message will send automatically when encryption is ready." }, plain: text });
+      const draftClear = clearDeliveredDraft(submittedDraft);
+      clearedDraftRevision = draftRevision.current;
+      const [queueResult] = await Promise.allSettled([queueSave, draftClear]);
+      if (queueResult.status === "rejected") throw queueResult.reason;
+      await prepareEncryptedSend(awaitingApproval && !conversation.introductionSent);
       chatPerf("send-key-ready", sendStarted);
       const payload = await e2ee.encrypt(text, conversationId);
       chatPerf("send-encrypted", sendStarted);
@@ -1488,6 +1499,7 @@ export function ChatView({
       }
       if (!waiting) {
         await removeQueuedMessage(me.id, conversationId, clientMessageId).catch(() => undefined);
+        if (clearedDraftRevision !== null && !draftRef.current && draftRevision.current === clearedDraftRevision) setDraft(submittedDraft);
         setError(cause instanceof Error ? cause.message : "No connection. Message not sent.");
       }
       setItems((prev) => prev.map((m) => m.id === optimisticId ? { ...m, sendStatus: waiting ? "queued" : "failed", queueReason: waiting ? cause.message : undefined } : m));
@@ -3271,7 +3283,7 @@ const MessageRow = memo(function MessageRow({msg, showDate, sameSenderPrev, me, 
                                           </span>
                                         ) : msg.replyTo.encrypted && replyText === undefined ? (
                                           <span className="flex items-center gap-1 opacity-70">
-                                            {replyUnavailable ? "Reply unavailable on this device. Check Security & recovery." : "Loading replied message…"}
+                                            {replyUnavailable ? "This reply is not available here. Check Profile for ways to get back into your chats." : "Opening reply…"}
                                             …
                                           </span>
                                         ) : (
