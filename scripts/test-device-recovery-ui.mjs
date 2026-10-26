@@ -106,7 +106,7 @@ export async function testDeviceRecoveryUI(base, pool) {
       HTMLMediaElement.prototype.play = async () => {};
     })()`);
     await source.page.getByRole("button", { name: "Scan QR on your new device", exact: true }).click();
-    await source.page.getByText("Safety number:").waitFor();
+    await source.page.getByText("Compare this check number with the one on the new device before approving.", { exact: true }).waitFor();
     await target.page.getByLabel("This device check number").waitFor({ state: "visible" });
     await source.page.getByText("Show full check number", { exact: true }).click();
     await source.page.getByLabel("I compared this number with the new phone and it matches.").check();
