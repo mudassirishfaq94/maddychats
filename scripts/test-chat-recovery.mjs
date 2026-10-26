@@ -81,7 +81,7 @@ export async function testChatRecovery(base, cookieHeader, conversationId) {
     await source.waitForFunction(text => document.querySelector('textarea[aria-label="Message text"]')?.value === text, nextDraft, { timeout: 30000 });
     await source.getByRole("button", { name: activeName, exact: true }).click();
     await source.getByRole("button", { name: "Share chat access with my devices", exact: true }).click();
-    await source.getByRole("status").filter({ hasText: "No other trusted devices found" }).waitFor({ timeout: 10000 }).catch(async cause => {
+    await source.getByRole("status").filter({ hasText: "No linked phone is ready yet" }).waitFor({ timeout: 10000 }).catch(async cause => {
       throw new Error(`Restore status: ${await source.getByRole("status").allTextContents()}; modal: ${await source.locator(".card-glass").last().innerText()}`, { cause });
     });
     await source.getByRole("button", { name: "Close", exact: true }).click();
