@@ -6,7 +6,13 @@ export async function testStartupInbox(base, source, conversationId) {
   page.on("request", track);
   let releaseList;
   const listGate = new Promise(resolve => { releaseList = resolve; });
-  await page.route("**/api/conversations", async route => { await listGate; await route.continue(); });
+  const heldRequests = [];
+  const holdList = route => {
+    const pending = listGate.then(() => route.continue());
+    heldRequests.push(pending);
+    return pending;
+  };
+  await page.route("**/api/conversations", holdList);
   try {
     const response = await page.goto(base + "/app/chats");
     assert.equal(response.status(), 200);
@@ -21,5 +27,10 @@ export async function testStartupInbox(base, source, conversationId) {
     await page.getByRole("region", { name: "Conversation", exact: true }).getByText("Real encrypted delivery baseline", { exact: true }).waitFor();
     assert(requests.length > 0, "Actual row interaction still loads authorized history");
     console.log("PASS authorized initial inbox without an API waterfall, no unsolicited history downloads, and intent-driven chat opening");
-  } finally { releaseList(); await page.unroute("**/api/conversations"); page.off("request", track); }
+  } finally {
+    releaseList();
+    await Promise.all(heldRequests);
+    await page.unroute("**/api/conversations", holdList);
+    page.off("request", track);
+  }
 }

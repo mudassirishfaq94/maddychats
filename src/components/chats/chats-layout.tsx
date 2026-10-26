@@ -412,6 +412,10 @@ export function ChatsLayout({
 
       </aside>
 
+      {/* The index can deliver a data-only snapshot without replacing the
+          empty selection panel. Deep chats still mount their content once. */}
+      {!activeId ? children : null}
+
       {/* ------------------------------ chat area ------------------------------ */}
       <section
         className={cn("min-w-0 flex-1 flex-col lg:flex", activeId ? "flex" : "hidden")}
