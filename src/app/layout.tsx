@@ -10,7 +10,7 @@ import { PwaUpdatePrompt } from "@/components/pwa-update-prompt";
 import { NativeAppBridge } from "@/components/native-app-bridge";
 import { PerformanceMonitor } from "@/components/performance-monitor";
 import { InstalledLaunch, LaunchScreen } from "@/components/installed-launch";
-import { getDeviceSetupUser } from "@/server/session";
+import { getDeviceSetupUser, getSessionUser } from "@/server/session";
 import "./globals.css";
 
 const inter = Inter({
@@ -54,8 +54,12 @@ export const viewport: Viewport = {
 };
 
 export default async function RootLayout({ children }: { children: ReactNode }) {
-  const requestHeaders = await headers();
+  const [requestHeaders, initialUser, approvedUser] = await Promise.all([headers(), getDeviceSetupUser(), getSessionUser()]);
   const nonce = requestHeaders.get("x-nonce") ?? undefined;
+  // Keep redirects/notFound outside a streaming boundary. Only this already-
+  // authorized index streams while its membership-filtered inbox is rendered.
+  const streamInbox = requestHeaders.get("x-circlo-pathname") === "/app/chats" && approvedUser !== null;
+  const application = <SessionProviders initialUser={initialUser}>{children}</SessionProviders>;
   return (
     <html
       lang="en"
@@ -64,14 +68,13 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
     >
       <body>
         <Script src="/theme-init.js" strategy="beforeInteractive" nonce={nonce} />
-        <Suspense fallback={<LaunchScreen />}><SessionProviders>{children}</SessionProviders></Suspense>
+        {streamInbox ? <Suspense fallback={<LaunchScreen />}>{application}</Suspense> : application}
       </body>
     </html>
   );
 }
 
-async function SessionProviders({ children }: { children: ReactNode }) {
-  const initialUser = await getDeviceSetupUser();
+function SessionProviders({ children, initialUser }: { children: ReactNode; initialUser: Awaited<ReturnType<typeof getDeviceSetupUser>> }) {
   return <><InstalledLaunch /><AuthProvider initialUser={initialUser}>
           <PerformanceMonitor>{children}</PerformanceMonitor>
           <CapacitorDeepLinks />
