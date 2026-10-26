@@ -94,8 +94,6 @@ export async function proxy(req: NextRequest) {
   }
 
   const headers = new Headers(req.headers);
-  // Rendering hint only; never an authorization proof. Replace client input.
-  headers.set("x-circlo-pathname", pathname);
   headers.set("cookie", req.cookies.toString());
   // Always replace incoming nonce/policy headers; the browser cannot choose them.
   const nonce = randomBytes(18).toString("base64");
