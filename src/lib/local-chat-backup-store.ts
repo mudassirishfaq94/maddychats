@@ -94,7 +94,7 @@ export async function collectChatBackup(input: { userId: string; deviceId: strin
     if (calls.length > 200000) throw new Error("Call history exceeds this device's backup limit.");
   } while (callCursor);
   await checkAccount(); signal.throwIfAborted();
-  return { format: "circlo-chats-v1", userId, createdAt: new Date().toISOString(), recovery: collectRecoveryBundle(userId, deviceId), chats: chats.filter(chat => !chatLocked(chat.id)), calls, missingMedia, unreadableMessages };
+  return { format: "circlo-chats-v1", userId, createdAt: new Date().toISOString(), recovery: collectRecoveryBundle(userId, deviceId), chats: chats.filter(chat => !chatLocked(chat.id)), calls: calls.filter(call => !call.conversationId || !chatLocked(call.conversationId)), missingMedia, unreadableMessages };
 }
 
 const pending = new Map<string, Promise<ChatBackup>>();

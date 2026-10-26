@@ -52,6 +52,10 @@ export async function testLocalChatBackup(base, pool, source, owner, password, c
     await restore.getByLabel("Choose a saved chat", { exact: true }).selectOption(conversationId);
     await restore.getByText("Real encrypted delivery baseline", { exact: true }).waitFor();
     assert(await target.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), "Local recovery fits a mobile viewport");
+    await target.evaluate(id => { localStorage.setItem("maddy:locked-chats", JSON.stringify([id])); window.dispatchEvent(new Event("maddy:locked-chats")); }, conversationId);
+    await restore.getByRole("button", { name: "View imported chats", exact: true }).click();
+    assert.equal(await restore.getByLabel("Choose a saved chat", { exact: true }).locator(`option[value="${conversationId}"]`).count(), 0, "Reopening an archive cannot expose a chat locked since its backup");
+    assert.equal(await restore.getByText("Real encrypted delivery baseline", { exact: true }).count(), 0);
   } finally {
     await context.close();
     if (targetId) await pool.query("delete from e2ee_keys where user_id=$1 and device_id=$2 and trusted_at is null", [owner.id, targetId]);
