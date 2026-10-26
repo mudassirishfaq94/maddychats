@@ -60,7 +60,7 @@ async function main() {
     const setupPage = await api("/app/admin", noMfaCookie);
     assert.equal(setupPage.status, 200);
     const setupHtml = await setupPage.text();
-    assert(setupHtml.includes("Secure your admin account") && setupHtml.includes("/app/settings#two-step-verification"));
+    assert(setupHtml.includes("Set up the extra sign-in check") && setupHtml.includes("/app/settings#two-step-verification"));
     assert(!setupHtml.includes("Admin Dashboard v1.0"), "MFA setup screen never includes privileged admin children");
     assert.equal((await api("/api/e2ee/signal/send", aliceCookie, "POST", {})).status, 503, "Experimental send cannot bypass production policies");
     assert.equal((await api("/api/admin/users", noMfaCookie, "PATCH", { userId: target.id, action: "role", role: "moderator" })).status, 403, "Admin writes require MFA enrollment");

@@ -61,8 +61,7 @@ function LandingChatPreview() {
       <div className="absolute -inset-5 rounded-[2.5rem] bg-[radial-gradient(ellipse_at_center,color-mix(in_srgb,var(--accent)_17%,transparent),transparent_70%)]" aria-hidden="true" />
       <div className="relative overflow-hidden rounded-[1.8rem] border border-[var(--border-strong)] bg-[var(--surface)] shadow-[0_30px_90px_-35px_rgba(0,0,0,.48)] sm:rounded-[2rem]">
         <div className="flex items-center justify-between border-b border-[var(--border)] px-4 py-3 sm:px-5 sm:py-4">
-          <div className="flex items-center gap-2.5"><LogoWordmark size={27} /><span className="rounded-full border border-[var(--border)] px-2 py-1 text-[10px] text-[var(--muted)]">SAMPLE</span></div>
-          <span className="text-[11px] text-[var(--muted)]">Example chats · names are made up</span>
+          <LogoWordmark size={27} />
         </div>
 
         <div className="grid min-h-[390px] sm:grid-cols-[190px_1fr] md:min-h-[430px]">

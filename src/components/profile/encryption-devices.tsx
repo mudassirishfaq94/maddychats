@@ -34,6 +34,8 @@ export function EncryptionDevices({ recoveryEmail, openRecovery = false, setup =
   const [busy, setBusy] = useState(false);
   const [links, setLinks] = useState<LinkRequest[]>([]);
   const [issuedQr, setIssuedQr] = useState<{ deviceId: string; payload: string; expiresAt: string } | null>(null);
+  const [issuedCode, setIssuedCode] = useState<{ deviceId: string; code: string; expiresAt: string } | null>(null);
+  const [entryCode, setEntryCode] = useState("");
   const [qrExpired, setQrExpired] = useState(false);
   const [scannedLink, setScannedLink] = useState<{ requestId: string; token: string } | null>(null);
   const [status, setStatus] = useState("");
@@ -88,10 +90,11 @@ export function EncryptionDevices({ recoveryEmail, openRecovery = false, setup =
   const current = devices.find(device => device.deviceId === encryption.deviceId);
 
   useEffect(() => {
-    if (!issuedQr) return;
-    const timer = window.setTimeout(() => setQrExpired(true), Math.max(0, Date.parse(issuedQr.expiresAt) - Date.now()));
+    const issued = issuedQr ?? issuedCode;
+    if (!issued) return;
+    const timer = window.setTimeout(() => setQrExpired(true), Math.max(0, Date.parse(issued.expiresAt) - Date.now()));
     return () => window.clearTimeout(timer);
-  }, [issuedQr]);
+  }, [issuedQr, issuedCode]);
 
   useEffect(() => { if (current?.trustedAt) onLinked?.(); }, [current?.trustedAt, onLinked]);
 
@@ -144,10 +147,29 @@ export function EncryptionDevices({ recoveryEmail, openRecovery = false, setup =
       if (!response.ok || !data.id || !data.token || !data.expiresAt) throw new Error(data.error ?? "Unable to create a secure QR code.");
       const payload = createDeviceLinkQrPayload(data.id, data.token);
       setIssuedQr({ deviceId: targetDeviceId, payload, expiresAt: data.expiresAt });
+      setIssuedCode(null);
       setQrExpired(false);
       setStatus("On a device you already linked, scan this QR and compare the check number before approving.");
     } catch (cause) {
       setStatus(cause instanceof Error ? cause.message : "Unable to create a secure QR code.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function createLinkCode(targetDeviceId: string) {
+    setBusy(true);
+    setStatus("Creating a one-time linking code…");
+    try {
+      const response = await e2eeRequest("/api/e2ee/devices/link/code", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ deviceId: targetDeviceId }) });
+      const data = await response.json() as { code?: string; expiresAt?: string; error?: string };
+      if (!response.ok || !data.code || !data.expiresAt) throw new Error(data.error ?? "Unable to create a linking code.");
+      setIssuedQr(null);
+      setIssuedCode({ deviceId: targetDeviceId, code: data.code, expiresAt: data.expiresAt });
+      setQrExpired(false);
+      setStatus("On your linked device, enter this code and compare the check number before approving.");
+    } catch (cause) {
+      setStatus(cause instanceof Error ? cause.message : "Unable to create a linking code.");
     } finally {
       setBusy(false);
     }
@@ -168,6 +190,28 @@ export function EncryptionDevices({ recoveryEmail, openRecovery = false, setup =
       setStatus("Compare this check number with the one on the new device before approving.");
     } catch (cause) {
       setStatus(cause instanceof Error ? cause.message : "Unable to verify this QR code.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function verifyEntryCode() {
+    setBusy(true);
+    setStatus("Checking the linking code…");
+    try {
+      const response = await e2eeRequest("/api/e2ee/devices/link/code/verify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code: entryCode, deviceId: encryption.deviceId }) });
+      const data = await response.json() as { id?: string; token?: string; error?: string };
+      if (!response.ok || !data.id || !data.token) throw new Error(data.error ?? "That code could not be used. Check it and try again.");
+      const snapshot = await refresh();
+      const request = snapshot?.requests.find(item => item.id === data.id && item.status === "pending");
+      const target = snapshot?.devices.find(device => device.deviceId === request?.deviceId && !device.trustedAt);
+      if (!request || !target || request.fingerprint !== target.fingerprint || new Date(request.expiresAt).getTime() <= Date.now()) throw new Error("That code has expired or the device changed. Ask the new device for another code.");
+      setVerified([]);
+      setScannedLink({ requestId: data.id, token: data.token });
+      setEntryCode("");
+      setStatus("Compare the check number on both devices before approving.");
+    } catch (cause) {
+      setStatus(cause instanceof Error ? cause.message : "Unable to check the linking code.");
     } finally {
       setBusy(false);
     }
@@ -200,13 +244,15 @@ export function EncryptionDevices({ recoveryEmail, openRecovery = false, setup =
       </div> : <>
       <button type="button" className="btn btn-primary min-h-11 w-full" disabled={busy} onClick={() => void createLinkQr(current.deviceId)}>{issuedQr && issuedQr.deviceId === current.deviceId ? "Create a new QR code" : "Show a device-link QR code"}</button>
       {issuedQr?.deviceId === current.deviceId && !qrExpired ? <DeviceLinkQr payload={issuedQr.payload} expiresAt={issuedQr.expiresAt} /> : null}
+      <button type="button" className="min-h-11 text-sm underline" disabled={busy} onClick={() => void createLinkCode(current.deviceId)}>Can’t scan? Show a one-time code</button>
+      {issuedCode?.deviceId === current.deviceId && !qrExpired ? <div className="rounded-xl border border-[var(--border)] p-4 text-center"><p className="text-xs text-[var(--muted)]">Enter this on a device you already linked · expires in 3 minutes</p><code aria-label="Device linking code" className="mt-2 block text-2xl font-bold tracking-[0.18em]">{issuedCode.code}</code></div> : null}
       <button type="button" className="min-h-11 text-sm underline" onClick={() => { setStatus(""); setRecoveryOpen(true); }}>I don’t have my old device</button>
       </>}
     </div>}
-    {!setup && current && !current.trustedAt && <div className="mt-4 rounded-xl border border-[var(--border)] p-3"><button type="button" className="btn btn-primary min-h-11 w-full" disabled={busy} onClick={() => void createLinkQr(current.deviceId)}>{issuedQr && issuedQr.deviceId === current.deviceId ? "Create a new QR code" : "Show a QR code to link this device"}</button>{issuedQr?.deviceId === current.deviceId && !qrExpired ? <DeviceLinkQr payload={issuedQr.payload} expiresAt={issuedQr.expiresAt} /> : null}<p className="mt-2 text-xs text-[var(--muted)]">Keep this page open. On a device you already linked, scan the code and compare the check number.</p></div>}
+    {!setup && current && !current.trustedAt && <div className="mt-4 rounded-xl border border-[var(--border)] p-3"><button type="button" className="btn btn-primary min-h-11 w-full" disabled={busy} onClick={() => void createLinkQr(current.deviceId)}>{issuedQr && issuedQr.deviceId === current.deviceId ? "Create a new QR code" : "Show a QR code to link this device"}</button>{issuedQr?.deviceId === current.deviceId && !qrExpired ? <DeviceLinkQr payload={issuedQr.payload} expiresAt={issuedQr.expiresAt} /> : null}<button type="button" className="mt-2 min-h-11 text-sm underline" disabled={busy} onClick={() => void createLinkCode(current.deviceId)}>Can’t scan? Show a one-time code</button>{issuedCode?.deviceId === current.deviceId && !qrExpired ? <div className="mt-2 rounded-xl border border-[var(--border)] p-4 text-center"><p className="text-xs text-[var(--muted)]">Enter this on a device you already linked · expires in 3 minutes</p><code aria-label="Device linking code" className="mt-2 block text-2xl font-bold tracking-[0.18em]">{issuedCode.code}</code></div> : null}<p className="mt-2 text-xs text-[var(--muted)]">Keep this page open. On a device you already linked, scan the QR code or enter this code, then compare the check number.</p></div>}
     {!setup && current && <div className="mt-4 rounded-2xl bg-[var(--surface-2)] p-4 text-sm"><p className="font-semibold">This device: {current.trustedAt ? "Linked" : "Waiting for approval"}</p><p className="mt-1 text-[var(--muted)]">{current.trustedAt ? "Ready to open your private chats." : "Link this device to open your private chats."}</p><p className="mt-2 text-xs text-[var(--muted)]">{current.deviceName || browserLabel(current.browser) || "This device"}{current.country ? ` · ${countryName(current.country)}` : ""}</p><details className="mt-3 text-xs"><summary className="cursor-pointer min-h-11 py-3">Device details</summary><p className="mt-2">Compare this number only while linking a device.</p><code className="mt-1 block break-all select-all" aria-label="This device check number">{current.fingerprint}</code><DeviceIdentityEditor key={current.deviceId} deviceId={current.deviceId} name={current.deviceName} country={current.country} onSaved={async () => { await refresh(); }} /></details></div>}
     {setup && !recoveryOpen && current && !current.trustedAt && <details className="mt-3 text-xs"><summary className="min-h-11 cursor-pointer py-2">Show this device’s check number</summary><p className="mt-2">Compare it on both devices before approving.</p><code className="mt-1 block break-all select-all" aria-label="This device check number">{current.fingerprint}</code></details>}
-    {!setup && current?.trustedAt ? <DeviceLinkScanner onPayload={raw => void handleScannedPayload(raw)} /> : null}
+    {!setup && current?.trustedAt ? <><DeviceLinkScanner onPayload={raw => void handleScannedPayload(raw)} /><div className="mt-3 rounded-xl border border-[var(--border)] p-3"><label className="block text-sm font-medium" htmlFor="device-link-entry-code">Or enter a code from your new device</label><div className="mt-2 flex gap-2"><input id="device-link-entry-code" className="field-input min-w-0 flex-1 uppercase tracking-widest" autoComplete="one-time-code" maxLength={11} value={entryCode} onChange={event => setEntryCode(event.target.value.toUpperCase().replace(/[^2-9A-HJ-NP-Z-]/g, "").slice(0, 11))} placeholder="ABCDE-FGHJK"/><button type="button" className="btn btn-secondary min-h-11" disabled={busy || entryCode.replaceAll("-", "").length !== 10} onClick={() => void verifyEntryCode()}>Check code</button></div><p className="mt-2 text-xs text-[var(--muted)]">You’ll still compare the check number and approve the new device.</p></div></> : null}
     {!setup && current && !current.trustedAt && <p className="mt-3 text-sm text-[var(--muted)]">This browser cannot approve devices. Use a device marked Linked to link this one, or choose recovery below.</p>}
 
     {!setup && devices.some(device => device.trustedAt && device.deviceId !== encryption.deviceId && !device.sessionRevokedAt && device.sessionState !== "expired") && <details className="mt-4 rounded-xl border border-[var(--border)] p-3"><summary className="cursor-pointer min-h-11 py-2 text-sm font-semibold">Other linked devices ({devices.filter(device => device.trustedAt && device.deviceId !== encryption.deviceId && !device.sessionRevokedAt && device.sessionState !== "expired").length})</summary><ul className="space-y-2">{devices.filter(device => device.trustedAt && device.deviceId !== encryption.deviceId && !device.sessionRevokedAt && device.sessionState !== "expired").map(device => <li key={device.deviceId} className="border-t border-[var(--border)] py-3 text-sm"><p className="font-medium">{device.deviceName || browserLabel(device.browser) || "Linked device"}</p><p className="mt-1 text-xs text-[var(--muted)]">Linked{device.country ? ` · ${countryName(device.country)}` : ""}{device.lastUsedAt ? ` · Last used ${new Date(device.lastUsedAt).toLocaleDateString()}` : ""}</p></li>)}</ul></details>}
@@ -269,7 +315,7 @@ export function EncryptionDevices({ recoveryEmail, openRecovery = false, setup =
         void encryption.approveDevice(device.deviceId, device.fingerprint, { linkId: scannedLink.requestId, token: scannedLink.token, decision: "approve" }).then(async () => { setScannedLink(null); await refresh(); setVerified([]); setStatus("Phone approved. Sending your chat history…"); window.dispatchEvent(new Event("maddy:message-request-keys")); }).catch(cause => setStatus(cause instanceof Error ? cause.message : "Could not approve this phone. Try again.")).finally(() => setBusy(false));
       }}>Approve this device</button>
       {!verified.includes(device.deviceId) && <p className="mt-1 text-xs text-[var(--muted)]">Compare the number on both screens before approving.</p>}
-      </> : <p className="mt-2 text-xs text-[var(--muted)]">Scan this device’s QR code to verify the request before approving.</p>}
+      </> : <p className="mt-2 text-xs text-[var(--muted)]">Scan the QR code or enter its one-time code to verify this request before approving.</p>}
       </>}
     </li>)}</ul>}
     {(!setup || !recoveryOpen) && <details className="mt-4 text-sm"><summary className="cursor-pointer min-h-11 py-3">{setup ? "Need help?" : "Troubleshooting"}</summary>

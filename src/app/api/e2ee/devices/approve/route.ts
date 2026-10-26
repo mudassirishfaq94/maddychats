@@ -68,6 +68,7 @@ export async function POST(req: NextRequest) {
       if (decision === "approve" && (typeof body.token !== "string" || !/^[A-Za-z0-9_-]{43}$/.test(body.token))) return jsonError(422, "Scan a current device-link QR code before approving.");
       const [link] = await db.select().from(deviceLinkRequests).where(and(eq(deviceLinkRequests.id, body.linkId), eq(deviceLinkRequests.userId, user.id), eq(deviceLinkRequests.deviceId, target.deviceId), eq(deviceLinkRequests.status, "pending"), gt(deviceLinkRequests.expiresAt, new Date()))).limit(1);
       if (!link || link.fingerprint !== targetHash) return jsonError(409, "Linking request expired or was already used.");
+      if (link.sourceDeviceId && link.sourceDeviceId !== source.deviceId) return jsonError(403, "Approve this code from the linked device where you entered it.");
       const [session] = await db.select({ id: deviceSessions.id }).from(deviceSessions).where(and(eq(deviceSessions.id, link.sessionId), eq(deviceSessions.userId, user.id), isNull(deviceSessions.revokedAt), gt(deviceSessions.expiresAt, new Date()))).limit(1);
       if (!session || (decision === "approve" && (typeof body.token !== "string" || digest(body.token) !== link.codeHash))) return jsonError(403, "Device-link QR token does not match this device.");
       linkId = link.id;
