@@ -25,7 +25,7 @@ export async function testStartupInbox(base, source, conversationId) {
     await page.locator(`.chat-list-row[href="/app/chats/${conversationId}"]`).click();
     await page.getByRole("textbox", { name: "Message text", exact: true }).waitFor();
     await page.getByRole("region", { name: "Conversation", exact: true }).getByText("Real encrypted delivery baseline", { exact: true }).waitFor();
-    assert(requests.length > 0, "Actual row interaction still loads authorized history");
+    assert(requests.some(request => new URL(request.url()).pathname.startsWith(`/api/conversations/${conversationId}/`)), "Actual row interaction still loads the selected conversation's authorized history");
     console.log("PASS authorized initial inbox without an API waterfall, no unsolicited history downloads, and intent-driven chat opening");
   } finally {
     releaseList();
