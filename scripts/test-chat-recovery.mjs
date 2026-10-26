@@ -103,7 +103,11 @@ export async function testChatRecovery(base, cookieHeader, conversationId) {
     await target.getByRole("button", { name: "Show queued message options", exact: true }).waitFor();
     await source.goto(`${base}/app/profile#encryption-devices`);
     await target.goto(`${base}/app/profile#encryption-devices`);
-    const linkResponse = target.waitForResponse(response => new URL(response.url()).pathname.replace(/\/+$/, "") === "/api/e2ee/devices/link" && response.request().method() === "POST");
+    const linkResponse = target.waitForResponse(response => {
+      let request = response.request();
+      while (request.redirectedFrom()) request = request.redirectedFrom();
+      return new URL(request.url()).pathname.replace(/\/+$/, "") === "/api/e2ee/devices/link" && request.method() === "POST";
+    });
     await target.getByRole("button", { name: "Show a device-link QR code", exact: true }).click();
     const linkCreated = await linkResponse.catch(async cause => {
       throw new Error(`Device-link request did not finish; status: ${await target.getByRole("status").allTextContents()}`, { cause });
