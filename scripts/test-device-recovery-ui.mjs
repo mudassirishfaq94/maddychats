@@ -121,9 +121,9 @@ export async function testDeviceRecoveryUI(base, pool) {
     await login(target.context); await target.page.reload();
     await target.page.getByText("This device: Linked", { exact: true }).waitFor({ timeout: 30000 });
     const downloadEvent = source.page.waitForEvent("download");
-    await source.page.getByRole("button", { name: "Download recovery file", exact: true }).click();
+    await source.page.getByRole("button", { name: "Download recovery file and phrase", exact: true }).click();
     const file = await readFile(await (await downloadEvent).path());
-    const recoveryCode = await source.page.locator('code[aria-label="Recovery file code"]').innerText();
+    const recoveryCode = await source.page.locator('code[aria-label="24-word recovery phrase"]').innerText();
     await openDeviceTools(source.page);
     const sourceFingerprint = await source.page.getByLabel("This device check number").innerText();
     await source.context.close();
