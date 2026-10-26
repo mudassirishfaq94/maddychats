@@ -58,7 +58,9 @@ export async function openHostedCameraSettings(): Promise<void> {
 export async function saveHostedFile(blob: Blob, name: string): Promise<boolean> {
   if (!hasHostedPushBridge()) return false;
   const file = { name, mime: "application/octet-stream", data: "", size: blob.size };
-  const transfer = (await request("backup-start", undefined, undefined, undefined, undefined, undefined, file))?.token;
+  let transfer: string | undefined;
+  try { transfer = (await request("backup-start", undefined, undefined, undefined, undefined, undefined, file))?.token; }
+  catch (cause) { if (cause instanceof Error && cause.message === "Unsupported notification command.") return false; throw cause; }
   if (!transfer) return false;
   try {
     for (let offset = 0; offset < blob.size; offset += 192 * 1024) {

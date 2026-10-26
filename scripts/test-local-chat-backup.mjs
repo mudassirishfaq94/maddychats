@@ -24,7 +24,30 @@ export async function testLocalChatBackup(base, pool, source, owner, password, c
   const file = await download, bytes = await readFile(await file.path());
   assert(file.suggestedFilename().endsWith(".circlo"));
   assert.equal(bytes.includes(Buffer.from("Real encrypted delivery baseline")), false);
-  await section.getByRole("button", { name: "Pause daily backup", exact: true }).click();
+  // Pause from a second tab while collection is in flight. Completion must not
+  // restore the old enabled settings or replace the previous archive.
+  const settingsPage = await page.context().newPage();
+  await settingsPage.goto(base + "/app/profile#local-chat-backup");
+  const pause = settingsPage.getByRole("button", { name: "Pause daily backup", exact: true });
+  await pause.waitFor();
+  let release, arrived;
+  const gate = new Promise(resolve => { release = resolve; });
+  const waiting = new Promise(resolve => { arrived = resolve; });
+  const detailPath = `**/api/conversations/${conversationId}`;
+  await page.route(detailPath, async route => { arrived(); await gate; await route.continue(); });
+  try {
+    await section.getByRole("button", { name: "Back up now", exact: true }).click();
+    await Promise.race([waiting, page.waitForTimeout(15000).then(() => { throw new Error("Backup detail collection did not begin"); })]);
+    await pause.click(); await settingsPage.getByRole("button", { name: "Enable daily backup", exact: true }).waitFor();
+    release();
+    await section.getByRole("status").filter({ hasText: "Daily backup is paused" }).waitFor();
+    const current = await page.evaluate(async userId => {
+      const db = await new Promise(resolve => { const request = indexedDB.open(`circlo-backup:${userId}`); request.onsuccess = () => resolve(request.result); });
+      const value = await new Promise(resolve => { const request = db.transaction("backup").objectStore("backup").get("settings"); request.onsuccess = () => resolve(request.result); });
+      db.close(); return { enabled: value.enabled, savedAt: value.savedAt };
+    }, owner.id);
+    assert.equal(current.enabled, false); assert.equal(current.savedAt, saved.savedAt);
+  } finally { release(); await page.unroute(detailPath); await settingsPage.close(); }
   const context = await page.context().browser().newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: "block" });
   let targetId;
   try {

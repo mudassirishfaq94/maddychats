@@ -336,14 +336,14 @@ export function useE2EE(userId: string | undefined) {
   const rememberSendingKey = useCallback(async (conversationId: string, key: CryptoKey, historical = false) => {
     if (!userId || !keyPairRef.current) throw new Error("Device keys are not ready");
     const storageKey = `e2ee_sentkeys_${userId}_${conversationId}`;
-    const saved = storedChatKeys(userId, storageKey);
     const fingerprint = await conversationFingerprint(key);
+    const wrapped = await encryptKeyForUser(key, keyPairRef.current.publicKey);
+    const saved = storedChatKeys(userId, storageKey);
     const previous = saved.find(entry => entry.fingerprint === fingerprint);
     if (previous) {
       if (!historical && previous.historical) localStorage.setItem(storageKey, JSON.stringify(saved.map(entry => entry.fingerprint === fingerprint ? { ...entry, historical: false } : entry)));
       return;
     }
-    const wrapped = await encryptKeyForUser(key, keyPairRef.current.publicKey);
     localStorage.setItem(storageKey, JSON.stringify([...saved, { fingerprint, wrapped, ...(historical ? { historical: true } : {}) }]));
     window.dispatchEvent(new Event("maddy:recovery-keys-changed"));
   }, [userId]);

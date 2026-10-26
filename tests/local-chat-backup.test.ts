@@ -3,9 +3,32 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { backupCode, backupKey, backupEligible, openChatBackup, sealChatBackup, validateChatBackup, type ChatBackup } from "../src/lib/local-chat-backup";
 import { generateKeyPair, exportPrivateKey, exportPublicKey, encryptPrivateKeyForStorage, generateConversationKey, encryptKeyForUser, decryptKeyFromSender, conversationFingerprint, encryptMessage, decryptMessage } from "../src/lib/crypto";
-import { latestSendingKey, rewrapRecoveryHistory } from "../src/lib/device-recovery-file";
+import { latestSendingKey, rewrapRecoveryHistory, storedChatKeys, commitRecoveredHistory } from "../src/lib/device-recovery-file";
 import { collectChatBackup } from "../src/lib/local-chat-backup-store";
 import type { MessageDTO } from "../src/lib/types";
+
+test("history imports preserve sending keys and roll back failed key or archive writes", async () => {
+  const original = Object.getOwnPropertyDescriptor(globalThis, "localStorage"), userId = randomUUID();
+  const values = new Map<string, string>(); let fail = "";
+  const store = { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => { if (key === fail) { fail = ""; throw new Error("storage full"); } values.set(key, value); }, removeItem: (key: string) => values.delete(key) };
+  Object.defineProperty(globalThis, "localStorage", { configurable: true, value: store });
+  try {
+    const active = { fingerprint: "same", wrapped: "live" }, old = { fingerprint: "same", wrapped: "old", historical: true };
+    values.set("chat", JSON.stringify([active]));
+    values.set(`e2ee_restored_${userId}`, JSON.stringify({ keys: { chat: JSON.stringify([old]) } }));
+    assert.deepEqual(storedChatKeys(userId, "chat"), [active]);
+    values.delete(`e2ee_restored_${userId}`);
+    const before = new Map(values), recovered = { chat: [{ fingerprint: "history", wrapped: "wrap", historical: true }], other: [old] };
+    let published = false;
+    fail = "other";
+    await assert.rejects(commitRecoveredHistory(userId, recovered, async () => { published = true; }, new AbortController().signal), /storage full/);
+    assert.equal(published, false); assert.deepEqual(values, before);
+    await assert.rejects(commitRecoveredHistory(userId, recovered, async () => { throw new Error("archive quota"); }, new AbortController().signal), /archive quota/);
+    assert.deepEqual(values, before);
+    await commitRecoveredHistory(userId, recovered, async () => { assert.equal(storedChatKeys(userId, "chat").length, 2); published = true; }, new AbortController().signal);
+    assert.equal(published, true); assert.equal(latestSendingKey(storedChatKeys(userId, "chat"))?.wrapped, "live");
+  } finally { if (original) Object.defineProperty(globalThis, "localStorage", original); else Reflect.deleteProperty(globalThis, "localStorage"); }
+});
 
 async function fixture(): Promise<ChatBackup> {
   const userId = randomUUID(), secret = "a".repeat(64), pair = await generateKeyPair();

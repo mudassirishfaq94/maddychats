@@ -40,3 +40,11 @@ test("native backup export transfers bounded, ordered chunks and opens only its 
   try { assert.equal(await saveHostedFile(new Blob([bytes]), "backup.circlo"), true); assert.deepEqual(Buffer.concat(received), Buffer.from(bytes)); await openHostedCameraSettings(); }
   finally { if (original) Object.defineProperty(globalThis, "window", original); else Reflect.deleteProperty(globalThis, "window"); }
 });
+
+test("old APK backup support gives an upgrade fallback without swallowing other native errors", async () => {
+  const original = Object.getOwnPropertyDescriptor(globalThis, "window"); let error = "Unsupported notification command.";
+  const port = { onmessage: null as ((event: MessageEvent<string>) => void) | null, postMessage(raw: string) { const value = JSON.parse(raw); queueMicrotask(() => port.onmessage?.({ data: JSON.stringify({ id: value.id, error }) } as MessageEvent<string>)); } };
+  Object.defineProperty(globalThis, "window", { configurable: true, value: { CircloPush: port } });
+  try { assert.equal(await saveHostedFile(new Blob(["encrypted"]), "backup.circlo"), false); error = "Archive too large"; await assert.rejects(saveHostedFile(new Blob(["encrypted"]), "backup.circlo"), /Archive too large/); }
+  finally { if (original) Object.defineProperty(globalThis, "window", original); else Reflect.deleteProperty(globalThis, "window"); }
+});

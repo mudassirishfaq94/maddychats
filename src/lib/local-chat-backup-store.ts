@@ -4,7 +4,7 @@ import { isActiveContentType } from "./media-types";
 import type { ConversationSummary, MessagePage } from "./types";
 import { chatLocked } from "../../public/offline-store.js";
 
-export type BackupSettings = { enabled: boolean; key: CryptoKey; savedAt?: string; error?: string };
+export type BackupSettings = { enabled: boolean; key: CryptoKey; savedAt?: string; error?: string; failedAt?: number };
 type Records = { settings?: BackupSettings; archive?: Blob; restored?: { archive: Blob; key: CryptoKey; savedAt: string } };
 async function database(userId: string): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -27,6 +27,28 @@ export async function writeBackupRecords(userId: string, values: Records): Promi
   window.dispatchEvent(new Event("circlo:local-backup"));
 }
 
+/** Read consent and publish in one transaction; background work cannot undo a pause. */
+async function updateBackupRecords(userId: string, update: (current: BackupSettings) => Records): Promise<void> {
+  const db = await database(userId);
+  let enabled: boolean | undefined;
+  try { await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction("backup", "readwrite"), store = tx.objectStore("backup"), request = store.get("settings");
+    request.onsuccess = () => {
+      try {
+        if (!request.result) throw new Error("Enable local backups first.");
+        const values = update(request.result);
+        for (const [id, value] of Object.entries(values)) store.put(value, id);
+        enabled = values.settings?.enabled;
+      } catch (cause) { tx.abort(); reject(cause); }
+    };
+    tx.oncomplete = () => resolve();
+    tx.onerror = tx.onabort = () => reject(new Error("Backup could not be saved. Your previous backup is unchanged."));
+  }); } finally { db.close(); }
+  if (enabled !== undefined) { try { localStorage.setItem(`circlo:local-backup-enabled:${userId}`, enabled ? "1" : "0"); } catch {} }
+  window.dispatchEvent(new Event("circlo:local-backup"));
+}
+export const patchBackupSettings = (userId: string, patch: Partial<Pick<BackupSettings, "enabled" | "error" | "failedAt">>) => updateBackupRecords(userId, current => ({ settings: { ...current, ...patch } }));
+
 export async function collectChatBackup(input: { userId: string; deviceId: string; signal: AbortSignal; decrypt: (text: string, id: string) => Promise<string> }): Promise<ChatBackup> {
   const { userId, deviceId, signal, decrypt } = input;
   const json = async (url: string) => { signal.throwIfAborted(); const response = await fetch(url, { cache: "no-store", signal: AbortSignal.any([signal, AbortSignal.timeout(30000)]) }); if (!response.ok) throw new Error("Backup paused. Reconnect and try again; your previous backup is safe."); const value = await response.json(); signal.throwIfAborted(); return value; };
@@ -40,7 +62,7 @@ export async function collectChatBackup(input: { userId: string; deviceId: strin
     signal.throwIfAborted();
     if (chatLocked(chat.id)) continue;
     // Locked chats require their own unlock; background backups cannot bypass it.
-    const detailResponse = await fetch(`/api/conversations/${chat.id}`, { cache: "no-store", signal });
+    const detailResponse = await fetch(`/api/conversations/${chat.id}`, { cache: "no-store", signal: AbortSignal.any([signal, AbortSignal.timeout(30000)]) });
     if (!detailResponse.ok) throw new Error("A chat is no longer available. Retry your backup.");
     const detail = (await detailResponse.json()).conversation;
     if (detail.disappearingSeconds > 0) continue;
@@ -107,7 +129,10 @@ export function refreshLocalBackup(input: Parameters<typeof collectChatBackup>[0
     await validateChatBackup(snapshot, input.userId);
     const archive = await sealChatBackup(snapshot, settings.key);
     input.signal.throwIfAborted();
-    await writeBackupRecords(input.userId, { archive, settings: { ...settings, savedAt: snapshot.createdAt, error: snapshot.missingMedia || snapshot.unreadableMessages ? `Backup saved with ${snapshot.missingMedia} uncopied media files and ${snapshot.unreadableMessages} unreadable messages. Keep the originals and retry recovery.` : undefined } });
+    await updateBackupRecords(input.userId, current => {
+      if (!current.enabled) throw new Error("Daily backup is paused. Your previous backup is unchanged.");
+      return { archive, settings: { ...current, failedAt: undefined, savedAt: snapshot.createdAt, error: snapshot.missingMedia || snapshot.unreadableMessages ? `Backup saved with ${snapshot.missingMedia} uncopied media files and ${snapshot.unreadableMessages} unreadable messages. Keep the originals and retry recovery.` : undefined } };
+    });
     return snapshot;
   })();
   pending.set(input.userId, work);

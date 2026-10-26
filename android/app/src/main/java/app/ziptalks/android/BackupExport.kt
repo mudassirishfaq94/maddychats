@@ -26,6 +26,9 @@ class BackupExport(private val activity: MainActivity) {
         }.start()
     }
     fun start(name: String, size: Long): String {
+        if (completed == null && transfer?.let { System.currentTimeMillis() - it.started >= 10 * 60 * 1000L } == true) {
+            transfer?.file?.delete(); transfer = null
+        }
         check(transfer == null && completed == null) { "Another backup is being saved. Finish or cancel it first." }
         require(size in 1..(128L * 1024 * 1024 + 1024)) { "Backup exceeds the supported archive size." }
         require(Regex("[a-zA-Z0-9._ -]{1,120}\\.circlo").matches(name)) { "Invalid backup filename." }

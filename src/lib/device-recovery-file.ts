@@ -16,7 +16,32 @@ export const latestSendingKey = (keys: StoredChatKey[]) => keys.filter(key => !k
 export function storedChatKeys(userId: string, storageKey: string): StoredChatKey[] {
   const local = JSON.parse(localStorage.getItem(storageKey) ?? "[]");
   const recovered = JSON.parse(restoredBundle(userId)?.keys[storageKey] ?? "[]");
-  return [...new Map([...local, ...recovered].map((entry: StoredChatKey) => [entry.fingerprint, entry])).values()];
+  const merged = new Map<string, StoredChatKey>();
+  for (const entry of [...local, ...recovered] as StoredChatKey[]) {
+    const previous = merged.get(entry.fingerprint);
+    if (!previous || (previous.historical && !entry.historical)) merged.set(entry.fingerprint, entry);
+  }
+  return [...merged.values()];
+}
+
+/** Publish the restored archive only after all recovered keys are durable. */
+export async function commitRecoveredHistory(userId: string, recovered: Record<string, StoredChatKey[]>, publish: () => Promise<void>, signal: AbortSignal): Promise<void> {
+  const previous = new Map<string, string | null>();
+  try {
+    signal.throwIfAborted();
+    for (const [storageKey, entries] of Object.entries(recovered)) {
+      const current = storedChatKeys(userId, storageKey), known = new Set(current.map(entry => entry.fingerprint));
+      previous.set(storageKey, localStorage.getItem(storageKey));
+      localStorage.setItem(storageKey, JSON.stringify([...entries.filter(entry => !known.has(entry.fingerprint)), ...current]));
+    }
+    signal.throwIfAborted();
+    await publish();
+  } catch (cause) {
+    for (const [storageKey, value] of previous) {
+      if (value === null) localStorage.removeItem(storageKey); else localStorage.setItem(storageKey, value);
+    }
+    throw cause;
+  }
 }
 
 /** Recover history onto the current device without reviving a revoked identity
