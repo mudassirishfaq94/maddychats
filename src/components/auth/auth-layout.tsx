@@ -75,12 +75,12 @@ export function AuthLayout({
         </div>
 
         <p className="text-xs text-[var(--muted)]">
-          Real-time · End-to-end encrypted · Simple
+          Private chats · Stay in touch · Simple
         </p>
         <div className="mt-2 flex items-center gap-2 rounded-xl border border-[color-mix(in_srgb,var(--accent)_20%,transparent)] bg-[color-mix(in_srgb,var(--accent)_5%,transparent)] px-3 py-2">
           <Lock className="h-3.5 w-3.5 shrink-0 text-[var(--accent-fg)]" />
           <span className="text-[0.7rem] leading-relaxed text-[var(--muted)]">
-            Chat messages are encrypted on your device before sending. Keep your device keys safe to access your history.
+            Your device locks messages before sending. Keep a recovery option so you can open chats on a new device.
           </span>
         </div>
       </section>
@@ -123,7 +123,7 @@ export function AuthLayout({
         </div>
 
         <p className="text-center text-xs text-[var(--muted)] opacity-70">
-          <span className="inline-flex items-center gap-1"><Lock className="h-2.5 w-2.5" />End-to-end encrypted</span>
+          <span className="inline-flex items-center gap-1"><Lock className="h-2.5 w-2.5" />Private chats locked before sending</span>
         </p>
       </section>
     </main>

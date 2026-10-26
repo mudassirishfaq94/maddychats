@@ -67,7 +67,7 @@ export async function testDeviceAccess(base, pool, secret) {
     await fingerprintDetails.locator(":scope > summary").click();
     await target.page.getByLabel("This device safety number").waitFor({state:"visible"});
     await source.page.getByText("Troubleshooting",{exact:true}).click();
-    await source.page.getByRole("button",{name:"Refresh encryption devices",exact:true}).click();
+    await source.page.getByRole("button",{name:"Refresh device list",exact:true}).click();
     const qrPayload=JSON.stringify({kind:"circlo-device-link",version:1,requestId,token});
     await source.page.evaluate(`(()=>{
       const payload=${JSON.stringify(qrPayload)};

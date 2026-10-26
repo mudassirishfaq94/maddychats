@@ -23,10 +23,18 @@ for(const width of [390,1440]) {
   assert.equal(response.status(),200,route);
   assert.equal(metrics.overflow,false,`${route} horizontal overflow at ${width}px`);
   assert.deepEqual(errors,[],`${route} browser errors`);
+  if(width===390 && pass==='first' && (route==='/login' || route==='/signup')) {
+   await mkdir('.freebuff/performance',{recursive:true});
+   await page.screenshot({path:`.freebuff/performance/${route.slice(1)}-390.png`,fullPage:true});
+  }
   if(route==='/' && pass==='first' && width===390) {
    await page.getByRole('heading',{name:'All the little ways to stay close.',exact:true}).waitFor();
    await page.getByRole('heading',{name:'A circle with room to grow.',exact:true}).waitFor();
-   assert.equal(await page.locator('#roadmap article').count(),4);
+   assert.equal(await page.locator('#roadmap article').count(),3);
+   assert.equal(await page.getByText('Available now',{exact:true}).count(),1);
+   assert.equal(await page.getByRole('link',{name:'Read the plain-language explanation'}).getAttribute('href'),'/privacy#encryption');
+   assert.equal(await page.getByText('We have not published an independent security review. We will update this page if that changes.',{exact:true}).count(),1);
+   assert.equal(await page.getByText('More transparency',{exact:true}).count(),0);
    for(const anchor of await page.locator('a[href^="#"]').all()) assert.equal(await page.locator(await anchor.getAttribute('href')).count(),1);
    await mkdir('.freebuff/performance',{recursive:true});
    for(const size of [320,360,390,412,768,1440]) {
@@ -47,24 +55,38 @@ for(const width of [390,1440]) {
   }
   if(route==='/login'||route==='/signup') {
    const action=page.getByRole('button',{name:route==='/login'?'Sign in':'Create account',exact:true});
-   assert.equal(await page.getByRole('checkbox').count(),2,'One shared agreement pair per page');
-   assert(await page.evaluate(() => {
-    const form=document.querySelector('form');
-    const fields=[...form.querySelectorAll('input:not([type="checkbox"])')];
-    const checkbox=form.querySelector('input[type="checkbox"]');
-    const submit=form.querySelector('button[type="submit"]');
-    return !!checkbox && !!submit && !!(fields.at(-1).compareDocumentPosition(checkbox)&Node.DOCUMENT_POSITION_FOLLOWING) && !!(checkbox.compareDocumentPosition(submit)&Node.DOCUMENT_POSITION_FOLLOWING);
-   }),'Agreement follows fields and precedes submit');
-   assert.equal(await action.isEnabled(),false);
-   await page.getByRole('checkbox',{name:/Terms and Conditions/}).check();
-   assert.equal(await action.isEnabled(),false);
-   await page.getByRole('checkbox',{name:/Privacy Policy/}).check();
-   assert.equal(await action.isEnabled(),true);
+   const checkboxes=page.getByRole('checkbox');
+   if(route==='/signup') {
+    assert.equal(await checkboxes.count(),2,'Signup asks for both policy choices');
+    assert(await page.evaluate(() => {
+     const form=document.querySelector('form');
+     const fields=[...form.querySelectorAll('input:not([type="checkbox"])')];
+     const checkbox=form.querySelector('input[type="checkbox"]');
+     const submit=form.querySelector('button[type="submit"]');
+     return !!checkbox && !!submit && !!(fields.at(-1).compareDocumentPosition(checkbox)&Node.DOCUMENT_POSITION_FOLLOWING) && !!(checkbox.compareDocumentPosition(submit)&Node.DOCUMENT_POSITION_FOLLOWING);
+    }),'Signup agreement follows fields and precedes submit');
+    assert.equal(await action.isEnabled(),false);
+    await page.getByRole('checkbox',{name:/Terms and Conditions/}).check();
+    assert.equal(await action.isEnabled(),false);
+    await page.getByRole('checkbox',{name:/Privacy Policy/}).check();
+    assert.equal(await action.isEnabled(),true);
+   } else {
+    assert.equal(await checkboxes.count(),0,'Returning sign-in does not ask for signup consent again');
+    await page.getByText(/By signing in, you confirm/).waitFor();
+    assert.equal(await action.isEnabled(),true);
+   }
    const google=page.getByRole('link',{name:'Continue with Google',exact:true});
-   assert.match(await google.getAttribute('href'),/terms=1&privacy=1/);
-   await page.getByRole('checkbox',{name:/Terms and Conditions/}).uncheck();
-   assert.equal(await action.isEnabled(),false);
-   assert.equal(await google.getAttribute('aria-disabled'),'true');
+   if(route==='/signup') {
+    assert.equal(await google.count(),0,'New accounts use the first-party email and password form');
+    assert.equal(await page.getByRole('button',{name:'Create account',exact:true}).count(),1);
+   } else {
+    assert.match(await google.getAttribute('href'),/^\/api\/auth\/google\?/,'Existing Google-linked users can still sign in');
+    assert.equal(await page.getByText(/New here\? Continue with Google|continue with Google first/).count(),0,'New users are directed to email signup, not Google account creation');
+   }
+   if(route==='/signup') {
+    await page.getByRole('checkbox',{name:/Terms and Conditions/}).uncheck();
+    assert.equal(await action.isEnabled(),false);
+   }
    await page.getByLabel('Password',{exact:true}).fill('visibility-probe');
    await page.getByRole('button',{name:'Show password',exact:true}).click();
    assert.equal(await page.getByLabel('Password',{exact:true}).getAttribute('type'),'text');

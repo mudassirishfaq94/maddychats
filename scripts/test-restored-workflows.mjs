@@ -54,7 +54,7 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
   };
   const profile = async page => { await page.goto(base + "/app/profile#encryption-devices"); await openDeviceTools(page); };
   const chat = async page => { await page.goto(base + "/app/chats/" + conversationId); await page.getByRole("textbox", { name: "Message text" }).waitFor(); };
-  const refresh = async page => { await openDeviceTools(page); const response = page.waitForResponse(r => r.url().endsWith("/api/e2ee/keys") && r.request().method() === "GET"); await page.getByRole("button", { name: "Refresh encryption devices", exact: true }).click(); assert.equal((await response).status(), 200); await openDeviceTools(page); };
+  const refresh = async page => { await openDeviceTools(page); const response = page.waitForResponse(r => r.url().endsWith("/api/e2ee/keys") && r.request().method() === "GET"); await page.getByRole("button", { name: "Refresh device list", exact: true }).click(); assert.equal((await response).status(), 200); await openDeviceTools(page); };
   let sessionRaceChecked = false;
   const renewSession = async device => {
     let releaseIdentity; let identityDone; let oldIdentity;
@@ -126,6 +126,8 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     await registrationPage.screenshot({ path: "test-artifacts/login-consent-after.png", fullPage: true, animations: "disabled" });
     await registrationPage.goto(base + "/signup");
     await registrationPage.screenshot({ path: "test-artifacts/signup-consent-after.png", fullPage: true, animations: "disabled" });
+    assert.equal(await registrationPage.getByRole("link", { name: "Continue with Google", exact: true }).count(), 0, "New account creation does not offer Google sign-in");
+    assert.equal(await registrationPage.getByRole("button", { name: "Create account", exact: true }).count(), 1, "New account creation uses the email and password form");
     await registrationPage.getByLabel("Display name", { exact: true }).fill("Workflow registration");
     await registrationPage.getByLabel("Username", { exact: true }).fill(registerName);
     await registrationPage.getByLabel("Email", { exact: true }).fill(registerName + "@example.invalid");
@@ -324,8 +326,8 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     assert.equal((await api("/api/e2ee/devices/approve", source.cookies, proof)).status, 409);
     await refresh(target.page); await target.page.getByText("This device: Linked", { exact: true }).waitFor();
     await chat(source.page);
-    await source.page.getByRole("button", { name: "End-to-end encryption is active. View details", exact: true }).click();
-    await source.page.getByRole("button", { name: "Restore my other devices", exact: true }).click();
+    await source.page.getByRole("button", { name: "Private chat protection is on. View details", exact: true }).click();
+    await source.page.getByRole("button", { name: "Share chat access with my devices", exact: true }).click();
     await source.page.getByText(/Shared \d+ existing key/).waitFor({ timeout: 30000 });
     await chat(target.page);
     await recipient.page.getByRole("region", { name: "Conversation", exact: true }).getByText("Queued new device delivery", { exact: true }).waitFor({ timeout: 45000 });

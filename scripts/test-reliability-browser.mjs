@@ -187,12 +187,12 @@ try {
 
 
  await owner.page.goto(base+"/app/profile#encryption-devices");await openDeviceTools(owner.page);
- await owner.page.getByRole("button",{name:"Set up recovery code",exact:true}).click();const code=await owner.page.locator('[aria-label="New recovery code"]').textContent();assert(code);
- await owner.page.getByLabel("Re-enter the saved code",{exact:true}).fill(code);await owner.page.getByRole("button",{name:"Confirm code and save encrypted backup",exact:true}).click();await owner.page.getByText(/Encrypted recovery is configured/).waitFor();
+ await owner.page.getByRole("button",{name:"Set up chat recovery",exact:true}).click();const code=await owner.page.locator('[aria-label="New recovery code"]').textContent();assert(code);
+ await owner.page.getByLabel("Enter the saved code again",{exact:true}).fill(code);await owner.page.getByRole("button",{name:"Save code and set up recovery",exact:true}).click();await owner.page.getByText(/Chat recovery is set up/).waitFor();
  const backup=(await pool.query("select id,envelope from recovery_backups where user_id=$1",[owner.id])).rows[0];assert(backup);assert.equal(JSON.stringify(backup.envelope).includes(code),false);
  await owner.page.evaluate(()=>localStorage.clear());await owner.page.reload();await openDeviceTools(owner.page);
- await owner.page.getByText("Restore using a saved recovery code",{exact:true}).click();await owner.page.getByLabel("Backup",{exact:true}).selectOption(backup.id);await owner.page.getByLabel("Saved recovery code",{exact:true}).fill(code);
- await owner.page.getByLabel(/I have preserved any keys needed from this browser/).check();await owner.page.getByRole("button",{name:"Restore encrypted keys",exact:true}).click();
+ await owner.page.getByText("Open chats with a saved code",{exact:true}).click();await owner.page.getByLabel("Backup",{exact:true}).selectOption(backup.id);await owner.page.getByLabel("Enter its recovery code",{exact:true}).fill(code);
+ await owner.page.getByLabel(/I saved a separate recovery file/).check();await owner.page.getByRole("button",{name:"Open chats on this device",exact:true}).click();
  await owner.page.waitForTimeout(1000);await owner.page.goto(`${base}/app/chats/${group}`);await owner.page.getByRole("region",{name:"Messages",exact:true}).getByText(normal,{exact:true}).waitFor();
  console.log("PASS: cloud recovery setup; browser storage loss; original encrypted history restored");
  // Real WebRTC, cold recipient launch through Answer, then SSE-offline decline.

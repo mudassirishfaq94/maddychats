@@ -21,7 +21,7 @@ export async function testChatRecovery(base, cookieHeader, conversationId) {
     return page;
   };
   const chatUrl = `${base}/app/chats/${conversationId}`;
-  const activeName = "End-to-end encryption is active. View details";
+  const activeName = "Private chat protection is on. View details";
   try {
     const source = await context();
     await source.goto(chatUrl);
@@ -80,7 +80,7 @@ export async function testChatRecovery(base, cookieHeader, conversationId) {
     await source.reload();
     await source.waitForFunction(text => document.querySelector('textarea[aria-label="Message text"]')?.value === text, nextDraft, { timeout: 30000 });
     await source.getByRole("button", { name: activeName, exact: true }).click();
-    await source.getByRole("button", { name: "Restore my other devices", exact: true }).click();
+    await source.getByRole("button", { name: "Share chat access with my devices", exact: true }).click();
     await source.getByRole("status").filter({ hasText: "No other trusted devices found" }).waitFor({ timeout: 10000 }).catch(async cause => {
       throw new Error(`Restore status: ${await source.getByRole("status").allTextContents()}; modal: ${await source.locator(".card-glass").last().innerText()}`, { cause });
     });
@@ -131,11 +131,11 @@ export async function testChatRecovery(base, cookieHeader, conversationId) {
     const peersUrl = "**/api/e2ee/peers?**";
     const unavailablePeers = route => route.fulfill({ status: 503, contentType: "application/json", body: "{}" });
     await source.route(peersUrl, unavailablePeers);
-    await source.getByRole("button", { name: "Restore my other devices", exact: true }).click();
+    await source.getByRole("button", { name: "Share chat access with my devices", exact: true }).click();
     await source.getByRole("status").filter({ hasText: "Unable to check trusted devices" }).waitFor();
-    assert.equal(await source.getByRole("button", { name: "Restore my other devices", exact: true }).isEnabled(), true, "A failed restore must stop its spinner");
+    assert.equal(await source.getByRole("button", { name: "Share chat access with my devices", exact: true }).isEnabled(), true, "A failed restore must stop its spinner");
     await source.unroute(peersUrl, unavailablePeers);
-    await source.getByRole("button", { name: "Restore my other devices", exact: true }).click();
+    await source.getByRole("button", { name: "Share chat access with my devices", exact: true }).click();
     await source.getByRole("status").filter({ hasText: "Shared" }).waitFor();
     // Return to the new device's chat after approval. Key restoration must
     // release its queued message without replacing keys.
