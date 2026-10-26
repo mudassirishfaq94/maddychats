@@ -50,7 +50,7 @@ export function EncryptionDevices({ recoveryEmail, openRecovery = false, setup =
   const { waitForDeviceRegistration, syncKnownConversations } = encryption;
   const knownLinked = useRef<Set<string> | null>(null);
 
-  const refresh = useCallback(async (signal?: AbortSignal) => {
+  const refresh = useCallback(async (signal?: AbortSignal, options: { syncHistory?: boolean } = {}) => {
     await waitForDeviceRegistration();
     const response = await e2eeRequest("/api/e2ee/keys", { cache: "no-store", signal });
     if (!response.ok) throw new Error("Unable to load encryption devices.");
@@ -69,7 +69,7 @@ export function EncryptionDevices({ recoveryEmail, openRecovery = false, setup =
     const currentJustApproved = knownLinked.current && !knownLinked.current.has(encryption.deviceId) && trusted.has(encryption.deviceId);
     knownLinked.current = trusted;
     if (currentJustApproved) { window.location.reload(); return { devices: rows, requests: linkData.requests }; }
-    if (added && trusted.has(encryption.deviceId)) {
+    if (added && trusted.has(encryption.deviceId) && options.syncHistory !== false) {
       setStatus("Sending your chat history to the new phone…");
       void syncKnownConversations(undefined, (completed, total) => setStatus(`Sending your chat history… ${completed} of ${total} chats`))
         .then(summary => { setStatus(summary); setHistorySyncIncomplete(summary.startsWith("Sent ")); })
@@ -312,7 +312,14 @@ export function EncryptionDevices({ recoveryEmail, openRecovery = false, setup =
       <label className="mt-2 flex items-start gap-2 text-xs"><input type="checkbox" checked={verified.includes(device.deviceId)} onChange={event => setVerified(previous => event.target.checked ? [...previous, device.deviceId] : previous.filter(id => id !== device.deviceId))} />I compared this number with the new phone and it matches.</label>
       <button type="button" className="btn btn-primary mt-2" disabled={busy || !current?.trustedAt || !verified.includes(device.deviceId)} onClick={() => {
         setBusy(true); setStatus("");
-        void encryption.approveDevice(device.deviceId, device.fingerprint, { linkId: scannedLink.requestId, token: scannedLink.token, decision: "approve" }).then(async () => { setScannedLink(null); await refresh(); setVerified([]); setStatus("Phone approved. Sending your chat history…"); window.dispatchEvent(new Event("maddy:message-request-keys")); }).catch(cause => setStatus(cause instanceof Error ? cause.message : "Could not approve this phone. Try again.")).finally(() => setBusy(false));
+        void encryption.approveDevice(device.deviceId, device.fingerprint, { linkId: scannedLink.requestId, token: scannedLink.token, decision: "approve" }).then(async () => {
+          setScannedLink(null); setVerified([]); setStatus("Phone approved. Sending your chat history…");
+          window.dispatchEvent(new Event("maddy:message-request-keys"));
+          await refresh(undefined, { syncHistory: false });
+          void syncKnownConversations(undefined, (completed, total) => setStatus(`Sending your chat history… ${completed} of ${total} chats`))
+            .then(summary => { setStatus(summary); setHistorySyncIncomplete(summary.startsWith("Sent ")); })
+            .catch(cause => { setStatus(cause instanceof Error ? cause.message : "Could not send your chats. Keep this phone connected and try again."); setHistorySyncIncomplete(true); });
+        }).catch(cause => setStatus(cause instanceof Error ? cause.message : "Could not approve this phone. Try again.")).finally(() => setBusy(false));
       }}>Approve this device</button>
       {!verified.includes(device.deviceId) && <p className="mt-1 text-xs text-[var(--muted)]">Compare the number on both screens before approving.</p>}
       </> : <p className="mt-2 text-xs text-[var(--muted)]">Scan the QR code or enter its one-time code to verify this request before approving.</p>}

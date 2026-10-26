@@ -130,8 +130,25 @@ export async function testChatRecovery(base, cookieHeader, conversationId) {
     await target.getByText("Device details", { exact: true }).click();
     await source.getByText("Show full check number", { exact: true }).click();
     await source.getByLabel("I compared this number with the new phone and it matches.").check();
+    const approvalResponse = source.waitForResponse(response => {
+      if (new URL(response.url()).pathname !== "/api/e2ee/devices/approve" || response.request().method() !== "POST") return false;
+      try { return response.request().postDataJSON()?.action === "approve"; } catch { return false; }
+    });
     await source.getByRole("button", { name: "Approve this device", exact: true }).click();
-    await source.getByRole("status").filter({ hasText: "Phone approved." }).waitFor();
+    const approval = await approvalResponse;
+    assert.equal(approval.status(), 200, `Trusted device approval request failed: ${await approval.text()}`);
+    const linkedDeviceId = await source.evaluate(async requestId => {
+      const response = await fetch("/api/e2ee/devices/link", { cache: "no-store" });
+      const data = await response.json();
+      return data.requests.find(item => item.id === requestId)?.deviceId;
+    }, requestId);
+    assert(linkedDeviceId, "The pending request remains associated with its new device");
+    await source.waitForFunction(async deviceId => {
+      const response = await fetch("/api/e2ee/keys", { cache: "no-store" });
+      if (!response.ok) return false;
+      const data = await response.json();
+      return data.keys.some(key => key.deviceId === deviceId && key.trustedAt);
+    }, linkedDeviceId, { timeout: 15000 });
     await source.goto(chatUrl);
     await source.getByRole("button", { name: activeName, exact: true }).click();
     const peersUrl = "**/api/e2ee/peers?**";
