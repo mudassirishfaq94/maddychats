@@ -170,10 +170,14 @@ export async function testAudioContacts(base, pool, owner, peer, password, conve
       for (let opened = 0; opened < 40; opened++) {
         const summary = a.locator("details:not([open]) > summary:visible").first();
         if (!(await summary.count())) break;
-        const parent = summary.locator("..");
-        const controlled = await parent.getAttribute("data-profile-disclosure-ready") === "true";
-        await summary.click();
-        if (controlled) await parent.locator(":scope > div").waitFor({ state: "attached" });
+        // Pin the actual element: the :not([open]) locator resolves to the
+        // next disclosure as soon as this one is clicked.
+        const parent = await summary.locator("..").elementHandle();
+        try {
+          const controlled = await parent.getAttribute("data-profile-disclosure-ready") === "true";
+          await summary.click();
+          if (controlled) await parent.waitForSelector(":scope > div", { state: "attached" });
+        } finally { await parent.dispose(); }
       }
       assert.equal(await a.locator("details:not([open]) > summary:visible").count(), 0);
       assert(await a.evaluate(() => document.documentElement.scrollWidth <= innerWidth), "Profile must not overflow horizontally");
