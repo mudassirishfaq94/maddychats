@@ -57,7 +57,8 @@ test("backup collection paginates history and rejects account changes without pu
   const originalStorage = Object.getOwnPropertyDescriptor(globalThis, "localStorage"), originalFetch = globalThis.fetch;
   const values = new Map<string, string>([[`e2ee_keypair_${snapshot.userId}`, snapshot.recovery.keypair], [`e2ee_recovery_${snapshot.userId}_original-device`, snapshot.recovery.secret]]);
   Object.defineProperty(globalThis, "localStorage", { configurable: true, value: { getItem: (key: string) => values.get(key) ?? null, get length() { return values.size; }, key: (index: number) => [...values.keys()][index] ?? null } });
-  let switched = false, accountReads = 0, pages = 0;
+  let switched = false, accountReads = 0, pages = 0, mediaReads = 0;
+  const attachmentId = randomUUID();
   globalThis.fetch = async input => {
     const path = String(input);
     if (path === "/api/auth/me") return Response.json({ user: { id: ++accountReads > 1 && switched ? randomUUID() : snapshot.userId } });
@@ -66,8 +67,9 @@ test("backup collection paginates history and rejects account changes without pu
     if (path.startsWith(`/api/conversations/${chat.id}/messages`)) {
       pages++;
       const older = path.includes("cursor=");
-      return Response.json({ messages: [{ ...chat.messages[0], id: randomUUID(), sender: { displayName: "Sender" }, encrypted: false }, { ...chat.messages[0], id: randomUUID(), sender: { displayName: "Sender" }, selfDestruct: true }], hasMore: !older, nextCursor: older ? null : "older-page" });
+      return Response.json({ messages: [{ ...chat.messages[0], id: randomUUID(), sender: { displayName: "Sender" }, encrypted: false, attachments: [{ id: attachmentId, originalName: "note.txt", mimeType: "text/plain", size: 5, kind: "file", encrypted: false, encKey: null, url: "https://untrusted.invalid/file" }] }, { ...chat.messages[0], id: randomUUID(), sender: { displayName: "Sender" }, selfDestruct: true }], hasMore: !older, nextCursor: older ? null : "older-page" });
     }
+    if (path === `/api/media/${attachmentId}`) { mediaReads++; return new Response("hello"); }
     if (path === "/api/calls/history") return Response.json({ calls: [], nextCursor: null });
     throw new Error("Unexpected test request");
   };
@@ -75,6 +77,8 @@ test("backup collection paginates history and rejects account changes without pu
     const input = { userId: snapshot.userId, deviceId: "original-device", signal: new AbortController().signal, decrypt: async (text: string) => text };
     const result = await collectChatBackup(input);
     assert.equal(pages, 2); assert.equal(result.chats[0].messages.length, 2);
+    assert.equal(mediaReads, 2); assert.equal(result.missingMedia, 0);
+    assert.equal(result.chats[0].messages[0].attachments[0].data, Buffer.from("hello").toString("base64"), "Saved media bytes come only from the authorized same-origin endpoint");
     switched = true; accountReads = 0;
     await assert.rejects(collectChatBackup(input), /Account changed/);
     const controller = new AbortController(); controller.abort();

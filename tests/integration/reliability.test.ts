@@ -51,6 +51,8 @@ test("bookmarks, pins, galleries and reply previews share per-viewer visibility"
   assert.equal((await chat.listPinnedMessages(conversation,member)).length,1);
   assert.equal((await chat.listConversationMedia(conversation,member)).length,1);
   assert.equal((await chat.listConversationFiles(conversation,member)).length,1);
+  await pool.query("insert into message_attachments(message_id,original_name,stored_name,mime_type,size,path,kind) values($1,'voice.ogg','visibility.ogg','audio/ogg',10,'files/visibility.ogg','audio')", [parent.id]);
+  assert.deepEqual((await chat.listConversationFiles(conversation,member)).map(file=>file.kind).sort(),["audio","file"],"Shared files include audio without weakening the same visibility checks");
   assert.equal((await chat.listConversationLinks(conversation,member)).length,1);
   await pool.query("update conversation_members set cleared_at=(select created_at from messages where id=$3) where conversation_id=$1 and user_id=$2", [conversation,member,parent.id]);
   assert.equal(await currentMessageEvent(member,retained),null,"A retained stream event cannot restore cleared content");

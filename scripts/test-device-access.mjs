@@ -97,6 +97,8 @@ export async function testDeviceAccess(base, pool, secret) {
     await pool.query("update e2ee_keys set trusted_at=null where user_id=$1",[user.id]);
     const recovery = await open();
     await recovery.page.getByText("I don’t have my old device",{exact:true}).click();
+    await recovery.page.getByRole("heading",{name:"Recover with email",exact:true}).waitFor();
+    await recovery.page.getByRole("button",{name:"Send recovery code",exact:true}).waitFor();
     const recoveryText = await recovery.page.locator("#encryption-devices").innerText();
     assert(recoveryText.includes("Recover with email") && recoveryText.includes("Send recovery code"));
     assert(!recoveryText.includes("Show a device-link QR code") && !recoveryText.includes("Back up or restore chats"),"No-old-device recovery hides unrelated setup choices");

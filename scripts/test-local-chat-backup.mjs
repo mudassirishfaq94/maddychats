@@ -35,6 +35,7 @@ export async function testLocalChatBackup(base, pool, source, owner, password, c
     await target.getByRole("button", { name: "Sign in", exact: true }).click();
     await target.waitForURL("**/app/device-access**");
     await target.getByRole("button", { name: "I don’t have my old device", exact: true }).click();
+    await target.getByText("Restore a saved backup instead", { exact: true }).click();
     const restore = target.locator("#local-chat-backup");
     await restore.getByLabel("Circlo backup file", { exact: true }).setInputFiles({ name: "saved.circlo", mimeType: "application/octet-stream", buffer: bytes });
     await restore.getByLabel("Saved backup code", { exact: true }).fill("A".repeat(43));
