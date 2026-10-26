@@ -107,11 +107,11 @@ export async function testChatRecovery(base, cookieHeader, conversationId) {
       let request = response.request();
       while (request.redirectedFrom()) request = request.redirectedFrom();
       return new URL(request.url()).pathname.replace(/\/+$/, "") === "/api/e2ee/devices/link" && request.method() === "POST";
-    });
+    }).then(response => ({ response }), cause => ({ cause }));
     await target.getByRole("button", { name: "Show a device-link QR code", exact: true }).click();
-    const linkCreated = await linkResponse.catch(async cause => {
-      throw new Error(`Device-link request did not finish; status: ${await target.getByRole("status").allTextContents()}`, { cause });
-    });
+    const linkResult = await linkResponse;
+    if ("cause" in linkResult) throw new Error(`Device-link request did not finish; status: ${await target.getByRole("status").allTextContents()}`, { cause: linkResult.cause });
+    const linkCreated = linkResult.response;
     assert.equal(linkCreated.status(), 201);
     const { id: requestId, token } = await linkCreated.json();
     assert.match(token, /^[A-Za-z0-9_-]{43}$/);
