@@ -134,7 +134,7 @@ async function main() {
           assert.deepEqual(errors, [], `Admin browser errors on ${path}`);
           page.off("pageerror", record);
         }
-        for (const [path, endpoint, heading] of [["/app/admin", "/api/admin/stats", "Dashboard Overview"], ["/app/admin/storage", "/api/admin/storage", "Storage Dashboard"], ["/app/admin/audit", "/api/admin/audit-log", "Audit Log"], ["/app/admin/security", "/api/admin/security/login-history", "Security & Retention"]]) {
+        for (const [path, endpoint, heading] of [["/app/admin", "/api/admin/stats", "Dashboard Overview"], ["/app/admin/storage", "/api/admin/storage", "File storage"], ["/app/admin/audit", "/api/admin/audit-log", "Admin action history"], ["/app/admin/security", "/api/admin/security/login-history", "Sign-in safety and data cleanup"]]) {
           const pattern = "**" + endpoint;
           const failures: string[] = []; const onError = (error: Error) => failures.push(error.message); page.on("pageerror", onError);
           await page.route(pattern, route => route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "Temporary admin service interruption." }) }));
