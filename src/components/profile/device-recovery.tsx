@@ -2,8 +2,7 @@
 import { useState } from "react";
 import { useAuth } from "@/components/providers/auth-provider";
 import { useSharedE2EE } from "@/components/providers/e2ee-provider";
-import { createRecoveryFile, readRecoveryFile, recoveryBundleKey, validateRecoveryBundle, collectRecoveryBundle } from "@/lib/device-recovery-file";
-import { writeDeviceKeyMaterial } from "@/lib/device-key-storage";
+import { createRecoveryFile, readRecoveryFile, recoveryBundleKey, validateRecoveryBundle, collectRecoveryBundle, writeRecoveryIdentity } from "@/lib/device-recovery-file";
 
 export function DeviceRecovery() {
   const { user } = useAuth();
@@ -41,8 +40,7 @@ export function DeviceRecovery() {
     const registered = keys.find(key => key.deviceId === bundle.deviceId && key.publicKey === publicKey);
     if (!registered) throw new Error("This identity is no longer registered. Use device linking or emergency recovery.");
     // Secure storage is written and read back first; only then save the wrapped history keys.
-    await writeDeviceKeyMaterial(`e2ee_keypair_${user.id}`, bundle.keypair);
-    await writeDeviceKeyMaterial(`e2ee_recovery_${user.id}_${bundle.deviceId}`, bundle.secret);
+    await writeRecoveryIdentity(bundle);
     localStorage.setItem(recoveryBundleKey(user.id), JSON.stringify({ ...bundle, keypair: "", secret: "" }));
     setCode("");
     window.location.reload();

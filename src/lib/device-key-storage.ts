@@ -20,7 +20,10 @@ export async function readDeviceKeyMaterial(key: string): Promise<string | null>
   if (!Capacitor.isNativePlatform()) return localStorage.getItem(key);
   const storage = await nativeStorage();
   const stored = await storage.get(key);
-  if (typeof stored === "string") return stored;
+  if (typeof stored === "string") {
+    if (localStorage.getItem(key) === stored) localStorage.removeItem(key);
+    return stored;
+  }
 
   const legacy = localStorage.getItem(key);
   if (legacy === null) return null;
@@ -38,5 +41,13 @@ export async function writeDeviceKeyMaterial(key: string, value: string): Promis
   const storage = await nativeStorage();
   await storage.set(key, value);
   if (await storage.get(key) !== value) throw new Error("This device could not confirm protected chat access. Your existing saved copy was kept.");
+  localStorage.removeItem(key);
+}
+
+export async function removeDeviceKeyMaterial(key: string): Promise<void> {
+  if (Capacitor.isNativePlatform()) {
+    const storage = await nativeStorage();
+    await storage.remove(key);
+  }
   localStorage.removeItem(key);
 }

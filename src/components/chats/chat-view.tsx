@@ -200,7 +200,7 @@ function ReceiptIcon({ message }: { message: MessageDTO }) {
 
 function queuedMessageHelp(reason?: string) {
   if (reason?.includes("This device needs approval")) return "Saved. On a linked phone, open Settings → Devices and approve this phone. It will send automatically.";
-  if (reason?.includes("safety number")) return "Saved. Confirm the new phone’s safety number in this chat. It will send after confirmation.";
+  if (reason?.includes("safety number") || reason?.includes("check number")) return "Saved. Compare the check number in this chat and approve the changed device. Your message will send after you approve it.";
   if (reason?.includes("No internet")) return "Saved. It will send automatically when you’re back online.";
   return "Saved. It will send automatically when secure chat setup is ready.";
 }
@@ -1457,6 +1457,7 @@ export function ChatView({
       if (res.status >= 500 || res.status === 429) throw new SecureDeliveryWaiting("Connection problem. This will send by itself in a moment.");
       if (!res.ok || !data?.message) {
         await removeQueuedMessage(me.id, conversationId, clientMessageId).catch(() => undefined);
+        if (!selfDestruct && clearedDraftRevision !== null && !draftRef.current && draftRevision.current === clearedDraftRevision) setDraft(submittedDraft);
         setError(data?.error ?? "Couldn't send. Tap to retry.");
         setItems((prev) => prev.map((m) => m.id === optimisticId ? { ...m, sendStatus: "failed" } : m));
         return;
@@ -1499,7 +1500,7 @@ export function ChatView({
       }
       if (!waiting) {
         await removeQueuedMessage(me.id, conversationId, clientMessageId).catch(() => undefined);
-        if (clearedDraftRevision !== null && !draftRef.current && draftRevision.current === clearedDraftRevision) setDraft(submittedDraft);
+        if (!selfDestruct && clearedDraftRevision !== null && !draftRef.current && draftRevision.current === clearedDraftRevision) setDraft(submittedDraft);
         setError(cause instanceof Error ? cause.message : "No connection. Message not sent.");
       }
       setItems((prev) => prev.map((m) => m.id === optimisticId ? { ...m, sendStatus: waiting ? "queued" : "failed", queueReason: waiting ? cause.message : undefined } : m));
@@ -3284,7 +3285,6 @@ const MessageRow = memo(function MessageRow({msg, showDate, sameSenderPrev, me, 
                                         ) : msg.replyTo.encrypted && replyText === undefined ? (
                                           <span className="flex items-center gap-1 opacity-70">
                                             {replyUnavailable ? "This reply is not available here. Check Profile for ways to get back into your chats." : "Opening reply…"}
-                                            …
                                           </span>
                                         ) : (
                                           <>

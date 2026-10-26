@@ -169,7 +169,7 @@ export function TwoFactorAuth() {
               Step 1: Add it to your code app
             </p>
             <p className="mb-2 text-xs text-[var(--muted)]">
-              If you cannot scan a code, enter these setup words in your code app:
+              If you cannot scan a code, enter this setup key in your code app:
             </p>
             <div className="flex flex-col items-center gap-3">
               {/* ASCII QR placeholder — the otpauth URL is the actual key */}

@@ -1,8 +1,27 @@
 import { conversationFingerprint, decryptKeyFromSender, decryptPrivateKeyFromStorage, encryptKeyForUser, importPrivateKey, importPublicKey } from "./crypto";
 import { recoveryPhraseFromEntropy, recoveryPhraseToEntropy } from "./recovery-phrase";
-import { readDeviceKeyMaterial, writeDeviceKeyMaterial } from "./device-key-storage";
+import { readDeviceKeyMaterial, removeDeviceKeyMaterial, writeDeviceKeyMaterial } from "./device-key-storage";
 
 export type RecoveryBundle = { version: 1; userId: string; deviceId: string; keypair: string; secret: string; keys: Record<string, string> };
+/** Keep the keypair and its recovery secret together when replacing an identity. */
+export async function writeRecoveryIdentity(bundle: RecoveryBundle): Promise<void> {
+  const keypairKey = `e2ee_keypair_${bundle.userId}`;
+  const secretKey = `e2ee_recovery_${bundle.userId}_${bundle.deviceId}`;
+  const previousKeypair = await readDeviceKeyMaterial(keypairKey);
+  const previousSecret = await readDeviceKeyMaterial(secretKey);
+  try {
+    await writeDeviceKeyMaterial(keypairKey, bundle.keypair);
+    await writeDeviceKeyMaterial(secretKey, bundle.secret);
+  } catch (cause) {
+    // Attempt both rollbacks even if one storage operation fails again.
+    await Promise.allSettled([
+      previousKeypair === null ? removeDeviceKeyMaterial(keypairKey) : writeDeviceKeyMaterial(keypairKey, previousKeypair),
+      previousSecret === null ? removeDeviceKeyMaterial(secretKey) : writeDeviceKeyMaterial(secretKey, previousSecret),
+    ]);
+    throw cause;
+  }
+}
+
 const MAX_BYTES = 8 * 1024 * 1024;
 const encode = (bytes: Uint8Array) => btoa(Array.from(bytes, value => String.fromCharCode(value)).join(""));
 const decode = (value: string) => Uint8Array.from(atob(value), char => char.charCodeAt(0));

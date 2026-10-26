@@ -7,7 +7,7 @@ import Link from "next/link";
 import { useAuth } from "@/components/providers/auth-provider";
 import { useSharedE2EE } from "@/components/providers/e2ee-provider";
 import { cloudRecoveryLocalKey, newRecoveryCode, openRecovery, refreshCloudRecovery } from "@/lib/cloud-key-recovery";
-import { recoveryBundleKey, validateRecoveryBundle } from "@/lib/device-recovery-file";
+import { recoveryBundleKey, validateRecoveryBundle, writeRecoveryIdentity } from "@/lib/device-recovery-file";
 import { readDeviceKeyMaterial, writeDeviceKeyMaterial } from "@/lib/device-key-storage";
 type Backup = { id:string; deviceId:string; confirmed:boolean; updatedAt:string; revision:number };
 
@@ -45,10 +45,9 @@ export function CloudRecoverySettings() {
     if(!keysResponse.ok) throw new Error("Sign in again before restoring.");
     const {keys}=await keysResponse.json();
     if(!keys.some((key:{deviceId:string;publicKey:string})=>key.deviceId===bundle.deviceId && key.publicKey===publicKey)) throw new Error("This backup can't be restored here any more. Nothing was changed.");
-    // Single active-identity write; quotas leave the existing identity untouched.
+    // Save the identity together before publishing the wrapped history keys.
     await writeDeviceKeyMaterial(cloudRecoveryLocalKey(user.id,bundle.deviceId),JSON.stringify({id:backup.id,code:code.trim(),revision:backup.revision}));
-    await writeDeviceKeyMaterial(`e2ee_keypair_${user.id}`, bundle.keypair);
-    await writeDeviceKeyMaterial(`e2ee_recovery_${user.id}_${bundle.deviceId}`, bundle.secret);
+    await writeRecoveryIdentity(bundle);
     localStorage.setItem(recoveryBundleKey(user.id),JSON.stringify({...bundle,keypair:"",secret:""}));
     setCode("");window.location.reload();
   };
