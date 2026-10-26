@@ -91,6 +91,22 @@ try {
  const normal=`Normal encrypted regression ${randomUUID()}`;
  await owner.page.getByRole("textbox",{name:"Message text"}).fill(normal);await owner.page.getByRole("button",{name:"Send message",exact:true}).click();
  await member.page.getByRole("region",{name:"Messages",exact:true}).getByText(normal,{exact:true}).waitFor();console.log("PASS: normal E2EE message decrypted across browser sessions");
+ // Keep the recipient chat open with its SSE transport unavailable. The
+ // foreground history catch-up must still deliver a missed encrypted message
+ // without route navigation or a page reload.
+ const recipientSseFailed=member.page.waitForEvent("requestfailed",request=>new URL(request.url()).pathname==="/api/realtime/stream");
+ await contexts[1].route("**/api/realtime/stream",route=>route.abort());
+ await member.page.reload();
+ await member.page.getByRole("textbox",{name:"Message text"}).waitFor();
+ await recipientSseFailed;
+ const missedWhileOpen=`Foreground catch-up regression ${randomUUID()}`;
+ await owner.page.getByRole("textbox",{name:"Message text"}).fill(missedWhileOpen);
+ await owner.page.getByRole("button",{name:"Send message",exact:true}).click();
+ await member.page.getByRole("region",{name:"Messages",exact:true}).getByText(missedWhileOpen,{exact:true}).waitFor({timeout:20000});
+ await contexts[1].unroute("**/api/realtime/stream");
+ await member.page.reload();
+ await member.page.getByRole("textbox",{name:"Message text"}).waitFor();
+ console.log("PASS: open chat catches up an encrypted message while SSE is unavailable");
  const cachedMessage=(await pool.query("select id,text from messages where conversation_id=$1 and not self_destruct order by created_at desc limit 1",[group])).rows[0];
  await testCachedChatHistory(member.page,member.id,group,cachedMessage,normal);
  const note=`Ephemeral private note ${randomUUID()}`;
