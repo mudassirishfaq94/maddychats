@@ -126,12 +126,12 @@ export async function testChatRecovery(base, cookieHeader, conversationId) {
       HTMLMediaElement.prototype.play = async () => {};
     })()`);
     await source.getByRole("button", { name: "Scan QR on your new device", exact: true }).click();
-    await source.getByText("Safety number:").waitFor();
+    await source.getByText("Check number:").waitFor();
     await target.getByText("Device details", { exact: true }).click();
     await source.getByText("Show full check number", { exact: true }).click();
     await source.getByLabel("I compared this number with the new phone and it matches.").check();
     await source.getByRole("button", { name: "Approve this device", exact: true }).click();
-    await source.getByRole("status").filter({ hasText: "Device approved." }).waitFor();
+    await source.getByRole("status").filter({ hasText: "Phone approved." }).waitFor();
     await source.goto(chatUrl);
     await source.getByRole("button", { name: activeName, exact: true }).click();
     const peersUrl = "**/api/e2ee/peers?**";
@@ -142,7 +142,7 @@ export async function testChatRecovery(base, cookieHeader, conversationId) {
     assert.equal(await source.getByRole("button", { name: "Share chat access with my devices", exact: true }).isEnabled(), true, "A failed restore must stop its spinner");
     await source.unroute(peersUrl, unavailablePeers);
     await source.getByRole("button", { name: "Share chat access with my devices", exact: true }).click();
-    await source.getByRole("status").filter({ hasText: "Shared" }).waitFor();
+    await source.getByRole("status").filter({ hasText: "Chat history sent to your linked phone." }).waitFor();
     // Return to the new device's chat after approval. Key restoration must
     // release its queued message without replacing keys.
     // Retries pause in background tabs, so bring this browser to the front.
