@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 
 export async function testStartupInbox(base, source, conversationId) {
   const page = source.page, requests = [];
-  const track = request => { if (request.method() === "GET" && /\/api\/conversations\/[^/]+\/messages(?:\?|$)/.test(request.url())) requests.push(request); };
+  const track = request => { if (request.method() === "GET" && /\/api\/conversations\/[^/]+\/(?:messages|open)(?:\?|$)/.test(request.url())) requests.push(request); };
   page.on("request", track);
   try {
     const response = await page.goto(base + "/app/chats");

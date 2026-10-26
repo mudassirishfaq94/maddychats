@@ -4,6 +4,7 @@ import type { Metadata } from "next";
 import { getSessionUser } from "@/server/session";
 import { ChatsLayout } from "@/components/chats/chats-layout";
 import { listConversationsFor } from "@/server/chat";
+import { headers } from "next/headers";
 
 export const metadata: Metadata = { title: "Chats" };
 export const dynamic = "force-dynamic";
@@ -14,10 +15,12 @@ export default async function ChatsSectionLayout({
 }: {
   children: ReactNode;
 }) {
-  const user = await getSessionUser();
+  const [user, requestHeaders] = await Promise.all([getSessionUser(), headers()]);
   if (!user) redirect("/login?next=/app/chats");
   // A summary outage must retain the existing client retry path.
-  const conversations = await listConversationsFor(user.id).catch(() => undefined);
+  const conversations = requestHeaders.get("x-circlo-pathname") === "/app/chats"
+    ? await listConversationsFor(user.id).catch(() => undefined)
+    : undefined;
 
   return (
     <>
