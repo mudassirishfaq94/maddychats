@@ -29,12 +29,12 @@ export function EncryptedMessageState({ failed, missingKey, deviceError, signal,
           {deviceError ? "Private chats aren't ready on this phone. Open settings to finish."
             : introduction ? "It will appear here when they open Circlo."
             : signal ? "This message needs an update. Ask them to send it again."
-            : missingKey ? "Try a device that can still open this chat. Without one, this message may not be recoverable."
+            : missingKey ? "This phone doesn't have this chat yet. Link the phone that can still open it and send its chat history."
             : "Check your connection, then try again."}
         </p>
         <div className="flex flex-wrap gap-2">
           {!signal && !deviceError ? <button type="button" onClick={() => { setSlow(false); setAttempt(value => value + 1); onRetry(); }} className="min-h-11 rounded-lg border border-current/30 px-3 text-xs font-medium">Try again</button> : null}
-          <button type="button" onClick={onSecurity} className="min-h-11 rounded-lg border border-current/30 px-3 text-xs font-medium">{deviceError ? "Open settings" : signal ? "Message help" : "Recovery help"}</button>
+          <button type="button" onClick={onSecurity} className="min-h-11 rounded-lg border border-current/30 px-3 text-xs font-medium">{deviceError ? "Open settings" : signal ? "Message help" : missingKey ? "How to bring chats over" : "Message help"}</button>
         </div>
       </> : null}
     </div>

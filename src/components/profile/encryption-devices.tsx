@@ -37,6 +37,7 @@ export function EncryptionDevices({ recoveryEmail, openRecovery = false, setup =
   const [qrExpired, setQrExpired] = useState(false);
   const [scannedLink, setScannedLink] = useState<{ requestId: string; token: string } | null>(null);
   const [status, setStatus] = useState("");
+  const [historySyncIncomplete, setHistorySyncIncomplete] = useState(false);
   const [recoveryOpen, setRecoveryOpen] = useState(openRecovery);
   const [confirmation, setConfirmation] = useState("");
   const [password, setPassword] = useState("");
@@ -67,8 +68,10 @@ export function EncryptionDevices({ recoveryEmail, openRecovery = false, setup =
     knownLinked.current = trusted;
     if (currentJustApproved) { window.location.reload(); return { devices: rows, requests: linkData.requests }; }
     if (added && trusted.has(encryption.deviceId)) {
-      setStatus("Device linked. Synchronizing existing chat keys…");
-      void syncKnownConversations().then(summary => setStatus("Device approved. " + summary)).catch(cause => setStatus(cause instanceof Error ? cause.message : "Retry key synchronization."));
+      setStatus("Sending your chat history to the new phone…");
+      void syncKnownConversations(undefined, (completed, total) => setStatus(`Sending your chat history… ${completed} of ${total} chats`))
+        .then(summary => { setStatus(summary); setHistorySyncIncomplete(summary.startsWith("Sent ")); })
+        .catch(cause => { setStatus(cause instanceof Error ? cause.message : "Could not send your chats. Keep this phone connected and try again."); setHistorySyncIncomplete(true); });
     }
     return { devices: rows, requests: linkData.requests };
   }, [waitForDeviceRegistration, encryption.deviceId, syncKnownConversations]);
@@ -240,16 +243,17 @@ export function EncryptionDevices({ recoveryEmail, openRecovery = false, setup =
     </div>}
     {setup && !recoveryOpen && current && !current.trustedAt && <div className="mt-3 rounded-xl border border-[var(--border)] p-3 text-sm">
       <p className="font-semibold">Keep this page open while your linked device scans the QR.</p>
-      <p className="mt-1 text-xs text-[var(--muted)]">After approval, this phone will be trusted. You can then restore old chats from a device that still has their keys.</p>
+      <p className="mt-1 text-xs text-[var(--muted)]">After approval, keep this phone online while it sends chats it can still open to the new phone.</p>
       {links.filter(link => link.deviceId === encryption.deviceId).map(link => <p key={link.id} className="mt-2 text-xs text-[var(--muted)]" role="status">Device link: {link.status}</p>)}
     </div>}
     {encryption.error && !current?.trustedAt && (!setup || !current) && <p role="status" className="mt-2 text-sm">{encryption.error}</p>}
     {status && !(recoveryOpen && recoveryEmail) && <p role="status" className="mt-2 text-sm">{status}</p>}
+    {historySyncIncomplete && current?.trustedAt && <button type="button" className="btn btn-secondary mt-2" disabled={busy} onClick={() => { setBusy(true); setStatus("Sending your chat history…"); void syncKnownConversations(undefined, (completed, total) => setStatus(`Sending your chat history… ${completed} of ${total} chats`)).then(summary => { setStatus(summary); setHistorySyncIncomplete(summary.startsWith("Sent ")); }).catch(error => { setStatus(error instanceof Error ? error.message : "Could not send your chats. Keep this phone connected and try again."); setHistorySyncIncomplete(true); }).finally(() => setBusy(false)); }}>Try sending the missing chats again</button>}
     {!setup && <ul className="mt-3 space-y-3">{devices.filter(device => !device.trustedAt && device.deviceId !== encryption.deviceId && !device.sessionRevokedAt && device.sessionState !== "expired").map(device => <li key={device.deviceId} className="border-t border-[var(--border)] pt-3">
       <p className="text-sm font-semibold">New device: {device.deviceName || browserLabel(device.browser) || "Device waiting to link"}</p>
       {current?.trustedAt ? <div className="mt-2 rounded-xl bg-[var(--surface-2)] p-3 text-xs"><p>Check number: <code className="font-semibold">{device.fingerprint.slice(0, 8)}…{device.fingerprint.slice(-8)}</code></p><details className="mt-2"><summary className="min-h-11 cursor-pointer py-2">Show full check number</summary><code className="block break-all select-all">{device.fingerprint}</code></details></div> : null}
       {device.country ? <p className="mt-1 text-xs text-[var(--muted)]">Country: {countryName(device.country)}</p> : null}
-      <p className="mt-1 text-xs">{device.sessionRevokedAt ? "Signed out / revoked — sign in on that browser before linking." : "Waiting for approval — messages from before aren't available yet."}</p>
+      <p className="mt-1 text-xs">{device.sessionRevokedAt ? "Signed out — sign in on that device before linking." : "Waiting for approval — this phone will send its readable chat history after you approve."}</p>
       {!current?.trustedAt && <p className="mt-2 text-xs text-[var(--muted)]">Approval needs a linked browser. Use the device list above, or use secure recovery.</p>}
       {current?.trustedAt && <>
       {links.filter(link => link.deviceId === device.deviceId && link.status === "pending").map(link => <div key={link.id} className="mt-2">
@@ -262,15 +266,15 @@ export function EncryptionDevices({ recoveryEmail, openRecovery = false, setup =
       <label className="mt-2 flex items-start gap-2 text-xs"><input type="checkbox" checked={verified.includes(device.deviceId)} onChange={event => setVerified(previous => event.target.checked ? [...previous, device.deviceId] : previous.filter(id => id !== device.deviceId))} />I compared this number with the new phone and it matches.</label>
       <button type="button" className="btn btn-primary mt-2" disabled={busy || !current?.trustedAt || !verified.includes(device.deviceId)} onClick={() => {
         setBusy(true); setStatus("");
-        void encryption.approveDevice(device.deviceId, device.fingerprint, { linkId: scannedLink.requestId, token: scannedLink.token, decision: "approve" }).then(async () => { setScannedLink(null); await refresh(); setVerified([]); setStatus("Device approved. Existing chat keys are synchronizing from this browser."); window.dispatchEvent(new Event("maddy:message-request-keys")); }).catch(cause => setStatus(cause instanceof Error ? cause.message : "Approval failed.")).finally(() => setBusy(false));
+        void encryption.approveDevice(device.deviceId, device.fingerprint, { linkId: scannedLink.requestId, token: scannedLink.token, decision: "approve" }).then(async () => { setScannedLink(null); await refresh(); setVerified([]); setStatus("Phone approved. Sending your chat history…"); window.dispatchEvent(new Event("maddy:message-request-keys")); }).catch(cause => setStatus(cause instanceof Error ? cause.message : "Could not approve this phone. Try again.")).finally(() => setBusy(false));
       }}>Approve this device</button>
       {!verified.includes(device.deviceId) && <p className="mt-1 text-xs text-[var(--muted)]">Compare the number on both screens before approving.</p>}
       </> : <p className="mt-2 text-xs text-[var(--muted)]">Scan this device’s QR code to verify the request before approving.</p>}
       </>}
     </li>)}</ul>}
     {(!setup || !recoveryOpen) && <details className="mt-4 text-sm"><summary className="cursor-pointer min-h-11 py-3">{setup ? "Need help?" : "Troubleshooting"}</summary>
-      <details className="mt-3 text-sm text-[var(--muted)]"><summary className="cursor-pointer">Why does a new browser need approval?</summary><p className="mt-2">Approval is saved for this account in this browser. Signing in again here keeps the approval. A different browser, website address, or cleared browser data counts as a new device and needs approval. Approval lets devices share access, but it does not automatically restore every older message.</p></details>
-    {current?.trustedAt && <button type="button" className="btn btn-secondary mt-3 mr-2" disabled={busy} onClick={() => { setBusy(true); setStatus("Sharing chat access with your other devices…"); void syncKnownConversations().then(setStatus).catch(error => setStatus(error.message)).finally(() => setBusy(false)); }}>Share chat access with my other devices</button>}
+      <details className="mt-3 text-sm text-[var(--muted)]"><summary className="cursor-pointer">Why does a new device need approval?</summary><p className="mt-2">A new phone must be approved by one you already use. Once approved, keep the old phone online while it sends the chats it can still open. Chats that the old phone can no longer open may need another device that still has them.</p></details>
+    {current?.trustedAt && <button type="button" className="btn btn-secondary mt-3 mr-2" disabled={busy} onClick={() => { setBusy(true); setStatus("Sending your chat history…"); void syncKnownConversations(undefined, (completed, total) => setStatus(`Sending your chat history… ${completed} of ${total} chats`)).then(setStatus).catch(error => setStatus(error instanceof Error ? error.message : "Could not send your chats. Keep this phone connected and try again.")).finally(() => setBusy(false)); }}>{busy ? "Sending chats…" : "Send chat history to my devices"}</button>}
     <button type="button" className="btn btn-secondary mt-3" disabled={busy || !encryption.initialized} onClick={() => { setBusy(true); setStatus("Checking…"); void refresh().then(() => { setStatus("Device list updated."); window.dispatchEvent(new Event("maddy:message-request-keys")); }).catch(cause => setStatus(cause instanceof Error ? cause.message : "Unable to load devices.")).finally(() => setBusy(false)); }}>{busy ? "Checking devices…" : "Refresh device list"}</button>
     <p className="mt-3 text-xs text-[var(--muted)]">Clearing browser data removes what this browser needs to open chats and any saved drafts. Save a recovery file first.</p></details>}
   </section>;

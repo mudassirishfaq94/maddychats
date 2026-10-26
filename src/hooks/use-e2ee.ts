@@ -26,6 +26,7 @@ import {
 } from "@/lib/crypto";
 import { e2eeRequest, awaitE2EERead } from "@/lib/e2ee-request";
 import { mapWithConcurrency } from "@/lib/async";
+import { transferDeviceHistory } from "@/lib/device-history-transfer";
 import { loadSignalBridge } from "@/lib/e2ee-signal-bridge";
 import { ensureSignalDeviceRegistered, maintainSignalPrekeyReserve } from "@/lib/e2ee-signal-registration";
 import {
@@ -884,17 +885,16 @@ export function useE2EE(userId: string | undefined) {
    * copy for a new Android device by itself. An already-authorized device
    * must wrap its key to the new device's public key.
    */
-  const syncKnownConversations = useCallback(async function synchronize(conversationId?: string): Promise<string> {
-    if (!state.initialized || !userId || !state.publicKey) throw new Error("Device keys are not ready. Use a trusted device that can already read this chat.");
+  const syncKnownConversations = useCallback(async function synchronize(conversationId?: string, onProgress?: (completed: number, total: number) => void): Promise<string> {
+    if (!state.initialized || !userId || !state.publicKey) throw new Error("This phone isn't ready to send chats yet. Reload and try again from a phone that can open them.");
     if (!conversationId) {
       const response = await e2eeRequest("/api/e2ee/devices/sync", { cache: "no-store" });
-      if (!response.ok) throw new Error("Only a trusted browser can synchronize chat keys. Reload and try again.");
+      if (!response.ok) throw new Error("This phone isn't approved to send your chats yet. Approve it from the new phone, then try again.");
       const { conversationIds } = await response.json() as { conversationIds: string[] };
-      let shared = 0;
-      for (const id of conversationIds) {
-        try { await synchronize(id); shared++; } catch { /* Other chats may still have recoverable keys. */ }
-      }
-      return `Synchronized ${shared} of ${conversationIds.length} recent chats. Chats whose keys are missing here must be restored from another participant. Open older chats and use Restore my other devices there.`;
+      if (!conversationIds.length) return "Your new phone is ready. There are no earlier chats to send.";
+      const { sent, total } = await transferDeviceHistory(conversationIds, synchronize, onProgress);
+      if (sent === total) return "Your chat history is ready on the new phone.";
+      return `Sent ${sent} of ${total} chats. Some older chats could not be sent. If this phone can still open them, keep it connected and try again.`;
     }
     // Recovery shares existing keys only, and never creates a replacement key.
     const controller = new AbortController();
@@ -905,10 +905,10 @@ export function useE2EE(userId: string | undefined) {
         `/api/e2ee/peers?conversationId=${encodeURIComponent(conversationId)}&deviceId=${encodeURIComponent(state.deviceId)}`,
         { cache: "no-store", signal },
       );
-      if (!response.ok) throw new Error("Unable to check trusted devices. Please retry.");
+      if (!response.ok) throw new Error("Couldn't find your linked phone. Check your connection and try again.");
       const data = await response.json() as { peers?: Peer[] };
       const devices = (data.peers ?? []).filter(peer => peer.userId === userId).flatMap(peer => peer.devices);
-      if (!devices.length) return "No other trusted devices found. Approve your new device in Profile > Devices first.";
+      if (!devices.length) throw new Error("No linked phone is ready yet. Approve the new phone, then try again.");
       const available = await awaitE2EERead(loadDecryptionKeys(conversationId), signal);
       signal.throwIfAborted();
       const current = conversationKeysRef.current.get(conversationId);
@@ -917,7 +917,7 @@ export function useE2EE(userId: string | undefined) {
         signal.throwIfAborted();
         unique.set(await conversationFingerprint(key), key);
       }
-      if (!unique.size) throw new Error("This device has no recoverable keys. Restore from a device that can already read these messages.");
+      if (!unique.size) throw new Error("This phone cannot open this chat yet. Try sending it from a phone that can still show the messages.");
       const currentFingerprint = current ? await conversationFingerprint(current) : null;
       const keys = [...unique.entries()].sort(([a], [b]) => Number(a === currentFingerprint) - Number(b === currentFingerprint)).map(([, key]) => key);
       // Preserve history order per device; write the active key last.
@@ -928,11 +928,11 @@ export function useE2EE(userId: string | undefined) {
         }
       });
       signal.throwIfAborted();
-      return `Shared ${keys.length} existing key(s) with ${devices.length} trusted device(s). Reopen this chat there.`;
+      return "Chat history sent to your linked phone.";
     } catch (cause) {
       const timedOut = signal.aborted;
       controller.abort();
-      if (timedOut) throw new Error("Restoration timed out. Check your connection and retry; existing keys were preserved.");
+      if (timedOut) throw new Error("Sending took too long. Check your connection and try again; your chats were not changed.");
       throw cause;
     } finally { clearTimeout(timeout); }
   }, [loadDecryptionKeys, shareKey, state.deviceId, state.initialized, state.publicKey, userId]);

@@ -20,9 +20,9 @@ test("encrypted messages show a calm loading state and explain failures in plain
   assert.match(network, /aria-busy="false"/);
   const key = render({ failed: true, missingKey: true });
   assert.match(key, /Message unavailable/);
-  assert.match(key, /device that can still open this chat/);
-  assert.match(key, /may not be recoverable/);
-  assert.doesNotMatch(key, /key|decrypt|trusted device/i);
+  assert.match(key, /Link the phone that can still open it and send its chat history/);
+  assert.match(key, /How to bring chats over/);
+  assert.doesNotMatch(key, /recovery key|decrypt|trusted device/i);
   assert.match(render({ deviceError: true }), /Open settings/);
   assert.match(render({ signal: true }), /needs an update.*send it again/);
   assert.match(render({ failed: true, introduction: true }), /when they open Circlo/);

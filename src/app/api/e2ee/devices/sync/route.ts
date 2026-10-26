@@ -14,6 +14,6 @@ export async function GET() {
   if (!trusted) return jsonError(403, "Use a trusted browser.");
   if (!(await rateLimit(`device-sync:${user.id}`, 5, 60000)).allowed) return jsonError(429, "Wait before synchronizing again.");
   const rows = await db.select({ id: conversations.id }).from(conversations).innerJoin(conversationMembers, eq(conversationMembers.conversationId, conversations.id))
-    .where(and(eq(conversationMembers.userId, user.id), isNull(conversations.deletedAt))).orderBy(desc(conversations.lastMessageAt)).limit(100);
+    .where(and(eq(conversationMembers.userId, user.id), isNull(conversations.deletedAt))).orderBy(desc(conversations.lastMessageAt));
   return Response.json({ conversationIds: rows.map(row => row.id) }, { headers: { "Cache-Control": "private, no-store" } });
 }
