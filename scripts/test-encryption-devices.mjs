@@ -55,7 +55,7 @@ export async function testEncryptionDevices(base, pool, owner, peer, password, c
     assert.equal(await device.page.getByRole("button", { name: "Approve encryption device", exact: true }).count(), 0, "Pending browsers do not offer impossible approval controls");
     await device.page.getByText(/No linked device is available/).waitFor();
     await openDeviceTools(device.page);
-    const fingerprint = await device.page.getByLabel("This device safety number").innerText();
+    const fingerprint = await device.page.getByLabel("This device check number").innerText();
     const target = (await pool.query("select device_id,session_id,public_key from e2ee_keys where user_id=$1 and trusted_at is null order by created_at desc limit 1", [owner.id])).rows[0]; assert(target);
     assert.equal(createHash("sha256").update(target.public_key).digest("hex"), fingerprint);
     const emailCode = "381529";
@@ -127,11 +127,11 @@ export async function testEncryptionDevices(base, pool, owner, peer, password, c
     await contact.page.getByRole("textbox", { name: "Message text" }).waitFor();
     const changed = contact.page.getByRole("button", { name: /A device changed in this chat/ });
     await changed.waitFor(); await changed.click();
-    const verification = contact.page.getByRole("dialog", { name: "Check the safety numbers", exact: true });
+    const verification = contact.page.getByRole("dialog", { name: "Check that your chat is private", exact: true });
     const confirmation = verification.getByRole("button", { name: "Approve", exact: true });
     assert.equal(await confirmation.isEnabled(), false);
     await openDeviceTools(device.page);
-    const expectedFingerprint = await device.page.getByLabel("This device safety number").innerText();
+    const expectedFingerprint = await device.page.getByLabel("This device check number").innerText();
     assert.equal(await verification.getByText(expectedFingerprint, { exact: true }).count(), 1);
     await verification.getByRole("checkbox").check(); await confirmation.click();
     await contact.page.getByRole("textbox", { name: "Message text" }).fill("Encrypted recovery verification");

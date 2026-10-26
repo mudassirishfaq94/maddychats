@@ -63,9 +63,9 @@ export async function testDeviceAccess(base, pool, secret) {
     const linkResult=await linkResponse; assert.equal(linkResult.status(),201);
     const {id:requestId,token}=await linkResult.json(); assert.match(token,/^[A-Za-z0-9_-]{43}$/);
     await target.page.getByRole("img",{name:"Temporary secure device-link QR code"}).waitFor();
-    const fingerprintDetails=target.page.locator("details").filter({has:target.page.getByLabel("This device safety number")});
+    const fingerprintDetails=target.page.locator("details").filter({has:target.page.getByLabel("This device check number")});
     await fingerprintDetails.locator(":scope > summary").click();
-    await target.page.getByLabel("This device safety number").waitFor({state:"visible"});
+    await target.page.getByLabel("This device check number").waitFor({state:"visible"});
     await source.page.getByText("Troubleshooting",{exact:true}).click();
     await source.page.getByRole("button",{name:"Refresh device list",exact:true}).click();
     const qrPayload=JSON.stringify({kind:"circlo-device-link",version:1,requestId,token});
@@ -79,8 +79,8 @@ export async function testDeviceAccess(base, pool, secret) {
     })()`);
     await source.page.getByRole("button",{name:"Scan QR on your new device",exact:true}).click();
     await source.page.getByText("Safety number:").waitFor();
-    await source.page.getByText("Show full safety number",{exact:true}).click();
-    await source.page.getByLabel("I compared this safety number with the new phone and it matches.").check();
+    await source.page.getByText("Show full check number",{exact:true}).click();
+    await source.page.getByLabel("I compared this number with the new phone and it matches.").check();
     await source.page.getByRole("button",{name:"Approve this device",exact:true}).click();
     await target.page.waitForURL(base+"/app/chats");
     assert.equal(target.authMeRequests.length,0,"A completed private-key proof authorizes the app without a redundant /api/auth/me request");

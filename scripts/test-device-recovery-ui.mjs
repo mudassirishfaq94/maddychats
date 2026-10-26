@@ -28,12 +28,12 @@ export async function testDeviceRecoveryUI(base, pool) {
     const simple = await source.context.newPage();
     await simple.goto(base + "/app/profile#encryption-devices");
     await simple.getByText("This device: Linked", { exact:true }).waitFor();
-    assert.equal(await simple.getByLabel("This device safety number").isVisible(),false,"Fingerprints are hidden in ordinary device settings");
+    assert.equal(await simple.getByLabel("This device check number").isVisible(),false,"Fingerprints are hidden in ordinary device settings");
     assert(!await simple.locator("#encryption-devices").innerText().then(text=>text.includes("Device ID:")),"Identifiers do not clutter the main view");
     await mkdir(".freebuff/performance",{recursive:true});
     await simple.screenshot({path:".freebuff/performance/simple-devices.png",fullPage:true});
     await simple.getByText("Device details",{exact:true}).click();
-    assert(await simple.getByLabel("This device safety number").isVisible(),"Verification remains available on demand");
+    assert(await simple.getByLabel("This device check number").isVisible(),"Verification remains available on demand");
     await simple.close();
     const overview = await source.context.newPage();
     await overview.goto(base + "/app/profile");
@@ -107,9 +107,9 @@ export async function testDeviceRecoveryUI(base, pool) {
     })()`);
     await source.page.getByRole("button", { name: "Scan QR on your new device", exact: true }).click();
     await source.page.getByText("Safety number:").waitFor();
-    await target.page.getByLabel("This device safety number").waitFor({ state: "visible" });
-    await source.page.getByText("Show full safety number", { exact: true }).click();
-    await source.page.getByLabel("I compared this safety number with the new phone and it matches.").check();
+    await target.page.getByLabel("This device check number").waitFor({ state: "visible" });
+    await source.page.getByText("Show full check number", { exact: true }).click();
+    await source.page.getByLabel("I compared this number with the new phone and it matches.").check();
     await source.page.getByRole("button", { name: "Approve this device", exact: true }).click();
     await target.page.getByText("This device: Linked", { exact: true }).waitFor({ timeout: 30000 });
     const device = (await pool.query("select device_id from e2ee_keys where user_id=$1 order by created_at desc limit 1", [user.id])).rows[0];
@@ -125,7 +125,7 @@ export async function testDeviceRecoveryUI(base, pool) {
     const file = await readFile(await (await downloadEvent).path());
     const recoveryCode = await source.page.locator('code[aria-label="Recovery file code"]').innerText();
     await openDeviceTools(source.page);
-    const sourceFingerprint = await source.page.getByLabel("This device safety number").innerText();
+    const sourceFingerprint = await source.page.getByLabel("This device check number").innerText();
     await source.context.close();
     const restored = await open();
     await restored.page.getByText("Use a saved file or move from the old website", { exact: true }).click();
@@ -135,7 +135,7 @@ export async function testDeviceRecoveryUI(base, pool) {
     await restored.page.getByRole("button", { name: "Restore chat access", exact: true }).click();
     await restored.page.getByText("This device: Linked", { exact: true }).waitFor({ timeout: 30000 });
     await openDeviceTools(restored.page);
-    assert.equal(await restored.page.getByLabel("This device safety number").innerText(), sourceFingerprint);
+    assert.equal(await restored.page.getByLabel("This device check number").innerText(), sourceFingerprint);
     assert.equal((await pool.query("select count(*)::int as n from e2ee_keys where user_id=$1 and trusted_at is not null", [user.id])).rows[0].n, 2, "Recovery preserves the other browser's trust");
     assert.equal(await restored.page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth), false, "Mobile recovery page fits the viewport");
     assert.deepEqual(errors, []);

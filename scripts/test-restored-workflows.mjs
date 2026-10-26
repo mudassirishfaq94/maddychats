@@ -314,9 +314,9 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     })()`);
     await source.page.getByRole("button", { name: "Scan QR on your new device", exact: true }).click();
     await source.page.getByText("Safety number:").waitFor();
-    await target.page.getByLabel("This device safety number").waitFor({ state: "visible" });
-    await source.page.getByText("Show full safety number", { exact: true }).click();
-    await source.page.getByLabel("I compared this safety number with the new phone and it matches.").check();
+    await target.page.getByLabel("This device check number").waitFor({ state: "visible" });
+    await source.page.getByText("Show full check number", { exact: true }).click();
+    await source.page.getByLabel("I compared this number with the new phone and it matches.").check();
     const proofResponse = source.page.waitForResponse(response => response.url().endsWith("/api/e2ee/devices/approve") && response.request().postDataJSON()?.action === "approve", { timeout: 60000 });
     await source.page.getByRole("button", { name: "Approve this device", exact: true }).click();
     const proof = (await proofResponse).request().postDataJSON();

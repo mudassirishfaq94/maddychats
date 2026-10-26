@@ -122,8 +122,8 @@ export async function testChatRecovery(base, cookieHeader, conversationId) {
     await source.getByRole("button", { name: "Scan QR on your new device", exact: true }).click();
     await source.getByText("Safety number:").waitFor();
     await target.getByText("Device details", { exact: true }).click();
-    await source.getByText("Show full safety number", { exact: true }).click();
-    await source.getByLabel("I compared this safety number with the new phone and it matches.").check();
+    await source.getByText("Show full check number", { exact: true }).click();
+    await source.getByLabel("I compared this number with the new phone and it matches.").check();
     await source.getByRole("button", { name: "Approve this device", exact: true }).click();
     await source.getByRole("status").filter({ hasText: "Device approved." }).waitFor();
     await source.goto(chatUrl);

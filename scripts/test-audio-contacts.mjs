@@ -167,7 +167,7 @@ export async function testAudioContacts(base, pool, owner, peer, password, conve
       const encryptionSummary = a.locator("summary:visible").filter({ has: a.getByText("Encryption & trusted devices", { exact: true }) });
       await encryptionSummary.click();
       const encryptionPanel = encryptionSummary.locator("..");
-      await encryptionPanel.getByLabel("This device safety number", { exact: true }).waitFor({ state: "attached" });
+      await encryptionPanel.getByLabel("This device check number", { exact: true }).waitFor({ state: "attached" });
       await encryptionPanel.locator("#local-chat-backup").waitFor({ state: "attached" });
       // Opening lazy sections inserts nested disclosures. Re-query each time
       // instead of retaining positional locators that can move to hidden children.
