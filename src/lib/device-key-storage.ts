@@ -21,7 +21,7 @@ export async function readDeviceKeyMaterial(key: string): Promise<string | null>
   const storage = await nativeStorage();
   const stored = await storage.get(key);
   if (typeof stored === "string") {
-    if (localStorage.getItem(key) === stored) localStorage.removeItem(key);
+    try { if (localStorage.getItem(key) === stored) localStorage.removeItem(key); } catch { /* Native storage remains authoritative. */ }
     return stored;
   }
 

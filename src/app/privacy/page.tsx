@@ -322,7 +322,9 @@ export default function PrivacyPage() {
             Devices that can open your chats
           </h3>
           <p>
-            A new browser or phone must be approved by a device you already use. To link one, scan its temporary QR code
+            A new browser or phone can be linked only after approval from a device you already use. If you no longer
+            have an existing device, use the recovery phrase or file you saved to restore chat access. To link one, scan
+            its temporary QR code
             and compare the safety code shown on both devices before you approve it. The QR code expires after three
             minutes and does not contain the secret information needed to open chats. Removing a device stops it from
             getting what it needs for new messages. Circlo also stores a locked recovery copy for this device; only the
@@ -472,7 +474,7 @@ export default function PrivacyPage() {
 
         <LegalSection id="transfers" number="10" title="Where data is processed" icon={Globe2}>
           <p>
-            Circlo runs on the providers listed in section 5, in the United States and the European Union. Where personal
+            Circlo runs on the providers listed in section 5, in the United States, India, and the European Union. Where personal
             data moves between regions we rely on safeguards required by law, and each provider publishes its own
             transfer terms. Private messages remain locked wherever they are stored.
           </p>
