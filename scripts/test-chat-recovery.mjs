@@ -138,7 +138,7 @@ export async function testChatRecovery(base, cookieHeader, conversationId) {
     const unavailablePeers = route => route.fulfill({ status: 503, contentType: "application/json", body: "{}" });
     await source.route(peersUrl, unavailablePeers);
     await source.getByRole("button", { name: "Share chat access with my devices", exact: true }).click();
-    await source.getByRole("status").filter({ hasText: "Unable to check trusted devices" }).waitFor();
+    await source.getByRole("status").filter({ hasText: "Couldn't find your linked phone. Check your connection and try again." }).waitFor();
     assert.equal(await source.getByRole("button", { name: "Share chat access with my devices", exact: true }).isEnabled(), true, "A failed restore must stop its spinner");
     await source.unroute(peersUrl, unavailablePeers);
     await source.getByRole("button", { name: "Share chat access with my devices", exact: true }).click();
