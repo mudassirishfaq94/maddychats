@@ -222,7 +222,10 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
       await messageHistory.getByText("Message unavailable", { exact: true }).waitFor({ timeout: 45000 });
       await source.page.getByRole("button", { name: "Try again", exact: true }).click();
       await messageHistory.getByText("Message unavailable", { exact: true }).waitFor({ timeout: 45000 });
-      assert.equal(await source.page.getByRole("button", { name: "Recovery help", exact: true }).count(), 1);
+      await messageHistory.getByRole("button", { name: "How to bring chats over", exact: true }).click();
+      const protectionDetails = source.page.getByRole("dialog", { name: "Private chat protection details", exact: true });
+      await protectionDetails.waitFor();
+      await protectionDetails.getByRole("button", { name: "Close", exact: true }).click();
       assert.equal(await source.page.getByText("unreadable-owned-fixture", { exact: true }).count(), 0, "Ciphertext is never displayed");
     } finally {
       await pool.query("delete from messages where id=$1 and conversation_id=$2", [unreadable, conversationId]);
