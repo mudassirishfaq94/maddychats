@@ -18,7 +18,7 @@ export function VerifyEmailForm({ token, deliveryUnavailable = false, googleVeri
     if (!token) return;
     let active = true;
     if (verification.current?.token !== token) {
-      verification.current = { token, promise: fetch("/api/auth/verify-email", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token }) }).then((r) => r.ok) };
+      verification.current = { token, promise: fetch("/api/auth/verify-email", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token }) }).then((r) => { if (r.status === 429 || r.status >= 500) throw new Error("unavailable"); return r.ok; }) };
     }
     verification.current.promise.then((ok) => { if (active) setState(ok ? "verified" : "invalid"); }).catch(() => { if (active) setState("error"); });
     return () => { active = false; };
@@ -27,8 +27,8 @@ export function VerifyEmailForm({ token, deliveryUnavailable = false, googleVeri
     event.preventDefault(); if (!challenge.ready) return; setBusy(true); setFeedback("");
     try {
       const response = await fetch("/api/auth/verify-email", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email,code,turnstileToken:challenge.token})});
-      const data = await response.json();
-      if (response.ok) setState("verified"); else setFeedback(data.error ?? "We couldn't verify that code.");
+      const data = await response.json().catch(() => null);
+      if (response.ok) setState("verified"); else setFeedback(data?.error ?? (response.status === 429 ? "Please wait a moment before trying again." : "We couldn't verify that code."));
     } catch { setFeedback("Connection interrupted. Please try again."); }
     finally { challenge.reset(); setBusy(false); }
   }
@@ -37,8 +37,8 @@ export function VerifyEmailForm({ token, deliveryUnavailable = false, googleVeri
     setBusy(true); setFeedback("");
     try {
       const response = await fetch("/api/auth/resend-verification", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email,turnstileToken:challenge.token})});
-      const data = await response.json();
-      setFeedback(response.ok ? data.message : data.error ?? "We couldn't request a code right now.");
+      const data = await response.json().catch(() => null);
+      setFeedback(response.ok ? data?.message : data?.error ?? (response.status === 429 ? "Please wait a moment before requesting another code." : "We couldn't request a code right now."));
     } catch { setFeedback("Connection interrupted. Please try again."); }
     finally { challenge.reset(); setBusy(false); }
   }
@@ -48,6 +48,7 @@ export function VerifyEmailForm({ token, deliveryUnavailable = false, googleVeri
       <h1 className="mt-5 text-2xl font-bold">Verify your email</h1>
       <p className="mt-2 text-[var(--muted)]">Enter the six-digit code from Circlo. Codes expire after 10 minutes.</p>
       {deliveryUnavailable ? <p className="mt-3" role="status">Your account was created, but the verification email could not be sent. Your account stays protected until you verify your email.</p> : null}
+      {state === "error" ? <p className="mt-3" role="alert">We couldn’t check the link right now. Try again shortly, or enter your email code below.</p> : null}
       {state === "invalid" ? <p className="mt-3" role="status">That verification link is invalid or expired. Request a new code below.</p> : null}
       <form onSubmit={verifyCode} className="mt-5 space-y-4">
         <label className="block">Email address<input className="field-input mt-2 w-full" type="email" required autoComplete="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@example.com" /></label>

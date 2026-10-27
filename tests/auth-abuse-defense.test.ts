@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { admissionProtected, createAuthAdmission } from "../src/server/auth-admission";
-import { challengeConfiguration, verifyChallenge } from "../src/server/turnstile";
+import { challengeConfiguration, verifyChallenge, verifySingleUseChallenge } from "../src/server/turnstile";
 
 const config = { enabled: true, configured: true, siteKey: "fixture-site", secret: "fixture-secret" };
 const reply = (body: unknown, status = 200) => (async () => Response.json(body, { status })) as typeof fetch;
@@ -54,4 +54,24 @@ test("admission leaves logout, session reads, realtime and regular messages alon
   assert(admissionProtected("/api/auth/resend-verification", "POST"));
   for (const path of ["/api/auth/logout", "/api/auth/me", "/api/auth/challenge", "/api/events", "/api/conversations/a/messages", "/api/auth/login/other"]) assert(!admissionProtected(path, "POST"));
   assert(!admissionProtected("/api/auth/login", "GET"));
+});
+
+test("concurrent provider successes consume a proof only once; invalid proofs never reach store", async () => {
+  const used = new Set<string>();
+  const consume = async (digest: string) => {
+    assert(/^[a-f0-9]{64}$/.test(digest)); assert.notEqual(digest, "proof");
+    if (used.has(digest)) return false; used.add(digest); return true;
+  };
+  const provider = reply({ success: true, action: "login", hostname: "circlo.chat" });
+  const results = await Promise.all([1, 2].map(() => verifySingleUseChallenge("proof", "login", "circlo.chat", config, consume, provider)));
+  assert.deepEqual(results.sort(), ["invalid", "ok"]); assert.equal(used.size, 1);
+  assert.equal(await verifySingleUseChallenge(undefined, "login", "circlo.chat", config, consume, provider), "invalid");
+  assert.equal(used.size, 1);
+  assert.equal(await verifySingleUseChallenge("fresh", "login", "circlo.chat", config, async () => { throw Error("store unavailable"); }, provider), "unavailable");
+});
+
+test("public dummy keys cannot enable challenges in production", () => {
+  const env = { NODE_ENV: "production", TURNSTILE_REQUIRED: "true", TURNSTILE_SITE_KEY: "1x00000000000000000000AA", TURNSTILE_SECRET_KEY: "1x0000000000000000000000000000000AA" };
+  assert.equal(challengeConfiguration(env).enabled, true); assert.equal(challengeConfiguration(env).configured, false);
+  assert.equal(challengeConfiguration({ ...env, NODE_ENV: "test" }).configured, true);
 });

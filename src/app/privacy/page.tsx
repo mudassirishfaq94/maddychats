@@ -78,13 +78,14 @@ const PROCESSORS: { name: string; role: string; region: string }[] = [
   {
     name: "Neon",
     role: "Database for accounts, locked messages and delivery details",
-    region: "Ohio, United States",
+    region: "Singapore",
   },
   {
     name: "Bluehost",
     role: "Runs the Circlo app and background services",
     region: "Mumbai, India",
   },
+  { name: "Cloudflare security", role: "Protects website traffic and checks for automated sign-in attempts", region: "Cloudflare network" },
   { name: "Cloudflare R2", role: "Private storage for photos, videos and files", region: "Cloudflare network" },
   { name: "Supabase", role: "Previous private media storage kept for rollback", region: "Mumbai, India" },
   { name: "Resend", role: "Delivery of verification and password-reset email", region: "United States" },
@@ -356,6 +357,7 @@ export default function PrivacyPage() {
         </LegalSection>
 
         <LegalSection id="collect" number="2" title="Information we collect" icon={Database}>
+          <p>Cloudflare helps block automated sign-in attempts. It receives connection and browser information for these security checks. Our verification request contains the check result, without chat messages or encryption keys.</p>
           <p>We collect information needed to run a messaging service. Chat contents and the details needed to deliver them are different, so we explain them separately.</p>
           <ul className="space-y-4">
             {COLLECTED.map((item) => (
@@ -474,7 +476,7 @@ export default function PrivacyPage() {
 
         <LegalSection id="transfers" number="10" title="Where data is processed" icon={Globe2}>
           <p>
-            Circlo runs on the providers listed in section 5, in the United States, India, and the European Union. Where personal
+            Circlo runs on the providers listed in section 5, including Singapore, India, the United States, and the European Union. Where personal
             data moves between regions we rely on safeguards required by law, and each provider publishes its own
             transfer terms. Private messages remain locked wherever they are stored.
           </p>
