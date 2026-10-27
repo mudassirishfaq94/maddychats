@@ -31,15 +31,15 @@ import {
   LegalSection,
 } from "@/components/legal/legal-shell";
 
-export const metadata = publicMetadata("/privacy", "Privacy Policy — Circlo", "How Circlo handles your data: end-to-end encrypted messages, service metadata, account recovery and the privacy controls you have.");
+export const metadata = publicMetadata("/privacy", "Privacy Policy — Circlo", "What Circlo stores, what it can see, how chat messages are protected, and how you can control your information.");
 
 const LAST_UPDATED = "14 October 2026";
 
 /** Numbered sections, also used to build the jump-to index. */
 const INDEX = [
-  { id: "encryption", label: "End-to-end encryption" },
+  { id: "encryption", label: "How private chats work" },
   { id: "collect", label: "Information we collect" },
-  { id: "metadata", label: "Metadata we handle" },
+  { id: "metadata", label: "Details about your chats" },
   { id: "use", label: "How we use information" },
   { id: "sharing", label: "When information is shared" },
   { id: "security", label: "How we protect your data" },
@@ -53,9 +53,9 @@ const INDEX = [
 ];
 
 const HIGHLIGHTS = [
-  { icon: LockKeyhole, text: "Encrypted on your device before anything is uploaded" },
-  { icon: KeyRound, text: "Your devices hold the keys needed to read your chats" },
-  { icon: Fingerprint, text: "New browsers and phones must be approved by a device you already trust" },
+  { icon: LockKeyhole, text: "Your device locks messages before they are sent" },
+  { icon: KeyRound, text: "Only approved devices can open your chats" },
+  { icon: Fingerprint, text: "A device you already use must approve a new one" },
 ];
 
 const NEVER_READ = [
@@ -63,12 +63,12 @@ const NEVER_READ = [
   "Photos, videos, voice notes and files shared in conversations",
   "Group and community message content",
   "Content of disappearing messages while they exist",
-  "The private half of your device keys — the copy we hold is itself encrypted with a secret that never leaves your device",
+  "The secret information your devices use to open private chats",
 ];
 
 const WE_HANDLE = [
   "Account details: display name, username, email, and any bio, avatar or phone number you add",
-  "Conversation metadata: who is in a chat, when a message was sent, how large it is, delivery and read state",
+  "Details about chats: who is in a chat, when messages are sent, their size, and whether they were delivered or seen",
   "Security data: sign-in times, IP address, browser and device type, and an approximate country",
   "Status updates, avatars and group names, which are stored in a readable form because other people must be shown them",
   "Notification tokens, so your phone can tell you a message arrived",
@@ -77,19 +77,21 @@ const WE_HANDLE = [
 const PROCESSORS: { name: string; role: string; region: string }[] = [
   {
     name: "Neon",
-    role: "Managed PostgreSQL database (accounts, ciphertext, metadata)",
-    region: "United States / European Union",
+    role: "Database for accounts, locked messages and delivery details",
+    region: "Singapore",
   },
   {
-    name: "Supabase",
-    role: "Private object storage for media and encryption envelopes",
-    region: "Selected data region; reads are authorized through the app only",
+    name: "Bluehost",
+    role: "Runs the Circlo app and background services",
+    region: "Mumbai, India",
   },
-  { name: "Render", role: "Application hosting and TLS termination", region: "United States" },
+  { name: "Cloudflare security", role: "Protects website traffic and checks for automated sign-in attempts", region: "Cloudflare network" },
+  { name: "Cloudflare R2", role: "Private storage for photos, videos and files", region: "Cloudflare network" },
+  { name: "Supabase", role: "Previous private media storage kept for rollback", region: "Mumbai, India" },
   { name: "Resend", role: "Delivery of verification and password-reset email", region: "United States" },
   {
     name: "Google, Apple, Mozilla",
-    role: "Push notification delivery and, if you choose it, Google sign-in",
+    role: "Push notification delivery and optional Google sign-in for existing accounts",
     region: "Global",
   },
 ];
@@ -113,17 +115,17 @@ const CONTROLS: { icon: LucideIcon; title: string; text: string }[] = [
   {
     icon: CheckCheck,
     title: "Read receipts and typing",
-    text: "Turn read receipts and typing indicators off independently, at any time.",
+    text: "Choose whether to show when you have seen a message or are typing.",
   },
   {
     icon: Fingerprint,
-    title: "Encryption devices",
-    text: "See every device on your account, its key fingerprint, and withdraw trust instantly.",
+    title: "Devices that can open your chats",
+    text: "See approved devices, check their safety codes, and remove any device you no longer use.",
   },
   {
     icon: KeyRound,
-    title: "Two-factor authentication",
-    text: "Add an authenticator app and keep recovery codes for sign-in and sensitive actions.",
+    title: "Extra sign-in check",
+    text: "Use an authenticator app for an extra check when you sign in or change important settings.",
   },
   {
     icon: BellRing,
@@ -138,38 +140,38 @@ const CONTROLS: { icon: LucideIcon; title: string; text: string }[] = [
 ];
 
 const STEPS = [
-  "The first time you open Circlo on a device, it creates a long-term identity key pair locally. Only the public half is uploaded; the private half stays encrypted on that device.",
-  "When you message someone, your device fetches their published prekeys and performs an X3DH key agreement, establishing a separate session for each of their approved devices.",
-  "Your message is encrypted with a key derived for that message from the session chain before it leaves the device. Our servers receive ciphertext, and store ciphertext.",
-  "The recipient's device derives the matching key and decrypts locally. Keys are never transmitted to us in a usable form.",
+  "When you first use Circlo on a device, it creates a secret for your chats and keeps it on that device. Circlo receives only the public information needed to connect approved devices.",
+  "When you start a chat, your device sets up a private connection with each approved device belonging to the other person.",
+  "Your device locks each message before sending it. Circlo stores and delivers the locked copy but does not have what it needs to open it.",
+  "The other person's approved device opens the message. The information needed to do this is not sent to Circlo in a usable form.",
 ];
 
 const NOT_COVERED = [
   "Your profile: display name, username, bio, avatar and links, which other people must be able to see.",
   "Group and community structure: names, avatars, membership, roles and admin settings.",
   "Status updates, which are stored in a readable form so they can be shown to your chosen audience and reviewed if reported.",
-  "Conversation metadata: who is talking to whom, when, how often, and how large the messages are.",
+  "Details about chats: who is talking, when and how often messages are sent, and their size.",
   "Security and account data: sign-in history, device and browser labels, and approximate country.",
   "Anything you deliberately send to us, such as a report, a support message or a verification request.",
 ];
 
 const USE = [
-  "To provide the service: authenticating you, delivering messages to the right devices, syncing state, and showing your own data back to you.",
-  "To keep it secure: rate limits, session management, same-origin request checks, device approval, and sign-in alerts.",
-  "To prevent abuse: pattern-based signals such as sending rates, duplicate sends and reports, plus blocking. We cannot scan encrypted message content, and we do not try to.",
+  "To run Circlo: signing you in, sending messages to the right devices, keeping your devices in sync, and showing you your information.",
+  "To protect accounts: limiting repeated attempts, checking sign-ins, approving new devices, and sending security alerts.",
+  "To reduce abuse: spotting unusual sending patterns, repeated messages and reports, and letting you block accounts. We cannot read private chat messages to scan them.",
   "To support you: answering in-app support threads and resolving the account problems you raise.",
   "To meet legal obligations: responding to valid legal requests to the extent we are able, and keeping the audit records that make administrative actions accountable.",
 ];
 
 const SAFEGUARDS = [
-  "Transport is encrypted in transit with TLS, and HSTS and a strict content security policy are enforced on the app.",
-  "Passwords are stored as bcrypt hashes with per-account salts; sign-in, reset and sensitive actions are rate-limited.",
-  "Sessions use HTTP-only, secure, same-site cookies, and state-changing requests are checked for same-origin.",
-  "Consequential actions — deleting your account, revoking devices, resetting encryption trust — require fresh authentication and, when enabled, a second factor.",
-  "Media lives in a private store. Every read is authorized through the app, and encrypted attachments are served as ciphertext only.",
-  "Uploads that are meant to be readable are validated, scanned where a scanner is configured, and re-encoded so embedded metadata and scripts are discarded.",
-  "Trust changes are recorded: device approvals, revocations and key rotations are visible in your encryption settings and in the audit trail.",
-  "We reduce exposure by default: previews, transcripts and search work from data decrypted on your own device rather than from a readable server copy.",
+  "The connection between your device and Circlo is protected against people trying to read or change data on the way.",
+  "We do not store your password in readable form. Sign-in, password reset and sensitive actions have limits to slow repeated attempts.",
+  "Your sign-in stays in a protected browser cookie. Important changes are checked to make sure they came from Circlo.",
+  "Important actions — such as deleting your account or removing a trusted device — ask you to prove it is really you again. Some also ask for an extra sign-in check.",
+  "Files are kept private and each request to open one is checked. Private chat files stay locked while stored and sent.",
+  "Files meant to be viewed by others are checked and prepared for display. Virus scanning is used only where it is set up.",
+  "We keep a record when devices are approved or removed and when chat protection changes. You can review device activity in settings.",
+  "Previews and search use information opened on your own device instead of a readable server copy.",
 ];
 
 const RETENTION = [
@@ -184,7 +186,7 @@ const RETENTION = [
 const RIGHTS = [
   {
     lead: "Access and portability.",
-    text: "You can export your account information from your profile at any time, and download any single conversation as a JSON file. Encrypted messages are exported exactly as they are stored — as ciphertext — because the export runs on servers that cannot read them.",
+    text: "You can export your account information from your profile and download one conversation as a data file. Private messages stay locked in the download because the export runs on servers that cannot open them.",
   },
   {
     lead: "Correction.",
@@ -207,11 +209,11 @@ const RIGHTS = [
 const COLLECTED: { lead: string; text: string }[] = [
   {
     lead: "Account and profile.",
-    text: "Display name, username, email address, and anything optional you add such as a bio, avatar, phone number or links. Your password is stored only as a bcrypt hash with a per-account salt. We never store the password itself and we never email it to you.",
+    text: "Display name, username, email address, and anything optional you add such as a bio, avatar, phone number or links. We store a protected check of your password, not the password itself, and never email it to you.",
   },
   {
-    lead: "Encrypted content.",
-    text: "Message text, captions, edits, reactions, attachments and voice notes. All of it is sealed on your device and stored as ciphertext alongside the wrapped keys that only the intended devices can open.",
+    lead: "Private chat content.",
+    text: "Message text, captions, edits, reactions, attachments and voice notes. Your device locks this content before sending; only approved devices in the chat can open it.",
   },
   {
     lead: "Readable content you publish.",
@@ -219,7 +221,7 @@ const COLLECTED: { lead: string; text: string }[] = [
   },
   {
     lead: "Security and device data.",
-    text: "Sign-in timestamps and outcomes, IP address, browser and device labels, an approximate country derived from the network, active sessions, and the public keys of your encryption devices.",
+    text: "When sign-ins happen and whether they succeed, your internet address, browser and device names, an approximate country, active sign-ins, and public device codes used to set up private chats.",
   },
   {
     lead: "Operational data.",
@@ -234,15 +236,15 @@ const COLLECTED: { lead: string; text: string }[] = [
 const SHARING: { lead: string; text: string }[] = [
   {
     lead: "With other users.",
-    text: "People in your conversations receive the content you send, and their devices do the decrypting. People who can see your profile see the fields and activity signals your privacy settings allow.",
+    text: "People in your conversations receive what you send, and their approved devices open it. People who can see your profile can see the details and activity your privacy settings allow.",
   },
   {
     lead: "With the people who run Circlo.",
-    text: "Administrators can see account records and conversation metadata, and can remove content that violates our terms — but what they remove is ciphertext they cannot read. Administrative actions require a fresh verification challenge and are written to an audit log.",
+    text: "Administrators can see account records and details about chats, and can remove content that breaks our terms. They cannot read private chat messages. Sensitive administrator actions require another identity check and are recorded.",
   },
   {
     lead: "Legal requests.",
-    text: "If we receive a valid request, we can produce account records, metadata and stored ciphertext. We cannot produce readable message content, because we do not hold the keys, and we will not weaken encryption for anyone. Where we are permitted to, we will tell you about a request that concerns your account.",
+    text: "If we receive a valid legal request, we can provide account records, details about chats and the locked copies of messages. We cannot provide readable private messages because we do not have what is needed to open them. Where allowed, we will tell you if a request concerns your account.",
   },
   {
     lead: "With service providers.",
@@ -258,7 +260,7 @@ export default function PrivacyPage() {
         badge="Privacy policy"
         badgeIcon={LockKeyhole}
         title="Your privacy, in plain language."
-        lead="Circlo is built so the content of your conversations belongs to you. Message text, attachments and voice notes are encrypted on your device before they reach us, and our servers store ciphertext they cannot read. This page explains what we collect, what we can and cannot see, and the controls you have."
+        lead="Your device locks private messages, attachments and voice notes before sending them. Circlo stores a locked copy it cannot open. This page explains what information we keep, what we can see, and the controls you have."
         meta={[
           { icon: ScrollText, text: `Last updated: ${LAST_UPDATED}` },
           { icon: Globe2, text: "Applies to the Circlo web app, Android app and this website" },
@@ -286,18 +288,17 @@ export default function PrivacyPage() {
           </article>
         </div>
         <p className="mt-4 text-xs leading-6 text-[var(--muted)]">
-          Encryption protects content. It does not hide the fact that two accounts exchanged messages, so we describe
-          the metadata we handle separately, and honestly, in section 3.
+          Chat protection hides message contents. It does not hide which accounts are talking or when, so we explain
+          those details separately in section 3.
         </p>
       </section>
 
       <LegalBody index={<LegalIndex entries={INDEX} />}>
-        <LegalSection id="encryption" number="1" title="End-to-end encryption" icon={LockKeyhole}>
+        <LegalSection id="encryption" number="1" title="How private chats work" icon={LockKeyhole}>
           <p>
-            Every Circlo conversation is end-to-end encrypted following the design pioneered by the Signal protocol:
-            X3DH key agreement to start a session, then a ratcheting session that advances as you talk. This is how the
-            app works. There is no switch that turns it off, and a payload that is not encrypted is rejected by our
-            servers.
+            Circlo locks each private message on your device before it is sent. Only approved devices in the chat can
+            open it. This is called end-to-end encryption. It is always on for private chats; the service rejects a
+            private message if it is not locked first.
           </p>
 
           <h3 className="font-display pt-2 text-base font-semibold text-[var(--text)]">How a message travels</h3>
@@ -312,30 +313,33 @@ export default function PrivacyPage() {
             ))}
           </ol>
 
-          <h3 className="font-display pt-2 text-base font-semibold text-[var(--text)]">Group conversations</h3>
+          <h3 className="font-display pt-2 text-base font-semibold text-[var(--text)]">Group chats</h3>
           <p>
-            Group messages use a sender key that is distributed to each member&apos;s approved devices separately, and
-            rotated when membership changes. Someone who joins later cannot read what was said before they arrived, and
-            someone who leaves or is removed cannot read what is said afterwards.
+            Each person&apos;s approved devices get what they need to open new group messages. When someone joins, they
+            cannot read earlier messages. When someone leaves or is removed, their devices cannot open later messages.
           </p>
 
           <h3 className="font-display pt-2 text-base font-semibold text-[var(--text)]">
-            Your devices and your keys
+            Devices that can open your chats
           </h3>
           <p>
-            A browser or phone becomes trusted only when a device you already trust approves it, by proving possession
-            of its private key. To link a device, scan its short-lived, single-use QR code on a trusted device and
-            compare the new device&apos;s key fingerprint before approval. The QR expires after three minutes and never
-            contains private keys. Revoking a device removes its trust immediately, so it stops receiving keys. We hold an encrypted
-            backup of your device key, so a returning browser can be restored — but the 32-byte secret that unlocks that
-            backup is generated on your device and is never sent to us, which is why the backup is unreadable without
-            it, including to us.
+            A new browser or phone can be linked only after approval from a device you already use. If you no longer
+            have an existing device, use the recovery phrase or file you saved to restore chat access. To link one, scan
+            its temporary QR code
+            and compare the safety code shown on both devices before you approve it. The QR code expires after three
+            minutes and does not contain the secret information needed to open chats. Removing a device stops it from
+            getting what it needs for new messages. Circlo also stores a locked recovery copy for this device; only the
+            separate recovery code you save can open that copy. Circlo does not receive that code.
+          </p>
+          <p>
+            Today, the web and Android app keep the information needed to open chats in saved data on that device.
+            Physical security keys and a word-based recovery phrase are not available yet. Before clearing saved data,
+            make a recovery file or link another device. Otherwise, you may lose access to older chats.
           </p>
           <LegalCallout>
-            No one — not our engineers, not an administrator, not anyone with a court order — can read your encrypted
-            conversations, because the keys needed to do so are never on our servers. The same fact has a hard edge: if
-            you lose every trusted device and your recovery material, your earlier history cannot be recovered. We would
-            rather say that plainly than offer a backdoor.
+            Circlo staff and administrators cannot open your private messages because the needed secret information is
+            kept on your devices. If you lose every approved device and your recovery code or file, you may permanently
+            lose access to earlier chats. We cannot restore messages without that information.
           </LegalCallout>
 
           <h3 className="font-display pt-2 text-base font-semibold text-[var(--text)]">
@@ -343,19 +347,18 @@ export default function PrivacyPage() {
           </h3>
           <LegalChecklist items={NOT_COVERED} tone="note" />
           <p>
-            Because we hold only ciphertext, we cannot build a searchable index of your conversations across the
-            service, and notifications cannot show what a message said. A push notification tells you that a message
-            arrived, not what it contains.
+            Circlo stores a locked copy of private messages, so it cannot search their contents for you. Notifications
+            can tell you a message arrived, but the service cannot read the message to add its contents.
           </p>
           <p className="text-[13px] leading-6">
-            <strong className="text-[var(--text)]">Verification.</strong> Our encryption design is documented in full,
-            and the client is written so its cryptographic layer can be reviewed and replaced on its own. We have not yet
-            published an independent third-party audit of that layer, and this page will say so plainly when we do.
+            <strong className="text-[var(--text)]">Independent review.</strong> This page explains how private chat
+            protection is designed to work. We have not published a review by an independent security specialist.
           </p>
         </LegalSection>
 
         <LegalSection id="collect" number="2" title="Information we collect" icon={Database}>
-          <p>We collect what a messaging service needs and no more, keeping content separate from metadata.</p>
+          <p>Cloudflare helps block automated sign-in attempts. It receives connection and browser information for these security checks. Our verification request contains the check result, without chat messages or encryption keys.</p>
+          <p>We collect information needed to run a messaging service. Chat contents and the details needed to deliver them are different, so we explain them separately.</p>
           <ul className="space-y-4">
             {COLLECTED.map((item) => (
               <li key={item.lead}>
@@ -369,16 +372,15 @@ export default function PrivacyPage() {
           </p>
         </LegalSection>
 
-        <LegalSection id="metadata" number="3" title="Metadata we handle" icon={ServerCog}>
+        <LegalSection id="metadata" number="3" title="Details about your chats" icon={ServerCog}>
           <p>
-            Encrypting content does not erase the fact that it was sent. Our servers necessarily see the envelope: which
-            accounts are in a conversation, when a message or reaction was written, its size and type, who has opened it,
-            and which devices are online to receive it. Delivering messages needs that information, and abuse prevention
-            relies on it.
+            Although private message contents are locked, our service needs some details to deliver them: which accounts
+            are in a chat, when a message or reaction was sent, its size and type, whether it was opened, and which
+            devices are online. These details can reveal who is talking and when.
           </p>
           <p>
-            We use metadata to route messages, keep sessions and notifications working, rate-limit and block spam and
-            abuse, and understand service health in aggregate. We do not sell it, and we do not use it to build
+            We use these details to deliver messages, keep sign-ins and notifications working, slow spam and abuse, and
+            check that the service is working. We do not sell them or use them to build
             advertising profiles.
           </p>
         </LegalSection>
@@ -435,8 +437,7 @@ export default function PrivacyPage() {
 
         <LegalSection id="security" number="6" title="How we protect your data" icon={Fingerprint}>
           <p>
-            Security is layered, and the encryption in section 1 is the outermost layer: the data most worth stealing is
-            never stored in a form we could lose.
+            Chat message contents are locked before they reach our service. We also use the following safeguards to protect accounts and other information.
           </p>
           <LegalChecklist items={SAFEGUARDS} />
         </LegalSection>
@@ -469,17 +470,15 @@ export default function PrivacyPage() {
         <LegalSection id="retention" number="9" title="How long we keep data" icon={Trash2}>
           <LegalChecklist items={RETENTION} />
           <p>
-            Deleting your account removes your account data, the messages you sent and the encryption keys registered to
-            you from the live database. Unreferenced uploads are eligible for cleanup after 24 hours; failed storage deletions are retried. Files still referenced by other users or groups remain. Limited security and moderation records may be retained for abuse investigation, and provider backups follow their configured lifecycle. Deletion does not erase a copy that another participant&apos;s device has already decrypted or downloaded. Read the <Link className="underline" href="/delete-account">account-deletion instructions</Link> before proceeding.
+            Deleting your account removes your account data, the messages you sent and the registered chat-device information from the live database. Unused uploads can be cleaned up after 24 hours; failed deletions are retried. Files still used by other people or groups remain. Some security and moderation records may be kept to investigate abuse, and copies in provider backups follow their own deletion schedule. Deletion cannot erase a copy another person has already opened or downloaded. Read the <Link className="underline" href="/delete-account">account-deletion instructions</Link> before proceeding.
           </p>
         </LegalSection>
 
         <LegalSection id="transfers" number="10" title="Where data is processed" icon={Globe2}>
           <p>
-            Circlo runs on the providers listed in section 5, in the United States and the European Union. Where personal
-            data moves between regions we rely on appropriate safeguards such as standard contractual clauses, and each
-            provider publishes its own transfer terms. To the extent we hold encrypted content at all, we hold ciphertext
-            that cannot be read in any region.
+            Circlo runs on the providers listed in section 5, including Singapore, India, the United States, and the European Union. Where personal
+            data moves between regions we rely on safeguards required by law, and each provider publishes its own
+            transfer terms. Private messages remain locked wherever they are stored.
           </p>
         </LegalSection>
 

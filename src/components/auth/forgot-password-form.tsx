@@ -57,7 +57,7 @@ export function ForgotPasswordForm() {
       if (!res.ok) {
         setState({
           kind: "error",
-          message: data?.error ?? "Something went wrong. Please try again.",
+          message: data?.error ?? (res.status === 429 ? "Too many attempts. Please wait a moment before trying again." : "Something went wrong. Please try again."),
         });
         if (data?.fields) setErrors(data.fields);
       } else if (data?.ok) {
