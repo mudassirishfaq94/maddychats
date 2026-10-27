@@ -102,7 +102,7 @@ jobs:
       - name: Install mobile lab browser
         run: npx playwright install --with-deps chromium
       - name: Wallpaper measurement regression
-        run: node scripts/test-chat-wallpaper-measurement.mjs
+        run: npx tsx scripts/test-chat-wallpaper-measurement.ts
       - name: Dependency audit
         run: |
           npm audit --omit=dev --audit-level=high
