@@ -21,8 +21,8 @@ export function MfaForm({ next = "/app" }: { next?: string }) {
     finally { setPending(false); }
   }
   return <form onSubmit={submit} className="space-y-4">
-    <p className="text-sm">Enter the six-digit code from your authenticator app, or one of your saved recovery codes.</p>
-    <label className="block text-sm">Authenticator or recovery code
+    <p className="text-sm">Enter the six-digit code from your code app. If you lost that app, use one of the backup sign-in codes you saved.</p>
+    <label className="block text-sm">Code from your app or backup sign-in code
       <input className="field-input mt-2" autoFocus autoComplete="one-time-code" value={code} onChange={(e) => setCode(e.target.value)} maxLength={40} required />
     </label>
     {error ? <p role="alert" className="text-sm text-[var(--danger)]">{error}</p> : null}

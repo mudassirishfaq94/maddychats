@@ -27,7 +27,7 @@ export function DeviceRecovery() {
     const link = document.createElement("a"); link.href = url; link.download = "circlo-encryption-recovery.json"; link.click();
     setTimeout(() => URL.revokeObjectURL(url), 10000);
     setExportCode(result.code);
-    setStatus("Recovery file downloaded. Save the 24 words shown below separately from the file.");
+    setStatus("File saved. Check your Downloads folder or the folder you chose. Write down the recovery words below and keep them separately.");
   }
   async function restore() {
     if (!user || !file || !confirmed) return;
@@ -38,7 +38,7 @@ export function DeviceRecovery() {
     if (!response.ok) throw new Error("Sign in and retry recovery.");
     const { keys } = await response.json() as { keys: Array<{ deviceId: string; publicKey: string; trustedAt: string | null }> };
     const registered = keys.find(key => key.deviceId === bundle.deviceId && key.publicKey === publicKey);
-    if (!registered) throw new Error("This identity is no longer registered. Use device linking or emergency recovery.");
+    if (!registered) throw new Error("This saved chat key is no longer linked to your account. Link a device you still use, or choose email recovery.");
     // Secure storage is written and read back first; only then save the wrapped history keys.
     await writeRecoveryIdentity(bundle);
     localStorage.setItem(recoveryBundleKey(user.id), JSON.stringify({ ...bundle, keypair: "", secret: "" }));
@@ -46,15 +46,17 @@ export function DeviceRecovery() {
     window.location.reload();
   }
   return <section className="mt-4 min-w-0 rounded-xl border border-[var(--border)] p-3 sm:p-4">
-    <h3 className="font-semibold">Save a way back into your chats</h3>
-    <p className="mt-2 text-sm text-[var(--muted)]">Save this file and its 24-word recovery phrase before changing devices or clearing saved data. They help a new device open your chats; they do not include messages, drafts or attachments.</p>
-    <button className="btn btn-secondary mt-3" disabled={busy || !encryption.initialized} onClick={() => void run(backup)}>Download recovery file and phrase</button>
-    {exportCode && <div className="mt-3 text-sm"><p>Write down all 24 words in order and keep them separate from the file. Anyone with both can open your saved chat access.</p><code className="mt-2 block select-all leading-7" aria-label="24-word recovery phrase">{exportCode}</code></div>}
+    <h3 className="font-semibold">Save a spare chat key as a file</h3>
+    <p className="mt-2 text-sm text-[var(--muted)]">Like a spare house key, this file helps you open older chats on another device. It does not contain your messages or photos.</p>
+    <p className="mt-2 text-sm text-[var(--muted)]">Save the file somewhere you can find, such as Downloads. Keep its recovery words on paper or in a password manager, separately from the file.</p>
+    <button className="btn btn-secondary mt-3" disabled={busy || !encryption.initialized} onClick={() => void run(backup)}>Save recovery file</button>
+    {exportCode && <div className="mt-3 text-sm"><p>These 24 words unlock this file. Write them down in order; you need both the file and words. Never share them with anyone.</p><code className="mt-2 block select-all leading-7" aria-label="Recovery words">{exportCode}</code></div>}
     <details className="mt-4"><summary className="cursor-pointer font-medium">Use a saved file or move from the old website</summary>
-      <p className="mt-2 text-sm">On the original browser, visit <a className="underline" href="https://maddychats.onrender.com/device-migration">the old-site migration page</a>, download the file, then import it here on circlo.chat. Use the same account. A previously revoked identity still needs approval; importing never overrides revocation.</p>
+      <p className="mt-2 text-sm">Choose the file you saved and enter its recovery words or code. Use the same Circlo account. A device you removed still needs approval.</p>
+      <p className="mt-2 text-sm">Moving from the old website? On your old browser, open <a className="underline" href="https://maddychats.onrender.com/device-migration">the old-site transfer page</a> and save a file to use here.</p>
       <label className="mt-3 block text-sm">Choose your recovery file<input className="mt-1 block max-w-full" type="file" accept=".json,application/json" onChange={event => setFile(event.target.files?.[0] ?? null)} /></label>
-      <label className="mt-3 block text-sm">Enter the 24 words saved with it<input className="field-input mt-1 w-full" type="password" autoComplete="off" value={code} onChange={event => setCode(event.target.value)} /></label>
-      <label className="mt-3 flex gap-2 text-sm"><input type="checkbox" checked={confirmed} onChange={event => setConfirmed(event.target.checked)} />I saved a recovery file for any chats this browser can open. This will replace chat access saved in this browser.</label>
+      <label className="mt-3 block text-sm">Recovery words or code saved with this file<input className="field-input mt-1 w-full" type="password" autoComplete="off" value={code} onChange={event => setCode(event.target.value)} /></label>
+      <label className="mt-3 flex gap-2 text-sm"><input type="checkbox" checked={confirmed} onChange={event => setConfirmed(event.target.checked)} />I saved a spare key for chats already on this device. I understand this replaces the chat key saved here.</label>
       <button className="btn btn-secondary mt-3" disabled={busy || !file || !code || !confirmed} onClick={() => void run(restore)}>Restore chat access</button>
     </details>
     {status && <p role="status" className="mt-3 text-sm">{status}</p>}

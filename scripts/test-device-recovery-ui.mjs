@@ -121,9 +121,9 @@ export async function testDeviceRecoveryUI(base, pool) {
     await login(target.context); await target.page.reload();
     await target.page.getByText("This device: Linked", { exact: true }).waitFor({ timeout: 30000 });
     const downloadEvent = source.page.waitForEvent("download");
-    await source.page.getByRole("button", { name: "Download recovery file and phrase", exact: true }).click();
+    await source.page.getByRole("button", { name: "Save recovery file", exact: true }).click();
     const file = await readFile(await (await downloadEvent).path());
-    const recoveryCode = await source.page.locator('code[aria-label="24-word recovery phrase"]').innerText();
+    const recoveryCode = await source.page.locator('code[aria-label="Recovery words"]').innerText();
     await openDeviceTools(source.page);
     const sourceFingerprint = await source.page.getByLabel("This device check number").innerText();
     await source.context.close();
@@ -131,7 +131,7 @@ export async function testDeviceRecoveryUI(base, pool) {
     await restored.page.getByText("Use a saved file or move from the old website", { exact: true }).click();
     await restored.page.getByLabel("Choose your recovery file", { exact: true }).setInputFiles({ name: "recovery.json", mimeType: "application/json", buffer: file });
     await restored.page.locator('input[type="password"]').last().fill(recoveryCode);
-    await restored.page.getByRole("checkbox", { name: /I saved a recovery file/ }).check();
+    await restored.page.getByRole("checkbox", { name: /I saved a spare key/ }).check();
     await restored.page.getByRole("button", { name: "Restore chat access", exact: true }).click();
     await restored.page.getByText("This device: Linked", { exact: true }).waitFor({ timeout: 30000 });
     await openDeviceTools(restored.page);

@@ -107,7 +107,7 @@ async function testNavigationSpace(page) {
         assert(settingsBoundary.contentBottom <= settingsBoundary.navTop + 1, `Settings content overlaps mobile navigation: ${JSON.stringify({ width, height, fontSize, inset, ...settingsBoundary })}`);
         assert(settingsBoundary.navBottom <= settingsBoundary.height + 1);
         await enable.scrollIntoViewIfNeeded(); await enable.click({ trial: true });
-        const recover = page.getByRole("button", { name: "Confirm email and recover this browser", exact: true });
+        const recover = page.getByRole("button", { name: "Use email code and sign out other devices", exact: true });
         await recover.scrollIntoViewIfNeeded();
         assert(await recover.evaluate(node => {
           const box = node.getBoundingClientRect();
@@ -119,7 +119,7 @@ async function testNavigationSpace(page) {
         await settings.setViewportSize({ width, height: height - 300 });
         await twoFactor.getByLabel("Current password", { exact: true }).focus();
         await settings.keyboard.press("Tab");
-        const codeInput = twoFactor.getByLabel("Authenticator or recovery code (if enabled)", { exact: true });
+        const codeInput = twoFactor.getByLabel("Code from your code app or saved backup list (if enabled)", { exact: true });
         assert(await codeInput.evaluate(node => node === document.activeElement));
         await enable.click({ trial: true });
       }
@@ -169,7 +169,7 @@ export async function testMobileLayout(base, pool, { recordOnly = false, navigat
     const pending = await login(accounts[0]);
     await pending.goto(base + "/app/profile#encryption-devices");
     await pending.getByText("This device: Waiting for approval", { exact: true }).waitFor();
-    await pending.getByRole("button", { name: "Emergency recovery: no linked device or backup file", exact: true }).click();
+    await pending.getByRole("button", { name: "Get back in without my old device", exact: true }).click();
     const navigationScreens = await testNavigationSpace(pending);
     if (navigationOnly) { assert.deepEqual(errors, []); return { screens: navigationScreens, observations: [], browserErrors: errors }; }
     const group = (await pool.query("insert into conversations(type,name,description,created_by_id) values('group',$1,$2,$3) returning id", ["Circle".repeat(16), "Long mobile group description ".repeat(8), accounts[0].id])).rows[0];
@@ -184,7 +184,7 @@ export async function testMobileLayout(base, pool, { recordOnly = false, navigat
         await check(pending, "pending-recovery-large-text-" + size);
         await pending.evaluate(() => {document.documentElement.style.fontSize = "";});
       }
-      await pending.getByRole("button", { name: "Confirm email and recover this browser", exact: true }).scrollIntoViewIfNeeded();
+      await pending.getByRole("button", { name: "Use email code and sign out other devices", exact: true }).scrollIntoViewIfNeeded();
       if (width === 320) { await pending.screenshot({ path: ".freebuff/performance/mobile-recovery-320.png", fullPage: true }); }
       await user.setViewportSize({ width, height });
       for (const path of ["/app", "/app/chats", "/app/profile", "/app/settings", "/app/people", "/app/status", "/app/communities", "/app/starred", `/app/users/${accounts[1].id}`, `/app/chats/${group.id}`]) {

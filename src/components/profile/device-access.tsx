@@ -16,6 +16,6 @@ export function DeviceAccess({ recoveryEmail, next, openRecovery }: { recoveryEm
   return <div className="min-w-0 space-y-4">
     <EncryptionDevices recoveryEmail={recoveryEmail} openRecovery={openRecovery} setup onLinked={continueToApp} returnTo={returnTo} />
     <button type="button" onClick={() => void signOut()} className="btn btn-secondary w-full">Cancel and sign out</button>
-    <p className="text-xs leading-relaxed text-[var(--muted)]">Finish to open your account. Linking keeps your other devices signed in; email recovery signs them out.</p>
+    <p className="text-xs leading-relaxed text-[var(--muted)]">Linking lets you use this device alongside your old one. An email code lets you use this device and signs your other devices out; it cannot unlock older chats on its own.</p>
   </div>;
 }

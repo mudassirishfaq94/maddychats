@@ -135,7 +135,7 @@ export function TwoFactorAuth() {
       <FreshAuthentication password={password} code={mfaCode} onPassword={setPassword} onCode={setMfaCode} />
       {recoveryCodes.length ? <section className="mt-3 rounded-xl border border-[var(--border)] p-3">
         <p className="text-sm font-bold">Save your backup sign-in codes now</p>
-        <p className="my-2 text-xs">Each code works once. We show them only now. Save them somewhere safe before leaving this page.</p>
+        <p className="my-2 text-xs">Use one of these codes to sign in if you lose your code app. Each works once. Keep them on paper or in a password manager; they do not open old chats.</p>
         <pre className="select-all whitespace-pre-wrap break-all text-xs">{recoveryCodes.join("\n")}</pre>
         <button type="button" className="btn btn-secondary mt-2" onClick={() => setRecoveryCodes([])}>I have saved these codes</button>
       </section> : null}

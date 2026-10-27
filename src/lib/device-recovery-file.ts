@@ -79,7 +79,7 @@ export async function rewrapRecoveryHistory(bundle: RecoveryBundle, userId: stri
     for (const entry of entries) {
       const key = await decryptKeyFromSender(entry.wrapped, privateKey);
       const fingerprint = await conversationFingerprint(key);
-      if (fingerprint !== entry.fingerprint) throw new Error("A recovered chat key is damaged.");
+      if (fingerprint !== entry.fingerprint) throw new Error("Part of this saved chat key is damaged. Try another copy of your file.");
       result[storageKey].push({ fingerprint, wrapped: await encryptKeyForUser(key, recipient), historical: true });
     }
   }
@@ -108,27 +108,27 @@ export async function collectRecoveryBundle(userId: string, deviceId: string): P
 export async function validateRecoveryBundle(bundle: RecoveryBundle, userId: string) {
   if (!bundle || typeof bundle !== "object" || bundle.version !== 1 || bundle.userId !== userId || !/^[a-zA-Z0-9-]{1,100}$/.test(bundle.deviceId) ||
       typeof bundle.secret !== "string" || !/^[a-f0-9]{64}$/.test(bundle.secret) || typeof bundle.keypair !== "string" ||
-      !bundle.keys || typeof bundle.keys !== "object" || Array.isArray(bundle.keys)) throw new Error("This recovery file does not belong to the signed-in account or is invalid.");
+      !bundle.keys || typeof bundle.keys !== "object" || Array.isArray(bundle.keys)) throw new Error("This file is damaged or belongs to another account. Sign in to the account it was saved from.");
   for (const [key, value] of Object.entries(bundle.keys)) {
-    if (!key.startsWith(`e2ee_sentkeys_${userId}_`) || typeof value !== "string") throw new Error("Invalid chat keys in recovery file.");
+    if (!key.startsWith(`e2ee_sentkeys_${userId}_`) || typeof value !== "string") throw new Error("This recovery file is damaged. Try another copy.");
     const entries = JSON.parse(value);
-    if (!Array.isArray(entries) || entries.some(entry => !entry || typeof entry.fingerprint !== "string" || typeof entry.wrapped !== "string")) throw new Error("Invalid chat key records.");
+    if (!Array.isArray(entries) || entries.some(entry => !entry || typeof entry.fingerprint !== "string" || typeof entry.wrapped !== "string")) throw new Error("This recovery file is damaged. Try another copy.");
   }
   const pair = JSON.parse(bundle.keypair) as { publicKey: string; encryptedPrivateKey: string };
-  if (typeof pair.publicKey !== "string" || typeof pair.encryptedPrivateKey !== "string" || !pair.encryptedPrivateKey.startsWith("v2:")) throw new Error("Unsupported encryption backup. Reload the original browser first.");
+  if (typeof pair.publicKey !== "string" || typeof pair.encryptedPrivateKey !== "string" || !pair.encryptedPrivateKey.startsWith("v2:")) throw new Error("This is an older recovery file. Open Circlo in the original browser and save a new file.");
   const privateKey = await importPrivateKey(await decryptPrivateKeyFromStorage(pair.encryptedPrivateKey.slice(3), bundle.secret));
   const publicKey = await importPublicKey(pair.publicKey);
   const challenge = crypto.getRandomValues(new Uint8Array(32));
   const encrypted = await crypto.subtle.encrypt({ name: "RSA-OAEP" }, publicKey, challenge);
   const proof = new Uint8Array(await crypto.subtle.decrypt({ name: "RSA-OAEP" }, privateKey, encrypted));
-  if (!proof.every((byte, i) => byte === challenge[i])) throw new Error("The recovery keys do not match.");
+  if (!proof.every((byte, i) => byte === challenge[i])) throw new Error("This recovery file could not open its saved chat key. Try another copy.");
   return pair.publicKey;
 }
 
 export async function createRecoveryFile(bundle: RecoveryBundle) {
   await validateRecoveryBundle(bundle, bundle.userId);
   const bytes = new TextEncoder().encode(JSON.stringify(bundle));
-  if (bytes.length > MAX_BYTES) throw new Error("Recovery data is too large to export.");
+  if (bytes.length > MAX_BYTES) throw new Error("There is too much saved chat information for one recovery file. Use a chat backup instead.");
   const raw = crypto.getRandomValues(new Uint8Array(32));
   const key = await crypto.subtle.importKey("raw", raw, "AES-GCM", false, ["encrypt"]);
   const iv = crypto.getRandomValues(new Uint8Array(12));
@@ -147,7 +147,7 @@ export async function readRecoveryFile(file: string, code: string, userId: strin
     const key = await crypto.subtle.importKey("raw", raw as BufferSource, "AES-GCM", false, ["decrypt"]);
     const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv: decode(envelope.iv), additionalData: new TextEncoder().encode("circlo-recovery-v1") }, key, decode(envelope.ciphertext));
     bundle = JSON.parse(new TextDecoder().decode(plain));
-  } catch { throw new Error("The recovery code is incorrect or the file is damaged."); }
+  } catch { throw new Error("The recovery words or code do not match this file, or the file is damaged. Check the copy you saved."); }
   await validateRecoveryBundle(bundle, userId);
   return bundle;
 }
