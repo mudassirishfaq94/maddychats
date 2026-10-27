@@ -12,9 +12,9 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "Use Circlo on this device", robots: { index: false, follow: false } };
 
 export default async function DeviceAccessPage({ searchParams }: { searchParams: Promise<{ next?: string; recovery?: string }> }) {
-  const user = await getDeviceSetupUser();
-  if (!user) redirect("/login");
   const query = await searchParams;
+  const user = await getDeviceSetupUser();
+  if (!user) redirect(`/login?next=${encodeURIComponent(deviceAccessDestination(query.next))}`);
   const adminTarget = adminDestination(query.next);
   if (adminTarget) {
     // Existing APKs may already be parked on the old post-login setup URL.

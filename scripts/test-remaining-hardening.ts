@@ -173,7 +173,8 @@ async function main() {
           const fresh = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
           try {
             const loginPage = await fresh.newPage();
-            await loginPage.goto(base + "/login?next=%2Fapp%2Fadmin");
+            await loginPage.goto(base + "/app/device-access?next=%2Fapp%2Fadmin");
+            await loginPage.waitForURL(url => url.pathname === "/login" && url.searchParams.get("next") === "/app/admin");
             await loginPage.getByLabel("Email or username", { exact: true }).fill(user.username);
             await loginPage.getByLabel("Password", { exact: true }).fill(password);
             await loginPage.getByRole("button", { name: "Sign in", exact: true }).click();
