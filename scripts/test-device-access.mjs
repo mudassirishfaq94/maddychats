@@ -70,7 +70,7 @@ export async function testDeviceAccess(base, pool, secret) {
     await source.page.getByRole("button",{name:"Refresh device list",exact:true}).click();
     await source.page.getByLabel("Or enter a code from your new device").fill(linkCodeValue);
     await source.page.getByRole("button",{name:"Check code",exact:true}).click();
-    await source.page.getByText("Check number:").waitFor();
+    await source.page.getByText("Compare the check number on both devices before approving.", { exact: true }).waitFor();
     await source.page.getByText("Show full check number",{exact:true}).click();
     await source.page.getByLabel("I compared this number with the new phone and it matches.").check();
     await source.page.getByRole("button",{name:"Approve this device",exact:true}).click();
