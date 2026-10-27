@@ -93,10 +93,10 @@ export async function testEncryptionDevices(base, pool, owner, peer, password, c
     await device.page.reload(); await openDeviceTools(device.page);
     await device.page.getByRole("button", { name: "Emergency recovery: no linked device or backup file", exact: true }).click();
     const section = device.page.locator("#encryption-devices");
-    await section.getByLabel("Encryption recovery confirmation").fill("RESET ENCRYPTION TRUST");
+    await section.getByLabel("Confirmation words").fill("RESET ENCRYPTION TRUST");
     await section.getByLabel("Email recovery code").fill(emailCode);
     await section.getByLabel("Current password", { exact: true }).fill(password);
-    await section.getByLabel("Authenticator or recovery code (if enabled)").fill(new TOTP({ secret: factor }).generate());
+    await section.getByLabel("Code from your code app or saved backup list (if enabled)").fill(new TOTP({ secret: factor }).generate());
     const approvalActions = [];
     device.page.on("response", response => {
       if (response.url().endsWith("/api/e2ee/devices/approve")) approvalActions.push({ action: response.request().postDataJSON()?.action, status: response.status(), body: response.text().catch(() => "") });
