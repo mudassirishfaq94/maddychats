@@ -23,6 +23,6 @@ export default function ApplicationLayout({ children }: { children: ReactNode })
   const adminOnly = pathname.startsWith("/app/admin");
   const sharedShell = user && pathname !== "/app/call" && !pathname.startsWith("/app/admin") && !setupOnly;
   const content = sharedShell ? <AppShell user={user}>{children}</AppShell> : children;
-  if (adminOnly) return <E2EEProvider setupOnly>{children}</E2EEProvider>;
+  if (adminOnly) return children; // Admin tools do not need chat keys or device linking.
   return <E2EEProvider setupOnly={setupOnly || notificationPreviewOnly}>{setupOnly || notificationPreviewOnly ? children : <RealtimeProvider><AudioCallProvider><ConversationListProvider>{content}<ForegroundMessageBanner /><CloudRecoverySync /><LocalBackupSync /><PwaNotificationPrompt /><OfflineComposeProvider /></ConversationListProvider></AudioCallProvider></RealtimeProvider>}</E2EEProvider>;
 }

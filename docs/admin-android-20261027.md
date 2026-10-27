@@ -25,3 +25,12 @@ Separate Android application `chat.circlo.admin`, version 1.0.0 (code 1), Androi
 The app points to `https://circlo.chat/app/admin`. Existing live admin features are available after an authorized sign-in. The new control room and navigation require this branch's web changes deployed; they have not been deployed. No production schema/data or hosting changes were performed for this admin app. Google sign-in opens the external browser and does not share its session with the embedded page; use existing email/username/password and the code app inside the APK.
 
 No automatic restart/deletion tools, private-message decryption, push alerts or full native/offline rewrite are claimed. Keep the PR in draft pending realtime CI investigation and physical-device validation.
+
+
+## Direct admin entry follow-up
+
+The admin account is already permitted; the block was the shared post-login chat-device setup flow. Admin guards now accept an active, non-revoked primary-authenticated administrator/moderator with current MFA enrollment and a fresh sign-in even while that session remains unapproved for chats. Database roles, MFA, suspension/revocation and sensitive-write proof checks remain enforced. The existing unlinked-session 15-minute lifetime is unchanged. The existing mfaTime claim represents the verified enrollment epoch; freshness is checked against authTime without changing token semantics.
+
+Login, MFA, returning sessions and already-open setup URLs route admin destinations to the guarded console. Admin pages do not initialize chat encryption. Ordinary chat routes/APIs still require device approval; no chat keys are created or approved. No email address is hardcoded as an access exception.
+
+Follow-up validation: 179 unit tests, build, lint/types and the admin browser suite passed. Added actual password/MFA browser sign-in for both an admin and an ordinary user; legacy setup return, role removal, revoked sessions, old authentication and preserved chat restrictions are checked using real unlinked sessions rather than an approved-session fixture. A schema-compatible Bluehost build is being checked separately before rollout.

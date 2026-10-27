@@ -13,7 +13,7 @@ A separate private Android app (`chat.circlo.admin`, Android 8+) opening the exi
 
 ## Sign in
 
-Use your existing administrator email/username and password, then the code from your code app. Complete existing device approval if prompted. The app does not make an ordinary account an administrator.
+Use your existing administrator email/username and password, then the code from your code app. Admin tools do not require linking an old phone or restoring chats. The app does not make an ordinary account an administrator. Unlinked admin sessions keep the existing 15-minute restriction; sign in again when that session expires. This does not approve the device to read chats.
 
 Google sign-in opens in the external browser, where its session stays. It does **not** sign the embedded admin page in; use password sign-in in this APK. No Google OAuth redirect or server authentication protocol is changed.
 

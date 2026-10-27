@@ -52,14 +52,14 @@ async function main() {
     assert(ready, `Isolated app did not become ready within 60 seconds. Exit: ${server.exitCode}. ${output}`);
     const api = (path: string, cookie = "", method = "GET", body?: unknown, headers: Record<string, string> = {}) => fetch(base + path, { method, headers: { cookie, origin: base, "content-type": "application/json", ...headers }, body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(15000) });
     const sessionCookie = (response: Response) => { const cookie = response.headers.getSetCookie().find((value) => value.startsWith("maddy_session="))?.split(";")[0]; assert(cookie); return cookie; };
-    const login = async (name: string, mfa?: string) => {
+    const login = async (name: string, mfa?: string, approveDevice = true) => {
       const response = await api("/api/auth/login", "", "POST", { acceptTerms: true, acceptPrivacy: true, identifier: name, password }); assert.equal(response.status, 200);
-      if (!mfa) { await fixtureAppSession(sql,response); return sessionCookie(response); }
+      if (!mfa) { if (approveDevice) await fixtureAppSession(sql,response); return sessionCookie(response); }
       const challenge = response.headers.getSetCookie().find((value) => value.startsWith("maddy_mfa_challenge="))?.split(";")[0]; assert(challenge);
-      const verified = await api("/api/auth/mfa", challenge, "POST", { code: new TOTP({ secret: mfa, algorithm: "SHA1", digits: 6, period: 30 }).generate() }); assert.equal(verified.status, 200, await verified.clone().text()); await fixtureAppSession(sql,verified); return sessionCookie(verified);
+      const verified = await api("/api/auth/mfa", challenge, "POST", { code: new TOTP({ secret: mfa, algorithm: "SHA1", digits: 6, period: 30 }).generate() }); assert.equal(verified.status, 200, await verified.clone().text()); if (approveDevice) await fixtureAppSession(sql,verified); return sessionCookie(verified);
     };
     let aliceCookie = await login(alice.username);
-    const bobCookie = await login(bob.username), noMfaCookie = await login(owner.username);
+    const bobCookie = await login(bob.username), noMfaCookie = await login(owner.username, undefined, false);
     const ownProfile = await api("/api/users/me", aliceCookie);
     assert.equal(ownProfile.status, 200);
     assert(ownProfile.headers.get("cache-control")?.includes("no-store"), "Private profile responses cannot be cached");
@@ -77,7 +77,10 @@ async function main() {
     const factorSecret = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ";
     const recovery = "11111111-22222222-33333333-44444444", recoveryHash = createHash("sha256").update(recovery.replace(/-/g, "")).digest("hex");
     for (const user of [owner, moderator]) await sql.query("insert into user_2fa(user_id,secret,enabled,enabled_at,recovery_code_hashes) values($1,$2,true,now()-interval '1 hour',$3::jsonb)", [user.id, factorSecret, JSON.stringify([recoveryHash])]);
-    const ownerCookie = await login(owner.username, factorSecret), modCookie = await login(moderator.username, factorSecret);
+    const ownerCookie = await login(owner.username, factorSecret, false), modCookie = await login(moderator.username, factorSecret, false);
+    const checkAdminLogin = await api("/api/admin/operations", ownerCookie);
+    const adminClaims = decodeJwt(ownerCookie.split("=")[1]);
+    assert.equal(checkAdminLogin.status, 200, `Fresh MFA admin can enter: ${JSON.stringify({ error: await checkAdminLogin.json(), mfaCompleted: Number(adminClaims.mfaTime) > 0, mfaAgeMs: Date.now() - Number(adminClaims.mfaTime), authAgeMs: Date.now() - Number(adminClaims.authTime) })}`);
     assert.equal((await api("/api/admin/users", modCookie, "PATCH", { userId: target.id, action: "role", role: "admin" })).status, 403, "Moderator cannot escalate any role");
     assert.equal((await api(`/api/admin/users/${target.id}`, modCookie, "PATCH", { displayName: "Hijacked" })).status, 403, "Moderator cannot edit identity or password");
     assert.equal((await api("/api/admin/users", ownerCookie, "PATCH", { userId: target.id, action: "role", role: "admin" }, { origin: "https://evil.example" })).status, 403);
@@ -97,6 +100,20 @@ async function main() {
       assert.deepEqual(Object.keys(snapshot).sort(), ["appVersion", "application", "attention", "database", "observedAt"].sort(), "No account or private-message records in the snapshot");
     }
     const claims = decodeJwt(ownerCookie.split("=")[1]);
+    assert.equal((await sql.query("select approval_required from device_sessions where id=$1", [claims.sid])).rows[0].approval_required, true, "Real admin login remains unapproved for chats");
+    assert.equal((await api("/api/conversations", ownerCookie)).status, 401, "Admin MFA does not grant chat access");
+    const chatReturn = await api("/app/chats", ownerCookie);
+    assert.equal(new URL(chatReturn.url).pathname, "/app/device-access", "Chat navigation still requires device approval");
+    const staleMfa = await new SignJWT({ ...claims, authTime: Date.now() - 16 * 60_000 }).setProtectedHeader({ alg: "HS256", typ: "JWT" }).sign(new TextEncoder().encode(secret));
+    assert.equal((await api("/api/admin/operations", `maddy_session=${staleMfa}`)).status, 401, "Unlinked admin access requires fresh authentication");
+    await sql.query("update users set role='user' where id=$1", [owner.id]);
+    try { assert.equal((await api("/api/admin/operations", ownerCookie)).status, 403, "Revoking admin role takes effect immediately"); }
+    finally { await sql.query("update users set role='admin' where id=$1", [owner.id]); }
+    await sql.query("update device_sessions set revoked_at=now() where id=$1", [claims.sid]);
+    try { assert.equal((await api("/api/admin/operations", ownerCookie)).status, 401, "Revoked admin sessions cannot use the console"); }
+    finally { await sql.query("update device_sessions set revoked_at=null where id=$1", [claims.sid]); }
+    assert.equal((await sql.query("select count(*)::int n from e2ee_keys where user_id=$1", [owner.id])).rows[0].n, 0, "Admin access creates or approves no chat keys");
+
     const oldToken = await new SignJWT({ ...claims, authTime: Date.now() - 360000 }).setProtectedHeader({ alg: "HS256", typ: "JWT" }).sign(new TextEncoder().encode(secret));
     const oldCookie = `maddy_session=${oldToken}`;
     const conversation = (await sql.query("insert into conversations(type,created_by_id) values('dm',$1) returning id", [alice.id])).rows[0];
@@ -145,6 +162,29 @@ async function main() {
         const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
         await context.addCookies([{ name: "maddy_session", value: ownerCookie.split("=")[1], url: base, httpOnly: true, sameSite: "Lax" }]);
         const page = await context.newPage();
+        // Next can stream server-component redirects as a document instruction;
+        // verify the real browser destination instead of assuming an HTTP 3xx.
+        await page.goto(base + "/app/device-access?next=%2Fapp%2Fadmin");
+        await page.waitForURL(base + "/app/admin");
+        await page.getByRole("heading", { name: "Dashboard Overview", exact: true }).waitFor();
+        for (const [name, role, heading] of [["remain_ui_admin", "admin", "Dashboard Overview"], ["remain_ui_user", "user", "Administrator access required"]]) {
+          const user = await account(name, role);
+          await sql.query("insert into user_2fa(user_id,secret,enabled,enabled_at) values($1,$2,true,now()-interval '1 hour')", [user.id, factorSecret]);
+          const fresh = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+          try {
+            const loginPage = await fresh.newPage();
+            await loginPage.goto(base + "/login?next=%2Fapp%2Fadmin");
+            await loginPage.getByLabel("Email or username", { exact: true }).fill(user.username);
+            await loginPage.getByLabel("Password", { exact: true }).fill(password);
+            await loginPage.getByRole("button", { name: "Sign in", exact: true }).click();
+            await loginPage.locator('input[autocomplete="one-time-code"]').fill(new TOTP({ secret: factorSecret, algorithm: "SHA1", digits: 6, period: 30 }).generate());
+            await loginPage.getByRole("button", { name: "Verify and sign in", exact: true }).click();
+            await loginPage.waitForURL(base + "/app/admin");
+            await loginPage.getByRole("heading", { name: heading, exact: true }).waitFor();
+            assert.equal((await sql.query("select bool_and(approval_required) pending from device_sessions where user_id=$1", [user.id])).rows[0].pending, true, "UI sign-in never approves chat devices");
+            assert.equal((await sql.query("select count(*)::int n from e2ee_keys where user_id=$1", [user.id])).rows[0].n, 0);
+          } finally { await fresh.close(); }
+        }
         for (const path of ["/app/admin", "/app/admin/users", "/app/admin/reports", "/app/admin/messages", "/app/admin/audit", "/app/admin/activity", "/app/admin/security", "/app/admin/storage", "/app/admin/operations"]) {
           const errors: string[] = []; const record = (error: Error) => errors.push(error.message);
           page.on("pageerror", record);
