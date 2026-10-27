@@ -1,3 +1,4 @@
+import { guardAuthChallenge } from "@/server/auth-challenge";
 import { NextRequest, NextResponse } from "next/server";
 import { findUserByEmail } from "@/server/users";
 import { issueEmailVerification, verificationDeliveryConfigured } from "@/server/email-verification";
@@ -11,6 +12,8 @@ export async function POST(req: NextRequest) {
   if (!rl.allowed) return jsonError(429, "Please wait before requesting another verification email.");
   if (!verificationDeliveryConfigured()) return jsonError(503, "Verification email delivery is not configured. Your account remains unverified.");
   const body = await readJson(req);
+  const challengeError = await guardAuthChallenge(body, "email_verification");
+  if (challengeError) return challengeError;
   const parsed = forgotPasswordSchema.safeParse(body);
   if (!parsed.success) return jsonError(422, "Enter a valid email address.", fieldErrors(parsed.error));
   const user = await findUserByEmail(parsed.data.email);

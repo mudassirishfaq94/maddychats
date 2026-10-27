@@ -5,6 +5,8 @@ import { rotateDeviceSession, setDeviceCookies } from "@/server/device-sessions"
 import { guardSameOrigin, jsonError } from "@/server/http";
 import { contentSecurityPolicy } from "@/lib/content-security-policy";
 import { randomBytes } from "node:crypto";
+import { admissionProtected, authAdmission } from "@/server/auth-admission";
+import { clientIp } from "@/server/http";
 import { rateLimit } from "@/server/rate-limit";
 import { clientUrl } from "@/server/config";
 import { canonicalDestination } from "@/server/canonical-domain";
@@ -25,6 +27,15 @@ import { adminDestination, deviceAccessPath } from "@/lib/device-access-navigati
 const PROTECTED_PREFIXES = ["/app"];
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
+  // Shed bursts before any session refresh, SQL quota write or password work.
+  if (process.env.AUTH_ADMISSION_ENABLED === "true" && admissionProtected(pathname, req.method)
+      && !authAdmission.allow(clientIp(req))) {
+    const response = jsonError(429, "Too many requests. Please wait a moment and try again.");
+    response.headers.set("Retry-After", "10");
+    response.headers.set("Cache-Control", "no-store");
+    return response;
+  }
+
   if (req.method === "GET" || req.method === "HEAD") {
     const destination = canonicalDestination(req.headers.get("host"), pathname, req.nextUrl.search, clientUrl(), process.env.RENDER_EXTERNAL_URL);
     // Validate redirect destination to prevent open redirect attacks
@@ -44,7 +55,7 @@ export async function proxy(req: NextRequest) {
       return NextResponse.redirect(destination, 307);
     }
   }
-  const publicMetadata = ["/api/app-version", "/api/auth/methods", "/.well-known/assetlinks.json"].includes(pathname);
+  const publicMetadata = ["/api/app-version", "/api/auth/methods", "/api/auth/challenge", "/.well-known/assetlinks.json"].includes(pathname);
 
   let token = req.cookies.get(SESSION_COOKIE)?.value;
   let claims = token ? await verifySessionToken(token) : null;

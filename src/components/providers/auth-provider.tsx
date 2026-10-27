@@ -30,8 +30,8 @@ interface AuthContextValue {
   requestScope: object;
   status: AuthStatus;
   user: SafeUser | null;
-  signIn: (input: LoginInput) => Promise<AuthResult>;
-  signUp: (input: RegisterInput) => Promise<AuthResult>;
+  signIn: (input: LoginInput & { turnstileToken?: string }) => Promise<AuthResult>;
+  signUp: (input: RegisterInput & { turnstileToken?: string }) => Promise<AuthResult>;
   signOut: () => Promise<void>;
   refresh: () => Promise<void>;
 }
@@ -150,7 +150,7 @@ export function AuthProvider({ children, initialUser }: { children: ReactNode; i
   }, [refresh]);
 
   const signIn = useCallback(
-    async (input: LoginInput): Promise<AuthResult> => {
+    async (input: LoginInput & { turnstileToken?: string }): Promise<AuthResult> => {
       if (Date.now() < loginRetryAt.current) return {
         ok: false, error: `Please retry sign-in in ${Math.ceil((loginRetryAt.current - Date.now()) / 1000)} seconds.`,
       };
@@ -201,7 +201,7 @@ export function AuthProvider({ children, initialUser }: { children: ReactNode; i
   );
 
   const signUp = useCallback(
-    async (input: RegisterInput): Promise<AuthResult> => {
+    async (input: RegisterInput & { turnstileToken?: string }): Promise<AuthResult> => {
       resetReads();
       try {
         const res = await fetch("/api/auth/register", {

@@ -1,10 +1,12 @@
 "use client";
+import { useSecurityCheck } from "./security-check";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { LogoWordmark } from "@/components/brand/logo";
 import { GoogleSignIn } from "./google-sign-in";
 
 export function VerifyEmailForm({ token, deliveryUnavailable = false, googleVerification = false }: { token: string | null; deliveryUnavailable?: boolean; googleVerification?: boolean }) {
+  const challenge = useSecurityCheck("email_verification");
   const [state, setState] = useState<"checking"|"verified"|"invalid"|"idle"|"sent"|"error">(token ? "checking" : "idle");
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
@@ -22,22 +24,23 @@ export function VerifyEmailForm({ token, deliveryUnavailable = false, googleVeri
     return () => { active = false; };
   }, [token]);
   async function verifyCode(event: FormEvent) {
-    event.preventDefault(); setBusy(true); setFeedback("");
+    event.preventDefault(); if (!challenge.ready) return; setBusy(true); setFeedback("");
     try {
-      const response = await fetch("/api/auth/verify-email", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email,code})});
+      const response = await fetch("/api/auth/verify-email", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email,code,turnstileToken:challenge.token})});
       const data = await response.json();
       if (response.ok) setState("verified"); else setFeedback(data.error ?? "We couldn't verify that code.");
     } catch { setFeedback("Connection interrupted. Please try again."); }
-    finally { setBusy(false); }
+    finally { challenge.reset(); setBusy(false); }
   }
   async function resend() {
+    if (!challenge.ready) return;
     setBusy(true); setFeedback("");
     try {
-      const response = await fetch("/api/auth/resend-verification", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email})});
+      const response = await fetch("/api/auth/resend-verification", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email,turnstileToken:challenge.token})});
       const data = await response.json();
       setFeedback(response.ok ? data.message : data.error ?? "We couldn't request a code right now.");
     } catch { setFeedback("Connection interrupted. Please try again."); }
-    finally { setBusy(false); }
+    finally { challenge.reset(); setBusy(false); }
   }
   return <main className="mx-auto flex min-h-screen max-w-md items-center p-6"><section className="w-full rounded-3xl border border-[var(--border)] bg-[var(--card)] p-6 sm:p-8">
     <LogoWordmark size={40} />
@@ -49,9 +52,10 @@ export function VerifyEmailForm({ token, deliveryUnavailable = false, googleVeri
       <form onSubmit={verifyCode} className="mt-5 space-y-4">
         <label className="block">Email address<input className="field-input mt-2 w-full" type="email" required autoComplete="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@example.com" /></label>
         <label className="block">Verification code<input className="field-input mt-2 w-full text-center text-xl tracking-[0.3em]" type="text" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} required autoComplete="one-time-code" value={code} onChange={e=>setCode(e.target.value.replace(/\D/g,""))} placeholder="000000" /></label>
-        <button className="btn btn-primary w-full" disabled={busy}>{busy ? "Please wait…" : "Verify email"}</button>
+        {challenge.field}
+        <button className="btn btn-primary w-full" disabled={busy || !challenge.ready}>{busy ? "Please wait…" : "Verify email"}</button>
       </form>
-      <button className="btn mt-3 w-full" type="button" disabled={busy || !email.trim()} onClick={resend}>Resend verification code</button>
+      <button className="btn mt-3 w-full" type="button" disabled={busy || !challenge.ready || !email.trim()} onClick={resend}>Resend verification code</button>
       {feedback ? <p className="mt-3 text-sm text-[var(--muted)]" role="status">{feedback}</p> : null}
       {deliveryUnavailable && googleVerification ? <><p className="mt-4 text-sm text-[var(--muted)]">You can also verify with the same Google account, then enter your Circlo password.</p><GoogleSignIn next="/app" /></> : null}
       <Link className="mt-5 block text-sm text-[var(--accent)]" href="/login">Back to login</Link>

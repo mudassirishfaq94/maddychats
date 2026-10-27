@@ -1,3 +1,4 @@
+import { guardAuthChallenge } from "@/server/auth-challenge";
 import { rateLimit } from "@/server/rate-limit";
 import { NextRequest, NextResponse } from "next/server";
 import { jsonError, readJson, guardSameOrigin, clientIp } from "@/server/http";
@@ -9,6 +10,10 @@ export async function POST(req: NextRequest) {
   if (blocked) return blocked;
   if (!(await rateLimit(`verify-email:${clientIp(req)}`, 20, 10 * 60 * 1000)).allowed) return jsonError(429, "Too many verification attempts.");
   const body = await readJson(req);
+  if (body?.code !== undefined) {
+    const challengeError = await guardAuthChallenge(body, "email_verification");
+    if (challengeError) return challengeError;
+  }
   if (body?.code !== undefined) {
     const parsed = forgotPasswordSchema.safeParse(body);
     const code = typeof body.code === "string" ? body.code : "";

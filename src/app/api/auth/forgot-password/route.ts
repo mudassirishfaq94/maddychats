@@ -1,3 +1,4 @@
+import { guardAuthChallenge } from "@/server/auth-challenge";
 import { NextRequest, NextResponse } from "next/server";
 import { fieldErrors, forgotPasswordSchema } from "@/lib/schemas";
 import { findUserByEmail } from "@/server/users";
@@ -23,6 +24,8 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await readJson(req);
+  const challengeError = await guardAuthChallenge(body, "password_reset");
+  if (challengeError) return challengeError;
   if (!body) return jsonError(400, "Invalid request body.");
 
   const parsed = forgotPasswordSchema.safeParse(body);

@@ -1,3 +1,4 @@
+import { guardAuthChallenge } from "@/server/auth-challenge";
 import { safeError } from "@/server/safe-error";
 import { withPasswordCapacity } from "@/server/password-capacity";
 import { issueEmailVerification } from "@/server/email-verification";
@@ -39,6 +40,8 @@ async function handlePOST(req: NextRequest) {
   }
 
   const body = await readJson(req);
+  const challengeError = await guardAuthChallenge(body, "register");
+  if (challengeError) return challengeError;
   if (!body) return jsonError(400, "Invalid request body.");
 
   const parsed = registerSchema.safeParse(body);

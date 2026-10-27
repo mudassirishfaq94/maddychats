@@ -1,5 +1,7 @@
 "use client";
 
+import { useSecurityCheck } from "./security-check";
+
 import { useState, type FormEvent } from "react";
 import Link from "next/link";
 import {
@@ -18,6 +20,7 @@ type SubmitState =
   | { kind: "error"; message: string };
 
 export function ForgotPasswordForm() {
+  const challenge = useSecurityCheck("password_reset");
   const [email, setEmail] = useState("");
   const [pending, setPending] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -25,6 +28,7 @@ export function ForgotPasswordForm() {
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
+    if (!challenge.ready) return;
     setState({ kind: "idle" });
 
     const parsed = forgotPasswordSchema.safeParse({ email });
@@ -39,7 +43,7 @@ export function ForgotPasswordForm() {
       const res = await fetch("/api/auth/forgot-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(parsed.data),
+        body: JSON.stringify({ ...parsed.data, turnstileToken: challenge.token }),
       });
       const data = (await res.json().catch(() => null)) as {
         delivered?: boolean;
@@ -62,6 +66,7 @@ export function ForgotPasswordForm() {
     } catch {
       setState({ kind: "error", message: "Network error. Please try again." });
     } finally {
+      challenge.reset();
       setPending(false);
     }
   }
@@ -117,7 +122,8 @@ export function ForgotPasswordForm() {
         error={errors.email}
       />
 
-      <button type="submit" disabled={pending} className="btn btn-primary w-full">
+      {challenge.field}
+      <button type="submit" disabled={!challenge.ready || pending} className="btn btn-primary w-full">
         {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
         {pending ? "Checking…" : "Request reset link"}
       </button>
