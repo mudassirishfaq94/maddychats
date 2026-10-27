@@ -155,6 +155,10 @@ async function main() {
     assert.equal((await sql.query("select count(*)::int n from realtime_events where payload->>'type'='message:deleted' and payload->'message'->>'id'=$1", [message.id])).rows[0].n, 2, "Moderation and recipient notifications commit together");
     const htmlName = "<img src=x onerror='window.__circloXss=1'>";
     await sql.query("update users set display_name=$1 where id=$2", [htmlName, bob.id]);
+    const responsiveUser = await account("remain_responsive");
+    const longName = "LongAccountName".repeat(5);
+    await sql.query("update users set display_name=$1,email=$2 where id=$3", [longName, "e".repeat(60) + "@" + "example".repeat(7) + "." + "domain".repeat(7) + ".invalid", responsiveUser.id]);
+
     if (browserChecks) {
       const { chromium } = await import("playwright");
       const browser = await chromium.launch({ headless: true });
@@ -196,6 +200,34 @@ async function main() {
             await page.getByText(htmlName, { exact: true }).waitFor();
             assert.equal(await page.locator('img[src="x"]').count(), 0, "Profile markup is rendered as text");
             assert.equal(await page.evaluate(() => "__circloXss" in window), false, "Profile payload never executes");
+            assert.equal(await page.getByLabel("Current password", { exact: true }).isVisible(), false, "Extra proof does not crowd a fresh sign-in");
+            await page.getByText("Confirm an account change", { exact: false }).click();
+            await page.getByLabel("Current password", { exact: true }).waitFor();
+            await page.getByText("Confirm an account change", { exact: false }).click();
+            await page.getByLabel("Search users", { exact: true }).fill(responsiveUser.username);
+            await page.waitForFunction(() => document.querySelectorAll("tbody tr").length === 1);
+            await page.getByText(longName, { exact: true }).waitFor();
+            const accessLabel = `Access for ${longName}`;
+            const access = page.getByRole("combobox", { name: accessLabel, exact: true });
+            assert((await access.boundingBox())!.height >= 44, "Phone controls have a usable touch target");
+            for (const role of ["moderator", "user"]) {
+              const changed = page.waitForResponse(response => response.url() === base + "/api/admin/users" && response.request().method() === "PATCH");
+              await access.selectOption(role);
+              assert.equal((await changed).status(), 200, "Mobile role changes use the real protected API");
+              await page.waitForFunction(({ label, role }) => Array.from(document.querySelectorAll("select")).some(select => select.getAttribute("aria-label") === label && select.value === role), { label: accessLabel, role });
+              assert.equal((await sql.query("select role from users where id=$1", [responsiveUser.id])).rows[0].role, role);
+            }
+            for (const width of [320, 360, 390, 768, 1024, 1280, 1440]) {
+              await page.setViewportSize({ width, height: 900 });
+              assert(await page.locator("tbody tr").evaluateAll(rows => rows.every(row => { const bounds = row.getBoundingClientRect(); return bounds.left >= 0 && bounds.right <= innerWidth && Array.from(row.children).every(cell => cell.scrollWidth <= cell.clientWidth + 1); })), `Complete account cards fit at ${width}px`);
+            }
+            await page.getByLabel("Search users", { exact: true }).fill("no-account-matches-this-search");
+            await page.getByText("No users match your search.", { exact: true }).waitFor();
+            await page.getByLabel("Search users", { exact: true }).fill("");
+            await page.setViewportSize({ width: 390, height: 844 });
+            await page.getByText(longName, { exact: true }).waitFor();
+            await page.screenshot({ path: ".freebuff/performance/admin-users-mobile.png", fullPage: true });
+
           }
           assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `No sideways scroll on ${path}`);
           if (path.endsWith("operations")) {
