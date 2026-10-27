@@ -327,9 +327,15 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     const comparison = source.page.getByLabel("I compared this number with the new phone and it matches.", { exact: true });
     const approvalCard = comparison.locator("..").locator("..");
     await approvalCard.getByText(/^Check number:/).waitFor();
-    await target.page.getByText("Show this device’s check number", { exact: true }).click();
-    await target.page.getByLabel("This device check number").waitFor({ state: "visible" });
+    const targetFingerprint = target.page.getByLabel("This device check number", { exact: true });
+    if (!await targetFingerprint.isVisible()) {
+      const fingerprintDetails = target.page.locator("details").filter({ has: targetFingerprint });
+      await fingerprintDetails.locator(":scope > summary").click();
+    }
+    await targetFingerprint.waitFor({ state: "visible" });
+    assert.equal((await targetFingerprint.innerText()).trim(), request.fingerprint);
     await approvalCard.getByText("Show full check number", { exact: true }).click();
+    await approvalCard.getByText(request.fingerprint, { exact: true }).waitFor();
     await comparison.check();
     const [proofResponse] = await Promise.all([
       source.page.waitForResponse(response => response.url().endsWith("/api/e2ee/devices/approve") && response.request().postDataJSON()?.action === "approve", { timeout: 60000 }),
