@@ -44,7 +44,9 @@ test("admission limits bursts, refills, bounds memory, and stops distributed bur
   for (let i = 0; i < 60; i++) assert(distributed.allow(`192.0.2.${i}`, 0));
   assert(!distributed.allow("198.51.100.1", 0));
   assert(distributed.allow("198.51.100.1", 500));
+  const before = distributed.size();
   for (let i = 0; i < 10000; i++) distributed.allow(`client-${i}`, 500);
+  assert.equal(distributed.size(), before, "Globally rejected bursts must not allocate per-client state");
   assert(distributed.size() <= 4096);
   assert(distributed.allow("after-expiry", 120000));
 });

@@ -16,6 +16,8 @@ export function createAuthAdmission() {
   return {
     allow(ip: string, now = Date.now()) {
       refill(total, 60, 120, now);
+      // Drop distributed bursts before hashing or allocating a client entry.
+      if (total.tokens < 1) return false;
       const key = createHash("sha256").update(ip).digest("hex");
       let client = clients.get(key);
       if (!client) {
