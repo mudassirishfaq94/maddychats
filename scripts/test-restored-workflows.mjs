@@ -298,9 +298,11 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     await target.page.waitForURL("**/app/profile#encryption-devices");
     await openDeviceTools(target.page);
     const targetDeviceId = (await pool.query("select device_id from e2ee_keys where user_id=$1 and trusted_at is null order by created_at desc limit 1", [owner.id])).rows[0].device_id;
-    const linkResponse = target.page.waitForResponse(response => response.url().endsWith("/api/e2ee/devices/link") && response.request().method() === "POST", { timeout: 30000 });
-    await target.page.getByRole("button", { name: "Show a device-link QR code", exact: true }).click();
-    const linkResult = await linkResponse; assert.equal(linkResult.status(), 201);
+    const [linkResult] = await Promise.all([
+      target.page.waitForResponse(response => response.url().endsWith("/api/e2ee/devices/link") && response.request().method() === "POST", { timeout: 30000 }),
+      target.page.getByRole("button", { name: "Show a QR code to link this device", exact: true }).click(),
+    ]);
+    assert.equal(linkResult.status(), 201);
     const { id: linkId, token, expiresAt } = await linkResult.json();
     assert.match(token, /^[A-Za-z0-9_-]{43}$/); assert(Date.parse(expiresAt) - Date.now() <= 3 * 60 * 1000); assert(Date.parse(expiresAt) > Date.now());
     const qrPayload = JSON.stringify({ kind: "circlo-device-link", version: 1, requestId: linkId, token });
