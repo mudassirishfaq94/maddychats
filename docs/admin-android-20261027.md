@@ -34,3 +34,12 @@ The admin account is already permitted; the block was the shared post-login chat
 Login, MFA, returning sessions and already-open setup URLs route admin destinations to the guarded console. Admin pages do not initialize chat encryption. Ordinary chat routes/APIs still require device approval; no chat keys are created or approved. No email address is hardcoded as an access exception.
 
 Follow-up validation: 179 unit tests, build, lint/types and the admin browser suite passed. Added actual password/MFA browser sign-in for both an admin and an ordinary user; legacy setup return, role removal, revoked sessions, old authentication and preserved chat restrictions are checked using real unlinked sessions rather than an approved-session fixture. A schema-compatible Bluehost build is being checked separately before rollout.
+
+
+## Bluehost rollout confirmed
+
+Schema-compatible deployment commit: 450d473aa44060c9df351d6c949043e9243d3a3e on codex/admin-direct-bluehost-20261027. Release: circlo-web:admin-450d473a. Built from the existing production schema/base with the deployed landing page retained. No migration, account-role change or chat-key change was performed. Rollback image and prior compose configuration are retained.
+
+The exact Linux build passed the complete remaining-hardening API/realtime command against disposable PostgreSQL, including 350 events to two subscribers in 393 ms (isolated test evidence, not production latency). Final runner image passed private readiness and anonymous 401 checks. Public checks confirmed the release ID, blocked anonymous admin API access and admin-preserving redirects from both /app/admin and the old /app/device-access URL. The expired setup/sign-in browser flow was also tested with real password and MFA entry for admin and ordinary accounts.
+
+The user installed and opened the APK on their phone; final authenticated physical-device confirmation is requested. Native phone-lock, camera and report-saving behaviors are not all verified on that phone. PR #69 remains separate from the schema-compatible deployment branch and has not been merged.
