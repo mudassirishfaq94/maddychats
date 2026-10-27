@@ -69,7 +69,11 @@ export async function testDeviceAccess(base, pool, secret) {
     await source.page.getByText("Troubleshooting",{exact:true}).click();
     await source.page.getByRole("button",{name:"Refresh device list",exact:true}).click();
     await source.page.getByLabel("Or enter a code from your new device").fill(linkCodeValue);
+    const verifyCodeResponse=source.page.waitForResponse(response=>response.url().endsWith("/api/e2ee/devices/link/code/verify")&&response.request().method()==="POST");
     await source.page.getByRole("button",{name:"Check code",exact:true}).click();
+    const verifyCodeResult=await verifyCodeResponse;
+    const verifyCodeBody=await verifyCodeResult.json();
+    assert.equal(verifyCodeResult.status(),200,`Device code verification failed: ${verifyCodeBody.error ?? `HTTP ${verifyCodeResult.status()}`}`);
     await source.page.getByText("Compare the check number on both devices before approving.", { exact: true }).waitFor();
     await source.page.getByText("Show full check number",{exact:true}).click();
     await source.page.getByLabel("I compared this number with the new phone and it matches.").check();
