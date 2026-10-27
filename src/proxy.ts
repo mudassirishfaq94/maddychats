@@ -82,7 +82,9 @@ export async function proxy(req: NextRequest) {
     const url = req.nextUrl.clone();
     url.pathname = "/login";
     url.search = "";
-    url.searchParams.set("next", pathname + req.nextUrl.search);
+    const adminReturn = pathname === "/app/device-access"
+      ? adminDestination(req.nextUrl.searchParams.get("next") ?? undefined) : null;
+    url.searchParams.set("next", adminReturn ?? pathname + req.nextUrl.search);
     return NextResponse.redirect(url);
   }
 
