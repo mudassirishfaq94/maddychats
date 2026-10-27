@@ -115,11 +115,17 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     const registrationPage = await registrationContext.newPage();
     pages.push(registrationPage);
     registrationPage.on("pageerror", error => errors.push(error.message));
+    let releaseSecurityConfig;
+    const configReleased = new Promise(resolve => { releaseSecurityConfig = resolve; });
+    await registrationPage.route(base + "/api/auth/challenge", async route => { await configReleased; await route.continue(); });
     await registrationPage.goto(base + "/login");
     const signInButton = registrationPage.getByRole("button", { name: "Sign in", exact: true });
     const googleButton = registrationPage.getByRole("link", { name: "Continue with Google", exact: true });
     assert.equal(await registrationPage.getByRole("checkbox").count(), 0, "Returning sign-in has no policy checkbox gate");
-    assert.equal(await signInButton.isEnabled(), true);
+    try { assert.equal(await signInButton.isDisabled(), true, "Sign-in waits for the security configuration check"); }
+    finally { releaseSecurityConfig(); }
+    await signInButton.and(registrationPage.locator(":enabled")).waitFor();
+    assert.equal(await signInButton.isEnabled(), true, "Configured sign-in becomes available without adding a policy checkbox");
     assert.equal(await googleButton.getAttribute("aria-disabled"), "false");
     assert.doesNotMatch(await googleButton.getAttribute("href"), /terms=1|privacy=1/);
     await registrationPage.getByText(/By signing in, you confirm/).waitFor();
