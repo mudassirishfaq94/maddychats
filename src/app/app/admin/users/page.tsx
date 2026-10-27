@@ -42,6 +42,7 @@ export default function AdminUsersPage() {
   const [query, setQuery] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [proofOpen, setProofOpen] = useState(false);
 
   const loadUsers = useCallback(async () => {
     try {
@@ -74,7 +75,10 @@ export default function AdminUsersPage() {
     try {
       const response = await fetch("/api/admin/users", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId, ...changes, ...proof }) });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error ?? "Administrative change failed.");
+      if (!response.ok) {
+        if (response.status === 403 && data.error?.includes("Confirm your password")) setProofOpen(true);
+        throw new Error(data.error ?? "Administrative change failed.");
+      }
       await loadUsers();
     } catch (error) { setActionError(error instanceof Error ? error.message : "Administrative change failed."); }
     finally { clearProof(); setBusyId(null); }
@@ -95,7 +99,10 @@ export default function AdminUsersPage() {
     try {
       const res = await fetch(`/api/admin/users/${user.id}`, { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify(proof) });
       const data = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(data?.error ?? "Could not delete this user.");
+      if (!res.ok) {
+        if (res.status === 403 && data?.error?.includes("Confirm your password")) setProofOpen(true);
+        throw new Error(data?.error ?? "Could not delete this user.");
+      }
       // Refetch after the destructive action so the view always reflects the
       // database, including cascaded membership/message cleanup.
       await loadUsers();
@@ -120,7 +127,10 @@ export default function AdminUsersPage() {
         </p>
       </div>
 
-      {form}
+      <details open={proofOpen} onToggle={event => setProofOpen(event.currentTarget.open)} className="card-flat overflow-hidden rounded-xl [&_section]:rounded-none [&_section]:border-0">
+        <summary className="min-h-11 cursor-pointer px-4 py-3 text-sm font-medium">Confirm an account change<span className="mt-1 block text-xs font-normal leading-5 text-[var(--muted)]">Only needed if you signed in more than five minutes ago.</span></summary>
+        {form}
+      </details>
       <div className="relative">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted)]" />
         <input
