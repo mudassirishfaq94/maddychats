@@ -33,7 +33,7 @@ import {
 
 export const metadata = publicMetadata("/privacy", "Privacy Policy — Circlo", "What Circlo stores, what it can see, how chat messages are protected, and how you can control your information.");
 
-const LAST_UPDATED = "14 October 2026";
+const LAST_UPDATED = "27 October 2026";
 
 /** Numbered sections, also used to build the jump-to index. */
 const INDEX = [
