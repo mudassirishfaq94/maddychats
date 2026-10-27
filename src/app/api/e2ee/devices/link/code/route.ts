@@ -43,7 +43,9 @@ export async function POST(req: NextRequest) {
     const fingerprint = hash(device.publicKey);
     const [request] = await tx.insert(deviceLinkRequests).values({
       userId: user.id, sessionId, deviceId, fingerprint,
-      codeHash: hash(token), entryCodeHash: hash(code),
+      // The verifier removes the display hyphen before hashing, so store only
+      // the canonical ten-character code digest as well.
+      codeHash: hash(token), entryCodeHash: hash(code.replaceAll("-", "")),
       expiresAt: new Date(Date.now() + 3 * 60000),
     }).returning({ id: deviceLinkRequests.id, expiresAt: deviceLinkRequests.expiresAt });
     return { ...request, code };
