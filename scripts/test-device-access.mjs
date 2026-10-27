@@ -8,7 +8,8 @@ import { inspectMobileLayout } from "./test-mobile-layout.mjs";
 export async function testDeviceAccess(base, pool, secret) {
   assert(["127.0.0.1", "localhost"].includes(new URL(base).hostname));
   const name = "accessqa_" + randomBytes(6).toString("hex"), password = "Aa9" + randomBytes(20).toString("hex");
-  const user = (await pool.query("insert into users(username,display_name,email,password_hash,email_verified_at) values($1,$1,$2,$3,now()) returning id", [name,name+"@example.invalid",await bcrypt.hash(password,12)])).rows[0];
+  const user = (await pool.query("insert into users(username,display_name,email,password_hash,email_verified_at) values($1,$1,$2,$3,now()) returning id,role", [name,name+"@example.invalid",await bcrypt.hash(password,12)])).rows[0];
+  assert.equal(user.role, "user", "Device-access fixture must remain an ordinary user");
   const browser = await chromium.launch(), errors = [];
   const open = async existingContext => {
     const context = existingContext ?? await browser.newContext({viewport:{width:320,height:740},isMobile:true,hasTouch:true,serviceWorkers:"block",extraHTTPHeaders:{"X-Forwarded-For":"198.51.100.232"}});
@@ -25,7 +26,7 @@ export async function testDeviceAccess(base, pool, secret) {
     const anonymous = await browser.newContext();
     const redirect = await anonymous.request.get(base+"/app/device-access",{maxRedirects:0});
     assert([303,307].includes(redirect.status()));
-    assert(new URL(redirect.headers().location,base).pathname === "/login"); await anonymous.close();
+    assert(new URL(redirect.headers().location,base).pathname === "/login"); assert.equal((await anonymous.request.get(base+"/api/admin/stats")).status(),401,"Anonymous requests cannot read admin data"); await anonymous.close();
     const source = await open(); await source.page.waitForURL(base+"/app/chats");
     await source.page.goto(base+"/app/profile#encryption-devices");
     await source.page.getByText("This device: Linked",{exact:true}).waitFor();
@@ -34,9 +35,10 @@ export async function testDeviceAccess(base, pool, secret) {
     await target.page.screenshot({path:"test-artifacts/device-access-choice-after.png",fullPage:true,animations:"disabled"});
     assert(target.page.url().includes("/app/device-access?"));
     assert.equal((await target.context.request.get(base+"/api/auth/me")).status(),202,"Credentials create only a restricted verification session");
-    for (const route of ["/api/users/me","/api/conversations","/api/contacts","/api/status","/api/communities","/api/notifications","/api/privacy/settings","/api/admin/stats","/api/calls"]) {
+    for (const route of ["/api/users/me","/api/conversations","/api/contacts","/api/status","/api/communities","/api/notifications","/api/privacy/settings","/api/calls"]) {
       assert.equal((await target.context.request.get(base+route)).status(),401,route+" cannot be read before device approval");
     }
+    for (const session of [source.context, target.context]) assert.equal((await session.request.get(base+"/api/admin/stats")).status(),403,"Ordinary users cannot read admin data, whether their chat device is linked or unlinked");
     for (const route of ["/api/conversations","/api/calls","/api/status"]) assert.equal((await target.context.request.post(base+route,{headers:{Origin:base},data:{}})).status(),401,route+" cannot be mutated before device approval");
     const profile = await target.context.request.get(base+"/app/profile",{maxRedirects:0});
     assert.equal(profile.status(),307); assert(new URL(profile.headers().location,base).pathname === "/app/device-access");
