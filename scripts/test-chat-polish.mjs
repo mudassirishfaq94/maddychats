@@ -187,6 +187,34 @@ export async function testChatPolish(page, recipient) {
 }
 
 
+/** Pure browser callback shared with the focused measurement regression. */
+export function measureChatWallpaper(wallpaper) {
+  const luminance = value => {
+    const channels = value.match(/[\d.]+/g).slice(0, 3).map(Number).map(v => {
+      const c = v / 255;
+      return c <= .04045 ? c / 12.92 : ((c + .055) / 1.055) ** 2.4;
+    });
+    return channels[0] * .2126 + channels[1] * .7152 + channels[2] * .0722;
+  };
+  const ratio = (a, b) => {
+    const x = luminance(a), y = luminance(b);
+    return (Math.max(x, y) + .05) / (Math.min(x, y) + .05);
+  };
+  return {
+    overflow: document.documentElement.scrollWidth > innerWidth + 1,
+    ratios: Array.from(document.querySelectorAll(".chat-bubble")).map(bubble => {
+      const css = getComputedStyle(bubble);
+      const probe = document.createElement("span");
+      probe.style.color = "var(--muted)";
+      bubble.append(probe);
+      const muted = getComputedStyle(probe).color;
+      probe.remove();
+      return { text: ratio(css.color, css.backgroundColor), metadata: ratio(muted, css.backgroundColor), alpha: css.backgroundColor };
+    }),
+    pattern: getComputedStyle(wallpaper).backgroundImage,
+  };
+}
+
 /** Real settings API + rendered CSS, owned fixture chats only. */
 async function testChatWallpapers(page) {
   const chat = new URL(page.url()).pathname.match(/\/app\/chats\/([^/]+)/)?.[1];
@@ -205,23 +233,7 @@ async function testChatWallpapers(page) {
         for (const viewport of [{ width: 320, height: 740 }, { width: 844, height: 390 }]) {
           await page.setViewportSize(viewport);
           await page.getByRole("region", { name: "Messages", exact: true }).locator(".chat-bubble").first().waitFor();
-          const result = await page.locator(".chat-message-area").evaluate(String.raw`(wallpaper) => {
-            const luminance = value => {
-              const channels = value.match(/[\d.]+/g).slice(0, 3).map(Number).map(v => { const c = v / 255; return c <= .04045 ? c / 12.92 : ((c + .055) / 1.055) ** 2.4; });
-              return channels[0] * .2126 + channels[1] * .7152 + channels[2] * .0722;
-            };
-            const ratio = (a, b) => { const x = luminance(a), y = luminance(b); return (Math.max(x, y) + .05) / (Math.min(x, y) + .05); };
-            return {
-              overflow: document.documentElement.scrollWidth > innerWidth + 1,
-              ratios: Array.from(document.querySelectorAll(".chat-bubble")).map(bubble => {
-                const css = getComputedStyle(bubble);
-                const probe = document.createElement("span"); probe.style.color = "var(--muted)"; bubble.append(probe);
-                const muted = getComputedStyle(probe).color; probe.remove();
-                return { text: ratio(css.color, css.backgroundColor), metadata: ratio(muted, css.backgroundColor), alpha: css.backgroundColor };
-              }),
-              pattern: getComputedStyle(wallpaper).backgroundImage,
-            };
-          }`);
+          const result = await page.locator(".chat-message-area").evaluate(measureChatWallpaper);
           assert.equal(result.overflow, false, `${style}: no horizontal overflow`);
           assert(result.ratios.length > 0, "Wallpaper contrast must check rendered messages");
           assert(result.ratios.every(value => value.text >= 4.5 && value.metadata >= 4.5), `${style}/${light}: readable bubble text and metadata: ${JSON.stringify(result.ratios)}`);
