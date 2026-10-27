@@ -1,3 +1,4 @@
+import { guardAuthChallenge } from "@/server/auth-challenge";
 import { issueEmailVerification, verificationDeliveryConfigured } from "@/server/email-verification";
 import { readGoogleEmailProof, GOOGLE_EMAIL_PROOF_COOKIE, GOOGLE_EMAIL_PROOF_TTL } from "@/server/google-email-proof";
 import { db } from "@/db";
@@ -43,6 +44,8 @@ async function login(req: NextRequest) {
   }
 
   const body = await readJson(req);
+  const challengeError = await guardAuthChallenge(body, "login");
+  if (challengeError) return challengeError;
   if (!body) return jsonError(400, "Invalid request body.");
   const parsed = loginSchema.safeParse(body);
   if (!parsed.success) {

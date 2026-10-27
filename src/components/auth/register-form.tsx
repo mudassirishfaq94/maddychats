@@ -1,5 +1,7 @@
 "use client";
 
+import { useSecurityCheck } from "./security-check";
+
 import { navigateWithReload } from "@/lib/navigation";
 
 import type * as React from "react";
@@ -33,6 +35,7 @@ function passwordScore(pw: string): number {
 const METER_LABELS = ["Too short", "Okay", "Good", "Strong", "Excellent"];
 
 export function RegisterForm({ consent, agreement }: { consent: PolicyConsent; agreement?: React.ReactNode }) {
+  const challenge = useSecurityCheck("register");
   const { signUp } = useAuth();
 
   const [form, setForm] = useState({
@@ -57,6 +60,7 @@ export function RegisterForm({ consent, agreement }: { consent: PolicyConsent; a
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
+    if (!challenge.ready) return;
     if (pending) return;
     setFormError(null);
     setSuggestions([]);
@@ -69,7 +73,8 @@ export function RegisterForm({ consent, agreement }: { consent: PolicyConsent; a
     setErrors({});
     setPending(true);
 
-    const result = await signUp(parsed.data);
+    const result = await signUp({ ...parsed.data, turnstileToken: challenge.token });
+    challenge.reset();
     setPending(false);
 
     if (!result.ok) {
@@ -186,7 +191,8 @@ export function RegisterForm({ consent, agreement }: { consent: PolicyConsent; a
 
       {agreement}
       {errors.acceptTerms || errors.acceptPrivacy ? <p role="alert" className="text-sm text-[var(--danger)]">Please agree to both the Terms and Conditions and Privacy Policy before creating an account.</p> : null}
-      <button type="submit" disabled={pending || !consent.acceptTerms || !consent.acceptPrivacy} className="btn btn-primary mt-6! w-full">
+      {challenge.field}
+      <button type="submit" disabled={!challenge.ready || pending || !consent.acceptTerms || !consent.acceptPrivacy} className="btn btn-primary mt-6! w-full">
         {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
         {pending ? "Creating your account…" : "Create account"}
       </button>
