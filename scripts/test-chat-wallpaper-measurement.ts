@@ -21,7 +21,7 @@ async function main() {
       assert.equal(result.ratios[0].text, 21);
       assert.equal(result.ratios[0].metadata, 21);
       assert.match(result.pattern, /linear-gradient/);
-  
+
       await page.locator(".chat-bubble").evaluate(bubble => {
         bubble.style.color = "rgb(10,10,10)";
         bubble.style.setProperty("--muted", "rgb(10,10,10)");
