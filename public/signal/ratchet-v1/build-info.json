@@ -1,0 +1,19 @@
+{
+  "status": "foundation-only-not-production-migration",
+  "adapterVersion": 1,
+  "libsignalRevision": "8fc2113bda042fc972a166a24b974b0d34155c6c",
+  "rust": "1.99.1",
+  "wasmBindgen": "0.2.128",
+  "protoc": "36.2",
+  "artifacts": {
+    "maddy_signal_bridge.js": "2cd81750d8d7ae0ea9165764f5523d3353ec2d1560e3f2a14a205a3b03ccfeb3",
+    "maddy_signal_bridge_bg.wasm": "4ad61ddebd2b0d528cff25eb5db13ea2191515eb65b97869f12b9006bb9451a3"
+  },
+  "sourceCanonicalLfSha256": {
+    "signal-bridge/Cargo.toml": "acdf515e4219ade4e042c8079dfac7fb004a3dc9de5f64db60495885315f0e77",
+    "signal-bridge/Cargo.lock": "0a082f30c556fb3ca3dfc0e69918f14c73ec5c677a37a139cd01de7dbd99a783",
+    "signal-bridge/rust-toolchain.toml": "df1b1f239d5b1df10f115021f4cefb60076919c5646693c9e77bb70a00aff615",
+    "signal-bridge/src/lib.rs": "2f31e245dc81b969b629b20ee609d15b8f1fd3f3655dca400eadf27e8569afea",
+    "signal-bridge/src/protocol.rs": "e8c8cce5e479476705e926cdb84218c1acea6a62f33e180dcfb2ba2d98393436"
+  }
+}

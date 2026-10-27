@@ -1,24 +1,12 @@
 import "client-only";
 
 /**
- * WASM bridge loader for the Signal Protocol implementation.
+ * Existing registration bridge. The shipped assets at /signal/ provide
+ * registration; the legacy session signatures below are disabled scaffolding,
+ * not evidence of working Double Ratchet message protection.
  *
- * The Rust/WASM bridge (public/signal/maddy_signal_bridge) provides:
- * - X3DH session establishment (create_x3dh_session, process_x3dh_initial_message)
- * - Session record verification (verify_session_record)
- * - Message encryption/decryption with Double Ratchet (encrypt_message, decrypt_message)
- * - Chain key extraction for debugging (DEPRECATED - use encrypt/decrypt instead)
- * - Chain advancement (DEPRECATED - use encrypt/decrypt instead)
- * - Message signature verification (verify_message_signature)
- *
- * **IMPLEMENTED:**
- * - Double Ratchet via libsignal's encrypt/decrypt (forward secrecy)
- * - Ed25519 signature verification
- * - X3DH key agreement
- *
- * **REMAINING:**
- * - Rust WASM bridge must be rebuilt from signal-bridge/ with cargo
- * - Formal security audit by external cryptography consultant
+ * New official-libsignal operations use signal-ratchet-loader.ts and separate
+ * versioned assets. Production sending remains on the existing encrypted path.
  */
 
 import type { SignalRegistrationBridge } from "./e2ee-signal-registration";

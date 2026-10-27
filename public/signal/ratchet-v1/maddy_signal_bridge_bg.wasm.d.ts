@@ -1,0 +1,35 @@
+/* tslint:disable */
+/* eslint-disable */
+export const memory: WebAssembly.Memory;
+export const advance_receiver_chain: (a: number, b: number) => [number, number, number, number];
+export const advance_sender_chain: (a: number, b: number) => [number, number, number, number];
+export const canonicalize_session_record: (a: number, b: number) => [number, number, number, number];
+export const create_x3dh_session: (a: number, b: number, c: number, d: number) => [number, number, number, number];
+export const decrypt_message: (a: number, b: number, c: number, d: number) => [number, number, number, number];
+export const encrypt_message: (a: number, b: number, c: number, d: number) => [number, number, number, number];
+export const generate_device_registration: (a: number) => [number, number, number];
+export const generate_identity: () => [number, number, number];
+export const generate_one_time_prekeys: (a: number) => [number, number, number];
+export const get_receiver_chain_key: (a: number, b: number) => [number, number, number, number];
+export const get_sender_chain_key: (a: number, b: number) => [number, number, number, number];
+export const get_session_chain_keys: (a: number, b: number) => [number, number, number, number];
+export const process_x3dh_initial_message: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => [number, number, number, number];
+export const protocol_version: () => number;
+export const ratchet_adapter_version: () => number;
+export const ratchet_decrypt: (a: number, b: number, c: number, d: number, e: number) => any;
+export const ratchet_encrypt: (a: number, b: number, c: number, d: number) => any;
+export const ratchet_establish: (a: number, b: number, c: number, d: number) => any;
+export const ratchet_import_registration: (a: number, b: number, c: number, d: number) => [number, number, number, number];
+export const verify_message_signature: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number];
+export const verify_session_record: (a: number, b: number) => number;
+export const wasm_bindgen_ca47c4c6f8cfe56f___convert__closures_____invoke___js_sys_15551f8eb071ad1b___Function_fn_wasm_bindgen_ca47c4c6f8cfe56f___JsValue_____wasm_bindgen_ca47c4c6f8cfe56f___sys__Undefined___js_sys_15551f8eb071ad1b___Function_fn_wasm_bindgen_ca47c4c6f8cfe56f___JsValue_____wasm_bindgen_ca47c4c6f8cfe56f___sys__Undefined_______true_: (a: number, b: number, c: any, d: any) => void;
+export const wasm_bindgen_ca47c4c6f8cfe56f___convert__closures_____invoke___wasm_bindgen_ca47c4c6f8cfe56f___JsValue__core_37ee0ce0c4cd57d5___result__Result_____wasm_bindgen_ca47c4c6f8cfe56f___JsError___true_: (a: number, b: number, c: any) => [number, number];
+export const __wbindgen_malloc: (a: number, b: number) => number;
+export const __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
+export const __wbindgen_exn_store: (a: number) => void;
+export const __externref_table_alloc: () => number;
+export const __wbindgen_externrefs: WebAssembly.Table;
+export const __wbindgen_destroy_closure: (a: number, b: number) => void;
+export const __wbindgen_free: (a: number, b: number, c: number) => void;
+export const __externref_table_dealloc: (a: number) => void;
+export const __wbindgen_start: () => void;

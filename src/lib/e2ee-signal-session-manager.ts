@@ -1,22 +1,12 @@
 import "client-only";
 
 /**
- * Session manager for Double Ratchet encryption/decryption.
- *
- * Encrypts/decrypts messages using AES-256-GCM with keys derived from
- * the Double Ratchet chain via HKDF. Each message gets a unique key.
- *
- * **IMPLEMENTED:**
- * - AES-256-GCM message encryption with per-message IV
- * - HKDF key derivation from chain keys
- * - X3DH session establishment via WASM bridge
- * - Session caching for performance
- * - Compromise detection integration
- * - Key rotation integration
- *
- * **REMAINING BEFORE PRODUCTION:**
- * - External cryptography audit
- * - Formal forward-secrecy verification
+ * Disabled legacy prototype; do not connect this manager to production chat.
+ * It derived a Web Crypto key from a chain-key snapshot without an atomic
+ * official-libsignal ratchet transition. Raw-chain extraction is rejected by
+ * the replacement Rust adapter. The supported production hook is use-e2ee.ts.
+ * New protocol integration must use the verified adapter and commit updated
+ * session/private-prekey state atomically before send or acknowledgement.
  */
 
 import { SignalLocalStore } from "./e2ee-signal-store";
