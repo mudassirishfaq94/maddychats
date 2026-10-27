@@ -324,14 +324,20 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
       HTMLMediaElement.prototype.play = async () => {};
     })()`);
     await source.page.getByRole("button", { name: "Scan QR on your new device", exact: true }).click();
-    await source.page.getByText("Safety number:").waitFor();
+    const comparison = source.page.getByLabel("I compared this number with the new phone and it matches.", { exact: true });
+    const approvalCard = comparison.locator("..").locator("..");
+    await approvalCard.getByText(/^Check number:/).waitFor();
+    await target.page.getByText("Show this device’s check number", { exact: true }).click();
     await target.page.getByLabel("This device check number").waitFor({ state: "visible" });
-    await source.page.getByText("Show full check number", { exact: true }).click();
-    await source.page.getByLabel("I compared this number with the new phone and it matches.").check();
-    const proofResponse = source.page.waitForResponse(response => response.url().endsWith("/api/e2ee/devices/approve") && response.request().postDataJSON()?.action === "approve", { timeout: 60000 });
-    await source.page.getByRole("button", { name: "Approve this device", exact: true }).click();
-    const proof = (await proofResponse).request().postDataJSON();
-    await source.page.getByText(/Device approved\./).waitFor();
+    await approvalCard.getByText("Show full check number", { exact: true }).click();
+    await comparison.check();
+    const [proofResponse] = await Promise.all([
+      source.page.waitForResponse(response => response.url().endsWith("/api/e2ee/devices/approve") && response.request().postDataJSON()?.action === "approve", { timeout: 60000 }),
+      approvalCard.getByRole("button", { name: "Approve this device", exact: true }).click(),
+    ]);
+    assert.equal(proofResponse.status(), 200);
+    const proof = proofResponse.request().postDataJSON();
+    await source.page.getByRole("status").filter({ hasText: "Your chat history is ready on the new phone." }).waitFor({ timeout: 60000 });
     assert.equal((await pool.query("select status from device_link_requests where id=$1", [request.id])).rows[0].status, "approved");
     assert.equal((await api("/api/e2ee/devices/approve", source.cookies, challenge)).status, 409);
     assert.equal((await api("/api/e2ee/devices/approve", source.cookies, proof)).status, 409);
@@ -339,7 +345,7 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     await chat(source.page);
     await source.page.getByRole("button", { name: "Private chat protection is on. View details", exact: true }).click();
     await source.page.getByRole("button", { name: "Share chat access with my devices", exact: true }).click();
-    await source.page.getByText(/Shared \d+ existing key/).waitFor({ timeout: 30000 });
+    await source.page.getByRole("status").filter({ hasText: "Chat history sent to your linked phone." }).waitFor({ timeout: 30000 });
     await chat(target.page);
     await recipient.page.getByRole("region", { name: "Conversation", exact: true }).getByText("Queued new device delivery", { exact: true }).waitFor({ timeout: 45000 });
     await chat(source.page);
