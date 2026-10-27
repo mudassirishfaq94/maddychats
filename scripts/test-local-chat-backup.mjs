@@ -10,7 +10,7 @@ export async function testLocalChatBackup(base, pool, source, owner, password, c
   await section.getByRole("button", { name: "Set up local backup", exact: true }).click();
   const code = await section.getByLabel("Local backup code", { exact: true }).textContent();
   assert.match(code, /^[A-Za-z0-9_-]{43}$/);
-  await section.getByLabel("Confirm your saved backup code", { exact: true }).fill(code);
+  await section.getByLabel("Enter your saved backup code to check it", { exact: true }).fill(code);
   await section.getByRole("button", { name: "I saved the code · Create backup", exact: true }).click();
   await section.getByRole("status").filter({ hasText: "Backup saved on this device." }).waitFor({ timeout: 90000 });
   const saved = await page.evaluate(async userId => {
@@ -20,7 +20,7 @@ export async function testLocalChatBackup(base, pool, source, owner, password, c
   }, owner.id);
   assert(saved.enabled && saved.savedAt); assert.equal(saved.extractable, false);
   const download = page.waitForEvent("download");
-  await section.getByRole("button", { name: "Export backup file", exact: true }).click();
+  await section.getByRole("button", { name: "Save backup file", exact: true }).click();
   const file = await download, bytes = await readFile(await file.path());
   assert(file.suggestedFilename().endsWith(".circlo"));
   assert.equal(bytes.includes(Buffer.from("Real encrypted delivery baseline")), false);
@@ -70,7 +70,7 @@ export async function testLocalChatBackup(base, pool, source, owner, password, c
     await restore.getByRole("status").filter({ hasText: "The backup code is incorrect" }).waitFor();
     await restore.getByLabel("Saved backup code", { exact: true }).fill(code);
     await restore.getByRole("button", { name: "Restore my chats", exact: true }).click();
-    await restore.getByRole("status").filter({ hasText: "Saved chats restored on this device." }).waitFor({ timeout: 60000 });
+    await restore.getByRole("status").filter({ hasText: "Your saved chats are back on this device." }).waitFor({ timeout: 60000 });
     targetId = await target.evaluate(() => localStorage.getItem("e2ee_device_id"));
     assert.equal((await pool.query("select trusted_at from e2ee_keys where user_id=$1 and device_id=$2", [owner.id, targetId])).rows[0].trusted_at, null, "A backup never auto-approves or revives a device");
     const conversations = await context.request.get(base + "/api/conversations");

@@ -323,7 +323,8 @@ export default function PrivacyPage() {
           </h3>
           <p>
             A new browser or phone can be linked only after approval from a device you already use. If you no longer
-            have an existing device, use the recovery phrase or file you saved to restore chat access. To link one, scan
+            have an existing device, use the recovery words you saved to unlock your saved chat key, or use your recovery
+            file together with its words or code. These are spare ways to open older chats, not copies of the messages. To link a device, scan
             its temporary QR code
             and compare the safety code shown on both devices before you approve it. The QR code expires after three
             minutes and does not contain the secret information needed to open chats. Removing a device stops it from
@@ -332,12 +333,13 @@ export default function PrivacyPage() {
           </p>
           <p>
             Today, the web and Android app keep the information needed to open chats in saved data on that device.
-            Physical security keys and a word-based recovery phrase are not available yet. Before clearing saved data,
-            make a recovery file or link another device. Otherwise, you may lose access to older chats.
+            Before clearing saved data, link another device or save a spare chat key and its recovery words.
+            To save copies of messages and available files too, make a chat backup and keep its file outside Circlo,
+            separately from its backup code. Without a working device or the things you saved, older chats may be lost.
           </p>
           <LegalCallout>
             Circlo staff and administrators cannot open your private messages because the needed secret information is
-            kept on your devices. If you lose every approved device and your recovery code or file, you may permanently
+            kept on your devices. If you lose every linked device, your saved chat key and its words, and any chat backup, you may permanently
             lose access to earlier chats. We cannot restore messages without that information.
           </LegalCallout>
 

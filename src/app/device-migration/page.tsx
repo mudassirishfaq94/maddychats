@@ -1,3 +1,3 @@
 import { DomainMigration } from "@/components/profile/domain-migration";
-export const metadata = { title: "Move your encryption keys", robots: { index: false, follow: false } };
+export const metadata = { title: "Bring your chats to Circlo", robots: { index: false, follow: false } };
 export default function MigrationPage() { return <DomainMigration />; }

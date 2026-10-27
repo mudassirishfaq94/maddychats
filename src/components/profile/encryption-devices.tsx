@@ -110,7 +110,7 @@ export function EncryptionDevices({ recoveryEmail, openRecovery = false, setup =
   async function sendRecoveryEmailCode() {
     if (!current || !current.fingerprint) return;
     setBusy(true);
-    setStatus("Sending a one-time recovery code to your verified email…");
+    setStatus("Sending a one-time sign-in code to your email…");
     try {
       const response = await e2eeRequest("/api/e2ee/devices/recovery-email", {
         method: "POST",
@@ -121,7 +121,7 @@ export function EncryptionDevices({ recoveryEmail, openRecovery = false, setup =
       if (data.code === "REAUTH_REQUIRED") setRecoveryReadiness(previous => ({ configured: previous?.configured ?? true, recentSignIn: false }));
       if (!response.ok) throw new Error(data.error ?? "Unable to send a recovery code.");
       setEmailRecoveryCodeSent(true);
-      setStatus("Recovery email submitted. Check your inbox and spam folder. The code expires in 10 minutes and works once.");
+      setStatus("Check your inbox and spam folder for the email code. It works once and expires in 10 minutes.");
     } catch (cause) {
       setStatus(cause instanceof Error ? cause.message : "Unable to send a recovery code.");
     } finally {
@@ -228,8 +228,8 @@ export function EncryptionDevices({ recoveryEmail, openRecovery = false, setup =
           <p className="mt-2 text-sm">{maskEmail(recoveryEmail)}</p>
           {recoveryReadiness?.recentSignIn === false ? <p className="mt-2 text-sm">For your safety, <Link className="underline" href={`/login?reauth=1&next=${encodeURIComponent(returnTo)}`}>sign in again</Link> before requesting a code.</p> : null}
           {recoveryReadiness?.configured === false ? <p className="mt-2 text-sm" role="status">Email recovery is unavailable. Try again later or contact support.</p> : null}
-          <button type="button" className="btn btn-secondary mt-3 min-h-11 w-full" disabled={busy || recoveryReadiness?.configured === false || recoveryReadiness?.recentSignIn === false} onClick={() => void sendRecoveryEmailCode()}>{busy ? "Please wait…" : emailRecoveryCodeSent ? "Send another code" : "Send recovery code"}</button>
-          <label className="mt-3 block text-sm">Code from your email<input className="field-input mt-1 w-full tracking-[0.3em]" aria-label="Email recovery code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={emailRecoveryCode} onChange={event => setEmailRecoveryCode(event.target.value.replace(/\D/g, "").slice(0, 6))} /></label>
+          <button type="button" className="btn btn-secondary mt-3 min-h-11 w-full" disabled={busy || recoveryReadiness?.configured === false || recoveryReadiness?.recentSignIn === false} onClick={() => void sendRecoveryEmailCode()}>{busy ? "Please wait…" : emailRecoveryCodeSent ? "Send another code" : "Send email code"}</button>
+          <label className="mt-3 block text-sm">Code from your email<input className="field-input mt-1 w-full tracking-[0.3em]" aria-label="Email sign-in code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={emailRecoveryCode} onChange={event => setEmailRecoveryCode(event.target.value.replace(/\D/g, "").slice(0, 6))} /></label>
           <button type="button" className="btn btn-primary mt-3 min-h-11 w-full" disabled={busy || emailRecoveryCode.length !== 6} onClick={() => {
               setBusy(true); setStatus("Verifying your code…");
               void encryption.approveDevice(current.deviceId, current.fingerprint, { decision: "recover", confirmation: "RESET ENCRYPTION TRUST", password, mfaCode, emailCode: emailRecoveryCode }).then(async () => {
@@ -239,7 +239,7 @@ export function EncryptionDevices({ recoveryEmail, openRecovery = false, setup =
               }).catch(cause => setStatus(cause instanceof Error ? cause.message : "We couldn’t verify that code. Try again.")).finally(() => setBusy(false));
           }}>Verify code and sign out other devices</button>
           {status ? <p role="status" className="mt-2 text-sm">{status}</p> : null}
-          <p className="mt-2 text-xs text-[var(--muted)]">This restores your account access. Older messages may need a linked phone.</p>
+          <p className="mt-2 text-xs text-[var(--muted)]">This email code lets you use your account here. To open older chats, use your old phone, saved recovery words, or a saved backup with its code.</p>
         </> : <p className="mt-2 text-sm" role="status">No verified email is available for recovery. Contact support to regain account access.</p>}
       </div> : <>
       <button type="button" className="btn btn-primary min-h-11 w-full" disabled={busy} onClick={() => void createLinkQr(current.deviceId)}>{issuedQr && issuedQr.deviceId === current.deviceId ? "Create a new QR code" : "Show a device-link QR code"}</button>
@@ -257,34 +257,35 @@ export function EncryptionDevices({ recoveryEmail, openRecovery = false, setup =
 
     {!setup && devices.some(device => device.trustedAt && device.deviceId !== encryption.deviceId && !device.sessionRevokedAt && device.sessionState !== "expired") && <details className="mt-4 rounded-xl border border-[var(--border)] p-3"><summary className="cursor-pointer min-h-11 py-2 text-sm font-semibold">Other linked devices ({devices.filter(device => device.trustedAt && device.deviceId !== encryption.deviceId && !device.sessionRevokedAt && device.sessionState !== "expired").length})</summary><ul className="space-y-2">{devices.filter(device => device.trustedAt && device.deviceId !== encryption.deviceId && !device.sessionRevokedAt && device.sessionState !== "expired").map(device => <li key={device.deviceId} className="border-t border-[var(--border)] py-3 text-sm"><p className="font-medium">{device.deviceName || browserLabel(device.browser) || "Linked device"}</p><p className="mt-1 text-xs text-[var(--muted)]">Linked{device.country ? ` · ${countryName(device.country)}` : ""}{device.lastUsedAt ? ` · Last used ${new Date(device.lastUsedAt).toLocaleDateString()}` : ""}</p></li>)}</ul></details>}
     {!setup && !devices.some(device => device.trustedAt) && current && <p className="mt-3 text-sm">No linked device is available. Use a recovery file or account recovery below.</p>}
+    {!setup && <details className="mt-4 rounded-xl border border-[var(--border)] p-3 text-sm"><summary className="min-h-11 cursor-pointer py-2 font-semibold">What do recovery and backup do?</summary><ul className="mt-2 list-disc space-y-2 pl-5"><li><strong>Changing phones?</strong> Link your new phone from the old one to bring over chats it can open.</li><li><strong>Want a spare copy of your chats?</strong> Make a chat backup, save its file on another device, and keep its backup code separately.</li><li><strong>Want a spare way to open older chats?</strong> Save a chat key online or as a file. Its recovery words unlock it; it does not contain your messages.</li><li><strong>Lost your old phone?</strong> An email code lets you use your account again. It cannot open older chats without a saved key or backup.</li></ul></details>}
     {!setup && <LocalChatBackupSettings />}
     {setup && recoveryOpen ? <BackupRestoreOption /> : null}
     {!setup && <CloudRecoverySettings />}
     {!setup && <details className="mt-4 rounded-xl border border-[var(--border)] p-3"><summary className="cursor-pointer min-h-11 py-2 text-sm font-semibold">Back up or restore chats</summary><DeviceRecovery /></details>}
     {!setup && current && !current.trustedAt && <div className="mt-4 rounded-xl border border-[var(--border)] p-3">
-      {!setup && <button type="button" className="btn btn-secondary" disabled={busy} onClick={() => setRecoveryOpen(previous => !previous)}>Emergency recovery: no linked device or backup file</button>}
+      {!setup && <button type="button" className="btn btn-secondary" disabled={busy} onClick={() => setRecoveryOpen(previous => !previous)}>Get back in without my old device</button>}
       {recoveryOpen && <div className="mt-3 text-sm">
-        <p>You will keep the same account. Recovery signs out your other devices and lets you use this one. Nothing is deleted from your account.</p>
+        <p>Use an email code to get back into the same account on this device. Your other devices will be signed out. Nothing is deleted from your account.</p>
         <p className="mt-2">An email code gets you back into your account, but it cannot unlock old chats by itself. To read those chats, use a device that can already open them or restore a saved file with its recovery words.</p>
         {recoveryEmail ? <div className="my-3 rounded-xl border border-[var(--border)] p-3">
           <p className="text-xs">Confirm your verified email: <strong>{maskEmail(recoveryEmail)}</strong></p>
           <p className="mt-1 text-xs text-[var(--muted)]">For safety, sign in again within the last five minutes before continuing. Use the link below if asked.</p>
           {recoveryReadiness?.recentSignIn === false ? <div className="mt-2 rounded-lg bg-[var(--card-2)] p-3 text-xs"><p>For your safety, sign in again before requesting the code.</p><Link className="btn btn-secondary mt-2" href={`/login?reauth=1&next=${encodeURIComponent(returnTo)}`}>Confirm with Google or sign in again</Link></div> : null}
           {recoveryReadiness?.configured === false ? <p className="mt-2 text-xs">Email recovery isn&apos;t available right now. Use a saved backup file or another linked browser.</p> : null}
-          <button type="button" className="btn btn-secondary mt-2" disabled={busy || recoveryReadiness?.configured === false || (recoveryReadiness?.recentSignIn === false && !password)} onClick={() => void sendRecoveryEmailCode()}>{busy ? "Please wait…" : emailRecoveryCodeSent ? "Send another recovery code" : "Send recovery code"}</button>
+          <button type="button" className="btn btn-secondary mt-2" disabled={busy || recoveryReadiness?.configured === false || (recoveryReadiness?.recentSignIn === false && !password)} onClick={() => void sendRecoveryEmailCode()}>{busy ? "Please wait…" : emailRecoveryCodeSent ? "Send another email code" : "Send email code"}</button>
           {status ? <p role="status" className="mt-2 text-sm">{status}</p> : null}
-          <label className="mt-3 block text-xs">Six-digit email recovery code<input className="field-input mt-1 w-full tracking-[0.3em]" aria-label="Email recovery code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={emailRecoveryCode} onChange={event => setEmailRecoveryCode(event.target.value.replace(/\D/g, "").slice(0, 6))} /></label>
+          <label className="mt-3 block text-xs">Six-digit code from your email<input className="field-input mt-1 w-full tracking-[0.3em]" aria-label="Email sign-in code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={emailRecoveryCode} onChange={event => setEmailRecoveryCode(event.target.value.replace(/\D/g, "").slice(0, 6))} /></label>
         </div> : <p className="my-3 text-xs text-[var(--muted)]">{setup ? "Email recovery needs a verified email on this account. Use your saved recovery file above, or return to Settings and verify your email first." : "This account has no verified email available for recovery. Use the password and recent sign-in options below, or verify an email in account settings first."}</p>}
         {!setup && <FreshAuthentication password={password} code={mfaCode} onPassword={setPassword} onCode={setMfaCode} returnTo={returnTo} />}
-        {setup ? <label className="mt-3 flex items-start gap-3 text-sm"><input className="mt-1 shrink-0" type="checkbox" checked={confirmation === "RESET ENCRYPTION TRUST"} onChange={event => setConfirmation(event.target.checked ? "RESET ENCRYPTION TRUST" : "")} />Sign out my other devices and use this one. I understand that old chats may still need a device that can open them.</label> : <label className="block text-xs">To confirm, type RESET ENCRYPTION TRUST exactly. This signs out your other devices.<input className="field-input mt-1 w-full" aria-label="Confirmation words" value={confirmation} maxLength={30} onChange={event => setConfirmation(event.target.value)} /></label>}
-        <button type="button" className="btn btn-secondary mt-3" disabled={busy || confirmation !== "RESET ENCRYPTION TRUST" || Boolean(recoveryEmail && emailRecoveryCode.length !== 6) || (setup && !recoveryEmail)} onClick={() => {
+        {setup ? <label className="mt-3 flex items-start gap-3 text-sm"><input className="mt-1 shrink-0" type="checkbox" checked={confirmation === "SIGN OUT OTHER DEVICES"} onChange={event => setConfirmation(event.target.checked ? "SIGN OUT OTHER DEVICES" : "")} />Sign out my other devices and use this one. I understand that old chats may still need a device that can open them.</label> : <label className="block text-xs">To confirm, type SIGN OUT OTHER DEVICES exactly.<input className="field-input mt-1 w-full" aria-label="Confirmation words" value={confirmation} maxLength={30} onChange={event => setConfirmation(event.target.value)} /></label>}
+        <button type="button" className="btn btn-secondary mt-3" disabled={busy || confirmation !== "SIGN OUT OTHER DEVICES" || Boolean(recoveryEmail && emailRecoveryCode.length !== 6) || (setup && !recoveryEmail)} onClick={() => {
           setBusy(true); setStatus("Checking your email, sign-in and this device…");
-          void encryption.approveDevice(current.deviceId, current.fingerprint, { decision: "recover", confirmation, password, mfaCode, ...(recoveryEmail ? { emailCode: emailRecoveryCode } : {}) }).then(async () => {
+          void encryption.approveDevice(current.deviceId, current.fingerprint, { decision: "recover", confirmation: "RESET ENCRYPTION TRUST", password, mfaCode, ...(recoveryEmail ? { emailCode: emailRecoveryCode } : {}) }).then(async () => {
             setPassword(""); setMfaCode(""); setEmailRecoveryCode(""); setConfirmation(""); setRecoveryOpen(false); await refresh();
-            setStatus("This device is set up. Reload to send messages. Older chats need their original keys from a device that can read them.");
+            setStatus("This device is set up. Reload to send messages. For older chats, link your old phone or use a saved chat key or backup.");
             window.dispatchEvent(new Event("maddy:message-request-keys"));
           }).catch(cause => setStatus(cause instanceof Error ? cause.message : "Recovery could not be verified.")).finally(() => setBusy(false));
-        }}>{recoveryEmail ? "Confirm email and recover this browser" : "Recover encryption on this browser"}</button>
+        }}>{recoveryEmail ? "Use email code and sign out other devices" : "Use this device and sign out others"}</button>
       </div>}
     </div>}
     {setup && !recoveryOpen && current && !current.trustedAt && <div className="mt-3 rounded-xl border border-[var(--border)] p-3 text-sm">
@@ -329,6 +330,6 @@ export function EncryptionDevices({ recoveryEmail, openRecovery = false, setup =
       <details className="mt-3 text-sm text-[var(--muted)]"><summary className="cursor-pointer">Why does a new device need approval?</summary><p className="mt-2">A new phone must be approved by one you already use. Once approved, keep the old phone online while it sends the chats it can still open. Chats that the old phone can no longer open may need another device that still has them.</p></details>
     {current?.trustedAt && <button type="button" className="btn btn-secondary mt-3 mr-2" disabled={busy} onClick={() => { setBusy(true); setStatus("Sending your chat history…"); void syncKnownConversations(undefined, (completed, total) => setStatus(`Sending your chat history… ${completed} of ${total} chats`)).then(setStatus).catch(error => setStatus(error instanceof Error ? error.message : "Could not send your chats. Keep this phone connected and try again.")).finally(() => setBusy(false)); }}>{busy ? "Sending chats…" : "Send chat history to my devices"}</button>}
     <button type="button" className="btn btn-secondary mt-3" disabled={busy || !encryption.initialized} onClick={() => { setBusy(true); setStatus("Checking…"); void refresh().then(() => { setStatus("Device list updated."); window.dispatchEvent(new Event("maddy:message-request-keys")); }).catch(cause => setStatus(cause instanceof Error ? cause.message : "Unable to load devices.")).finally(() => setBusy(false)); }}>{busy ? "Checking devices…" : "Refresh device list"}</button>
-    <p className="mt-3 text-xs text-[var(--muted)]">Clearing browser data removes what this browser needs to open chats and any saved drafts. Save a recovery file first.</p></details>}
+    <p className="mt-3 text-xs text-[var(--muted)]">Clearing this device&apos;s saved data removes its chat key and drafts. Before you do that, link another device or save your chat key and a backup file somewhere else.</p></details>}
   </section>;
 }

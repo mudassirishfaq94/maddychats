@@ -44,14 +44,14 @@ const features = [
 
 const steps = [
   { title: "Sign up", text: "Create an account with your email and password." },
-  { title: "Save a recovery file", text: "Keep the file and its separate code somewhere safe." },
+  { title: "Confirm your email", text: "Enter the code we email you, then sign in. No recovery file is needed to get started." },
   { title: "Say hello", text: "Find your people and start a chat or group." },
 ];
 
 const questions = [
   { title: "Is Circlo free?", text: "Yes. You can use Circlo in your browser for free." },
   { title: "Are my private chats really private?", text: "Only approved devices in a chat can open its messages. Circlo still stores basic account information needed to run the service." },
-  { title: "What if I change phones?", text: "Save a recovery file first, or approve the new phone from a device you already use. Without either one, you may lose access to older chats." },
+  { title: "What if I change phones?", text: "Link your new phone from your old one to bring over chats it can open. A saved recovery file is another option; without either, older chats may be lost." },
   { title: "Can I use Circlo on a computer?", text: "Yes. Open Circlo in a browser on your phone, tablet or computer." },
 ];
 
@@ -165,7 +165,21 @@ export default async function LandingPage() {
       </section>
 
       <section id="privacy" aria-labelledby="privacy-title" className="scroll-mt-20 mx-auto grid max-w-7xl gap-5 px-4 py-14 sm:px-8 sm:py-20 md:grid-cols-[1fr_auto] md:items-center">
-        <div><p className="text-xs font-semibold uppercase tracking-[.16em] text-[var(--accent-fg)]">Your messages stay yours</p><h2 id="privacy-title" className="font-display mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">A clear promise about privacy.</h2><p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--muted)]">Only people in a private chat can open its messages. Circlo still stores basic account information needed to run the service.</p></div>
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[.16em] text-[var(--accent-fg)]">Your messages stay yours</p>
+          <h2 id="privacy-title" className="font-display mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">A clear promise about privacy.</h2>
+          <p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--muted)]">Private chats use end-to-end encryption: AES-256-GCM protects content, and RSA-OAEP shares chat keys with approved devices.</p>
+          <p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--muted)]">To run the service, we store:</p>
+          <ul className="mt-3 max-w-2xl list-disc space-y-2 pl-5 text-sm leading-6 text-[var(--muted)]">
+            <li>Account details: display name, username, email address and a password hash, rather than your password.</li>
+            <li>Optional profile details: the bio, avatar, phone number and links you add.</li>
+            <li>Security details: sign-in times, IP address, browser and device type, and approximate country.</li>
+            <li>Delivery details: chat membership, message times and sizes, and delivery and read status.</li>
+          </ul>
+          <p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--muted)]"><strong className="text-[var(--text)]">Open-source code and security audits:</strong> Circlo’s application code is currently private. We have not published an independent security review.</p>
+          <p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--muted)]"><strong className="text-[var(--text)]">Photo location details:</strong> some uploads keep the original file, including location tags. Remove location information before sharing sensitive photos.</p>
+          <p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--muted)]"><strong className="text-[var(--text)]">Advertising:</strong> we do not use your messages or shared photos for advertising algorithms or ad targeting.</p>
+        </div>
         <Link href="/privacy" className="btn btn-secondary min-h-11 justify-center">Read the Privacy Policy</Link>
       </section>
 

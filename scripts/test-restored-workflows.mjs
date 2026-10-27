@@ -176,6 +176,16 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     await profile(source.page); await profile(recipient.page);
     await source.page.getByText("This device: Linked", { exact: true }).waitFor();
     assert.equal(await source.page.getByText(/App (by|My) Mudassir/).count(), 0);
+    if (process.env.LOCAL_BACKUP_ONLY === "1" && !ownedLive) {
+      await source.page.goto(`${base}/app/chats/${conversationId}`);
+      await recipient.page.goto(`${base}/app/chats/${conversationId}`);
+      await source.page.getByRole("textbox", { name: "Message text" }).fill("Real encrypted delivery baseline");
+      await source.page.getByRole("textbox", { name: "Message text" }).press("Enter");
+      await recipient.page.getByRole("region", { name: "Conversation", exact: true }).getByText("Real encrypted delivery baseline", { exact: true }).waitFor({ timeout: 60000 });
+      await testLocalChatBackup(base, pool, source, owner, password, conversationId);
+      assert.deepEqual(errors, []);
+      return { localBackup: true, encryptedFile: true, restoration: true, accountIsolation: true, browserErrors: 0 };
+    }
     if (process.env.GROUP_ONLY === "1" && !ownedLive) {
       const photos = await testProfilePhotos(base, pool, owner, peer, source, unrelatedCookie, recipient.cookies);
       await pool.query("delete from conversations where id=$1 and created_by_id=$2", [photos.groupId, owner.id]);
@@ -216,7 +226,7 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
       await messageHistory.getByText("Message unavailable", { exact: true }).waitFor({ timeout: 45000 });
       await source.page.getByRole("button", { name: "Try again", exact: true }).click();
       await messageHistory.getByText("Message unavailable", { exact: true }).waitFor({ timeout: 45000 });
-      assert.equal(await source.page.getByRole("button", { name: "Recovery help", exact: true }).count(), 1);
+      assert.equal(await source.page.getByRole("button", { name: "How to bring chats over", exact: true }).count(), 1);
       assert.equal(await source.page.getByText("unreadable-owned-fixture", { exact: true }).count(), 0, "Ciphertext is never displayed");
     } finally {
       await pool.query("delete from messages where id=$1 and conversation_id=$2", [unreadable, conversationId]);

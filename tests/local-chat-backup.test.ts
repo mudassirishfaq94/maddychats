@@ -46,7 +46,7 @@ test("portable local chat archives authenticate the entire snapshot, account and
   await assert.rejects(openChatBackup(new Blob([bytes]), key, snapshot.userId), /damaged/);
   await assert.rejects(backupKey("easy-password"), /complete saved backup code/);
   await assert.rejects(openChatBackup(new Blob(["{}"]), key, snapshot.userId), /incomplete/);
-  await assert.rejects(validateChatBackup({ ...snapshot, recovery: { ...snapshot.recovery, userId: randomUUID() } }, snapshot.userId), /signed-in account/);
+  await assert.rejects(validateChatBackup({ ...snapshot, recovery: { ...snapshot.recovery, userId: randomUUID() } }, snapshot.userId), /belongs to another account/);
 });
 test("local archives exclude temporary, deleted, pending and self-destruct messages", () => {
   const regular = { deletedAt: null, deletedForMe: false, selfDestruct: false, expiresAt: null } as MessageDTO;

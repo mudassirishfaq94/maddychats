@@ -14,16 +14,16 @@ const aad = (identity: RecoveryIdentity) => new TextEncoder().encode(`circlo-clo
 export const newRecoveryCode = () => recoveryPhraseFromEntropy(crypto.getRandomValues(new Uint8Array(32)));
 async function wrappingKey(code: string, salt: Uint8Array, identity: RecoveryIdentity) {
   let recoveryBytes: Uint8Array;
-  try { recoveryBytes = recoveryPhraseToEntropy(code); } catch { throw new Error("Enter your 24-word recovery phrase, not your account password."); }
+  try { recoveryBytes = recoveryPhraseToEntropy(code); } catch { throw new Error("Enter the recovery words or older code you saved. Your sign-in password cannot unlock this copy."); }
   const material = await crypto.subtle.importKey("raw", recoveryBytes as BufferSource, "HKDF", false, ["deriveKey"]);
   return crypto.subtle.deriveKey({ name: "HKDF", hash: "SHA-256", salt: salt as BufferSource, info: aad(identity) }, material, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
 }
 export async function sealRecovery(bundle: RecoveryBundle, code: string, identity: RecoveryIdentity): Promise<RecoveryEnvelope> {
   await validateRecoveryBundle(bundle, identity.userId);
-  if (bundle.deviceId !== identity.deviceId) throw new Error("Recovery identity mismatch.");
+  if (bundle.deviceId !== identity.deviceId) throw new Error("This saved chat key belongs to another device. Choose the matching saved copy.");
   const salt = crypto.getRandomValues(new Uint8Array(32)), iv = crypto.getRandomValues(new Uint8Array(12));
   const plaintext = new TextEncoder().encode(JSON.stringify(bundle));
-  if (plaintext.byteLength > 8 * 1024 * 1024) throw new Error("This backup is too large. Keep an encrypted recovery file instead.");
+  if (plaintext.byteLength > 8 * 1024 * 1024) throw new Error("There is too much saved chat information for this online copy. Save a recovery file instead.");
   const key = await wrappingKey(code, salt, identity);
   const encrypted = await crypto.subtle.encrypt({ name: "AES-GCM", iv, additionalData: aad(identity) }, key, plaintext);
   plaintext.fill(0);
@@ -41,7 +41,7 @@ export async function openRecovery(envelope: RecoveryEnvelope, code: string, ide
     if (bundle!.deviceId !== identity.deviceId) throw new Error("identity");
     await validateRecoveryBundle(bundle!, identity.userId);
     return bundle!;
-  } catch { throw new Error("The recovery code is incorrect, this backup belongs to another account, or it is damaged."); }
+  } catch { throw new Error("We couldn't open this saved chat key. Check your recovery words or code and use the account this copy belongs to."); }
 }
 export interface CloudRecoveryConfig { id: string; code: string; revision: number; snapshotDigest?: string }
 /** Called away from typing/send work. The code never enters this request. */
@@ -65,12 +65,12 @@ export async function refreshCloudRecovery(userId: string, deviceId: string): Pr
       bundle.keys[key]=JSON.stringify([...new Map(entries.map((entry:{fingerprint:string})=>[entry.fingerprint,entry])).values()]);
     }
     config.revision=backup.revision;
-  } else if(previous.status!==404) throw new Error("Recovery status could not be checked. Existing backup was preserved.");
+  } else if(previous.status!==404) throw new Error("We couldn't check your saved chat key. Your previous copy is safe. Try again when you're online.");
   const envelope = await sealRecovery(bundle, config.code, identity);
   const response = await fetch("/api/e2ee/recovery-backups", { method: "PUT", headers: { "Content-Type": "application/json" }, signal: AbortSignal.timeout(15000),
     body: JSON.stringify({ id: config.id, deviceId, revision: config.revision, confirmed: true, envelope }) });
   const result = await response.json();
-  if (!response.ok) throw new Error(result.error ?? "Recovery backup could not be refreshed.");
+  if (!response.ok) throw new Error(result.error ?? "We couldn't update your saved chat key. Your previous copy is safe. Try again.");
   await writeDeviceKeyMaterial(localKey, JSON.stringify({ ...config, revision: result.revision, snapshotDigest: digest }));
   window.dispatchEvent(new Event("circlo:recovery-status"));
   return true;

@@ -16,11 +16,11 @@ test("recovery file authenticates owner, private key, ciphertext and separate re
   assert.deepEqual(recoveryPhraseToEntropy(code.toUpperCase()), recoveryPhraseToEntropy(code));
   assert(!file.includes(secret) && !file.includes("original-device"));
   assert.deepEqual(await readRecoveryFile(file, code, "owner"), bundle);
-  await assert.rejects(readRecoveryFile(file, code, "other-account"), /signed-in account/);
-  await assert.rejects(readRecoveryFile(file, "A".repeat(43) + "=", "owner"), /incorrect or the file is damaged/);
+  await assert.rejects(readRecoveryFile(file, code, "other-account"), /belongs to another account/);
+  await assert.rejects(readRecoveryFile(file, "A".repeat(43) + "=", "owner"), /do not match this file, or the file is damaged/);
   const altered = JSON.parse(file); altered.ciphertext = "AAAA" + altered.ciphertext.slice(4);
-  await assert.rejects(readRecoveryFile(JSON.stringify(altered), code, "owner"), /incorrect or the file is damaged/);
-  await assert.rejects(validateRecoveryBundle({ ...bundle, keys: { maddy_session: "credential" } }, "owner"), /Invalid chat keys/);
+  await assert.rejects(readRecoveryFile(JSON.stringify(altered), code, "owner"), /do not match this file, or the file is damaged/);
+  await assert.rejects(validateRecoveryBundle({ ...bundle, keys: { maddy_session: "credential" } }, "owner"), /recovery file is damaged/);
   const other = await generateKeyPair();
   await assert.rejects(validateRecoveryBundle({ ...bundle, keypair: JSON.stringify({ ...JSON.parse(bundle.keypair), publicKey: await exportPublicKey(other.publicKey) }) }, "owner"));
 });

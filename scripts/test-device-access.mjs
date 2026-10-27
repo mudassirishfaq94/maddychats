@@ -94,9 +94,9 @@ export async function testDeviceAccess(base, pool, secret) {
     const recovery = await open();
     await recovery.page.getByText("I don’t have my old device",{exact:true}).click();
     await recovery.page.getByRole("heading",{name:"Get a sign-in code by email",exact:true}).waitFor();
-    await recovery.page.getByRole("button",{name:"Send recovery code",exact:true}).waitFor();
+    await recovery.page.getByRole("button",{name:"Send email code",exact:true}).waitFor();
     const recoveryText = await recovery.page.locator("#encryption-devices").innerText();
-    assert(recoveryText.includes("Get a sign-in code by email") && recoveryText.includes("Send recovery code"));
+    assert(recoveryText.includes("Get a sign-in code by email") && recoveryText.includes("Send email code"));
     assert(!recoveryText.includes("Show a device-link QR code") && !recoveryText.includes("Back up or restore chats"),"No-old-device recovery hides unrelated setup choices");
     const confirm = recovery.page.getByRole("button",{name:"Verify code and sign out other devices",exact:true});
     assert(await confirm.isDisabled());
@@ -109,7 +109,7 @@ export async function testDeviceAccess(base, pool, secret) {
     await pool.query("update users set email_verified_at=now() where id=$1",[user.id]);
     const hash=createHmac("sha256",secret).update(`device-recovery-email:v1:${user.id}:${pending.device_id}:${pending.session_id}:${fingerprint}:${code}`).digest("hex");
     await pool.query("insert into device_recovery_email_codes(user_id,device_id,session_id,fingerprint,code_hash,expires_at) values($1,$2,$3,$4,$5,now()+interval '10 minutes')",[user.id,pending.device_id,pending.session_id,fingerprint,hash]);
-    await recovery.page.getByLabel("Email recovery code",{exact:true}).fill(code);
+    await recovery.page.getByLabel("Email sign-in code",{exact:true}).fill(code);
     assert.equal(await confirm.isDisabled(),false,"The explicit button states that recovery signs out other devices");
     assert.equal((await source.context.request.get(base+"/api/auth/me")).status(),200);
     for(const [width,height] of [[320,740],[844,390],[390,360]]) {
