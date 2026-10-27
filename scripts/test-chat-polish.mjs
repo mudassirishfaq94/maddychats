@@ -187,8 +187,10 @@ export async function testChatPolish(page, recipient) {
 }
 
 
-/** Pure browser callback shared with the focused measurement regression. */
-export function measureChatWallpaper(wallpaper) {
+// Construct in the Node test runner so tsx cannot insert closure-bound __name
+// helpers into the browser callback. No application CSP change is needed.
+/** @type {(wallpaper: Element) => { overflow: boolean, ratios: { text: number, metadata: number, alpha: string }[], pattern: string }} */
+export const measureChatWallpaper = new Function("wallpaper", String.raw`
   const luminance = value => {
     const channels = value.match(/[\d.]+/g).slice(0, 3).map(Number).map(v => {
       const c = v / 255;
@@ -213,7 +215,7 @@ export function measureChatWallpaper(wallpaper) {
     }),
     pattern: getComputedStyle(wallpaper).backgroundImage,
   };
-}
+`);
 
 /** Real settings API + rendered CSS, owned fixture chats only. */
 async function testChatWallpapers(page) {
