@@ -26,9 +26,9 @@ export default function AdminAuditPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-bold">Audit Log</h1>
+        <h1 className="text-xl font-bold">Admin action history</h1>
         <p className="mt-1 text-sm text-[var(--muted)]">
-          History of all administrative actions.
+          See changes made by administrators.
         </p>
       </div>
 

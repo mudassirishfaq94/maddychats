@@ -38,7 +38,7 @@ export const metadata: Metadata = {
     template: "%s · Circlo",
   },
   description:
-    "Your circle. Your secrets. Sealed. Connect through end-to-end encrypted conversations with Circlo.",
+    "Your circle. Your secrets. Sealed. Send private messages that only approved devices in your chat can open.",
   authors: [{ name: "Mudassir Ishfaq" }],
   creator: "Mudassir Ishfaq",
   appleWebApp: { capable: true, title: "Circlo", statusBarStyle: "black-translucent" },

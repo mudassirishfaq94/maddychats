@@ -84,13 +84,13 @@ export default function AdminOverviewPage() {
       <div>
         <h1 className="text-xl font-bold">Dashboard Overview</h1>
         <p className="mt-1 text-sm text-[var(--muted)]">
-          Live operational overview · Refreshes every 15 seconds while visible.
+          System snapshot · Updates every 15 seconds while this page is open.
         </p>
       </div>
 
       {/* Stat Cards */}
       {error?<p role="alert" className="rounded-xl border border-[var(--border)] p-3 text-sm">Refresh failed. Showing data from {new Date(stats.observedAt).toLocaleTimeString()}.</p>:null}
-      <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 text-sm"><b>Database: {stats.health.database}</b><span className="ml-3 text-[var(--muted)]">Probe {stats.health.databaseLatencyMs} ms · Web process uptime {Math.floor(stats.health.processUptimeSeconds/60)} min</span><p className="mt-2 text-xs text-[var(--muted)]">Observed {new Date(stats.observedAt).toLocaleString()} · Counts and trends only; no private message content.</p></div>
+      <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 text-sm"><b>Database connection: {stats.health.database}</b><span className="ml-3 text-[var(--muted)]">Check took {stats.health.databaseLatencyMs} ms · Server running for {Math.floor(stats.health.processUptimeSeconds/60)} min</span><p className="mt-2 text-xs text-[var(--muted)]">Updated {new Date(stats.observedAt).toLocaleString()} · Counts only; private message contents are not shown.</p></div>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         {statCards.map((card) => (
           <div

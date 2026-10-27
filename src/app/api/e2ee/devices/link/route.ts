@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
     const [session] = await tx.select().from(deviceSessions).where(and(eq(deviceSessions.id, sessionId), eq(deviceSessions.userId, user.id), isNull(deviceSessions.revokedAt), gt(deviceSessions.expiresAt, new Date()))).for("update");
     const [device] = await tx.select().from(e2eeKeys).where(and(eq(e2eeKeys.userId, user.id), eq(e2eeKeys.deviceId, deviceId))).for("update");
     if (!session || !device || device.trustedAt || device.sessionId !== sessionId) return null;
-    await tx.update(deviceLinkRequests).set({ status: "revoked", usedAt: new Date() }).where(and(eq(deviceLinkRequests.userId, user.id), eq(deviceLinkRequests.deviceId, deviceId), eq(deviceLinkRequests.status, "pending")));
+    await tx.update(deviceLinkRequests).set({ status: "revoked", usedAt: new Date(), entryCodeHash: null }).where(and(eq(deviceLinkRequests.userId, user.id), eq(deviceLinkRequests.deviceId, deviceId), eq(deviceLinkRequests.status, "pending")));
     // The QR payload is a bearer secret. Use 256 random bits; never place it in
     // a URL or a log, and persist only its digest in the link request row.
     const token = randomBytes(32).toString("base64url");

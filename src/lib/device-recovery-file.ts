@@ -1,6 +1,27 @@
 import { conversationFingerprint, decryptKeyFromSender, decryptPrivateKeyFromStorage, encryptKeyForUser, importPrivateKey, importPublicKey } from "./crypto";
+import { recoveryPhraseFromEntropy, recoveryPhraseToEntropy } from "./recovery-phrase";
+import { readDeviceKeyMaterial, removeDeviceKeyMaterial, writeDeviceKeyMaterial } from "./device-key-storage";
 
 export type RecoveryBundle = { version: 1; userId: string; deviceId: string; keypair: string; secret: string; keys: Record<string, string> };
+/** Keep the keypair and its recovery secret together when replacing an identity. */
+export async function writeRecoveryIdentity(bundle: RecoveryBundle): Promise<void> {
+  const keypairKey = `e2ee_keypair_${bundle.userId}`;
+  const secretKey = `e2ee_recovery_${bundle.userId}_${bundle.deviceId}`;
+  const previousKeypair = await readDeviceKeyMaterial(keypairKey);
+  const previousSecret = await readDeviceKeyMaterial(secretKey);
+  try {
+    await writeDeviceKeyMaterial(keypairKey, bundle.keypair);
+    await writeDeviceKeyMaterial(secretKey, bundle.secret);
+  } catch (cause) {
+    // Attempt both rollbacks even if one storage operation fails again.
+    await Promise.allSettled([
+      previousKeypair === null ? removeDeviceKeyMaterial(keypairKey) : writeDeviceKeyMaterial(keypairKey, previousKeypair),
+      previousSecret === null ? removeDeviceKeyMaterial(secretKey) : writeDeviceKeyMaterial(secretKey, previousSecret),
+    ]);
+    throw cause;
+  }
+}
+
 const MAX_BYTES = 8 * 1024 * 1024;
 const encode = (bytes: Uint8Array) => btoa(Array.from(bytes, value => String.fromCharCode(value)).join(""));
 const decode = (value: string) => Uint8Array.from(atob(value), char => char.charCodeAt(0));
@@ -65,16 +86,23 @@ export async function rewrapRecoveryHistory(bundle: RecoveryBundle, userId: stri
   return result;
 }
 
-export function collectRecoveryBundle(userId: string, deviceId: string): RecoveryBundle {
+export async function collectRecoveryBundle(userId: string, deviceId: string): Promise<RecoveryBundle> {
   const previous = restoredBundle(userId);
   const keys = { ...previous?.keys };
   for (let i = 0; i < localStorage.length; i++) {
     const key = localStorage.key(i)!;
     if (key.startsWith(`e2ee_sentkeys_${userId}_`)) keys[key] = JSON.stringify(storedChatKeys(userId, key));
   }
-  return { version: 1, userId, deviceId: previous?.deviceId ?? deviceId,
-    keypair: previous?.keypair ?? localStorage.getItem(`e2ee_keypair_${userId}`) ?? "",
-    secret: previous?.secret ?? localStorage.getItem(`e2ee_recovery_${userId}_${deviceId}`) ?? "", keys };
+  const keypairKey = `e2ee_keypair_${userId}`;
+  const secretKey = `e2ee_recovery_${userId}_${deviceId}`;
+  const keypair = previous?.keypair || await readDeviceKeyMaterial(keypairKey) || "";
+  const secret = previous?.secret || await readDeviceKeyMaterial(secretKey) || "";
+  if (previous && (previous.keypair || previous.secret)) {
+    await writeDeviceKeyMaterial(keypairKey, keypair);
+    await writeDeviceKeyMaterial(secretKey, secret);
+    localStorage.setItem(recoveryBundleKey(userId), JSON.stringify({ ...previous, keypair: "", secret: "" }));
+  }
+  return { version: 1, userId, deviceId: previous?.deviceId ?? deviceId, keypair, secret, keys };
 }
 
 export async function validateRecoveryBundle(bundle: RecoveryBundle, userId: string) {
@@ -105,7 +133,7 @@ export async function createRecoveryFile(bundle: RecoveryBundle) {
   const key = await crypto.subtle.importKey("raw", raw, "AES-GCM", false, ["encrypt"]);
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const ciphertext = await crypto.subtle.encrypt({ name: "AES-GCM", iv, additionalData: new TextEncoder().encode("circlo-recovery-v1") }, key, bytes);
-  return { code: encode(raw), file: JSON.stringify({ format: "circlo-recovery-v1", iv: encode(iv), ciphertext: encode(new Uint8Array(ciphertext)) }) };
+  return { code: recoveryPhraseFromEntropy(raw), file: JSON.stringify({ format: "circlo-recovery-v1", iv: encode(iv), ciphertext: encode(new Uint8Array(ciphertext)) }) };
 }
 
 export async function readRecoveryFile(file: string, code: string, userId: string): Promise<RecoveryBundle> {
@@ -114,9 +142,9 @@ export async function readRecoveryFile(file: string, code: string, userId: strin
   try {
     const envelope = JSON.parse(file);
     if (envelope.format !== "circlo-recovery-v1") throw new Error("format");
-    const raw = decode(code.trim());
+    const raw = recoveryPhraseToEntropy(code);
     if (raw.length !== 32) throw new Error("code");
-    const key = await crypto.subtle.importKey("raw", raw, "AES-GCM", false, ["decrypt"]);
+    const key = await crypto.subtle.importKey("raw", raw as BufferSource, "AES-GCM", false, ["decrypt"]);
     const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv: decode(envelope.iv), additionalData: new TextEncoder().encode("circlo-recovery-v1") }, key, decode(envelope.ciphertext));
     bundle = JSON.parse(new TextDecoder().decode(plain));
   } catch { throw new Error("The recovery code is incorrect or the file is damaged."); }

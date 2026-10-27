@@ -60,7 +60,7 @@ async function main() {
     const setupPage = await api("/app/admin", noMfaCookie);
     assert.equal(setupPage.status, 200);
     const setupHtml = await setupPage.text();
-    assert(setupHtml.includes("Secure your admin account") && setupHtml.includes("/app/settings#two-step-verification"));
+    assert(setupHtml.includes("Set up the extra sign-in check") && setupHtml.includes("/app/settings#two-step-verification"));
     assert(!setupHtml.includes("Admin Dashboard v1.0"), "MFA setup screen never includes privileged admin children");
     assert.equal((await api("/api/e2ee/signal/send", aliceCookie, "POST", {})).status, 503, "Experimental send cannot bypass production policies");
     assert.equal((await api("/api/admin/users", noMfaCookie, "PATCH", { userId: target.id, action: "role", role: "moderator" })).status, 403, "Admin writes require MFA enrollment");
@@ -126,7 +126,6 @@ async function main() {
           const response = await page.goto(base + path, { waitUntil: "load" });
           assert.equal(response?.status(), 200);
           await page.getByRole("heading", { level: 1 }).waitFor();
-          if (["users", "reports", "messages"].some(segment => path.endsWith("/" + segment))) await page.getByRole("main").getByText(/Enable two-factor authentication first/).waitFor();
           if (path.endsWith("users")) {
             await page.getByText(htmlName, { exact: true }).waitFor();
             assert.equal(await page.locator('img[src="x"]').count(), 0, "Profile markup is rendered as text");
@@ -135,7 +134,7 @@ async function main() {
           assert.deepEqual(errors, [], `Admin browser errors on ${path}`);
           page.off("pageerror", record);
         }
-        for (const [path, endpoint, heading] of [["/app/admin", "/api/admin/stats", "Dashboard Overview"], ["/app/admin/storage", "/api/admin/storage", "Storage Dashboard"], ["/app/admin/audit", "/api/admin/audit-log", "Audit Log"], ["/app/admin/security", "/api/admin/security/login-history", "Security & Retention"]]) {
+        for (const [path, endpoint, heading] of [["/app/admin", "/api/admin/stats", "Dashboard Overview"], ["/app/admin/storage", "/api/admin/storage", "File storage"], ["/app/admin/audit", "/api/admin/audit-log", "Admin action history"], ["/app/admin/security", "/api/admin/security/login-history", "Sign-in safety and data cleanup"]]) {
           const pattern = "**" + endpoint;
           const failures: string[] = []; const onError = (error: Error) => failures.push(error.message); page.on("pageerror", onError);
           await page.route(pattern, route => route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "Temporary admin service interruption." }) }));

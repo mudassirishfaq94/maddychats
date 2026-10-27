@@ -47,9 +47,9 @@ export default async function ProfilePage({
     : query.auth_error === "google_link_expired"
       ? { kind: "error" as const, text: "Google linking expired or your signed-in account changed. Sign in again, then choose Add Google on this profile." }
     : query.auth_error === "google_in_use"
-      ? { kind: "error" as const, text: "That Google identity belongs to another Circlo account. Sign out and use Google sign-in to recover it; accounts are not merged automatically." }
+          ? { kind: "error" as const, text: "That Google account is already linked to another Circlo account. Sign out and use it to sign in; accounts are not combined automatically." }
       : query.auth_error === "google_already_linked"
-        ? { kind: "error" as const, text: "A different Google identity is already connected to this account." }
+          ? { kind: "error" as const, text: "A different Google account is already linked here." }
         : null;
 
   const meta = [
@@ -94,13 +94,13 @@ export default async function ProfilePage({
       <div className="mt-5 grid min-w-0 grid-cols-[minmax(0,1fr)] items-start gap-5 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
         <div className="min-w-0 space-y-5">
           <ProfileEditor user={user} />
-          <ProfileDisclosure title="Encryption & trusted devices" description="Manage your devices and keep access to your private chats." anchors={["encryption-devices", "cloud-recovery", "local-chat-backup"]} defaultOpen={query.recovery === "1"}>
+          <ProfileDisclosure title="Private chats and devices" description="Choose which devices can open your chats and save a way to get back in." anchors={["encryption-devices", "cloud-recovery", "local-chat-backup"]} defaultOpen={query.recovery === "1"}>
             <EncryptionDevices openRecovery={query.recovery === "1"} recoveryEmail={accountSecurity?.emailVerifiedAt && !user.email.endsWith("@auth.maddychats.invalid") ? user.email : undefined} />
           </ProfileDisclosure>
-          <ProfileDisclosure title="Sign-in & account security" description="Google, passwords, and signed-in sessions." anchors={["account-security", "devices", "authentication-methods"]} defaultOpen={Boolean(notice)}>
+          <ProfileDisclosure title="Sign-in and account safety" description="Manage sign-in methods and devices signed into your account." anchors={["account-security", "devices", "authentication-methods"]} defaultOpen={Boolean(notice)}>
             <div id="account-security" className="space-y-4"><AuthenticationMethods initialMethods={initialMethods} notice={notice} /><ProfileDisclosure title="Password" description="Set or change your password."><PasswordSettings email={user.email} google={initialMethods.google} /></ProfileDisclosure><Devices /></div>
           </ProfileDisclosure>
-          <Link href="/app/settings" className="flex min-h-16 items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--card)] px-5 py-4"><span className="min-w-0 flex-1"><span className="block font-semibold">Notifications, privacy and two-step verification</span><span className="mt-1 block text-xs text-[var(--muted)]">These live in Settings.</span></span><span aria-hidden className="text-[var(--muted)]">›</span></Link>
+          <Link href="/app/settings" className="flex min-h-16 items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--card)] px-5 py-4"><span className="min-w-0 flex-1"><span className="block font-semibold">Notifications, privacy and extra sign-in check</span><span className="mt-1 block text-xs text-[var(--muted)]">These live in Settings.</span></span><span aria-hidden className="text-[var(--muted)]">›</span></Link>
         </div>
 
         <div className="min-w-0 space-y-4">

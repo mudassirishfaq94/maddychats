@@ -38,7 +38,7 @@ const INDEX = [
   { id: "acceptance", label: "Acceptance of these terms" },
   { id: "service", label: "What Circlo is" },
   { id: "account", label: "Your account" },
-  { id: "keys", label: "Encryption and your keys" },
+  { id: "keys", label: "Protecting private chats" },
   { id: "content", label: "Your content" },
   { id: "use", label: "Acceptable use" },
   { id: "moderation", label: "Moderation and enforcement" },
@@ -58,11 +58,11 @@ const HIGHLIGHTS = [
   },
   {
     icon: KeyRound,
-    text: "Keep your recovery material safe. If every trusted device and your recovery are lost, nobody can restore your history.",
+    text: "Keep your recovery code or file safe. If you lose them and every device that can open your chats, no one can restore your old messages.",
   },
   {
     icon: ScrollText,
-    text: "You own what you send. We hold ciphertext we cannot read, and we claim no rights over your content.",
+    text: "You own what you send. We store locked copies of private messages that we cannot open, and we claim no rights over your content.",
   },
 ];
 
@@ -77,7 +77,7 @@ const ACCEPTABLE_USE = [
   "Attempting to access accounts, devices, or systems that are not yours.",
   "Scraping, crawling, or automating the service without our written permission.",
   "Uploading malware, or content designed to damage a device or network.",
-  "Evading rate limits, bans, or safety controls, including by creating additional accounts.",
+  "Getting around sending limits, bans or safety controls, including by creating extra accounts.",
   "Using the service for anything unlawful, or to infringe another person's rights.",
 ];
 
@@ -142,7 +142,7 @@ const LIABILITY = [
   },
   {
     lead: "Back up what matters.",
-    text: "Encrypted history depends on keys you hold, so keep your recovery material safe and do not rely on Circlo as the only copy of anything irreplaceable.",
+    text: "Your old chats depend on information saved on your devices or in your recovery file. Keep the recovery code or file safe, and keep another copy of anything irreplaceable.",
   },
 ];
 
@@ -164,8 +164,8 @@ const ACCOUNT = [
     text: "New password accounts stay limited until the email address is verified. Verification also protects the account from someone registering in your name.",
   },
   {
-    lead: "Protect your credentials.",
-    text: "Keep your password and any second factor private. Turn on two-factor authentication and review your trusted devices; you can revoke a device at any time.",
+    lead: "Protect your sign-in.",
+    text: "Keep your password and extra sign-in codes private. Turn on an extra sign-in check and review your devices; you can remove a device at any time.",
   },
   {
     lead: "Tell us about misuse.",
@@ -175,24 +175,24 @@ const ACCOUNT = [
 
 const KEY_DUTIES = [
   {
-    lead: "Only approved devices get keys.",
-    text: "A new browser or phone must be approved by a device you already trust, by proving possession of its private key. Someone holding your signed-in session cannot silently start reading your conversations.",
+    lead: "Only approved devices can open chats.",
+    text: "A device you already use must approve a new browser or phone. Someone who gets access to your signed-in account cannot quietly add a device to read your chats.",
   },
   {
     lead: "You control your devices.",
-    text: "Approve only devices you recognise, compare key fingerprints when asked, and revoke anything you do not. Revoking removes that device's trust immediately.",
+    text: "Approve only devices you recognise. Compare the safety codes when asked, and remove any device you do not recognise. Removing it stops it from opening new messages.",
   },
   {
-    lead: "Keep your recovery material safe.",
-    text: "Your recovery phrase or key, and the secret that unlocks the encrypted backup of your device key, are what let you restore access after a reinstall or a cleared browser.",
+    lead: "Keep your recovery code and file safe.",
+    text: "Use the recovery code with its matching recovery file to restore access after replacing a device or clearing saved browser data. Your email password cannot open old chats.",
   },
   {
     lead: "There is no backdoor.",
-    text: "We cannot read your messages, cannot recover your history for you, and cannot reset your encryption trust on your behalf if you lose every trusted device and your recovery material. In that situation, earlier conversations stay unreadable, including to you.",
+    text: "We cannot read your private messages or restore old chats for you. If you lose every approved device and your recovery code or file, earlier conversations may stay unreadable, including to you.",
   },
   {
     lead: "Encryption has limits.",
-    text: "It protects content in transit and at rest, not a compromised device, a malicious app on your side, or someone reading over your shoulder. It also does not hide the metadata described in our Privacy Policy.",
+    text: "Chat protection cannot protect a device that has been taken over, a harmful app on your device, or someone looking at your screen. It also does not hide the chat details described in our Privacy Policy.",
   },
   {
     lead: "Do not weaken it.",
@@ -221,7 +221,7 @@ export default function TermsPage() {
           <ShieldAlert className="h-5 w-5 shrink-0 text-[var(--accent-fg)]" />
           <p className="max-w-3xl text-sm leading-7 text-[var(--muted)]">
             <strong className="text-[var(--text)]">The short version.</strong> Use Circlo for real conversations with
-            people who want to hear from you. Keep your recovery material somewhere safe. Do not use the service to harm
+            people who want to hear from you. Keep your recovery code and file somewhere safe. Do not use the service to harm
             anyone or to break the law. We keep the service running, we do not sell your data, and we cannot read your
             encrypted messages even if we wanted to. The numbered sections below are the part that binds us both.
           </p>
@@ -252,8 +252,8 @@ export default function TermsPage() {
           <p>
             Circlo is a private messaging service: one-to-one conversations, group chats, communities and channels, voice
             notes, photo and file sharing, status updates, reactions, replies, read receipts, pinned and starred
-            messages, disappearing messages, and scheduled messages. Chat content is end-to-end encrypted by default, as
-            described in section 4.
+            messages, disappearing messages, and scheduled messages. Private messages are locked on your device before
+            they are sent, as explained in section 4.
           </p>
           <p>
             You need an account to use it. You are responsible for the device and network you use to reach the service,
@@ -265,11 +265,12 @@ export default function TermsPage() {
           <LegalPoints points={ACCOUNT} />
         </LegalSection>
 
-        <LegalSection id="keys" number="4" title="Encryption and your keys" icon={KeyRound}>
+        <LegalSection id="keys" number="4" title="Protecting private chats" icon={KeyRound}>
           <p>
-            Circlo encrypts chat content on your device before it is uploaded. Our servers store ciphertext and the
-            public keys needed to route messages; they never hold a key that can open your conversations. That is what
-            makes your chats private, and it also places responsibilities on you.
+            Circlo locks private chat messages on your device before sending them. Our service delivers the locked
+            copies and the public information needed to connect approved devices. It does not have what it needs to
+            open your conversations. This protection is called end-to-end encryption, and it also means you must keep
+            your recovery code or file safe.
           </p>
           <LegalPoints points={KEY_DUTIES} />
         </LegalSection>
@@ -301,9 +302,9 @@ export default function TermsPage() {
             profile. We keep enforcement records so decisions can be reviewed.
           </p>
           <LegalCallout>
-            If we receive a valid legal request, we can provide account records, metadata and stored ciphertext. We
-            cannot provide readable message content, because we do not hold the keys, and we will not weaken encryption
-            for any request.
+            If we receive a valid legal request, we can provide account records, details about chats and the locked
+            copies of messages. We cannot provide readable private messages because we do not have what is needed to
+            open them, and we will not weaken this protection for any request.
           </LegalCallout>
         </LegalSection>
 
@@ -376,7 +377,7 @@ export default function TermsPage() {
 
       <LegalClosing
         title="Your circle. Your secrets. Sealed."
-        text="Encryption is what makes Circlo private — and what makes your recovery material worth looking after."
+        text="Your devices open your private chats. Keep your recovery code and file somewhere safe."
         links={[
           { href: "/privacy", label: "Privacy Policy" },
           { href: "/signup", label: "Join your circle", primary: true },

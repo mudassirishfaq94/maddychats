@@ -8,5 +8,5 @@ test("built-in help returns maintained app guides and declines unrelated questio
  assert.equal(findCircloGuides("How can a guest join by code?")[0].id,"temporary");
  assert.deepEqual(findCircloGuides("What is the weather tomorrow?"),[]);
  assert(circloGuides.every(guide=>guide.href.startsWith("/")&&!guide.href.startsWith("//")&&guide.steps.length>0));
- assert(circloGuides.find(guide=>guide.id==="recovery")!.note!.includes("unrecoverable"));
+ assert(circloGuides.find(guide=>guide.id==="recovery")!.note!.includes("may be lost"));
 });

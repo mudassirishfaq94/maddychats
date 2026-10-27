@@ -147,7 +147,7 @@ export async function testMessageRequests(base, senderCookie, recipientCookie, c
     await sender.getByRole("textbox", { name: "Message text" }).fill("Safety verification must remain required");
     await sender.getByRole("textbox", { name: "Message text" }).press("Enter");
     await sender.getByLabel("Queued", { exact: true }).waitFor();
-    await sender.getByText("Saved. Confirm the new phone’s safety number in this chat. It will send after confirmation.", { exact: true }).waitFor();
+    await sender.getByText("Saved. Compare the check number in this chat and approve the changed device. Your message will send after you approve it.", { exact: true }).waitFor();
     assert.equal(await sender.getByLabel("Failed to send", { exact: true }).count(), 0);
     const cancelQueuedMessage = sender.getByRole("button", { name: "Cancel message", exact: true });
     if (!await cancelQueuedMessage.isVisible()) await sender.getByRole("button", { name: "Show queued message options", exact: true }).click();

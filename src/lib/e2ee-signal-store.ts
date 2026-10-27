@@ -7,17 +7,9 @@ import "client-only";
  * persistence. The encryption key is a non-extractable Web Crypto key
  * generated per-origin and never sent to the server.
  *
- * **IMPLEMENTED:**
- * - AES-256-GCM encryption of all stored records
- * - Atomic multi-record writes for crash safety
- * - Non-extractable master key (cannot be exported via JS)
- * - Android uses Capacitor SecureStorage (Android Keystore-backed)
- *   via createHardwareKeyStorage() in e2ee-hardware-storage.ts
- *
- * **REMAINING BEFORE PRODUCTION:**
- * - Desktop browsers: master key derived from login passphrase
- *   (via e2ee-hardware-storage.ts DesktopKeyStorage)
- * - Formal security review
+ * Signal records are encrypted with Web Crypto and an unextractable AES key
+ * held in IndexedDB. This store does not use the native keystore; device
+ * identity material is handled separately by device-key-storage.ts.
  */
 
 const DATABASE = "maddy-signal-v2";

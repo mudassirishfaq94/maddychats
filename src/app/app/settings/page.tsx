@@ -106,14 +106,14 @@ export default async function SettingsPage() {
             </h2>
             <div className="space-y-4">
               <E2EEStatus />
-              <div id="two-step-verification"><ProfileDisclosure title="Two-step verification" description="Add an extra sign-in check." anchors={["two-step-verification"]}><TwoFactorAuth /></ProfileDisclosure></div>
+              <div id="two-step-verification"><ProfileDisclosure title="Extra sign-in check" description="Ask for a code from your code app as well as your password." anchors={["two-step-verification"]}><TwoFactorAuth /></ProfileDisclosure></div>
               <ProfileDisclosure title="Recent sign-ins" description="Review recent account activity."><LoginHistory /></ProfileDisclosure>
             </div>
           </section>
 
           {/* Data */}
           <section id="data">
-            <Link href="/app/profile#local-chat-backup" className="mb-4 flex min-h-16 items-center gap-3 rounded-2xl border border-[var(--border)] p-4"><Download className="h-5 w-5 shrink-0 text-[var(--accent-fg)]"/><span className="min-w-0 flex-1"><span className="block text-sm font-semibold">Chat backup & restore</span><span className="block text-xs text-[var(--muted)]">Daily encrypted copies on your device and portable recovery files</span></span><ChevronRight className="h-4 w-4 shrink-0"/></Link>
+            <Link href="/app/profile#local-chat-backup" className="mb-4 flex min-h-16 items-center gap-3 rounded-2xl border border-[var(--border)] p-4"><Download className="h-5 w-5 shrink-0 text-[var(--accent-fg)]"/><span className="min-w-0 flex-1"><span className="block text-sm font-semibold">Chat backup & restore</span><span className="block text-xs text-[var(--muted)]">Daily protected copies on this device and recovery files you can carry</span></span><ChevronRight className="h-4 w-4 shrink-0"/></Link>
             <h2 className="mb-3 flex items-center gap-2 text-sm font-bold">
               <Download className="h-4 w-4 text-[var(--accent)]" />
               Your Data
