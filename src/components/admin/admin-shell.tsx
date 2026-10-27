@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -20,20 +20,27 @@ import { LogoMark } from "@/components/brand/logo";
 
 const NAV_ITEMS = [
   { href: "/app/admin", label: "Overview", icon: BarChart3 },
+  { href: "/app/admin/operations", label: "Control room", icon: Activity },
   { href: "/app/admin/users", label: "Users", icon: Users },
   { href: "/app/admin/messages", label: "Messages", icon: MessageSquare },
   { href: "/app/admin/activity", label: "Activity", icon: Activity },
   { href: "/app/admin/reports", label: "Reports", icon: Flag },
   { href: "/app/admin/storage", label: "Storage", icon: HardDrive },
   { href: "/app/admin/security", label: "Security", icon: Lock },
-  { href: "/app/admin/audit", label: "Audit Log", icon: Activity },
+  { href: "/app/admin/audit", label: "Admin history", icon: Activity },
 ];
 
 export default function AdminShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  useEffect(() => {
+    if (!sidebarOpen) return;
+    const close = (event: KeyboardEvent) => { if (event.key === "Escape") setSidebarOpen(false); };
+    window.addEventListener("keydown", close);
+    return () => window.removeEventListener("keydown", close);
+  }, [sidebarOpen]);
   return (
-    <div className="flex h-full min-h-0">
+    <div className="flex h-dvh min-h-0 overflow-hidden">
       {/* Mobile overlay */}
       {sidebarOpen ? (
         <div
@@ -79,6 +86,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
               <Link
                 key={item.href}
                 href={item.href}
+                aria-current={active ? "page" : undefined}
                 onClick={() => setSidebarOpen(false)}
                 className={cn(
                   "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-colors",
@@ -116,10 +124,14 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
           <span className="text-sm font-bold">Admin Panel</span>
         </header>
 
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
+        <main className="min-h-0 min-w-0 flex-1 overflow-y-auto p-4 pb-24 sm:p-6 sm:pb-24 lg:p-8">
           {children}
         </main>
       </div>
+      <nav aria-label="Quick admin navigation" className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-4 border-t border-[var(--border)] bg-[var(--surface)] pb-[env(safe-area-inset-bottom)] lg:hidden">
+        {NAV_ITEMS.filter(item => ["Overview", "Users", "Reports"].includes(item.label)).map(item => <Link key={item.href} href={item.href} aria-current={pathname === item.href ? "page" : undefined} className={cn("flex min-h-16 min-w-0 flex-col items-center justify-center gap-1 px-1 text-[11px]", pathname === item.href ? "font-semibold text-[var(--accent-fg)]" : "text-[var(--muted)]")}><item.icon className="h-5 w-5" />{item.label}</Link>)}
+        <button type="button" aria-label="More admin tools" aria-expanded={sidebarOpen} onClick={() => setSidebarOpen(true)} className="flex min-h-16 flex-col items-center justify-center gap-1 text-[11px] text-[var(--muted)]"><Menu className="h-5 w-5" />More</button>
+      </nav>
     </div>
   );
 }

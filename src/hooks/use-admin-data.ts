@@ -15,6 +15,7 @@ export function useAdminData<T>(url: string, refreshMs = 0) {
     void fetch(url, { cache: "no-store", signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15000)]) })
       .then(async response => {
         const result = await response.json().catch(() => null);
+        if ((response.status === 401 || response.status === 403) && !controller.signal.aborted) setData(null);
         if (!response.ok || result === null) throw new Error(result?.error ?? "Could not load this admin page. Try again, or sign in again if your session expired.");
         if (!controller.signal.aborted) { setData(result as T); setError(null); }
       })
