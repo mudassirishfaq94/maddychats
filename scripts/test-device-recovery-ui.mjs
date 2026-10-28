@@ -52,7 +52,8 @@ export async function testDeviceRecoveryUI(base, pool) {
     const notificationSection = settingsPage.locator("#notifications");
     await notificationSection.waitFor({ state: "visible" });
 
-    assert.equal(await notificationSection.locator("button").count()>0,true,"Notification controls are visible without a collapsed panel");
+    await notificationSection.getByRole("switch").first().waitFor({state:"visible"});
+    assert.equal(await notificationSection.getByRole("switch").first().isVisible(),true,"Notification controls are visible without a collapsed panel");
     await settingsPage.evaluate(`(() => {
       const subscription = { toJSON: () => ({ endpoint: "https://fcm.googleapis.com/fcm/send/circlo-disposable-ui-fixture", keys: { p256dh: "fake-public-key-for-ui-test-only", auth: "fake-auth-for-ui-test" } }) };
       const oldSubscription = { endpoint: "https://fcm.googleapis.com/fcm/send/old-disposable-ui-fixture", options: { applicationServerKey: new Uint8Array(65).buffer }, unsubscribe: async () => { window.__pushReplacedKey = true; return true; } };

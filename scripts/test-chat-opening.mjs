@@ -34,7 +34,7 @@ export async function testChatOpeningRace(sender, recipient) {
 
 export async function testChatOpeningFixture(base, pool, owner, peer, password, conversationId) {
   assert(["localhost", "127.0.0.1"].includes(new URL(base).hostname));
-  const browser = await chromium.launch(); const pages = [];
+  const browser = await chromium.launch({args:["--use-fake-device-for-media-stream","--use-fake-ui-for-media-stream"]}); const pages = [];
   try {
     for (const account of [owner, peer]) {
       const context = await browser.newContext({ serviceWorkers: "block", viewport: { width: 390, height: 844 } });
