@@ -14,8 +14,8 @@ export async function testStatusVideo(base,pool,owner,peer,source,recipient) {
     await source.getByLabel('Choose video',{exact:true}).setInputFiles({name:'fixture.webm',mimeType:'video/webm',buffer:bytes});
     const publishing=source.waitForResponse(r=>r.url().endsWith('/api/status')&&r.request().method()==='POST');
     await source.getByRole('button',{name:'Share status',exact:true}).click();
-    const response=await publishing;assert.equal(response.status(),201);
-    status=(await response.json()).status;assert.equal(status.type,'video');
+    const response=await publishing,result=await response.json();assert.equal(response.status(),201,result.error??'Video upload must succeed');
+    status=result.status;assert.equal(status.type,'video');
     const stored=(await pool.query('select privacy,media_mime_type from statuses where id=$1',[status.id])).rows[0];
     assert.equal(stored.privacy,'selected');assert.equal(stored.media_mime_type,'video/webm');
     const media=await recipient.request.get(base+status.mediaUrl);assert.equal(media.status(),200);
