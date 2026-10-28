@@ -13,8 +13,8 @@ export function useAdminProof() {
     proof: { password, mfaCode: code },
     clearProof: () => { setPassword(""); setCode(""); },
     form: <section className="card-flat rounded-xl p-4">
-      <p className="text-sm">Enable two-factor authentication first. If your sign-in is older than five minutes, enter your password and current authenticator or recovery code, then click the action you want below. There is no separate save step.</p>
-      <Link href="/app/profile" className="text-xs text-[var(--accent)]">Manage two-factor authentication</Link>
+      <p className="text-sm">Turn on the extra sign-in check first. If you signed in more than five minutes ago, enter your password and a code from your code app or saved recovery list, then choose an action below. It takes effect right away.</p>
+      <Link href="/app/profile" className="text-xs text-[var(--accent)]">Manage the extra sign-in check</Link>
       <FreshAuthentication password={password} code={code} onPassword={setPassword} onCode={setCode} returnTo={pathname} />
     </section>,
   };

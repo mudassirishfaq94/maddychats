@@ -7,7 +7,7 @@ test("cloud recovery round-trips original identity and rejects wrong code, weak 
  const pair=await generateKeyPair(),secret="f".repeat(64),identity={id:"backup-id",userId:"owner",deviceId:"device-a"};
  const privateKey=await exportPrivateKey(pair.privateKey);
  const bundle:RecoveryBundle={version:1,userId:"owner",deviceId:"device-a",secret,keypair:JSON.stringify({publicKey:await exportPublicKey(pair.publicKey),encryptedPrivateKey:`v2:${await encryptPrivateKeyForStorage(privateKey,secret)}`}),keys:{}};
- const code=newRecoveryCode();assert.equal(code.length,43);
+ const code=newRecoveryCode();assert.equal(code.trim().split(/\s+/).length,24);
  const envelope=await sealRecovery(bundle,code,identity);
  assert.equal(JSON.stringify(envelope).includes(privateKey),false);assert.equal(JSON.stringify(envelope).includes(code),false);assert.equal(JSON.stringify(envelope).includes(secret),false);
  assert.deepEqual(await openRecovery(envelope,code,identity),bundle);

@@ -79,7 +79,7 @@ export async function testNavigationLatency(context,base,conversationId) {
      assert.equal(await page.getByRole("status").filter({hasText:"Messages in this chat are end-to-end encrypted and can be read only on devices in this conversation."}).count(),0,"Routine chat view must not repeat the one-time encryption notice after dismissal");
      assert.equal(await page.getByText(/decrypting/i).count(),0,"Routine chat view must not expose transient decryption progress copy");
      assert.equal(await page.locator('[aria-label="End-to-end encrypted"]').count(),0,"Messages must not repeat the encryption lock icon");
-     assert.equal(await page.getByRole("button",{name:/^(Encryption status|End-to-end encryption is active\. View details|Encryption key rotation needed\. View details)$/}).count(),1,"Encryption details remain available from one compact header control");
+     assert.equal(await page.getByRole("button",{name:/^(Private chat status|Private chat protection is on\. View details|Chat safety check needed\. View details)$/}).count(),1,"Chat privacy details remain available from one compact header control");
      await mkdir("test-artifacts",{recursive:true});await page.screenshot({path:"test-artifacts/encryption-chat-after.png",animations:"disabled"});
     }
     await nav().getByRole("link",{name:"Chats",exact:true}).click();await page.getByLabel("Search conversations",{exact:true}).waitFor();await page.waitForTimeout(250);

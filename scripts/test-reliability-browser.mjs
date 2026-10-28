@@ -81,10 +81,10 @@ try {
  for(const account of [owner,member]) {
   await account.page.reload();
   await account.page.getByRole("button").filter({hasText:"A device changed in this chat."}).click();
-  await account.page.getByLabel("Participant safety number").nth(accounts.length-2).waitFor();
-  const fingerprints=await account.page.getByLabel("Participant safety number").allTextContents();
+  await account.page.getByLabel("Participant check number").nth(accounts.length-2).waitFor();
+  const fingerprints=await account.page.getByLabel("Participant check number").allTextContents();
   assert.deepEqual(fingerprints.sort(),accounts.filter(peer=>peer!==account).map(peer=>createHash("sha256").update(peer.publicKey).digest("hex")).sort());
-  await account.page.getByLabel("I compared the safety numbers and they match.",{exact:true}).check();
+  await account.page.getByLabel("I compared the numbers and they match.",{exact:true}).check();
   await account.page.getByRole("button",{name:"Approve",exact:true}).click();
  }
  console.log("PASS: added participant identities verified without bypassing E2EE trust");
@@ -187,12 +187,12 @@ try {
 
 
  await owner.page.goto(base+"/app/settings#privacy");await openDeviceTools(owner.page);
- await owner.page.getByRole("button",{name:"Set up recovery code",exact:true}).click();const code=await owner.page.locator('[aria-label="New recovery code"]').textContent();assert(code);
- await owner.page.getByLabel("Re-enter the saved code",{exact:true}).fill(code);await owner.page.getByRole("button",{name:"Confirm code and save encrypted backup",exact:true}).click();await owner.page.getByText(/Encrypted recovery is configured/).waitFor();
+ await owner.page.getByRole("button",{name:"Set up chat recovery",exact:true}).click();const phrase=await owner.page.getByLabel("24-word recovery phrase").textContent();assert(phrase);const code=phrase.trim().toLowerCase().replace(/\s+/g," ");
+ await owner.page.getByLabel("Enter the 24 words again",{exact:true}).fill(code);await owner.page.getByRole("button",{name:"Save phrase and set up recovery",exact:true}).click();await owner.page.getByText(/Chat recovery is set up/).waitFor();
  const backup=(await pool.query("select id,envelope from recovery_backups where user_id=$1",[owner.id])).rows[0];assert(backup);assert.equal(JSON.stringify(backup.envelope).includes(code),false);
  await owner.page.evaluate(()=>localStorage.clear());await owner.page.reload();await openDeviceTools(owner.page);
- await owner.page.getByText("Restore using a saved recovery code",{exact:true}).click();await owner.page.getByLabel("Backup",{exact:true}).selectOption(backup.id);await owner.page.getByLabel("Saved recovery code",{exact:true}).fill(code);
- await owner.page.getByLabel(/I have preserved any keys needed from this browser/).check();await owner.page.getByRole("button",{name:"Restore encrypted keys",exact:true}).click();
+ await owner.page.getByText("Open chats with a saved code",{exact:true}).click();await owner.page.getByLabel("Backup",{exact:true}).selectOption(backup.id);await owner.page.getByLabel("Enter its recovery phrase or older recovery code",{exact:true}).fill(code);
+ await owner.page.getByLabel(/I saved a separate recovery file/).check();await owner.page.getByRole("button",{name:"Open chats on this device",exact:true}).click();
  await owner.page.waitForTimeout(1000);await owner.page.goto(`${base}/app/chats/${group}`);await owner.page.getByRole("region",{name:"Messages",exact:true}).getByText(normal,{exact:true}).waitFor();
  console.log("PASS: cloud recovery setup; browser storage loss; original encrypted history restored");
  // Real WebRTC, cold recipient launch through Answer, then SSE-offline decline.

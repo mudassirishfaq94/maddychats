@@ -81,15 +81,22 @@ try {
   const registerB = await call("/api/e2ee/keys", { method: "POST", cookies: sessionA, body: { deviceId: deviceB, publicKey: keyB, encryptedPrivateKey: "v2:placeholder" } });
   record("second device registers as pending", registerB.status === 200 && registerB.json?.pendingApproval === true, JSON.stringify(registerB.json));
 
-  // The old numeric-code endpoints are retired so linking always requires a
-  // scanned target token and an explicit trusted-device fingerprint approval.
+  // The fallback code is shown once, stored only as a digest, and exchanged
+  // only by a session with a trusted key for the same account.
   const codeResponse = await call("/api/e2ee/devices/link/code", { method: "POST", cookies: sessionA, body: { deviceId: deviceB } });
-  record("legacy numeric-code issuance is retired", codeResponse.status === 404, `status=${codeResponse.status}`);
-  const verify = await call("/api/e2ee/devices/link/verify", { method: "POST", cookies: sessionA, body: { code: "000000", deviceId: deviceB } });
-  record("legacy numeric-code approval is retired", verify.status === 404, `status=${verify.status}`);
+  const linkCode = codeResponse.json?.code;
+  record("new device receives a short-lived unique code", codeResponse.status === 201 && /^[23456789A-HJ-NP-Z]{5}-[23456789A-HJ-NP-Z]{5}$/.test(linkCode ?? ""), `status=${codeResponse.status} expires=${Boolean(codeResponse.json?.expiresAt)}`);
+  const storedCode = await client.query("select entry_code_hash, code_hash, status from device_link_requests where user_id=$1 and device_id=$2", [userId, deviceB]);
+  record("database stores only code digests", storedCode.rows.length === 1 && storedCode.rows[0].entry_code_hash === createHash("sha256").update(linkCode.replaceAll("-", "")).digest("hex") && storedCode.rows[0].entry_code_hash !== linkCode, JSON.stringify({ rowCount: storedCode.rows.length, hasDigest: Boolean(storedCode.rows[0]?.entry_code_hash) }));
+  const verify = await call("/api/e2ee/devices/link/code/verify", { method: "POST", cookies: sessionA, body: { code: linkCode, deviceId: deviceA } });
+  record("trusted device exchanges the code for an approval token", verify.status === 200 && verify.json?.id === codeResponse.json?.id && /^[A-Za-z0-9_-]{43}$/.test(verify.json?.token ?? "") && verify.json?.deviceId === deviceB, `status=${verify.status}`);
+  const afterVerify = await client.query("select entry_code_hash, code_hash, source_device_id from device_link_requests where user_id=$1 and device_id=$2", [userId, deviceB]);
+  record("exchanging a code consumes it and rotates the QR-equivalent token", afterVerify.rows.length === 1 && afterVerify.rows[0].entry_code_hash === null && afterVerify.rows[0].code_hash === createHash("sha256").update(verify.json?.token ?? "").digest("hex") && afterVerify.rows[0].source_device_id === deviceA, JSON.stringify({ consumed: afterVerify.rows[0]?.entry_code_hash === null, sourceBound: afterVerify.rows[0]?.source_device_id === deviceA }));
+  const replay = await call("/api/e2ee/devices/link/code/verify", { method: "POST", cookies: sessionA, body: { code: linkCode, deviceId: deviceA } });
+  record("linking codes cannot be replayed", replay.status === 404, `status=${replay.status}`);
 
   const afterLinks = await call("/api/e2ee/devices/link", { cookies: sessionA });
-  record("retired numeric-code endpoints created no linking requests", afterLinks.status === 200 && afterLinks.json?.requests?.length === 0, JSON.stringify(afterLinks.json?.requests));
+  record("code linking remains pending for explicit device approval", afterLinks.status === 200 && afterLinks.json?.requests?.length === 1 && afterLinks.json.requests[0]?.status === "pending", JSON.stringify(afterLinks.json?.requests));
 
   const list = await call("/api/privacy/devices", { cookies: sessionA });
   const devices = list.json?.devices ?? [];
@@ -122,7 +129,7 @@ try {
   record("the browser in use is listed after signing in again", Boolean(currentSession), JSON.stringify({ currentSessionId: afterRelogin.json?.currentSessionId, listed: Boolean(currentSession) }));
 
   const linkRow = await client.query("select id from device_link_requests where user_id=$1", [userId]);
-  record("retired numeric endpoints create no pairing records", linkRow.rows.length === 0, JSON.stringify(linkRow.rows));
+  record("the one-time code creates exactly one pairing record", linkRow.rows.length === 1, JSON.stringify(linkRow.rows));
 
   const sessionId = currentSession?.id;
   if (sessionId) {

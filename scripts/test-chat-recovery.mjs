@@ -21,7 +21,7 @@ export async function testChatRecovery(base, cookieHeader, conversationId) {
     return page;
   };
   const chatUrl = `${base}/app/chats/${conversationId}`;
-  const activeName = "End-to-end encryption is active. View details";
+  const activeName = "Private chat protection is on. View details";
   try {
     const source = await context();
     await source.goto(chatUrl);
@@ -80,8 +80,8 @@ export async function testChatRecovery(base, cookieHeader, conversationId) {
     await source.reload();
     await source.waitForFunction(text => document.querySelector('textarea[aria-label="Message text"]')?.value === text, nextDraft, { timeout: 30000 });
     await source.getByRole("button", { name: activeName, exact: true }).click();
-    await source.getByRole("button", { name: "Restore my other devices", exact: true }).click();
-    await source.getByRole("status").filter({ hasText: "No other trusted devices found" }).waitFor({ timeout: 10000 }).catch(async cause => {
+    await source.getByRole("button", { name: "Share chat access with my devices", exact: true }).click();
+    await source.getByRole("status").filter({ hasText: "No linked phone is ready yet" }).waitFor({ timeout: 10000 }).catch(async cause => {
       throw new Error(`Restore status: ${await source.getByRole("status").allTextContents()}; modal: ${await source.locator(".card-glass").last().innerText()}`, { cause });
     });
     await source.getByRole("button", { name: "Close", exact: true }).click();
@@ -103,9 +103,15 @@ export async function testChatRecovery(base, cookieHeader, conversationId) {
     await target.getByRole("button", { name: "Show queued message options", exact: true }).waitFor();
     await source.goto(`${base}/app/settings#privacy`);
     await target.goto(`${base}/app/settings#privacy`);
-    const linkResponse = target.waitForResponse(response => response.url().endsWith("/api/e2ee/devices/link") && response.request().method() === "POST");
-    if(await target.getByRole("button",{name:"I still have my old phone",exact:true}).count())await target.getByRole("button",{name:"I still have my old phone",exact:true}).click();else await target.getByRole("button",{name:"Show a device-link QR code",exact:true}).click();
-    const linkCreated = await linkResponse;
+    const linkResponse = target.waitForResponse(response => {
+      let request = response.request();
+      while (request.redirectedFrom()) request = request.redirectedFrom();
+      return new URL(request.url()).pathname.replace(/\/+$/, "") === "/api/e2ee/devices/link" && request.method() === "POST";
+    }).then(response => ({ response }), cause => ({ cause }));
+    if(await target.getByRole("button",{name:"I still have my old phone",exact:true}).count())await target.getByRole("button",{name:"I still have my old phone",exact:true}).click();else await target.getByRole("button",{name:"Show a QR code to link this device",exact:true}).click();
+    const linkResult = await linkResponse;
+    if ("cause" in linkResult) throw new Error(`Device-link request did not finish; status: ${await target.getByRole("status").allTextContents()}`, { cause: linkResult.cause });
+    const linkCreated = linkResult.response;
     assert.equal(linkCreated.status(), 201);
     const { id: requestId, token } = await linkCreated.json();
     assert.match(token, /^[A-Za-z0-9_-]{43}$/);
@@ -120,23 +126,40 @@ export async function testChatRecovery(base, cookieHeader, conversationId) {
       HTMLMediaElement.prototype.play = async () => {};
     })()`);
     await source.getByRole("button", { name: "Scan QR on your new device", exact: true }).click();
-    await source.getByText("Safety number:").waitFor();
-    await target.getByText("Device details", { exact: true }).click();
-    await source.getByText("Show full safety number", { exact: true }).click();
-    await source.getByLabel("I compared this safety number with the new phone and it matches.").check();
+    await source.getByText("Check number:").waitFor();
+    await target.getByText("Check this phone’s number", { exact: true }).click();
+    await source.getByText("Show full check number", { exact: true }).click();
+    await source.getByLabel("I compared this number with the new phone and it matches.").check();
+    const approvalResponse = source.waitForResponse(response => {
+      if (new URL(response.url()).pathname !== "/api/e2ee/devices/approve" || response.request().method() !== "POST") return false;
+      try { return response.request().postDataJSON()?.action === "approve"; } catch { return false; }
+    });
     await source.getByRole("button", { name: "Approve this device", exact: true }).click();
-    await source.getByRole("status").filter({ hasText: "Device approved." }).waitFor();
+    const approval = await approvalResponse;
+    assert.equal(approval.status(), 200, `Trusted device approval request failed: ${await approval.text()}`);
+    const linkedDeviceId = await source.evaluate(async requestId => {
+      const response = await fetch("/api/e2ee/devices/link", { cache: "no-store" });
+      const data = await response.json();
+      return data.requests.find(item => item.id === requestId)?.deviceId;
+    }, requestId);
+    assert(linkedDeviceId, "The pending request remains associated with its new device");
+    await source.waitForFunction(async deviceId => {
+      const response = await fetch("/api/e2ee/keys", { cache: "no-store" });
+      if (!response.ok) return false;
+      const data = await response.json();
+      return data.keys.some(key => key.deviceId === deviceId && key.trustedAt);
+    }, linkedDeviceId, { timeout: 15000 });
     await source.goto(chatUrl);
     await source.getByRole("button", { name: activeName, exact: true }).click();
     const peersUrl = "**/api/e2ee/peers?**";
     const unavailablePeers = route => route.fulfill({ status: 503, contentType: "application/json", body: "{}" });
     await source.route(peersUrl, unavailablePeers);
-    await source.getByRole("button", { name: "Restore my other devices", exact: true }).click();
-    await source.getByRole("status").filter({ hasText: "Unable to check trusted devices" }).waitFor();
-    assert.equal(await source.getByRole("button", { name: "Restore my other devices", exact: true }).isEnabled(), true, "A failed restore must stop its spinner");
+    await source.getByRole("button", { name: "Share chat access with my devices", exact: true }).click();
+    await source.getByRole("status").filter({ hasText: "Couldn't find your linked phone. Check your connection and try again." }).waitFor();
+    assert.equal(await source.getByRole("button", { name: "Share chat access with my devices", exact: true }).isEnabled(), true, "A failed restore must stop its spinner");
     await source.unroute(peersUrl, unavailablePeers);
-    await source.getByRole("button", { name: "Restore my other devices", exact: true }).click();
-    await source.getByRole("status").filter({ hasText: "Shared" }).waitFor();
+    await source.getByRole("button", { name: "Share chat access with my devices", exact: true }).click();
+    await source.getByRole("status").filter({ hasText: "Chat history sent to your linked phone." }).waitFor();
     // Return to the new device's chat after approval. Key restoration must
     // release its queued message without replacing keys.
     // Retries pause in background tabs, so bring this browser to the front.

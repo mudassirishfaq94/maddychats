@@ -1422,6 +1422,8 @@ export const deviceLinkRequests = pgTable("device_link_requests", {
   sourceDeviceId: text("source_device_id"),
   fingerprint: text("fingerprint").notNull(),
   codeHash: text("code_hash").notNull(),
+  /** Optional one-time human-entered code digest; never store the displayed code. */
+  entryCodeHash: text("entry_code_hash").unique("device_link_entry_code_hash_unique"),
   status: text("status").notNull().default("pending"),
   expiresAt: timestamp("expires_at", { withTimezone: true, mode: "date" }).notNull(),
   usedAt: timestamp("used_at", { withTimezone: true, mode: "date" }),

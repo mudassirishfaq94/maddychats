@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { useAuth } from "@/components/providers/auth-provider";
 import { useSharedE2EE } from "@/components/providers/e2ee-provider";
-import { createRecoveryFile, readRecoveryFile, recoveryBundleKey, validateRecoveryBundle, collectRecoveryBundle } from "@/lib/device-recovery-file";
+import { createRecoveryFile, readRecoveryFile, recoveryBundleKey, validateRecoveryBundle, collectRecoveryBundle, writeRecoveryIdentity } from "@/lib/device-recovery-file";
 
 export function DeviceRecovery({restoreOnly=false}:{restoreOnly?:boolean}={}) {
   const { user } = useAuth();
@@ -21,13 +21,13 @@ export function DeviceRecovery({restoreOnly=false}:{restoreOnly?:boolean}={}) {
   async function backup() {
     if (!user) return;
     await encryption.waitForDeviceRegistration();
-    const bundle = collectRecoveryBundle(user.id, encryption.deviceId);
+    const bundle = await collectRecoveryBundle(user.id, encryption.deviceId);
     const result = await createRecoveryFile(bundle);
     const url = URL.createObjectURL(new Blob([result.file], { type: "application/json" }));
     const link = document.createElement("a"); link.href = url; link.download = "circlo-encryption-recovery.json"; link.click();
     setTimeout(() => URL.revokeObjectURL(url), 10000);
     setExportCode(result.code);
-    setStatus("Recovery file downloaded. Save the recovery code separately in your password manager.");
+    setStatus("Recovery file downloaded. Save the 24 words shown below separately from the file.");
   }
   async function restore() {
     if (!user || !file || !confirmed) return;
@@ -39,20 +39,21 @@ export function DeviceRecovery({restoreOnly=false}:{restoreOnly?:boolean}={}) {
     const { keys } = await response.json() as { keys: Array<{ deviceId: string; publicKey: string; trustedAt: string | null }> };
     const registered = keys.find(key => key.deviceId === bundle.deviceId && key.publicKey === publicKey);
     if (!registered) throw new Error("This identity is no longer registered. Use device linking or emergency recovery.");
-    // One atomic write; a quota error leaves the existing browser identity intact.
-    localStorage.setItem(recoveryBundleKey(user.id), JSON.stringify(bundle));
+    // Secure storage is written and read back first; only then save the wrapped history keys.
+    await writeRecoveryIdentity(bundle);
+    localStorage.setItem(recoveryBundleKey(user.id), JSON.stringify({ ...bundle, keypair: "", secret: "" }));
     setCode("");
     window.location.reload();
   }
   return <section className="mt-4 min-w-0 rounded-xl border border-[var(--border)] p-3 sm:p-4">
     <h3 className="font-semibold">{restoreOnly?"Open a saved recovery file":"Save my chats"}</h3>
-    {!restoreOnly && <><p className="mt-2 text-sm text-[var(--muted)]">Save this file before you change browsers or clear data. It holds what your chats need to reopen — not your messages, drafts, or attachments.</p>
+    {!restoreOnly && <><p className="mt-2 text-sm text-[var(--muted)]">Save this file and its 24-word recovery phrase before you change browsers or clear data. It holds what your chats need to reopen — not your messages, drafts, or attachments.</p>
     <button className="btn btn-secondary mt-3" disabled={busy || !encryption.initialized} onClick={() => void run(backup)}>Save recovery file</button></>}
-    {exportCode && <div className="mt-3 text-sm"><p>Save this code separately. Anyone with both the file and code can read the keys it contains.</p><code className="mt-2 block break-all select-all" aria-label="Recovery file code">{exportCode}</code></div>}
+    {exportCode && <div className="mt-3 text-sm"><p>Write down all 24 words in order and keep them separate from the file. Anyone with both can open your saved chat access.</p><code className="mt-2 block break-all select-all" aria-label="24-word recovery phrase">{exportCode}</code></div>}
     <details open={restoreOnly || undefined} className="mt-4"><summary className="min-h-11 cursor-pointer break-words py-2 font-medium">Restore a recovery file or move from the old website</summary>
       <p className="mt-2 text-sm">On the original browser, visit <a className="underline" href="https://maddychats.onrender.com/device-migration">the old-site migration page</a>, download the file, then import it here on circlo.chat. Use the same account. A previously revoked identity still needs approval; importing never overrides revocation.</p>
       <label className="mt-3 block text-sm">Encrypted recovery file<input className="mt-1 block w-full min-w-0 max-w-full" type="file" accept=".json,application/json" onChange={event => setFile(event.target.files?.[0] ?? null)} /></label>
-      <label className="mt-3 block text-sm">Recovery file code<input className="field-input mt-1 w-full min-w-0" type="password" autoComplete="off" value={code} onChange={event => setCode(event.target.value)} /></label>
+      <label className="mt-3 block text-sm">Recovery phrase or older file code<input className="field-input mt-1 w-full min-w-0" type="password" autoComplete="off" value={code} onChange={event => setCode(event.target.value)} /></label>
       <label className="mt-3 flex gap-2 text-sm"><input type="checkbox" checked={confirmed} onChange={event => setConfirmed(event.target.checked)} />I saved a recovery file for any keys I need from this browser. Import will replace its active encryption identity.</label>
       <button className="btn btn-secondary mt-3" disabled={busy || !file || !code || !confirmed} onClick={() => void run(restore)}>Open my saved file</button>
     </details>

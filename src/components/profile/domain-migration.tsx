@@ -19,7 +19,7 @@ export function DomainMigration() {
   async function download() {
     setBusy(true); setStatus("");
     try {
-      const result = await createRecoveryFile(collectRecoveryBundle(account, localStorage.getItem("e2ee_device_id") ?? ""));
+      const result = await createRecoveryFile(await collectRecoveryBundle(account, localStorage.getItem("e2ee_device_id") ?? ""));
       const url = URL.createObjectURL(new Blob([result.file], { type: "application/json" }));
       const anchor = document.createElement("a"); anchor.href = url; anchor.download = "circlo-encryption-recovery.json"; anchor.click();
       setTimeout(() => URL.revokeObjectURL(url), 10000); setCode(result.code);

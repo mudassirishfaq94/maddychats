@@ -60,29 +60,26 @@ export async function testDeviceAccess(base, pool, secret) {
       await target.page.setViewportSize({width,height});
       assert.deepEqual(await inspectMobileLayout(target.page,"access-choice"),[]);
     }
-    const linkResponse = target.page.waitForResponse(response=>response.url().endsWith("/api/e2ee/devices/link")&&response.request().method()==="POST");
-    if(await target.page.getByRole("button",{name:"I still have my old phone",exact:true}).count())await target.page.getByRole("button",{name:"I still have my old phone",exact:true}).click();else await target.page.getByRole("button",{name:"Show a device-link QR code",exact:true}).click();
+    await target.page.getByRole("button",{name:"I still have my old phone",exact:true}).click();
+    const linkResponse = target.page.waitForResponse(response=>response.url().endsWith("/api/e2ee/devices/link/code")&&response.request().method()==="POST");
+    await target.page.getByRole("button",{name:"Can’t scan? Show a one-time code",exact:true}).click();
     const linkResult=await linkResponse; assert.equal(linkResult.status(),201);
-    const {id:requestId,token}=await linkResult.json(); assert.match(token,/^[A-Za-z0-9_-]{43}$/);
-    await target.page.getByRole("img",{name:"Temporary secure device-link QR code"}).waitFor();
-    const fingerprintDetails=target.page.locator("details").filter({has:target.page.getByLabel("This device safety number")});
+    const {code:linkCodeValue}=await linkResult.json(); assert.match(linkCodeValue,/^[23456789A-HJ-NP-Z]{5}-[23456789A-HJ-NP-Z]{5}$/);
+    assert.equal(await target.page.getByLabel("Device linking code").innerText(),linkCodeValue,"The new device displays the one-time code");
+    const fingerprintDetails=target.page.locator("details").filter({has:target.page.getByLabel("This device check number")});
     await fingerprintDetails.locator(":scope > summary").click();
-    await target.page.getByLabel("This device safety number").waitFor({state:"visible"});
+    await target.page.getByLabel("This device check number").waitFor({state:"visible"});
     await source.page.getByText("Troubleshooting",{exact:true}).click();
-    await source.page.getByRole("button",{name:"Refresh encryption devices",exact:true}).click();
-    const qrPayload=JSON.stringify({kind:"circlo-device-link",version:1,requestId,token});
-    await source.page.evaluate(`(()=>{
-      const payload=${JSON.stringify(qrPayload)};
-      Object.defineProperty(window,"BarcodeDetector",{configurable:true,value:function(){}});
-      Object.defineProperty(window.BarcodeDetector,"getSupportedFormats",{value:function(){return Promise.resolve(["qr_code"])}});
-      Object.defineProperty(window.BarcodeDetector.prototype,"detect",{value:function(){return Promise.resolve([{rawValue:payload}])}});
-      Object.defineProperty(navigator.mediaDevices,"getUserMedia",{configurable:true,value:async()=>new MediaStream()});
-      HTMLMediaElement.prototype.play=async()=>{};
-    })()`);
-    await source.page.getByRole("button",{name:"Scan QR on your new device",exact:true}).click();
-    await source.page.getByText("Safety number:").waitFor();
-    await source.page.getByText("Show full safety number",{exact:true}).click();
-    await source.page.getByLabel("I compared this safety number with the new phone and it matches.").check();
+    await source.page.getByRole("button",{name:"Refresh device list",exact:true}).click();
+    await source.page.getByLabel("Or enter a code from your new device").fill(linkCodeValue);
+    const verifyCodeResponse=source.page.waitForResponse(response=>response.url().endsWith("/api/e2ee/devices/link/code/verify")&&response.request().method()==="POST");
+    await source.page.getByRole("button",{name:"Check code",exact:true}).click();
+    const verifyCodeResult=await verifyCodeResponse;
+    const verifyCodeBody=await verifyCodeResult.json();
+    assert.equal(verifyCodeResult.status(),200,`Device code verification failed: ${verifyCodeBody.error ?? `HTTP ${verifyCodeResult.status()}`}`);
+    await source.page.getByText("Compare the check number on both devices before approving.", { exact: true }).waitFor();
+    await source.page.getByText("Show full check number",{exact:true}).click();
+    await source.page.getByLabel("I compared this number with the new phone and it matches.").check();
     await source.page.getByRole("button",{name:"Approve this device",exact:true}).click();
     await target.page.waitForURL(base+"/app/chats");
     assert.equal(target.authMeRequests.length,0,"A completed private-key proof authorizes the app without a redundant /api/auth/me request");
@@ -103,7 +100,7 @@ export async function testDeviceAccess(base, pool, secret) {
     await recovery.page.getByRole("button",{name:"Send recovery code",exact:true}).waitFor();
     const recoveryText = await recovery.page.getByRole("region",{name:"Set up this phone"}).innerText();
     assert(recoveryText.includes("Recover with email") && recoveryText.includes("Send recovery code"));
-    assert(!recoveryText.includes("Show a device-link QR code") && !recoveryText.includes("Back up or restore chats"),"No-old-device recovery hides unrelated setup choices");
+    assert(!recoveryText.includes("Show a QR code to link this device") && !recoveryText.includes("Back up or restore chats"),"No-old-device recovery hides unrelated setup choices");
     const confirm = recovery.page.getByRole("button",{name:"Verify code and sign out other devices",exact:true});
     assert(await confirm.isDisabled());
     // A mailbox-code fixture avoids calling a paid or third-party email service.

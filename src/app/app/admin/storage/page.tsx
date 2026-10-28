@@ -38,15 +38,15 @@ export default function AdminStoragePage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-bold">Storage Dashboard</h1>
-        <p className="mt-1 text-sm text-[var(--muted)]">Monitor file storage usage and top uploaders.</p>
+        <h1 className="text-xl font-bold">File storage</h1>
+        <p className="mt-1 text-sm text-[var(--muted)]">See how much space files use and who has uploaded them.</p>
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <div className="card-flat rounded-2xl p-4">
           <HardDrive className="h-5 w-5 text-[var(--accent)]" />
           <p className="mt-2 text-2xl font-bold">{formatBytes(stats.totalSize)}</p>
-          <p className="text-[0.7rem] text-[var(--muted)]">Total Storage</p>
+          <p className="text-[0.7rem] text-[var(--muted)]">Space used</p>
         </div>
         <div className="card-flat rounded-2xl p-4">
           <FileText className="h-5 w-5 text-blue-500" />
@@ -56,7 +56,7 @@ export default function AdminStoragePage() {
       </div>
 
       <div className="card-flat rounded-2xl p-5">
-        <h3 className="mb-3 text-sm font-semibold">Storage by Type</h3>
+        <h3 className="mb-3 text-sm font-semibold">Space used by file type</h3>
         <div className="space-y-3">
           {stats.byType.map((type) => {
             const Icon = kindIcons[type.kind] ?? FileText;
@@ -78,7 +78,7 @@ export default function AdminStoragePage() {
       </div>
 
       <div className="card-flat rounded-2xl p-5">
-        <h3 className="mb-3 text-sm font-semibold">Top Uploaders</h3>
+        <h3 className="mb-3 text-sm font-semibold">Most active uploaders</h3>
         {stats.topUploaders.length === 0 ? (
           <p className="text-xs text-[var(--muted)]">No uploads yet.</p>
         ) : (

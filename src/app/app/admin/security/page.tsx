@@ -62,8 +62,8 @@ export default function AdminSecurityPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-bold">Security & Retention</h1>
-        <p className="mt-1 text-sm text-[var(--muted)]">Failed login monitoring and data retention controls.</p>
+        <h1 className="text-xl font-bold">Sign-in safety and data cleanup</h1>
+        <p className="mt-1 text-sm text-[var(--muted)]">Review sign-in attempts and how long old data is kept.</p>
       </div>
 
       <div className="flex gap-2">
@@ -76,7 +76,7 @@ export default function AdminSecurityPage() {
               tab === t ? "bg-[var(--accent)] text-white" : "bg-[var(--surface-2)] text-[var(--muted)]"
             }`}
           >
-            {t === "logins" ? "Login History" : "Retention Controls"}
+            {t === "logins" ? "Sign-in history" : "Data cleanup"}
           </button>
         ))}
       </div>
@@ -87,12 +87,12 @@ export default function AdminSecurityPage() {
             <div className="card-flat rounded-2xl p-4">
               <ShieldAlert className="h-5 w-5 text-[var(--danger)]" />
               <p className="mt-2 text-2xl font-bold">{failedLogins.length}</p>
-              <p className="text-[0.7rem] text-[var(--muted)]">Failed Logins (24h)</p>
+              <p className="text-[0.7rem] text-[var(--muted)]">Failed sign-ins (24 hours)</p>
             </div>
             <div className="card-flat rounded-2xl p-4">
               <ShieldCheck className="h-5 w-5 text-[var(--success)]" />
               <p className="mt-2 text-2xl font-bold">{successLogins.length}</p>
-              <p className="text-[0.7rem] text-[var(--muted)]">Successful Logins (24h)</p>
+              <p className="text-[0.7rem] text-[var(--muted)]">Successful sign-ins (24 hours)</p>
             </div>
           </div>
 
@@ -121,7 +121,7 @@ export default function AdminSecurityPage() {
           )}
 
           <div className="card-flat rounded-2xl p-5">
-            <h3 className="mb-3 text-sm font-semibold">Recent Login Activity</h3>
+            <h3 className="mb-3 text-sm font-semibold">Recent sign-ins</h3>
             <div className="space-y-1.5">
               {logins.slice(0, 30).map((entry) => (
                 <div key={entry.id} className="flex items-center gap-3 px-3 py-2 text-xs">
@@ -163,7 +163,7 @@ export default function AdminSecurityPage() {
               </div>
 
               <div className="card-flat rounded-2xl p-5">
-                <h3 className="mb-3 text-sm font-semibold">Data Retention</h3>
+                <h3 className="mb-3 text-sm font-semibold">How long we keep data</h3>
                 <p className="mb-4 text-xs text-[var(--muted)]">
                   Messages and attachments older than the retention period can be cleaned up to reduce storage usage.
                 </p>

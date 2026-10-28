@@ -26,9 +26,9 @@ export function PeerVerificationDialog({ review, names, onConfirm, onClose }: {
       <p className="mt-2 text-sm text-[var(--muted)]">Ask each person, through a way you already know them, to open Settings → Privacy → Linked phones and account security and compare their safety number with the one below.</p>
       {review.devices.length ? <ul className="mt-4 space-y-3">{review.devices.map(device => <li key={`${device.userId}:${device.deviceId}`} className="rounded-xl border border-[var(--border)] p-3 text-xs">
         <p className="font-semibold">{names[device.userId] ?? device.userId}</p>
-        <code className="mt-2 block select-all break-all" aria-label="Participant safety number">{device.fingerprint}</code>
+        <code className="mt-2 block select-all break-all" aria-label="Participant check number">{device.fingerprint}</code>
       </li>)}</ul> : <p className="mt-4 text-sm">No one else is in this chat. Confirm the change you made.</p>}
-      <label className="mt-4 flex min-h-11 items-start gap-3 text-sm"><input type="checkbox" className="mt-1" checked={confirmed} onChange={event => setConfirmed(event.target.checked)} />I compared the safety numbers and they match.</label>
+      <label className="mt-4 flex min-h-11 items-start gap-3 text-sm"><input type="checkbox" className="mt-1" checked={confirmed} onChange={event => setConfirmed(event.target.checked)} />I compared the numbers and they match.</label>
       <p className="mt-2 text-xs text-[var(--muted)]">If a number doesn&apos;t match, cancel and check with that person.</p>
       <div className="mt-4 flex flex-wrap gap-3">
         <button type="button" disabled={!confirmed} onClick={onConfirm} className="btn btn-primary min-h-11">Approve</button>

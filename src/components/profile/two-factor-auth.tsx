@@ -52,7 +52,7 @@ export function TwoFactorAuth() {
 
   async function handleVerify() {
     if (!verifyCode.trim()) {
-      setError("Enter the 6-digit code from your authenticator app.");
+      setError("Enter the 6-digit code from your code app.");
       return;
     }
     setError("");
@@ -75,7 +75,7 @@ export function TwoFactorAuth() {
       setOtpauthUrl("");
       setEnabled(true);
       setSetupMode(false);
-      setSuccess("Two-factor authentication enabled successfully!");
+      setSuccess("The extra sign-in check is on.");
       setTimeout(() => setSuccess(""), 3000);
     } catch {
       setError("Network error. Please try again.");
@@ -99,7 +99,7 @@ export function TwoFactorAuth() {
       setMfaCode("");
       setRecoveryCodes([]);
       if (data.signInRequired) { await signOut(); router.replace("/login"); return; }
-      setSuccess("Two-factor authentication disabled.");
+      setSuccess("The extra sign-in check is off.");
       setTimeout(() => setSuccess(""), 3000);
     } catch {
       setError("Network error. Please try again.");
@@ -120,7 +120,7 @@ export function TwoFactorAuth() {
     <div className="card-glass rounded-2xl p-5 sm:p-6 animate-fade-up">
       <div className="flex items-center gap-2.5">
         <ShieldCheck className="h-4.5 w-4.5 text-[var(--accent)]" />
-        <h2 className="text-sm font-bold">Two-Factor Authentication</h2>
+        <h2 className="text-sm font-bold">Extra sign-in check</h2>
         {enabled && (
           <span className="ml-auto rounded-full bg-[color-mix(in_srgb,var(--success)_12%,transparent)] px-2 py-0.5 text-[0.65rem] font-semibold text-[var(--success)]">
             Enabled ✓
@@ -129,13 +129,13 @@ export function TwoFactorAuth() {
       </div>
 
       <p className="mt-2 text-xs text-[var(--muted)]">
-        Add an extra layer of security by requiring a verification code from an authenticator app when you sign in.
+        Ask for a code from a code app as well as your password when you sign in.
       </p>
 
       <FreshAuthentication password={password} code={mfaCode} onPassword={setPassword} onCode={setMfaCode} />
       {recoveryCodes.length ? <section className="mt-3 rounded-xl border border-[var(--border)] p-3">
-        <p className="text-sm font-bold">Save your recovery codes now</p>
-        <p className="my-2 text-xs">Each code works once. These codes are shown only now. Store them somewhere safe before leaving this page.</p>
+        <p className="text-sm font-bold">Save your backup sign-in codes now</p>
+        <p className="my-2 text-xs">Each code works once. We show them only now. Save them somewhere safe before leaving this page.</p>
         <pre className="select-all whitespace-pre-wrap break-all text-xs">{recoveryCodes.join("\n")}</pre>
         <button type="button" className="btn btn-secondary mt-2" onClick={() => setRecoveryCodes([])}>I have saved these codes</button>
       </section> : null}
@@ -144,11 +144,11 @@ export function TwoFactorAuth() {
         try {
           const res = await fetch("/api/privacy/2fa/recovery", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password, mfaCode }) });
           const data = await res.json();
-          if (!res.ok) { setError(data.error || "Could not replace recovery codes."); return; }
+          if (!res.ok) { setError(data.error || "Could not replace backup sign-in codes."); return; }
           setRecoveryCodes(data.recoveryCodes); setPassword(""); setMfaCode("");
         } catch { setError("Could not connect. Try again."); }
         finally { setSubmitting(false); }
-      }}>Replace recovery codes</button> : null}
+      }}>Replace backup sign-in codes</button> : null}
       {error && (
         <div className="mt-3 flex items-center gap-2 rounded-xl bg-[color-mix(in_srgb,var(--danger)_8%,transparent)] p-3 text-xs text-[var(--danger)]">
           <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
@@ -166,10 +166,10 @@ export function TwoFactorAuth() {
         <div className="mt-4 space-y-3">
           <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
             <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-[var(--muted)]">
-              Step 1: Add to your authenticator app
+              Step 1: Add it to your code app
             </p>
             <p className="mb-2 text-xs text-[var(--muted)]">
-              Enter this secret manually in your authenticator app:
+              If you cannot scan a code, enter this setup key in your code app:
             </p>
             <div className="flex flex-col items-center gap-3">
               {/* ASCII QR placeholder — the otpauth URL is the actual key */}
@@ -184,14 +184,14 @@ export function TwoFactorAuth() {
                 className="flex items-center gap-1.5 text-xs font-medium text-[var(--accent)] hover:underline"
               >
                 <QrCode className="h-3.5 w-3.5" />
-                Open authenticator app
+                Open your code app
               </a>
             </div>
           </div>
 
           <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
             <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-[var(--muted)]">
-              Step 2: Enter verification code
+              Step 2: Enter the code from your app
             </p>
             <div className="flex flex-col gap-2 sm:flex-row">
               <input
@@ -238,7 +238,7 @@ export function TwoFactorAuth() {
               {submitting ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
-                "Disable two-factor authentication"
+                "Turn off the extra sign-in check"
               )}
             </button>
           ) : (
@@ -253,7 +253,7 @@ export function TwoFactorAuth() {
               ) : (
                 <>
                   <ShieldCheck className="h-4 w-4" />
-                  Enable two-factor authentication
+                  Turn on the extra sign-in check
                 </>
               )}
             </button>

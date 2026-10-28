@@ -172,7 +172,7 @@ export async function testProfilePhotos(base, pool, owner, peer, source, unrelat
   await composer.fill("Group encryption after removal"); await composer.press("Enter");
   const approve = source.page.getByRole("button").filter({ hasText: "A device changed in this chat" });
   await approve.waitFor(); await approve.click();
-  const verification = source.page.getByRole("dialog", { name: "Check the safety numbers", exact: true });
+  const verification = source.page.getByRole("dialog", { name: "Check that your chat is private", exact: true });
   const confirmChanges = verification.getByRole("button", { name: "Approve", exact: true });
   assert.equal(await confirmChanges.isEnabled(), false);
   await verification.getByRole("checkbox").check(); await confirmChanges.click();
@@ -195,7 +195,7 @@ export async function testProfilePhotos(base, pool, owner, peer, source, unrelat
   assert.equal((await pool.query("select count(*)::int n from conversation_members where conversation_id=$1 and user_id=$2", [group.id, peer.id])).rows[0].n, 1);
   await composer.fill("Group encryption after rejoining"); await composer.press("Enter");
   await approve.waitFor(); await approve.click();
-  const rejoinVerification = source.page.getByRole("dialog", { name: "Check the safety numbers", exact: true });
+  const rejoinVerification = source.page.getByRole("dialog", { name: "Check that your chat is private", exact: true });
   const expectedFingerprint = (await import("node:crypto")).createHash("sha256").update((await pool.query("select public_key from e2ee_keys where user_id=$1 and device_id=$2", [peer.id, peerDevice.device_id])).rows[0].public_key).digest("hex");
   assert.equal(await rejoinVerification.getByText(expectedFingerprint, { exact: true }).count(), 1);
   await rejoinVerification.getByRole("checkbox").check();

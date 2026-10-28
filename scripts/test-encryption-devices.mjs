@@ -55,7 +55,7 @@ export async function testEncryptionDevices(base, pool, owner, peer, password, c
     assert.equal(await device.page.getByRole("button", { name: "Approve encryption device", exact: true }).count(), 0, "Pending browsers do not offer impossible approval controls");
     await device.page.getByText(/No linked device is available/).waitFor();
     await openDeviceTools(device.page);
-    const fingerprint = await device.page.getByLabel("This device safety number").innerText();
+    const fingerprint = await device.page.getByLabel("This device check number").innerText();
     const target = (await pool.query("select device_id,session_id,public_key from e2ee_keys where user_id=$1 and trusted_at is null order by created_at desc limit 1", [owner.id])).rows[0]; assert(target);
     assert.equal(createHash("sha256").update(target.public_key).digest("hex"), fingerprint);
     const emailCode = "381529";
@@ -96,7 +96,7 @@ export async function testEncryptionDevices(base, pool, owner, peer, password, c
     await section.getByLabel("Encryption recovery confirmation").fill("RESET ENCRYPTION TRUST");
     await section.getByLabel("Email recovery code").fill(emailCode);
     await section.getByLabel("Current password", { exact: true }).fill(password);
-    await section.getByLabel("Authenticator or recovery code (if enabled)").fill(new TOTP({ secret: factor }).generate());
+    await section.getByLabel("Code from your code app or saved backup list (if enabled)").fill(new TOTP({ secret: factor }).generate());
     const approvalActions = [];
     device.page.on("response", response => {
       if (response.url().endsWith("/api/e2ee/devices/approve")) approvalActions.push({ action: response.request().postDataJSON()?.action, status: response.status(), body: response.text().catch(() => "") });
@@ -131,7 +131,7 @@ export async function testEncryptionDevices(base, pool, owner, peer, password, c
     const confirmation = verification.getByRole("button", { name: "Approve", exact: true });
     assert.equal(await confirmation.isEnabled(), false);
     await openDeviceTools(device.page);
-    const expectedFingerprint = await device.page.getByLabel("This device safety number").innerText();
+    const expectedFingerprint = await device.page.getByLabel("This device check number").innerText();
     assert.equal(await verification.getByText(expectedFingerprint, { exact: true }).count(), 1);
     await verification.getByRole("checkbox").check(); await confirmation.click();
     await contact.page.getByRole("textbox", { name: "Message text" }).fill("Encrypted recovery verification");

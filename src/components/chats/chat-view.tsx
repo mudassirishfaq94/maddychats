@@ -199,7 +199,7 @@ function ReceiptIcon({ message }: { message: MessageDTO }) {
 
 function queuedMessageHelp(reason?: string) {
   if (reason?.includes("This device needs approval")) return "Saved. On a linked phone, open Settings → Devices and approve this phone. It will send automatically.";
-  if (reason?.includes("safety number")) return "Saved. Confirm the new phone’s safety number in this chat. It will send after confirmation.";
+  if (reason?.includes("safety number") || reason?.includes("check number")) return "Saved. Compare the check number in this chat and approve the changed device. Your message will send after you approve it.";
   if (reason?.includes("No internet")) return "Saved. It will send automatically when you’re back online.";
   return "Saved. It will send automatically when secure chat setup is ready.";
 }
@@ -831,11 +831,17 @@ export function ChatView({
     if ((trimmed ? draftRef.current.trim() : draftRef.current) !== expected) return;
     const revision = ++draftRevision.current;
     draftRef.current = "";
-    if (draftPersistTimer.current) clearTimeout(draftPersistTimer.current);
     if (draftUpdateTimer.current) clearTimeout(draftUpdateTimer.current);
+    if (draftPersistTimer.current) clearTimeout(draftPersistTimer.current);
+    if (composerRef.current) composerRef.current.value = "";
+    setDraftState("");
     await saveChatDraft(me.id, conversationId, "").catch(() => undefined);
     // Preserve anything the user typed while IndexedDB was finishing.
-    if (draftRevision.current === revision) { setDraft(""); setReplyTo(null); selfDestructDraft.current=false; setSelfDestruct(false); }
+    if (draftRevision.current !== revision) {
+      await saveChatDraft(me.id, conversationId, draftRef.current).catch(() => undefined);
+      return;
+    }
+    setReplyTo(null); selfDestructDraft.current=false; setSelfDestruct(false);
   }
 
   /* ------------------------------ read receipts ----------------------------- */
@@ -1407,17 +1413,31 @@ export function ChatView({
     setItems((prev) => [...prev, optimistic]);
     chatPerf("send-click-to-optimistic", sendStarted);
     const replyId = replyTo?.id ?? null;
-    // Keep the draft until the server confirms delivery, including key failures.
+    let clearedDraftRevision: number | null = null;
+    const restoreSubmittedDraft = async () => {
+      if (selfDestruct || clearedDraftRevision === null || draftRef.current || draftRevision.current !== clearedDraftRevision) return;
+      setDraft(submittedDraft);
+      const restoredRevision = draftRevision.current;
+      await saveChatDraft(me.id, conversationId, submittedDraft).catch(() => undefined);
+      if (draftRevision.current !== restoredRevision) {
+        await saveChatDraft(me.id, conversationId, draftRef.current).catch(() => undefined);
+      }
+    };
     nearBottomRef.current = true;
     requestAnimationFrame(() => scrollToBottom(true));
     setSendPending(true);
     setError(null);
     try {
       // E2EE: plaintext never leaves this device — send AES-GCM ciphertext.
-      await Promise.all([
-        saveQueuedMessage(me.id, { message: { ...optimistic, sendStatus: "queued", queueReason: "Waiting for secure delivery. Your message will send automatically when encryption is ready." }, plain: text }).catch(() => undefined),
-        prepareEncryptedSend(awaitingApproval && !conversation.introductionSent),
-      ]);
+      // Clear the visible composer immediately while the durable retry copy
+      // and encrypted draft cleanup finish together. A save failure restores
+      // the draft below; encryption and network work never block the clear.
+      const queueSave = saveQueuedMessage(me.id, { message: { ...optimistic, sendStatus: "queued", queueReason: "Waiting for secure delivery. Your message will send automatically when encryption is ready." }, plain: text });
+      const draftClear = clearDeliveredDraft(submittedDraft);
+      clearedDraftRevision = draftRevision.current;
+      const [queueResult] = await Promise.allSettled([queueSave, draftClear]);
+      if (queueResult.status === "rejected") throw queueResult.reason;
+      await prepareEncryptedSend(awaitingApproval && !conversation.introductionSent);
       chatPerf("send-key-ready", sendStarted);
       const payload = await e2ee.encrypt(text, conversationId);
       chatPerf("send-encrypted", sendStarted);
@@ -1448,6 +1468,7 @@ export function ChatView({
       if (res.status >= 500 || res.status === 429) throw new SecureDeliveryWaiting("Connection problem. This will send by itself in a moment.");
       if (!res.ok || !data?.message) {
         await removeQueuedMessage(me.id, conversationId, clientMessageId).catch(() => undefined);
+        await restoreSubmittedDraft();
         setError(data?.error ?? "Couldn't send. Tap to retry.");
         setItems((prev) => prev.map((m) => m.id === optimisticId ? { ...m, sendStatus: "failed" } : m));
         return;
@@ -1491,6 +1512,7 @@ export function ChatView({
       }
       if (!waiting) {
         await removeQueuedMessage(me.id, conversationId, clientMessageId).catch(() => undefined);
+        await restoreSubmittedDraft();
         setError(cause instanceof Error ? cause.message : "No connection. Message not sent.");
       }
       setItems((prev) => prev.map((m) => m.id === optimisticId ? { ...m, sendStatus: waiting ? "queued" : "failed", queueReason: waiting ? cause.message : undefined } : m));
@@ -2129,19 +2151,19 @@ export function ChatView({
           onClick={() => setShowEncryptionInfo(true)}
           aria-label={
             e2eeState.ready && e2eeState.needsRotation
-              ? "Encryption key rotation needed. View details"
+              ? "Chat safety check needed. View details"
               : e2eeState.ready
-                ? "End-to-end encryption is active. View details"
-                : "Encryption status"
+                ? "Private chat protection is on. View details"
+                : "Private chat status"
           }
           title={
             e2eeState.checking
               ? "Private chat details"
               : e2eeState.ready
-                ? "End-to-end encrypted"
+                ? "Private chat protected"
                 : e2eeState.peersMissingKeys > 0
-                  ? "Waiting for the other participant(s) to set up encryption"
-                  : "Encryption unavailable"
+                  ? "Waiting for the other person to open Circlo"
+                  : "Chat protection is not ready"
           }
           className={cn(
             "flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-full px-2 transition-colors sm:px-2.5",
@@ -2796,7 +2818,7 @@ function EncryptionInfoDialog({
   const [restoreResult, setRestoreResult] = useState<string | null>(null);
   return (
     <div
-      role="dialog" aria-modal="true" aria-label="Encryption details" className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-black/50 p-3 sm:p-4"
+      role="dialog" aria-modal="true" aria-label="Private chat protection details" className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-black/50 p-3 sm:p-4"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -2811,7 +2833,7 @@ function EncryptionInfoDialog({
             )}
           </span>
           <div className="min-w-0 flex-1">
-            <h3 className="text-base font-bold">End-to-end encryption</h3>
+            <h3 className="text-base font-bold">Private chat protection</h3>
             <p className="text-xs text-[var(--muted)]">{conversationName}</p>
           </div>
           <button
@@ -2828,18 +2850,17 @@ function EncryptionInfoDialog({
           {checking ? (
             <div className="flex items-center gap-2 py-6 text-sm text-[var(--muted)]">
               <Loader2 className="h-4 w-4 animate-spin" />
-              Checking encryption keys…
+              Checking chat protection…
             </div>
           ) : error ? (
             <p role="alert" className="py-6 text-sm text-[var(--muted)]">{error}</p>
           ) : ready ? (
             <>
-              {needsRotation ? <p role="alert" className="mb-3 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3.5 py-2.5 text-xs leading-relaxed text-amber-800 dark:text-amber-200">Encryption keys need rotation. Review the key status before continuing.</p> : null}
+              {needsRotation ? <p role="alert" className="mb-3 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3.5 py-2.5 text-xs leading-relaxed text-amber-800 dark:text-amber-200">A device safety check changed. Review the code below before continuing.</p> : null}
               <div className="flex items-center gap-2 rounded-xl border border-[color-mix(in_srgb,var(--accent)_25%,transparent)] bg-[color-mix(in_srgb,var(--accent)_7%,transparent)] px-3.5 py-2.5">
                 <Lock className="h-4 w-4 shrink-0 text-[var(--accent-fg)]" />
                 <p className="text-xs leading-relaxed">
-                  Messages in this chat are <b>end-to-end encrypted</b>. Circlo and its servers cannot read them — only the devices in
-                  this conversation hold the keys.
+                  Your device locks messages before sending. Only approved devices in this chat can open them; Circlo cannot read them.
                 </p>
               </div>
 
@@ -2849,9 +2870,9 @@ function EncryptionInfoDialog({
                     Verify the other person&apos;s device
                   </p>
                   <p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">
-                    Compare this code with {conversationName}&apos;s device in
-                    person or over another secure channel. If they match, your
-                    chat is secure against interception.
+                    Compare this safety code with {conversationName}&apos;s device
+                    in person or over a trusted call. If the numbers match, you
+                    know you are checking the right device.
                   </p>
                   <div className="mt-2 flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3">
                     <code className="min-w-0 flex-1 select-all text-center font-mono text-sm font-semibold tracking-wider">
@@ -2883,24 +2904,24 @@ function EncryptionInfoDialog({
               <ul className="mt-4 space-y-2">
                 <li className="flex items-start gap-2 text-xs text-[var(--muted)]">
                   <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--accent-fg)]" />
-                  Text, voice and media are encrypted before they leave your device.
+                  Your messages, voice notes and files are locked before they leave your device.
                 </li>
                 <li className="flex items-start gap-2 text-xs text-[var(--muted)]">
                   <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--accent-fg)]" />
-                  No one in between — not even Circlo — can read the contents.
+                  Circlo cannot open private chat messages.
                 </li>
                 <li className="flex items-start gap-2 text-xs text-[var(--muted)]">
                   <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--accent-fg)]" />
-                  Each conversation uses its own encryption keys. Older keys are retained on authorized devices so you can read history.
+                  Each chat has its own protection. Approved devices keep what they need to open older messages.
                 </li>
                 <li className="flex items-start gap-2 text-xs text-[var(--muted)]">
                   <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--accent-fg)]" />
-                  Group sending keys refresh when membership or approved devices change. This chat does not provide a per-message forward-secrecy guarantee.
+                  Group protection is updated when members or approved devices change. This chat does not create a new protection code for every message.
                 </li>
               </ul>
               <div className="mt-4 border-t border-[var(--border)] pt-4">
                 <p className="text-xs leading-relaxed text-[var(--muted)]">
-                  Missing older messages on a second device? Use this on the device that can already read them to securely share its existing keys with your other signed-in devices.
+                  Missing older messages on another device? Use this on a device that can already read them to share access with your other signed-in devices.
                 </p>
                 <button
                   type="button"
@@ -2916,7 +2937,7 @@ function EncryptionInfoDialog({
                   className="mt-3 inline-flex min-h-10 items-center gap-2 rounded-xl border border-[var(--border)] px-3 text-xs font-semibold text-[var(--accent-fg)] transition-colors hover:bg-[var(--accent-soft)] disabled:cursor-wait disabled:opacity-60"
                 >
                   {restoring ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="h-3.5 w-3.5" />}
-                  {restoring ? "Restoring devices…" : "Restore my other devices"}
+                  {restoring ? "Sharing chat access…" : "Share chat access with my devices"}
                 </button>
                 {restoreResult ? <p role="status" className="mt-2 text-xs text-[var(--muted)]">{restoreResult}</p> : null}
               </div>
@@ -2924,13 +2945,12 @@ function EncryptionInfoDialog({
           ) : (
             <div className="space-y-3">
               <p className="text-xs leading-relaxed text-[var(--muted)]">
-                End-to-end encryption needs every participant&apos;s device to
-                generate a secure key. {peersMissing > 0
-                  ? `We're still waiting for ${peersMissing} participant${peersMissing > 1 ? "s" : ""} to open Circlo once so their key can be created.`
-                  : "Encryption keys are still being prepared."}
+                Private chat protection needs each person&apos;s device to be ready. {peersMissing > 0
+                  ? `Waiting for ${peersMissing} person${peersMissing > 1 ? "s" : ""} to open Circlo so this chat can be protected.`
+                  : "Chat protection is still being set up."}
               </p>
               <p className="text-xs leading-relaxed text-[var(--muted)]">
-                  As soon as everyone&apos;s key is ready, new messages in this chat are automatically end-to-end encrypted.
+                  New messages will be protected automatically when everyone&apos;s device is ready.
               </p>
             </div>
           )}
@@ -3272,8 +3292,7 @@ const MessageRow = memo(function MessageRow({msg, showDate, sameSenderPrev, me, 
                                           </span>
                                         ) : msg.replyTo.encrypted && replyText === undefined ? (
                                           <span className="flex items-center gap-1 opacity-70">
-                                            {replyUnavailable ? "Reply unavailable on this device. Check Security & recovery." : "Loading replied message…"}
-                                            …
+                                            {replyUnavailable ? "This reply is not available here. Check Profile for ways to get back into your chats." : "Opening reply…"}
                                           </span>
                                         ) : (
                                           <>
