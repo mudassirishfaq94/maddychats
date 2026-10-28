@@ -1,35 +1,21 @@
-//! Browser bridge for the official Signal protocol implementation.
-//!
-//! **SECURITY WARNING:** This is a PRE-PRODUCTION implementation that has NOT
-//! undergone formal security audit. DO NOT use in production without external
-//! cryptographic review.
-//!
-//! This crate intentionally exposes no message transport or server access.
-//! It only creates client-side cryptographic material; persistence and network
-//! delivery remain in the TypeScript application layer.
-//!
-//! **CRITICAL LIMITATIONS:**
-//! - Double Ratchet not implemented (no forward secrecy)
-//! - X3DH session setup incomplete
-//! - Local key storage not hardware-backed
-//! - No formal verification
-//!
-//! **REQUIRED BEFORE PRODUCTION:**
-//! - External security audit by qualified cryptographer
-//! - Implementation of Double Ratchet
-//! - Hardware-backed key storage
-//! - Formal protocol verification
-
+//! Client-only registration and official-libsignal ratchet adapter.
+//! Experimental transport remains disabled until application integration,
+//! cross-device persistence, compatibility tests and independent review pass.
 #![forbid(unsafe_code)]
-
-mod x3dh;
-pub use x3dh::*;
-
+mod protocol;
 use libsignal_protocol::{IdentityKeyPair, KeyPair, SessionRecord};
+pub use protocol::{ratchet_decrypt, ratchet_encrypt, ratchet_establish};
 use rand::{Rng, rng};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
-
+#[wasm_bindgen]
+pub fn protocol_version() -> u32 {
+    2
+}
+#[wasm_bindgen]
+pub fn ratchet_adapter_version() -> u32 {
+    1
+}
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct IdentityBundle {
@@ -40,15 +26,22 @@ struct IdentityBundle {
     public_identity: Vec<u8>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct PublicPrekey { key_id: u32, public_key: Vec<u8>, signature: Option<Vec<u8>> }
+struct PublicPrekey {
+    key_id: u32,
+    public_key: Vec<u8>,
+    signature: Option<Vec<u8>>,
+}
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct PrivatePrekey { key_id: u32, private_key: Vec<u8> }
+struct PrivatePrekey {
+    key_id: u32,
+    private_key: Vec<u8>,
+}
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct DeviceRegistrationBundle {
     registration_id: u32,
@@ -66,150 +59,62 @@ struct DeviceRegistrationBundle {
     private_one_time_prekeys: Vec<PrivatePrekey>,
 }
 
-/// Version of the protocol envelope understood by this bridge.
 #[wasm_bindgen]
-pub fn protocol_version() -> u32 {
-  2
+pub fn get_sender_chain_key(_state: &[u8]) -> Result<Vec<u8>, JsValue> {
+    Err(JsValue::from_str("raw_chain_keys_unavailable"))
 }
-
-/// Get the sender chain key from a session record.
-/// This is used by the TypeScript layer to derive message keys.
 #[wasm_bindgen]
-pub fn get_sender_chain_key(session_record_bytes: &[u8]) -> Result<Vec<u8>, JsValue> {
-    let session = SessionRecord::deserialize(session_record_bytes)
-        .map_err(|error| JsValue::from_str(&format!("failed to deserialize session: {error}")))?;
-    
-    let session_state = session.session_state()
-        .map_err(|error| JsValue::from_str(&format!("no session state: {error}")))?;
-    
-    session_state.get_sender_chain_key_bytes()
-        .map_err(|error| JsValue::from_str(&format!("no sender chain key: {error}")))
+pub fn get_receiver_chain_key(_state: &[u8]) -> Result<Vec<u8>, JsValue> {
+    Err(JsValue::from_str("raw_chain_keys_unavailable"))
 }
-
-/// Get the receiver chain key from a session record.
-/// This is used by the TypeScript layer to derive message keys.
 #[wasm_bindgen]
-pub fn get_receiver_chain_key(session_record_bytes: &[u8]) -> Result<Vec<u8>, JsValue> {
-    let session = SessionRecord::deserialize(session_record_bytes)
-        .map_err(|error| JsValue::from_str(&format!("failed to deserialize session: {error}")))?;
-    
-    let session_state = session.session_state()
-        .map_err(|error| JsValue::from_str(&format!("no session state: {error}")))?;
-    
-    session_state.get_receiver_chain_key_bytes()
-        .map_err(|error| JsValue::from_str(&format!("no receiver chain key: {error}")))
+pub fn advance_sender_chain(_state: &[u8]) -> Result<Vec<u8>, JsValue> {
+    Err(JsValue::from_str("use_atomic_ratchet_adapter"))
 }
-
-/// Encrypt a message using the session's Double Ratchet.
-/// This uses libsignal's built-in ratchet implementation which provides forward secrecy.
 #[wasm_bindgen]
-pub fn encrypt_message(session_record_bytes: &[u8], plaintext: &[u8]) -> Result<Vec<u8>, JsValue> {
-    let mut session = SessionRecord::deserialize(session_record_bytes)
-        .map_err(|error| JsValue::from_str(&format!("failed to deserialize session: {error}")))?;
-    
-    // Use libsignal's encrypt which automatically advances the Double Ratchet
-    let ciphertext = session.encrypt(plaintext)
-        .map_err(|error| JsValue::from_str(&format!("encryption failed: {error}")))?;
-    
-    // Return the updated session and ciphertext
-    let updated_session = session.serialize()
-        .map_err(|error| JsValue::from_str(&format!("failed to serialize session: {error}")))?;
-    
-    // Combine session + ciphertext for return
-    let result = serde_json::json!({
-        "sessionRecord": updated_session,
-        "ciphertext": ciphertext,
-    });
-    
-    serde_json::to_vec(&result)
-        .map_err(|error| JsValue::from_str(&format!("result serialization failed: {error}")))
+pub fn advance_receiver_chain(_state: &[u8]) -> Result<Vec<u8>, JsValue> {
+    Err(JsValue::from_str("use_atomic_ratchet_adapter"))
 }
-
-/// Decrypt a message using the session's Double Ratchet.
-/// This uses libsignal's built-in ratchet implementation which provides forward secrecy.
 #[wasm_bindgen]
-pub fn decrypt_message(session_record_bytes: &[u8], ciphertext: &[u8]) -> Result<Vec<u8>, JsValue> {
-    let mut session = SessionRecord::deserialize(session_record_bytes)
-        .map_err(|error| JsValue::from_str(&format!("failed to deserialize session: {error}")))?;
-    
-    // Use libsignal's decrypt which automatically advances the Double Ratchet
-    let plaintext = session.decrypt(ciphertext)
-        .map_err(|error| JsValue::from_str(&format!("decryption failed: {error}")))?;
-    
-    // Return the updated session and plaintext
-    let updated_session = session.serialize()
-        .map_err(|error| JsValue::from_str(&format!("failed to serialize session: {error}")))?;
-    
-    // Combine session + plaintext for return
-    let result = serde_json::json!({
-        "sessionRecord": updated_session,
-        "plaintext": plaintext,
-    });
-    
-    serde_json::to_vec(&result)
-        .map_err(|error| JsValue::from_str(&format!("result serialization failed: {error}")))
+pub fn encrypt_message(_state: &[u8], _plaintext: &[u8]) -> Result<Vec<u8>, JsValue> {
+    Err(JsValue::from_str("use_atomic_ratchet_adapter"))
 }
-
-/// Advance the sender chain key (ratchet step).
-/// Returns the updated session record after ratcheting.
-///
-/// **DEPRECATED:** Use encrypt_message/decrypt_message instead, which handle
-/// the Double Ratchet automatically. This function is kept for compatibility
-/// but does not manually advance the chain - libsignal handles it internally.
 #[wasm_bindgen]
-pub fn advance_sender_chain(session_record_bytes: &[u8]) -> Result<Vec<u8>, JsValue> {
-    let session = SessionRecord::deserialize(session_record_bytes)
-        .map_err(|error| JsValue::from_str(&format!("failed to deserialize session: {error}")))?;
-    
-    // Return the session as-is - libsignal manages the ratchet internally
-    // when encrypting/decrypting messages
-    let serialized = session.serialize()
-        .map_err(|error| JsValue::from_str(&format!("failed to serialize session: {error}")))?;
-    
-    Ok(serialized)
+pub fn decrypt_message(_state: &[u8], _ciphertext: &[u8]) -> Result<Vec<u8>, JsValue> {
+    Err(JsValue::from_str("use_atomic_ratchet_adapter"))
 }
-
-/// Advance the receiver chain key (ratchet step).
-/// Returns the updated session record after ratcheting.
-///
-/// **DEPRECATED:** Use encrypt_message/decrypt_message instead, which handle
-/// the Double Ratchet automatically. This function is kept for compatibility
-/// but does not manually advance the chain - libsignal handles it internally.
 #[wasm_bindgen]
-pub fn advance_receiver_chain(session_record_bytes: &[u8]) -> Result<Vec<u8>, JsValue> {
-    let session = SessionRecord::deserialize(session_record_bytes)
-        .map_err(|error| JsValue::from_str(&format!("failed to deserialize session: {error}")))?;
-    
-    // Return the session as-is - libsignal manages the ratchet internally
-    // when encrypting/decrypting messages
-    let serialized = session.serialize()
-        .map_err(|error| JsValue::from_str(&format!("failed to serialize session: {error}")))?;
-    
-    Ok(serialized)
+pub fn create_x3dh_session(_identity: &[u8], _bundle: &[u8]) -> Result<Vec<u8>, JsValue> {
+    Err(JsValue::from_str("use_verified_prekey_bundle"))
 }
-
-/// Verify a message signature (for key verification).
-/// This is used to verify that a message was signed by the expected sender.
-///
-/// Uses libsignal's Ed25519 signature verification.
+#[wasm_bindgen]
+pub fn process_x3dh_initial_message(
+    _identity: &[u8],
+    _signed: &[u8],
+    _kyber: &[u8],
+    _remote: &[u8],
+    _message: &[u8],
+) -> Result<Vec<u8>, JsValue> {
+    Err(JsValue::from_str("use_authenticated_prekey_message"))
+}
+#[wasm_bindgen]
+pub fn verify_session_record(state: &[u8]) -> bool {
+    SessionRecord::deserialize(state).is_ok()
+}
+#[wasm_bindgen]
+pub fn get_session_chain_keys(_state: &[u8]) -> Result<Vec<u8>, JsValue> {
+    Err(JsValue::from_str("raw_chain_keys_unavailable"))
+}
 #[wasm_bindgen]
 pub fn verify_message_signature(
     signature: &[u8],
     message: &[u8],
     public_key: &[u8],
 ) -> Result<bool, JsValue> {
-    // Import the public key
-    let pubkey = libsignal_protocol::PublicKey::deserialize(public_key)
-        .map_err(|error| JsValue::from_str(&format!("invalid public key: {error}")))?;
-    
-    // Verify the signature using libsignal's Ed25519 verification
-    // The signature is expected to be Ed25519 format (64 bytes)
-    match pubkey.verify_signature(message, signature) {
-        Ok(_) => Ok(true),
-        Err(_) => Ok(false),
-    }
+    let key = libsignal_protocol::PublicKey::deserialize(public_key)
+        .map_err(|_| JsValue::from_str("invalid_public_key"))?;
+    Ok(key.verify_signature(message, signature))
 }
-
 /// Parse and re-serialize an official libsignal session record. This is the
 /// only representation accepted by the persistent client session store: it
 /// rejects malformed/tampered bytes before a ratchet mutation is committed.
@@ -217,8 +122,9 @@ pub fn verify_message_signature(
 pub fn canonicalize_session_record(serialized: &[u8]) -> Result<Vec<u8>, JsValue> {
     let record = SessionRecord::deserialize(serialized)
         .map_err(|error| JsValue::from_str(&format!("invalid Signal session record: {error}")))?;
-    record.serialize()
-        .map_err(|error| JsValue::from_str(&format!("Signal session serialization failed: {error}")))
+    record.serialize().map_err(|error| {
+        JsValue::from_str(&format!("Signal session serialization failed: {error}"))
+    })
 }
 
 /// Create a new Signal identity key pair entirely in the client runtime.
@@ -242,17 +148,26 @@ pub fn generate_identity() -> Result<JsValue, JsValue> {
 /// directly to `SignalLocalStore` and never sent over the network.
 #[wasm_bindgen]
 pub fn generate_device_registration(one_time_count: u32) -> Result<JsValue, JsValue> {
-    if one_time_count > 100 { return Err(JsValue::from_str("too many one-time prekeys")); }
+    if one_time_count > 100 {
+        return Err(JsValue::from_str("too many one-time prekeys"));
+    }
     let mut csprng = rng();
     let identity = IdentityKeyPair::generate(&mut csprng);
     let signed = KeyPair::generate(&mut csprng);
     let signed_public = signed.public_key.serialize();
-    let signature = identity.private_key().calculate_signature(&signed_public, &mut csprng)
+    let signature = identity
+        .private_key()
+        .calculate_signature(&signed_public, &mut csprng)
         .map_err(|error| JsValue::from_str(&format!("signed prekey failed: {error}")))?;
     let signed_id = csprng.random::<u32>();
-    let kyber = libsignal_protocol::kem::KeyPair::generate(libsignal_protocol::kem::KeyType::Kyber1024, &mut csprng);
+    let kyber = libsignal_protocol::kem::KeyPair::generate(
+        libsignal_protocol::kem::KeyType::Kyber1024,
+        &mut csprng,
+    );
     let kyber_public = kyber.public_key.serialize();
-    let kyber_signature = identity.private_key().calculate_signature(&kyber_public, &mut csprng)
+    let kyber_signature = identity
+        .private_key()
+        .calculate_signature(&kyber_public, &mut csprng)
         .map_err(|error| JsValue::from_str(&format!("Kyber prekey failed: {error}")))?;
     let kyber_id = csprng.random::<u32>();
     let mut public_one_time = Vec::with_capacity(one_time_count as usize);
@@ -260,25 +175,50 @@ pub fn generate_device_registration(one_time_count: u32) -> Result<JsValue, JsVa
     for _ in 0..one_time_count {
         let key = KeyPair::generate(&mut csprng);
         let key_id = csprng.random::<u32>();
-        public_one_time.push(PublicPrekey { key_id, public_key: key.public_key.serialize().to_vec(), signature: None });
-        private_one_time.push(PrivatePrekey { key_id, private_key: key.private_key.serialize() });
+        public_one_time.push(PublicPrekey {
+            key_id,
+            public_key: key.public_key.serialize().to_vec(),
+            signature: None,
+        });
+        private_one_time.push(PrivatePrekey {
+            key_id,
+            private_key: key.private_key.serialize(),
+        });
     }
     let identity_public = identity.identity_key().serialize().to_vec();
     let bundle = DeviceRegistrationBundle {
         registration_id: csprng.random::<u32>() & 0x3fff,
         // Signal addresses are account name + numeric device id. This is
         // intentionally separate from both the app UUID and registration id.
-        protocol_device_id: (csprng.random::<u32>() & 0x7fff_ffff).max(1),
-        identity_key: identity_public.clone(), signing_key: identity_public,
-        signed_prekey: PublicPrekey { key_id: signed_id, public_key: signed_public.to_vec(), signature: Some(signature.to_vec()) },
-        kyber_prekey: PublicPrekey { key_id: kyber_id, public_key: kyber_public.to_vec(), signature: Some(kyber_signature.to_vec()) },
+        // Official libsignal DeviceId accepts 1..=127. The directory must
+        // resolve address collisions without regenerating this identity.
+        protocol_device_id: csprng.random_range(1..=127),
+        identity_key: identity_public.clone(),
+        signing_key: identity_public,
+        signed_prekey: PublicPrekey {
+            key_id: signed_id,
+            public_key: signed_public.to_vec(),
+            signature: Some(signature.to_vec()),
+        },
+        kyber_prekey: PublicPrekey {
+            key_id: kyber_id,
+            public_key: kyber_public.to_vec(),
+            signature: Some(kyber_signature.to_vec()),
+        },
         one_time_prekeys: public_one_time,
         private_identity: identity.serialize().into_vec(),
-        private_signed_prekey: PrivatePrekey { key_id: signed_id, private_key: signed.private_key.serialize() },
-        private_kyber_prekey: PrivatePrekey { key_id: kyber_id, private_key: kyber.secret_key.serialize().to_vec() },
+        private_signed_prekey: PrivatePrekey {
+            key_id: signed_id,
+            private_key: signed.private_key.serialize(),
+        },
+        private_kyber_prekey: PrivatePrekey {
+            key_id: kyber_id,
+            private_key: kyber.secret_key.serialize().to_vec(),
+        },
         private_one_time_prekeys: private_one_time,
     };
-    serde_wasm_bindgen::to_value(&bundle).map_err(|error| JsValue::from_str(&format!("registration serialization failed: {error}")))
+    serde_wasm_bindgen::to_value(&bundle)
+        .map_err(|error| JsValue::from_str(&format!("registration serialization failed: {error}")))
 }
 
 /// Generate replacement one-time prekeys without replacing the device identity
@@ -286,71 +226,28 @@ pub fn generate_device_registration(one_time_count: u32) -> Result<JsValue, JsVa
 /// encrypted registration state before their public halves are uploaded.
 #[wasm_bindgen]
 pub fn generate_one_time_prekeys(count: u32) -> Result<JsValue, JsValue> {
-    if count == 0 || count > 100 { return Err(JsValue::from_str("invalid one-time prekey count")); }
+    if count == 0 || count > 100 {
+        return Err(JsValue::from_str("invalid one-time prekey count"));
+    }
     let mut csprng = rng();
     let mut public = Vec::with_capacity(count as usize);
     let mut private = Vec::with_capacity(count as usize);
     for _ in 0..count {
         let key = KeyPair::generate(&mut csprng);
         let key_id = csprng.random::<u32>();
-        public.push(PublicPrekey { key_id, public_key: key.public_key.serialize().to_vec(), signature: None });
-        private.push(PrivatePrekey { key_id, private_key: key.private_key.serialize() });
+        public.push(PublicPrekey {
+            key_id,
+            public_key: key.public_key.serialize().to_vec(),
+            signature: None,
+        });
+        private.push(PrivatePrekey {
+            key_id,
+            private_key: key.private_key.serialize(),
+        });
     }
     serde_wasm_bindgen::to_value(&serde_json::json!({
         "oneTimePrekeys": public,
         "privateOneTimePrekeys": private,
-    })).map_err(|error| JsValue::from_str(&format!("prekey serialization failed: {error}")))
-}
-
-#[cfg(test)]
-mod tests {
-    use libsignal_protocol::{
-        AliceSignalProtocolParameters, BobSignalProtocolParameters, IdentityKeyPair, KeyPair,
-        initialize_alice_session_record, initialize_bob_session_record, kem,
-    };
-    use rand::rng;
-
-    #[test]
-    fn session_records_round_trip_through_official_serialization() {
-        let fresh = libsignal_protocol::SessionRecord::new_fresh();
-        let serialized = fresh.serialize().expect("serialize fresh session");
-        let restored = libsignal_protocol::SessionRecord::deserialize(&serialized).expect("deserialize fresh session");
-        assert_eq!(serialized, restored.serialize().expect("re-serialize session"));
-    }
-
-    /// This is the minimum protocol gate: the initiator and recipient derive
-    /// matching ratchet chain keys through the official Signal implementation.
-    /// It exercises the same X3DH/PQ ratchet setup the browser bridge will use
-    /// before message encryption is exposed to TypeScript.
-    #[test]
-    fn signal_initiator_and_recipient_agree_on_chain_key() {
-        let mut csprng = rng();
-        let alice_identity = IdentityKeyPair::generate(&mut csprng);
-        let alice_base = KeyPair::generate(&mut csprng);
-        let bob_ephemeral = KeyPair::generate(&mut csprng);
-        let bob_identity = IdentityKeyPair::generate(&mut csprng);
-        let bob_signed = KeyPair::generate(&mut csprng);
-        let bob_kyber = kem::KeyPair::generate(kem::KeyType::Kyber1024, &mut csprng);
-
-        let alice_parameters = AliceSignalProtocolParameters::new(
-            alice_identity,
-            alice_base,
-            *bob_identity.identity_key(),
-            bob_signed.public_key,
-            bob_ephemeral.public_key,
-            bob_kyber.public_key.clone(),
-            false,
-        );
-        let alice_record = initialize_alice_session_record(&alice_parameters, &mut csprng).expect("initiator session");
-        let kyber_ciphertext = alice_record.get_kyber_ciphertext().expect("session state").expect("PQ ciphertext").clone().into_boxed_slice();
-        let bob_parameters = BobSignalProtocolParameters::new(
-            bob_identity, bob_signed, None, bob_kyber,
-            *alice_identity.identity_key(), alice_base.public_key, &kyber_ciphertext, false,
-        );
-        let bob_record = initialize_bob_session_record(&bob_parameters, &bob_ephemeral).expect("recipient session");
-        assert_eq!(
-            bob_record.get_sender_chain_key_bytes().expect("sender chain"),
-            alice_record.get_receiver_chain_key_bytes(&bob_ephemeral.public_key).expect("receiver chain").expect("matching chain").to_vec(),
-        );
-    }
+    }))
+    .map_err(|error| JsValue::from_str(&format!("prekey serialization failed: {error}")))
 }

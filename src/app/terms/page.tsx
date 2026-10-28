@@ -1,5 +1,6 @@
 import { publicMetadata } from "@/lib/public-metadata";
 import Link from "next/link";
+import { SERVICE_OPERATOR } from "@/lib/service-operator";
 import {
   Ban,
   CalendarClock,
@@ -32,7 +33,7 @@ import {
 
 export const metadata = publicMetadata("/terms", "Terms of Service — Circlo", "The agreement between you and Circlo: service terms, encrypted messaging, account responsibilities and your rights.");
 
-const LAST_UPDATED = "14 October 2026";
+const LAST_UPDATED = "28 October 2026";
 
 const INDEX = [
   { id: "acceptance", label: "Acceptance of these terms" },
@@ -340,9 +341,9 @@ export default function TermsPage() {
 
         <LegalSection id="law" number="12" title="Governing law and disputes" icon={Gavel}>
           <p>
-            These terms are governed by the laws of the jurisdiction in which the operator of Circlo is established,
-            without regard to conflict-of-law rules, and the courts of that place have exclusive jurisdiction over any
-            dispute that cannot be resolved informally.
+            Circlo is {SERVICE_OPERATOR.description} based in {SERVICE_OPERATOR.location}. These terms are governed
+            by the applicable laws of the United Arab Emirates. Disputes may be brought before the competent courts
+            in Dubai, subject to any mandatory rights and court protections that apply where you live.
           </p>
           <p>
             Before starting formal proceedings, please raise the issue with us through the in-app support options so we
@@ -361,6 +362,10 @@ export default function TermsPage() {
         </LegalSection>
 
         <LegalSection id="contact" number="14" title="Contact us" icon={ShieldCheck}>
+          <p>
+            Contact the independent operator of {SERVICE_OPERATOR.name} in {SERVICE_OPERATOR.location} at{" "}
+            <a className="underline" href={`mailto:${SERVICE_OPERATOR.privacyEmail}`}>{SERVICE_OPERATOR.privacyEmail}</a>.
+          </p>
           <p>
             Questions about these terms, an enforcement decision, or a legal request can be sent from inside Circlo
             through the support and report options in your profile, and you will get a recorded answer. Our{" "}
