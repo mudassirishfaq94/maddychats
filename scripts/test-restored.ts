@@ -70,6 +70,8 @@ async function main() {
         await testChatOpeningFixture(base, pool, accounts[0], accounts[1], password, conversation!);
       } else if (process.env.MOBILE_NAV_ONLY === "1") {
         console.log(await testMobileLayout(base, pool, { navigationOnly: true }));
+      } else if (process.env.MOBILE_LAYOUT_ONLY === "1") {
+        console.log(await testMobileLayout(base, pool));
       } else if (process.env.PWA_ONLY === "1") {
         console.log(await testPwaNotifications(base, pool));
       } else if (process.env.DEVICE_RECOVERY_ONLY === "1") {
