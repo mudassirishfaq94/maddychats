@@ -39,7 +39,7 @@ export default function CommunitiesPage() {
   const [newName, setNewName] = useState("");
   const [newDesc, setNewDesc] = useState("");
   const [creating, setCreating] = useState(false);
-  const [tab, setTab] = useState<"my" | "browse">("my");
+  const [tab, setTab] = useState<"my" | "browse">("browse");
   const [error, setError] = useState<string | null>(null);
   const [retry, setRetry] = useState(0);
   const [joining, setJoining] = useState<string | null>(null);
@@ -68,7 +68,7 @@ export default function CommunitiesPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: newName.trim(), description: newDesc.trim() || undefined }),
       });
-      if (!res.ok) { const data = await res.json().catch(() => null); throw new Error(data?.error ?? "Could not create the community. Please try again."); }
+      if (!res.ok) { const data = await res.json().catch(() => null); throw new Error(data?.error ?? "Could not create the group. Please try again."); }
       if (res.ok) {
         const data = await res.json();
         setMyCommunities((prev) => [{ ...data.community, memberCount: 1, channelCount: 0, myRole: "owner" }, ...prev]);
@@ -89,7 +89,7 @@ export default function CommunitiesPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "join" }),
     });
-    if (!res.ok) { const data = await res.json().catch(() => null); throw new Error(data?.error ?? "Could not join the community. Please try again."); }
+    if (!res.ok) { const data = await res.json().catch(() => null); throw new Error(data?.error ?? "Could not join the group. Please try again."); }
     if (res.ok) {
       const community = publicCommunities.find((c) => c.id === communityId);
       if (community) {
@@ -117,7 +117,7 @@ export default function CommunitiesPage() {
             <ArrowLeft className="h-5 w-5" />
           </Link>
           <div>
-            <h1 className="font-display text-xl font-bold">Public groups</h1><p className="mt-2 text-sm text-[var(--muted)]">Anyone can find and join these.</p>
+            <h1 className="font-display text-xl font-bold">Public groups</h1><p className="mt-2 text-sm text-[var(--muted)]">{tab === "browse" ? "Anyone can find and join these." : "Your joined groups. Private groups stay private."}</p>
             <p className="text-xs text-[var(--muted)]">
               {myCommunities.length} joined · {publicCommunities.length} available
             </p>
@@ -144,7 +144,7 @@ export default function CommunitiesPage() {
               tab === t ? "bg-[var(--action)] text-[var(--action-fg)]" : "bg-[var(--surface-2)] text-[var(--muted)]"
             }`}
           >
-            {t === "my" ? `My Communities (${myCommunities.length})` : `Browse (${publicCommunities.length})`}
+            {t === "my" ? `Your groups (${myCommunities.length})` : `Browse (${publicCommunities.length})`}
           </button>
         ))}
       </div>

@@ -24,7 +24,7 @@ export default async function DeviceAccessPage({ searchParams }: { searchParams:
   }
   const [account] = await db.select({ emailVerifiedAt: users.emailVerifiedAt }).from(users).where(eq(users.id, user.id)).limit(1);
   const recoveryEmail = account?.emailVerifiedAt && !user.email.endsWith("@auth.maddychats.invalid") ? user.email : undefined;
-  return <AuthLayout title="Set up this device" subtitle="Link this browser so your chats stay private.">
+  return <AuthLayout title="Open Circlo on this phone" subtitle="Choose how to bring your chats with you.">
     <DeviceAccess recoveryEmail={recoveryEmail} next={deviceAccessDestination(query.next)} openRecovery={query.recovery === "1"} />
   </AuthLayout>;
 }

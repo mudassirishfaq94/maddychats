@@ -111,8 +111,8 @@ export function NewChatDialog({ start = "choose", compact = false, openExternall
         </div>
 
         {mode === "choose" ? <div className="mt-4 space-y-2">
-          <button type="button" onClick={() => setMode("group-people")} className="flex w-full items-center gap-3 rounded-2xl p-3 text-left hover:bg-[var(--surface-2)]"><span className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--accent)] text-white"><Users className="h-5 w-5" /></span><span><b className="block text-sm">Group</b><small className="text-[var(--muted)]">Create a conversation with multiple people</small></span></button>
           <button type="button" onClick={() => setMode("direct")} className="flex w-full items-center gap-3 rounded-2xl p-3 text-left hover:bg-[var(--surface-2)]"><span className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--surface-2)]"><MessageCircle className="h-5 w-5" /></span><span><b className="block text-sm">One person</b><small className="text-[var(--muted)]">Start a direct chat</small></span></button>
+          <button type="button" onClick={() => setMode("group-people")} className="flex w-full items-center gap-3 rounded-2xl p-3 text-left hover:bg-[var(--surface-2)]"><span className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--accent)] text-white"><Users className="h-5 w-5" /></span><span><b className="block text-sm">Group</b><small className="text-[var(--muted)]">Create a conversation with multiple people</small></span></button>
         <Link href="/app/people" className="flex min-h-11 items-center px-3 text-sm underline">My contacts</Link>
         </div> : null}
 

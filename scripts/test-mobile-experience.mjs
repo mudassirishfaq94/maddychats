@@ -97,5 +97,5 @@ try{
  });
  assert.deepEqual(cacheResult,{progressive:true,changed:undefined,otherAccount:undefined,stale:undefined,encrypted:true});
  assert.deepEqual(errors,[]);
- console.log('PASS: responsive help conversation, typing/reply, one phone field with country selection/cancellation, fixed-ratio decoded video thumbnail, image optimization, progressive encrypted cache, ciphertext/account isolation and stale-write guard');
+ console.log('PASS: responsive help conversation, immediate help reply, one phone field with country selection/cancellation, fixed-ratio decoded video thumbnail, image optimization, progressive encrypted cache, ciphertext/account isolation and stale-write guard');
 }finally{await browser?.close();await new Promise(resolve=>server.close(resolve));}

@@ -26,7 +26,6 @@ import dynamic from "next/dynamic";
 import { useRouter, useSearchParams } from "next/navigation";
 import type * as React from "react";
 import {
-  Settings,
   Phone,
   AlertTriangle,
   ArrowDown,
@@ -701,7 +700,7 @@ export function ChatView({
     }));
     if (!prepared.ready) {
       throw new SecureDeliveryWaiting(prepared.trustChanged
-        ? "Someone in this chat changed phones. Check their safety number before sending."
+        ? "Your friend is using a new phone. Confirm it’s them before you send."
         : encryptionRef.current?.error ?? "Waiting for secure delivery. Your message will send automatically when encryption is ready.");
     }
   }, [conversationId]);
@@ -2076,7 +2075,7 @@ export function ChatView({
           <ChevronLeft className="h-5 w-5" />
         </Link>
         {isGroup ? (
-          <button type="button" onClick={() => setShowDetails(true)} className="flex min-w-0 flex-1 items-center gap-2.5 text-left">
+          <button type="button" aria-label="Open group settings" onClick={() => setShowDetails(true)} className="flex min-w-0 flex-1 items-center gap-2.5 text-left">
             {conversation.avatarUrl ? <Image unoptimized width={36} height={36} src={conversation.avatarUrl} alt="Group photo" className="h-9 w-9 shrink-0 rounded-full object-cover" /> : <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--accent-soft)]"><Users className="h-4 w-4 text-[var(--accent-fg)]" /></span>}
             <span className="min-w-0"><span className="block truncate text-[0.92rem] font-semibold leading-tight">{otherName}</span><span className="block truncate text-[0.72rem] text-[var(--muted)]">{conversation.members.length} members</span></span>
           </button>
@@ -2122,7 +2121,6 @@ export function ChatView({
           </div>
         )}
 
-        {isGroup ? <button type="button" aria-label="Open group settings" title="Group settings" onClick={() => setShowDetails(true)} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full hover:bg-[var(--surface-2)]"><Settings className="h-5 w-5" /></button> : null}
         {!isGroup && other ? <button type="button" aria-label="Start audio call" title="Direct audio call · keep Circlo open" disabled={audioCall.busy || conversation.blocked || conversation.requestPending || conversation.awaitingApproval} onClick={() => audioCall.start(conversationId, otherName)} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full hover:bg-[var(--surface-2)] disabled:opacity-40"><Phone className="h-5 w-5" /></button> : null}
         {showHeaderSearch ? <MessageSearch open onOpenChange={setShowHeaderSearch} /> : null}
 

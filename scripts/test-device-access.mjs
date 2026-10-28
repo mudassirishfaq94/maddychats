@@ -28,7 +28,7 @@ export async function testDeviceAccess(base, pool, secret) {
     assert([303,307].includes(redirect.status()));
     assert(new URL(redirect.headers().location,base).pathname === "/login"); assert.equal((await anonymous.request.get(base+"/api/admin/stats")).status(),401,"Anonymous requests cannot read admin data"); await anonymous.close();
     const source = await open(); await source.page.waitForURL(base+"/app/chats");
-    await source.page.goto(base+"/app/settings#privacy");
+    await source.page.goto(base+"/app/settings#privacy");await source.page.getByText("Linked phones and account security",{exact:true}).click();
     await source.page.getByText("This device: Linked",{exact:true}).waitFor();
     const target = await open();
     await target.page.getByRole("button",{name:"I still have my old phone",exact:true}).waitFor();
