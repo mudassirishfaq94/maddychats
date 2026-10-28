@@ -26,7 +26,12 @@ test("session tokens require the intended algorithm, expiry, identity and bounde
     assert.equal(await verifySessionToken(await token({...claims,...patch})),null,JSON.stringify(patch));
   }
   assert.equal(await verifySessionToken("x".repeat(8193)),null);
-  const signed=await token();assert.equal(await verifySessionToken(signed.slice(0,-2)+"xx"),null);
+  const signed=await token();
+  const parts=signed.split(".");
+  // Change a significant signature bit; trailing base64url padding bits may
+  // decode to the original bytes and do not reliably corrupt a signature.
+  parts[2]=(parts[2][0]==="A"?"B":"A")+parts[2].slice(1);
+  assert.equal(await verifySessionToken(parts.join(".")),null);
 });
 
 test("verified credential snapshots cannot survive password changes or revocation-watermark changes",()=>{

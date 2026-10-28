@@ -30,6 +30,7 @@ export function ChatActionsMenu({
   onOpenInfo,
   onOpenSearch,
   onReport,
+  onSchedule,
 }: {
   conversationId: string;
   conversation: ConversationDetail;
@@ -37,6 +38,7 @@ export function ChatActionsMenu({
   onOpenInfo: () => void;
   onOpenSearch: () => void;
   onReport: () => void;
+  onSchedule?: () => void;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -117,7 +119,7 @@ export function ChatActionsMenu({
     if (await control("archive")) router.push("/app/chats");
   }
 
-  const item = "flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition-colors hover:bg-[color-mix(in_srgb,var(--muted)_10%,transparent)]";
+  const item = "flex min-h-11 w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition-colors hover:bg-[color-mix(in_srgb,var(--muted)_10%,transparent)]";
   const openInfo = () => { setOpen(false); onOpenInfo(); };
   const openSearch = () => { setOpen(false); onOpenSearch(); };
   const openReport = () => { setOpen(false); onReport(); };
@@ -152,8 +154,9 @@ export function ChatActionsMenu({
           <div className="my-1 border-t border-[var(--border)]" />
           <button type="button" role="menuitem" className={item} onClick={() => void control(conversation.muted ? "unmute" : "mute")}>
             {conversation.muted ? <Bell className="h-4 w-4" /> : <BellOff className="h-4 w-4" />}
-            {conversation.muted ? "Unmute notifications" : "Mute notifications"}
+            <span>{conversation.muted ? "Unmute notifications" : "Mute notifications"}<small className="block text-xs text-[var(--muted)]">{conversation.muted ? "Get alerts for this chat again." : "Stop alerts for this chat."}</small></span>
           </button>
+          {onSchedule ? <button type="button" role="menuitem" className={item} onClick={() => { setOpen(false); onSchedule(); }}><Clock3 className="h-4 w-4"/><span>Schedule message<small className="block text-xs text-[var(--muted)]">Choose when to send a message.</small></span></button> : null}
           <button type="button" role="menuitem" className={item} onClick={() => void control("archive")}>
             <Archive className="h-4 w-4" /> Archive chat
           </button>
@@ -162,6 +165,7 @@ export function ChatActionsMenu({
           </button>
           <div className="my-1 border-t border-[var(--border)]" />
           <p className="px-3 pb-1 pt-1 text-[0.68rem] font-semibold uppercase tracking-wide text-[var(--muted)]">Disappearing messages</p>
+          <p className="px-3 pb-2 text-xs text-[var(--muted)]">New messages disappear after the time you choose.</p>
           <div className="px-2 pb-1">
             <select aria-label="Disappearing message duration" defaultValue={conversation.disappearingSeconds} onChange={(event) => void setDisappearing(Number(event.target.value))} className="field-input py-2! text-xs!">
               <option value={0}>Off</option><option value={86400}>After 24 hours</option><option value={604800}>After 7 days</option><option value={2592000}>After 30 days</option>

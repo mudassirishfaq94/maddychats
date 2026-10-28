@@ -97,6 +97,7 @@ import {
 } from "@/lib/crypto";
 import { mapWithConcurrency } from "@/lib/async";
 import { chatPerf } from "@/lib/performance";
+import { waitForBackgroundSlot } from "@/lib/background-work";
 import { offlineHistoryRows } from "@/lib/offline-history";
 import { optimizeImageForUpload } from "@/lib/optimize-image";
 import { rememberHistory } from "../../../public/offline-store.js";
@@ -422,10 +423,11 @@ export function ChatView({
   const decryptedRepliesRef = useRef(decryptedReplies);
   const { prepareConversation, decrypt, cacheDecryptedMessage, loadCachedDecryptedMessages } = e2ee;
 
-  // On open: fetch-or-create the conversation key, share it with every peer
-  // device, and learn whether this chat can actually be E2EE right now.
+  // Reconcile devices after local history has had a chance to paint.
+  // Sending still performs its own current device/trust checks.
   useEffect(() => {
     let alive = true;
+    const housekeeping = new AbortController();
     (async () => {
       // Let cleanup cancel stale initialization before updating the status.
       await Promise.resolve();
@@ -436,7 +438,9 @@ export function ChatView({
       }
       setE2eeState((prev) => ({ ...prev, ready: false, checking: true }));
       try {
-        const rotationPromise = fetch(`/api/e2ee/key-rotation/status?conversationId=${encodeURIComponent(conversationId)}&deviceId=${encodeURIComponent(e2ee.deviceId)}`)
+        await waitForBackgroundSlot(housekeeping.signal);
+        if (!alive) return;
+        const rotationPromise = fetch(`/api/e2ee/key-rotation/status?conversationId=${encodeURIComponent(conversationId)}&deviceId=${encodeURIComponent(e2ee.deviceId)}`, { signal: housekeeping.signal })
           .then(async (response) => response.ok ? await response.json() as { needsRotation?: boolean; keyVersion?: number } : null)
           .catch(() => null);
         const { ready, fingerprint, trustChanged, missingPeers = 0 } = await prepareConversation(conversationId);
@@ -458,6 +462,7 @@ export function ChatView({
     })();
     return () => {
       alive = false;
+      housekeeping.abort();
     };
   }, [e2ee.initialized, e2ee.loading, e2ee.deviceId, conversationId, me.id, prepareConversation]);
 
@@ -700,7 +705,7 @@ export function ChatView({
     }));
     if (!prepared.ready) {
       throw new SecureDeliveryWaiting(prepared.trustChanged
-        ? "Your friend is using a new phone. Confirm it’s them before you send."
+        ? "Confirm this is still them before you send."
         : encryptionRef.current?.error ?? "Waiting for secure delivery. Your message will send automatically when encryption is ready.");
     }
   }, [conversationId]);
@@ -2191,6 +2196,7 @@ export function ChatView({
           onOpenInfo={() => setShowDetails(true)}
           onOpenSearch={() => setShowHeaderSearch(true)}
           onReport={() => setReportChat(true)}
+          onSchedule={!selfDestruct && !schedulePaused && !sendPending && canCompose && !awaitingApproval ? () => { setDraftState(draftRef.current); setShowSchedule(true); } : undefined}
         />
 
       </header>
@@ -2211,7 +2217,7 @@ export function ChatView({
           className="flex items-center gap-2 border-b border-[var(--warning,#f59e0b)] bg-[color-mix(in_srgb,var(--warning,#f59e0b)_10%,var(--surface))] px-4 py-2 text-left"
         >
           <ShieldCheck className="h-4 w-4 shrink-0 text-amber-600" />
-          <span className="min-w-0 flex-1 text-[0.72rem] text-[var(--muted)]">Your friend is using a new phone. Confirm it’s them before you send.</span>
+          <span className="min-w-0 flex-1 text-[0.72rem] text-[var(--muted)]">Confirm this is still them before you send.</span>
           <span className="shrink-0 text-[0.65rem] font-bold text-amber-700">Approve</span>
         </button>
       ) : e2eeState.peersMissingKeys > 0 && !e2eeState.checking && !awaitingApproval ? (
@@ -2529,7 +2535,6 @@ export function ChatView({
                   anchor={mediaPickerAnchor}
                   mediaDisabled={mediaPaused || sendPending || !canCompose || awaitingApproval}
                   onAttach={() => { (document.getElementById(`chat-files-${conversationId}`) as HTMLInputElement | null)?.click(); setShowEmoji(false); }}
-                  onSchedule={!selfDestruct && !schedulePaused && !sendPending && canCompose && !awaitingApproval ? () => { setShowEmoji(false); setDraftState(draftRef.current); setShowSchedule(true); } : undefined}
                   onFile={file => { setShowEmoji(false); attachments.addFiles([file]); }}
                   onEmoji={(emoji) => {
                     setDraft((prev) => prev + emoji);

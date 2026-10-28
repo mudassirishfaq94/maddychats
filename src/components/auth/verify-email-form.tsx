@@ -47,7 +47,7 @@ export function VerifyEmailForm({ token, deliveryUnavailable = false, googleVeri
     {state === "checking" ? <p className="mt-5" role="status">Checking your verification link…</p> : state === "verified" ? <><h1 className="mt-5 text-2xl font-bold">Email Verified!</h1><p className="mt-2 text-[var(--muted)]">Your email is verified. Sign in to continue; your existing security settings still apply.</p><Link className="btn btn-primary mt-6" href="/login">Continue to Circlo</Link></> : <>
       <h1 className="mt-5 text-2xl font-bold">Verify your email</h1>
       <p className="mt-2 text-[var(--muted)]">Enter the six-digit code from Circlo. Codes expire after 10 minutes.</p>
-      {deliveryUnavailable ? <p className="mt-3" role="status">Your account was created, but the verification email could not be sent. Your account stays protected until you verify your email.</p> : null}
+      {deliveryUnavailable ? <p className="mt-3" role="status">Your account is saved. We couldn’t send your email code yet. You don’t need to sign up again. Enter your email below and choose Resend verification code when email is available. You must verify it before signing in.</p> : null}
       {state === "error" ? <p className="mt-3" role="alert">We couldn’t check the link right now. Try again shortly, or enter your email code below.</p> : null}
       {state === "invalid" ? <p className="mt-3" role="status">That verification link is invalid or expired. Request a new code below.</p> : null}
       <form onSubmit={verifyCode} className="mt-5 space-y-4">

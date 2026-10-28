@@ -30,7 +30,15 @@ function AccountConversationList({ userId, children }: { userId: string; childre
         const response = await fetch("/api/conversations", {
           cache: "no-store", signal: AbortSignal.any([request.signal, AbortSignal.timeout(10000)]),
         });
-        if (!response.ok) throw new Error("Conversation refresh failed");
+        if (!response.ok) {
+          // A rejected session must remove the local transition surface too.
+          // Transport failures can retain it; authorization failures cannot.
+          if (active && (response.status === 401 || response.status === 403)) {
+            current = { viewerId: userId, conversations: [] };
+            setSnapshot(current);
+          }
+          throw new Error("Conversation refresh failed");
+        }
         const data = await response.json() as Snapshot;
         if (data.viewerId !== userId || !Array.isArray(data.conversations)) throw new Error("Conversation account changed");
         request.signal.throwIfAborted();

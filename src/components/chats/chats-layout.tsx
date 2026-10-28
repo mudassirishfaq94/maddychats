@@ -6,6 +6,7 @@ import { useHydrated } from "@/hooks/use-hydrated";
 
 import { lazy, Suspense, memo, useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {SaveChatsReminder} from "./save-chats-reminder";
+import { SavedInboxList } from "./saved-inbox-list";
 import { SavedChatOpening } from "./saved-chat-opening";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -374,13 +375,11 @@ export function ChatsLayout({
 
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain pb-2">
           {!snapshot && initialConversations === undefined ? (
-            <div role="status" aria-live="polite" aria-label="Loading conversations" className="space-y-3 px-4 py-5">
-              <span className="sr-only">Loading conversations</span>
-              {[0, 1, 2, 3].map(index => <div key={index} aria-hidden="true" className="flex min-h-[56px] items-center gap-3">
-                <span className="size-11 shrink-0 animate-pulse rounded-full bg-[var(--surface-2)] motion-reduce:animate-none" />
-                <span className="min-w-0 flex-1 space-y-2"><span className="block h-3 w-2/5 animate-pulse rounded bg-[var(--surface-2)] motion-reduce:animate-none" /><span className="block h-3 w-3/4 animate-pulse rounded bg-[var(--surface-2)] motion-reduce:animate-none" /></span>
-              </div>)}
-            </div>
+            <SavedInboxList filter={filter} onPrepare={id => {
+              void warmChatCode().catch(() => undefined);
+              if (user?.id) void prefetchChatRouteData(user.id, id).catch(() => undefined);
+            }}/>
+
           ) : conversations.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center px-6 text-center">
               <LogoMark size={30} className="text-[var(--muted)]" />
