@@ -108,6 +108,10 @@ try {
     window.show({user:{id:'dddddddd-dddd-4ddd-8ddd-dddddddddddd'},status:'authenticated',requestScope:{key:'events'}});
   });
   await page.getByText('Saved readable fixture',{exact:true}).waitFor();
+  await page.evaluate(() => window.eventHandler({type:'message:new',conversationId:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'}));
+  assert.equal(await page.getByText('Saved readable fixture',{exact:true}).count(),1,'A new message must not blank readable saved history');
+  await page.evaluate(() => window.eventHandler({type:'message:deleted',conversationId:'ffffffff-ffff-4fff-8fff-ffffffffffff'}));
+  assert.equal(await page.getByText('Saved readable fixture',{exact:true}).count(),1,'Another chat changing must not blank this saved history');
   await page.evaluate(() => window.eventHandler({type:'message:deleted'}));
   await page.getByText('Opening…',{exact:true}).waitFor();
   assert.equal(await page.getByText('Saved readable fixture',{exact:true}).count(),0);

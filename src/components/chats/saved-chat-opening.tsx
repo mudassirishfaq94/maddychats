@@ -18,8 +18,12 @@ export function SavedChatOpening({ conversationId }: { conversationId?: string }
     if (!user || status !== "authenticated" || !id || activeAccount() !== user.id || chatLocked(id)) return;
     const clear = () => { stopped = true; setSaved(null); };
     const unsubscribe = subscribe(event => {
-      // A fresh server event supersedes the transition snapshot immediately.
-      if (event.type.startsWith("message:") || event.type.startsWith("conversation:") || event.type.startsWith("group:")) clear();
+      // New messages and read receipts do not invalidate the saved history.
+      // Edits, deletion, lifetime or access changes do: never leave a revoked
+      // or changed row visible while its authorized replacement is loading.
+      const invalidates = ["message:update", "message:deleted", "message:deleted_for_me", "message:lifetime", "conversation:delete"].includes(event.type) || event.type.startsWith("group:");
+      const affected = "conversationId" in event ? event.conversationId : undefined;
+      if (invalidates && (!affected || affected === id)) clear();
     });
     window.addEventListener("maddy:locked-chats", clear);
     window.addEventListener("storage", clear);
