@@ -70,7 +70,7 @@ async function expandDetails(page, scope = page) {
 async function testNavigationSpace(page) {
   const settings = await page.context().newPage();
   await settings.goto(new URL("/app/settings#two-step-verification", page.url()).toString());
-  const enable = settings.getByRole("button", { name: "Enable two-factor authentication", exact: true });
+  const enable = settings.getByRole("button", { name: "Turn on the extra sign-in check", exact: true });
   await enable.waitFor({ state: "visible" });
   const twoFactor = settings.locator("#two-step-verification");
   const measurements = [];
@@ -119,7 +119,7 @@ async function testNavigationSpace(page) {
         await settings.setViewportSize({ width, height: height - 300 });
         await twoFactor.getByLabel("Current password", { exact: true }).focus();
         await settings.keyboard.press("Tab");
-        const codeInput = twoFactor.getByLabel("Authenticator or recovery code (if enabled)", { exact: true });
+        const codeInput = twoFactor.getByLabel("Code from your code app or saved backup list (if enabled)", { exact: true });
         assert(await codeInput.evaluate(node => node === document.activeElement));
         await enable.click({ trial: true });
       }
@@ -200,9 +200,9 @@ export async function testMobileLayout(base, pool, { recordOnly = false, navigat
           await check(user, "delete-confirmation-" + size);
           await user.getByRole("dialog", { name: "Delete account", exact: true }).getByRole("button").first().click();
           if (width === 320) {
-            const two = user.locator(".card-glass").filter({has:user.getByRole("heading",{name:"Two-Factor Authentication",exact:true})}).last();
+            const two = user.locator(".card-glass").filter({has:user.getByRole("heading",{name:"Extra sign-in check",exact:true})}).last();
             await two.getByLabel("Current password", {exact:true}).fill(password);
-            await two.getByRole("button",{name:"Enable two-factor authentication",exact:true}).click();
+            await two.getByRole("button",{name:"Turn on the extra sign-in check",exact:true}).click();
             await two.getByPlaceholder("000000",{exact:true}).waitFor();
             await check(user, "two-factor-setup-" + size);
             await two.getByRole("button",{name:"Cancel setup",exact:true}).click();
