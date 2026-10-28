@@ -112,7 +112,7 @@ public final class AdminActivity extends ComponentActivity {
         webView.setWebViewClient(new WebViewClient() {
             @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 String value = request.getUrl().toString();
-                if (!request.isForMainFrame()) return !"https".equalsIgnoreCase(request.getUrl().getScheme());
+                if (!request.isForMainFrame()) return !AdminPolicy.allowsFrame(value);
                 if (AdminPolicy.trusted(value)) {
                     if (request.getUrl().getPath() != null && request.getUrl().getPath().startsWith("/api/auth/google")) {
                         openBrowser(value); notifyUser("Google sign-in continues in your browser. Use email and password to sign in inside this app."); return true;

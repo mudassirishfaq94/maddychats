@@ -22,6 +22,13 @@ public final class AdminPolicy {
                 && !value.contains("\\");
         } catch (Exception ignored) { return false; }
     }
+    public static boolean allowsFrame(String value) {
+        if ("about:blank".equals(value) || "about:srcdoc".equals(value) || trusted(value)) return true;
+        try {
+            URI uri = new URI(value);
+            return externalHttps(value) && ("challenges.cloudflare.com".equalsIgnoreCase(uri.getHost()) || "www.google.com".equalsIgnoreCase(uri.getHost()));
+        } catch (Exception ignored) { return false; }
+    }
     public static boolean externalHttps(String value) {
         try {
             URI uri = new URI(value);

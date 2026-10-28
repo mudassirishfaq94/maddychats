@@ -115,11 +115,17 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     const registrationPage = await registrationContext.newPage();
     pages.push(registrationPage);
     registrationPage.on("pageerror", error => errors.push(error.message));
+    let releaseSecurityConfig;
+    const configReleased = new Promise(resolve => { releaseSecurityConfig = resolve; });
+    await registrationPage.route(base + "/api/auth/challenge", async route => { await configReleased; await route.continue(); });
     await registrationPage.goto(base + "/login");
     const signInButton = registrationPage.getByRole("button", { name: "Sign in", exact: true });
     const googleButton = registrationPage.getByRole("link", { name: "Continue with Google", exact: true });
     assert.equal(await registrationPage.getByRole("checkbox").count(), 0, "Returning sign-in has no policy checkbox gate");
-    assert.equal(await signInButton.isEnabled(), true);
+    try { assert.equal(await signInButton.isDisabled(), true, "Sign-in waits for the security configuration check"); }
+    finally { releaseSecurityConfig(); }
+    await signInButton.and(registrationPage.locator(":enabled")).waitFor();
+    assert.equal(await signInButton.isEnabled(), true, "Configured sign-in becomes available without adding a policy checkbox");
     assert.equal(await googleButton.getAttribute("aria-disabled"), "false");
     assert.doesNotMatch(await googleButton.getAttribute("href"), /terms=1|privacy=1/);
     await registrationPage.getByText(/By signing in, you confirm/).waitFor();
@@ -216,7 +222,10 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
       await messageHistory.getByText("Message unavailable", { exact: true }).waitFor({ timeout: 45000 });
       await source.page.getByRole("button", { name: "Try again", exact: true }).click();
       await messageHistory.getByText("Message unavailable", { exact: true }).waitFor({ timeout: 45000 });
-      assert.equal(await source.page.getByRole("button", { name: "Recovery help", exact: true }).count(), 1);
+      await messageHistory.getByRole("button", { name: "How to bring chats over", exact: true }).click();
+      const protectionDetails = source.page.getByRole("dialog", { name: "Private chat protection details", exact: true });
+      await protectionDetails.waitFor();
+      await protectionDetails.getByRole("button", { name: "Close", exact: true }).click();
       assert.equal(await source.page.getByText("unreadable-owned-fixture", { exact: true }).count(), 0, "Ciphertext is never displayed");
     } finally {
       await pool.query("delete from messages where id=$1 and conversation_id=$2", [unreadable, conversationId]);
@@ -289,9 +298,11 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     await target.page.waitForURL("**/app/profile#encryption-devices");
     await openDeviceTools(target.page);
     const targetDeviceId = (await pool.query("select device_id from e2ee_keys where user_id=$1 and trusted_at is null order by created_at desc limit 1", [owner.id])).rows[0].device_id;
-    const linkResponse = target.page.waitForResponse(response => response.url().endsWith("/api/e2ee/devices/link") && response.request().method() === "POST", { timeout: 30000 });
-    await target.page.getByRole("button", { name: "Show a device-link QR code", exact: true }).click();
-    const linkResult = await linkResponse; assert.equal(linkResult.status(), 201);
+    const [linkResult] = await Promise.all([
+      target.page.waitForResponse(response => response.url().endsWith("/api/e2ee/devices/link") && response.request().method() === "POST", { timeout: 30000 }),
+      target.page.getByRole("button", { name: "Show a QR code to link this device", exact: true }).click(),
+    ]);
+    assert.equal(linkResult.status(), 201);
     const { id: linkId, token, expiresAt } = await linkResult.json();
     assert.match(token, /^[A-Za-z0-9_-]{43}$/); assert(Date.parse(expiresAt) - Date.now() <= 3 * 60 * 1000); assert(Date.parse(expiresAt) > Date.now());
     const qrPayload = JSON.stringify({ kind: "circlo-device-link", version: 1, requestId: linkId, token });
@@ -313,14 +324,26 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
       HTMLMediaElement.prototype.play = async () => {};
     })()`);
     await source.page.getByRole("button", { name: "Scan QR on your new device", exact: true }).click();
-    await source.page.getByText("Safety number:").waitFor();
-    await target.page.getByLabel("This device check number").waitFor({ state: "visible" });
-    await source.page.getByText("Show full check number", { exact: true }).click();
-    await source.page.getByLabel("I compared this number with the new phone and it matches.").check();
-    const proofResponse = source.page.waitForResponse(response => response.url().endsWith("/api/e2ee/devices/approve") && response.request().postDataJSON()?.action === "approve", { timeout: 60000 });
-    await source.page.getByRole("button", { name: "Approve this device", exact: true }).click();
-    const proof = (await proofResponse).request().postDataJSON();
-    await source.page.getByText(/Device approved\./).waitFor();
+    const comparison = source.page.getByLabel("I compared this number with the new phone and it matches.", { exact: true });
+    const approvalCard = comparison.locator("..").locator("..");
+    await approvalCard.getByText(/^Check number:/).waitFor();
+    const targetFingerprint = target.page.getByLabel("This device check number", { exact: true });
+    if (!await targetFingerprint.isVisible()) {
+      const fingerprintDetails = target.page.locator("details").filter({ has: targetFingerprint });
+      await fingerprintDetails.locator(":scope > summary").click();
+    }
+    await targetFingerprint.waitFor({ state: "visible" });
+    assert.equal((await targetFingerprint.innerText()).trim(), request.fingerprint);
+    await approvalCard.getByText("Show full check number", { exact: true }).click();
+    await approvalCard.getByText(request.fingerprint, { exact: true }).waitFor();
+    await comparison.check();
+    const [proofResponse] = await Promise.all([
+      source.page.waitForResponse(response => response.url().endsWith("/api/e2ee/devices/approve") && response.request().postDataJSON()?.action === "approve", { timeout: 60000 }),
+      approvalCard.getByRole("button", { name: "Approve this device", exact: true }).click(),
+    ]);
+    assert.equal(proofResponse.status(), 200);
+    const proof = proofResponse.request().postDataJSON();
+    await source.page.getByRole("status").filter({ hasText: "Your chat history is ready on the new phone." }).waitFor({ timeout: 60000 });
     assert.equal((await pool.query("select status from device_link_requests where id=$1", [request.id])).rows[0].status, "approved");
     assert.equal((await api("/api/e2ee/devices/approve", source.cookies, challenge)).status, 409);
     assert.equal((await api("/api/e2ee/devices/approve", source.cookies, proof)).status, 409);
@@ -328,7 +351,7 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     await chat(source.page);
     await source.page.getByRole("button", { name: "Private chat protection is on. View details", exact: true }).click();
     await source.page.getByRole("button", { name: "Share chat access with my devices", exact: true }).click();
-    await source.page.getByText(/Shared \d+ existing key/).waitFor({ timeout: 30000 });
+    await source.page.getByRole("status").filter({ hasText: "Chat history sent to your linked phone." }).waitFor({ timeout: 30000 });
     await chat(target.page);
     await recipient.page.getByRole("region", { name: "Conversation", exact: true }).getByText("Queued new device delivery", { exact: true }).waitFor({ timeout: 45000 });
     await chat(source.page);

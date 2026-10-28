@@ -12,7 +12,9 @@ ARG NEXT_PUBLIC_VAPID_PUBLIC_KEY
 ARG APP_VERSION=development
 COPY --from=dependencies /app/node_modules ./node_modules
 COPY . .
-RUN npm run build
+# Webpack avoids the Turbopack memory spikes observed on the 4 GB deployment host.
+# Type checking remains enabled; build in CI or a resource-limited container.
+RUN npm run build -- --webpack
 
 FROM dependencies AS migrator
 COPY drizzle.config.ts ./

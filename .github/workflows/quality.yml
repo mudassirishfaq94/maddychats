@@ -101,6 +101,8 @@ jobs:
         run: npx tsx scripts/test-authentication-audit.ts
       - name: Install mobile lab browser
         run: npx playwright install --with-deps chromium
+      - name: Wallpaper measurement regression
+        run: npx tsx scripts/test-chat-wallpaper-measurement.ts
       - name: Dependency audit
         run: |
           npm audit --omit=dev --audit-level=high
