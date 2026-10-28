@@ -37,7 +37,7 @@ export function OfflineComposeProvider() {
         const locked = notificationLockedChatIds();
         const chats = data.conversations.map(c => locked === null || locked.includes(c.id)
           ? {id:c.id,name:"Locked chat",locked:true}
-          : {id:c.id,name:c.name??c.otherMember?.displayName??"Chat",type:c.type,unreadCount:c.unreadCount,favorited:c.favorited,pinned:c.pinned,archived:c.archived,lastMessageAt:c.lastMessageAt,blocked:c.blocked,requestPending:c.requestPending});
+          : {id:c.id,name:c.name??c.otherMember?.displayName??"Chat",avatarUrl:c.avatarUrl??c.otherMember?.avatarUrl??null,type:c.type,unreadCount:c.unreadCount,markedUnread:c.markedUnread,muted:c.muted,favorited:c.favorited,pinned:c.pinned,archived:c.archived,lastMessageAt:c.lastMessageAt,blocked:c.blocked,requestPending:c.requestPending});
         for (const old of await offlineChats(userId)) if (!chats.some(chat => chat.id === old.id) || locked === null || locked.includes(old.id)) await forgetHistory(userId,old.id);
         if (!stopped && current.current.user?.id === userId) await rememberChats(userId, chats);
       } catch { /* Keep the last encrypted contact list during a network outage. */ }

@@ -21,7 +21,9 @@ const bundle = await build({ bundle: true, write: false, format: "iife", platfor
     window.show=(auth)=>{window.fixtureAuth=auth;root.render(<SavedChatOpening key={auth.requestScope.key}/>);};
   `,
 }, plugins: [{ name: "fixture-providers", setup(builder) {
-  builder.onResolve({filter:/^(@\/components\/chats\/chat-view|next\/link|lucide-react)$/},args=>({path:args.path,namespace:'route-fixture'}));
+  builder.onResolve({filter:/^next\/image$/},()=>({path:'image',namespace:'image-fixture'}));
+  builder.onLoad({filter:/.*/,namespace:'image-fixture'},()=>({contents:`import React from 'react';export default function Image({unoptimized,...props}){return <img {...props}/>;}`,loader:'jsx',resolveDir:process.cwd()}));
+  builder.onResolve({filter:/^(@\/components\/chats\/chat-view|next\/link)$/},args=>({path:args.path,namespace:'route-fixture'}));
   builder.onLoad({filter:/.*/,namespace:'route-fixture'},args=>({contents: args.path.endsWith('chat-view') ? `import React from 'react';export const ChatView=()=> <p>Authorized server fixture</p>;` : args.path==='next/link' ? `import React from 'react';export default function Link({children,onNavigate,prefetch,...props}){return <a {...props} onClick={event=>{event.preventDefault();onNavigate?.({preventDefault(){}});}}>{children}</a>;}` : `import React from 'react';export const Ghost=()=>null;`,loader:'jsx',resolveDir:process.cwd()}));
   builder.onResolve({filter:/^\.\/(auth-provider|realtime-provider)$/},args=>({path:args.path,namespace:"fixture"}));
   builder.onResolve({ filter: /^(next\/navigation|@\/components\/providers\/(auth-provider|realtime-provider|e2ee-provider))$/ }, args => ({ path: args.path, namespace: "fixture" }));
@@ -44,7 +46,7 @@ try {
   await page.waitForFunction(() => window.store && window.show);
   await page.evaluate(async () => {
     const id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
-    await window.store.rememberChats('dddddddd-dddd-4ddd-8ddd-dddddddddddd', [{id,name:'Fixture circle'}]);
+    await window.store.rememberChats('dddddddd-dddd-4ddd-8ddd-dddddddddddd', [{id,name:'Fixture circle',lastMessageAt:new Date().toISOString(),unreadCount:3}]);
     await window.store.rememberHistory('dddddddd-dddd-4ddd-8ddd-dddddddddddd',id,[
       {id:'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',senderId:'peer',senderName:'Fixture',createdAt:new Date().toISOString(),kind:'message',text:'Saved readable fixture',mine:false},
       {id:'cccccccc-cccc-4ccc-8ccc-cccccccccccc',senderId:'peer',senderName:'Fixture',createdAt:new Date(Date.now()-1000).toISOString(),kind:'ephemeral',text:'Never show this',mine:false},
@@ -59,6 +61,9 @@ try {
   await page.evaluate(auth=>window.showInbox(auth),authA);
   await page.getByRole('list',{name:'Saved conversations'}).getByText('Fixture circle',{exact:true}).waitFor();
   await page.getByText('Saved readable fixture',{exact:true}).waitFor();
+  assert.equal(await page.getByRole('list',{name:'Saved conversations'}).locator('time').count(),1,'Saved rows retain their timestamp before the server responds');
+  assert.equal(await page.getByLabel('3 unread',{exact:true}).count(),1,'Saved unread badges do not wait for the server');
+  assert.equal(await page.getByRole('list',{name:'Saved conversations'}).getByText('FC',{exact:true}).count(),1,'Saved rows include avatar initials immediately');
   assert(inboxRequests.length>0,'Saved list and preview paint while the authorized list response is withheld');
   await page.getByRole('list',{name:'Saved conversations'}).getByRole('link').first().click();
   assert.equal(await page.evaluate(()=>window.fixtureOpened),'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','A tap on a saved row records the selected chat before fresh inbox data arrives');
