@@ -1,5 +1,5 @@
-import { RouteLoading } from "@/components/shell/route-loading";
+import { SavedChatOpening } from "@/components/chats/saved-chat-opening";
 
 export default function Loading() {
-  return <RouteLoading label="Loading chats" />;
+  return <SavedChatOpening />;
 }
