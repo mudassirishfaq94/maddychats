@@ -22,8 +22,8 @@ import { prefetchChatRouteData, retainChatRouteAccount } from "@/lib/chat-route-
 import { mapWithConcurrency } from "@/lib/async";
 import { cn, timeAgo } from "@/lib/utils";
 
-// Warm JavaScript only: message history and server expiration timestamps must
-// be read on navigation, rather than retained in a full-route prefetch.
+// The client chat route contains only the account shell. Its history and
+// expiration timestamps still come from the independently authorized /open API.
 let chatCode: Promise<unknown> | undefined;
 function warmChatCode() {
   chatCode ??= import("./chat-view").catch(() => { chatCode = undefined; });
@@ -74,7 +74,7 @@ const ConversationRow = memo(function ConversationRow({ conv, active, online, pr
     <li key={conv.id} className="group/row relative flex min-w-0 items-center border-b border-[var(--border)] last:border-b-0">
       <Link
         href={`/app/chats/${conv.id}`}
-        prefetch={false}
+        prefetch={true}
         onPointerEnter={() => void warmChatCode()}
         onFocus={() => void warmChatCode()}
         onPointerDown={() => {
@@ -180,6 +180,7 @@ export function ChatsLayout({
   children: ReactNode;
 }) {
   const hydrated = useHydrated();
+  useEffect(() => { void warmChatCode(); }, []);
   const [liveList, setLiveList] = useState<{
     source: ConversationSummary[]; items: ConversationSummary[];
   } | null>(null);
@@ -225,21 +226,20 @@ export function ChatsLayout({
       await loadCachedDecryptedMessages(c.id,[message],(id,text)=>{if(!cancelled)setPreviews(previous=>new Map(previous).set(`${id}:${message.text}`,text));});
     });
     const pending = conversations.filter(c => c.lastMessage?.encrypted && c.lastMessage.text && !c.lastMessage.deletedAt && !previewCache.current.has(`${c.lastMessage.id}:${c.lastMessage.text}`));
-    // Decrypting previews for every encrypted conversation at once fans out
-    // unbounded crypto work onto the main thread as soon as the list renders.
-    // Cap concurrency so the chat list stays responsive on a slow device.
+    // Previews may unwrap local keys, but never fetch remote key history.
+    // Keep the network available to the conversation the user actually opens.
     void mapWithConcurrency(pending, 4, async c => {
       const message = c.lastMessage!;
       const key = `${message.id}:${message.text}`;
-      for (let attempt = 0; attempt < 3; attempt++) {
+      for (let attempt = 0; attempt < 1; attempt++) {
         try {
-          const text = await decrypt(message.text, c.id);
+          const text = await decrypt(message.text, c.id, { localOnly: true });
           if (!message.expiresAt) cacheDecryptedMessage(c.id,message.id,message.text,text);
           if (!cancelled) setPreviews(previous => new Map(previous).set(key, text));
           return;
         } catch {
           if (cancelled) return;
-          if (attempt < 2) await new Promise(resolve => setTimeout(resolve, 1500));
+          // Preview work must never fetch key history or retry on the tap path.
         }
       }
       if (!cancelled) setPreviews(previous => previous.has(key) ? previous : new Map(previous).set(key, ({ audio:"Voice message",image:"Photo",video:"Video",file:"File" }[message.type] ?? "Message unavailable")));

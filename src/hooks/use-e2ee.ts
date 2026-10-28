@@ -392,19 +392,6 @@ export function useE2EE(userId: string | undefined) {
     }
   }, [userId]);
 
-  useEffect(() => {
-    if (!state.initialized || !userId || !keyPairRef.current) return;
-    let cancelled = false;
-    const prefix = `e2ee_sentkeys_${userId}_`;
-    const ids = Object.keys(localStorage).filter(key => key.startsWith(prefix))
-      .map(key => key.slice(prefix.length)).filter(id => /^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(id)).slice(0, 20);
-    // Local unwrap only: no membership bypass, network lookup, key creation,
-    // rotation or sharing. Send authorization still runs on every send.
-    void mapWithConcurrency(ids, 2, async id => {
-      if (!cancelled) await loadLocalConversationKeys(id).catch(() => undefined);
-    });
-    return () => { cancelled = true; };
-  }, [state.initialized, userId, loadLocalConversationKeys]);
 
   /**
    * Return the established legacy symmetric key for a conversation.
@@ -537,7 +524,7 @@ export function useE2EE(userId: string | undefined) {
 
   /** Receiving never generates or replaces a sending key. Try cached keys,
    * then current/device/history shares, retaining all recoverable keys. */
-  const decrypt = useCallback(async (ciphertext: string, conversationId: string): Promise<string> => {
+  const decrypt = useCallback(async (ciphertext: string, conversationId: string, options: { localOnly?: boolean } = {}): Promise<string> => {
     if (!keyPairRef.current) throw new Error("Device keys are not ready");
     const local = decryptionKeysRef.current.get(conversationId) ?? [];
     const sending = conversationKeysRef.current.get(conversationId);
@@ -550,6 +537,7 @@ export function useE2EE(userId: string | undefined) {
     for (const key of restored) {
       try { return await decryptMessage(ciphertext, key); } catch { /* Try the next key. */ }
     }
+    if (options.localOnly) throw new Error("Local conversation key is unavailable");
     const loaded = await loadDecryptionKeys(conversationId);
     for (const key of loaded) {
       try { return await decryptMessage(ciphertext, key); } catch { /* Try the next key. */ }
