@@ -121,6 +121,8 @@ export async function testAudioContacts(base, pool, owner, peer, password, conve
     await a.getByRole("button", { name: "Minimize call controls", exact: true }).click();
     await a.waitForURL(base + "/app/chats/" + conversationId);
     await a.getByRole("button", { name: "End call", exact: true }).click();
+    // Route arrival precedes the encrypted draft read from IndexedDB.
+    await a.waitForFunction(() => document.querySelector('textarea[aria-label="Message text"]')?.value === "Draft while calling", undefined, { timeout: 5000 });
     assert.equal(await a.getByRole("textbox", { name: "Message text", exact: true }).inputValue(), "Draft while calling");
     await b.getByText("Call ended or was not answered.", { exact: true }).waitFor();
     assert.equal((await (await ca.request.get(base + "/api/calls")).json()).call, null);
