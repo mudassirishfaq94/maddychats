@@ -5,6 +5,7 @@ import { SwipeFilters } from "./swipe-filters";
 import { useHydrated } from "@/hooks/use-hydrated";
 
 import { lazy, Suspense, memo, useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {SaveChatsReminder} from "./save-chats-reminder";
 import { SavedChatOpening } from "./saved-chat-opening";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -284,9 +285,9 @@ export function ChatsLayout({
   const filterChips: { key: typeof chatFilter; label: string; count: number; color?: string }[] = [
     { key: "all", label: "All", count: conversations.filter((c) => !c.archived).length },
     { key: "unread", label: "Unread", count: unreadCount, color: "var(--accent)" },
-    { key: "favorites", label: "Favorites", count: conversations.filter((c) => !c.archived && c.favorited).length },
+    { key: "favorites", label: "Starred chats", count: conversations.filter((c) => !c.archived && c.favorited).length },
     { key: "groups", label: "Groups", count: groupCount },
-    { key: "dms", label: "DMs", count: dmCount },
+    { key: "dms", label: "Direct", count: dmCount },
   ];
 
   const filtered = useMemo(() => {
@@ -323,12 +324,8 @@ export function ChatsLayout({
         <div className="flex h-14 shrink-0 items-center justify-between gap-3 px-4">
           <h1 className="min-w-0 truncate text-xl font-semibold tracking-tight">Chats</h1>
           <div className="flex shrink-0 items-center gap-1">
-        <Link href="/help" aria-label="Open Circlo Help" title="Circlo Help" className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[var(--border-strong)] bg-[var(--surface)] text-[var(--accent-fg)] transition-colors hover:bg-[var(--surface-2)] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--accent)]">
-          <LogoMark size={26} />
-          <span aria-hidden="true" className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-[var(--accent)] text-[10px] font-bold text-white">?</span>
-        </Link>
-            <NewChatDialog start="group-people" compact />
-            <NewChatDialog start="direct" compact />
+
+            <NewChatDialog />
           </div>
         </div>
 
@@ -343,7 +340,7 @@ export function ChatsLayout({
               className="field-input field-input--icon min-h-11 rounded-xl! py-2! text-sm!"
             />
           </div>
-          <SwipeFilters>
+          {conversations.length > 0 ? <SwipeFilters>
             {filterChips.map((chip) => (
               <button
                 key={chip.key}
@@ -362,7 +359,7 @@ export function ChatsLayout({
                 ) : null}
               </button>
             ))}
-          </SwipeFilters>
+          </SwipeFilters> : null}
           {archivedCount > 0 || showArchived ? (
             <button
               type="button"
@@ -417,6 +414,7 @@ export function ChatsLayout({
           empty selection panel. Deep chats still mount their content once. */}
       {!activeId ? children : null}
 
+      <SaveChatsReminder />
       {/* ------------------------------ chat area ------------------------------ */}
       <section
         className={cn("min-w-0 flex-1 flex-col lg:flex", activeId ? "flex" : "hidden")}

@@ -34,9 +34,9 @@ export function MobileNav() {
         {NAV_ITEMS.map((item) => {
           const active =
             item.match === "/app"
-              ? pathname === "/app" || pathname.startsWith("/app/chats")
+              ? pathname === "/app" || ["/app/chats", "/app/people", "/app/users", "/app/communities", "/app/starred"].some(path=>pathname.startsWith(path))
               : item.match === "/app/settings"
-                ? ["/app/settings", "/app/profile", "/app/people", "/app/users", "/app/communities", "/app/starred"].some(path => pathname.startsWith(path))
+                ? ["/app/settings", "/app/profile", "/app/help"].some(path => pathname.startsWith(path))
                 : pathname.startsWith(item.match);
           const Icon = item.icon;
           return (

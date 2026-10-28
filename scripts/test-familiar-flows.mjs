@@ -1,0 +1,26 @@
+import assert from 'node:assert/strict';
+import {createServer} from 'node:http';
+import {build} from 'esbuild';
+import {chromium} from 'playwright';
+const bundle=await build({bundle:true,write:false,platform:'browser',format:'iife',jsx:'automatic',stdin:{resolveDir:process.cwd(),loader:'jsx',contents:`
+import React from 'react';import{createRoot}from'react-dom/client';
+import{NewChatDialog}from'./src/components/chats/new-chat-dialog';
+import{EncryptionDevices}from'./src/components/profile/encryption-devices';
+import{CircloHelp}from'./src/components/help/circlo-help';
+import{StatusPage}from'./src/components/status/status-page';
+const root=createRoot(document.getElementById('root'));
+const user={id:'fixture-user',displayName:'Fixture',username:'fixture'};
+window.show=mode=>root.render(mode==='chat'?<NewChatDialog/>:mode==='device'?<EncryptionDevices setup recoveryEmail='fixture@example.invalid'/>:mode==='help'?<CircloHelp/>:<StatusPage me={user} initial={[]}/>);
+`},plugins:[{name:'isolated-dependencies',setup(b){
+b.onResolve({filter:/^(next\/(navigation|link|image|dynamic)|@\/components\/providers\/(auth-provider|e2ee-provider|realtime-provider))$/},a=>({path:a.path,namespace:'fixture'}));
+b.onLoad({filter:/.*/,namespace:'fixture'},a=>({resolveDir:process.cwd(),loader:'jsx',contents:a.path==='next/navigation'?`export const usePathname=()=>"/app/device-access";export const useRouter=()=>({push(){},replace(){}});`:a.path==='next/link'?`import React from'react';export default function Link({children,prefetch,...p}){return <a {...p}>{children}</a>;}`:a.path==='next/image'?`import React from'react';export default function Image({unoptimized,...p}){return <img {...p}/>;}`:a.path==='next/dynamic'?`import React from'react';export default ()=>()=> <p>Choose your saved file</p>;`:a.path.endsWith('auth-provider')?`const scope={};export const useAuth=()=>({user:{id:'fixture-user'},status:'authenticated',requestScope:scope});`:a.path.endsWith('realtime-provider')?`const subscribe=()=>()=>{};export const useRealtime=()=>({subscribe});`:`const value={initialized:true,deviceId:'fixture-device',waitForDeviceRegistration:async()=>{},syncKnownConversations:async()=>''};export const useSharedE2EE=()=>value;`}));
+}}]});
+const server=createServer((req,res)=>{if(req.url==='/bundle.js'){res.setHeader('content-type','text/javascript');res.end(bundle.outputFiles[0].contents);}else if(req.url?.startsWith('/api/e2ee/keys')){res.setHeader('content-type','application/json');res.end(JSON.stringify({keys:[{deviceId:'fixture-device',trustedAt:null,publicKey:'fixture-public'}]}));}else if(req.url?.startsWith('/api/e2ee/devices/link')){res.setHeader('content-type','application/json');res.end('{"requests":[]}');}else if(req.url?.startsWith('/api/users/search')){res.setHeader('content-type','application/json');res.end('{"users":[]}');}else if(req.url?.startsWith('/api/')){res.setHeader('content-type','application/json');res.end('{}');}else res.end('<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><style>*{box-sizing:border-box}body{margin:0;font:16px system-ui}button,input,select{max-width:100%;min-height:44px}p,code{overflow-wrap:anywhere}img{max-width:100%}</style><div id="root"></div><script src="/bundle.js"></script>');});
+await new Promise(r=>server.listen(0,'127.0.0.1',r));const browser=await chromium.launch();
+try{const page=await browser.newPage({viewport:{width:390,height:844}});const errors=[];page.on('pageerror',e=>errors.push(e.message));await page.goto(`http://127.0.0.1:${server.address().port}`);await page.waitForFunction(()=>window.show);
+await page.evaluate(()=>window.show('chat'));await page.getByRole('button',{name:'New chat',exact:true}).click();await page.getByRole('button',{name:/One person/}).click();await page.getByPlaceholder('Search by name, username or phone…').fill('+971500000000');await page.getByText('Ask them to open Circlo and send you their username.',{exact:true}).waitFor();
+await page.evaluate(()=>window.show('device'));await page.getByRole('button',{name:'I still have my old phone',exact:true}).waitFor();assert.equal(await page.getByRole('button').count(),2);assert.equal(await page.getByText('fixture@example.invalid',{exact:true}).count(),0);assert.equal(await page.locator('input').count(),0);await page.getByRole('button',{name:'I saved a recovery file',exact:true}).click();await page.getByText('Choose your saved file',{exact:true}).waitFor();
+await page.evaluate(()=>window.show('help'));await page.getByRole('button',{name:'Notifications not arriving',exact:true}).click();await page.getByRole('article',{name:'Help answer'}).waitFor({timeout:1000});assert.equal(await page.getByText('Circlo Help is typing…').count(),0);
+await page.evaluate(()=>window.show('status'));await page.getByRole('button',{name:'Add status',exact:true}).click();await page.getByRole('button',{name:'Text',exact:true}).click();assert.equal(await page.getByRole('combobox',{name:'Status audience'}).inputValue(),'chats');assert.equal(await page.getByRole('option',{name:'All users',exact:true}).count(),0);
+assert.deepEqual(errors,[]);console.log('PASS phone-sized user flows: one-person search, two initial recovery choices, second-step file controls, immediate help, private status default');
+}finally{await browser.close();await new Promise(r=>server.close(r));}

@@ -87,7 +87,7 @@ export async function testChatRecovery(base, cookieHeader, conversationId) {
     await source.getByRole("button", { name: "Close", exact: true }).click();
 
     const target = await context();
-    await target.goto(`${base}/app/profile#encryption-devices`);
+    await target.goto(`${base}/app/settings#privacy`);
     await target.getByText("This device: Waiting for approval", { exact: true }).waitFor({ timeout: 30000 });
     await openDeviceTools(target);
     const pendingText = "A new device waits safely for approval";
@@ -101,10 +101,10 @@ export async function testChatRecovery(base, cookieHeader, conversationId) {
     await queuedNotice.waitFor({ state: "hidden", timeout: 12000 });
     await target.getByLabel("Queued", { exact: true }).waitFor();
     await target.getByRole("button", { name: "Show queued message options", exact: true }).waitFor();
-    await source.goto(`${base}/app/profile#encryption-devices`);
-    await target.goto(`${base}/app/profile#encryption-devices`);
+    await source.goto(`${base}/app/settings#privacy`);
+    await target.goto(`${base}/app/settings#privacy`);
     const linkResponse = target.waitForResponse(response => response.url().endsWith("/api/e2ee/devices/link") && response.request().method() === "POST");
-    await target.getByRole("button", { name: "Show a device-link QR code", exact: true }).click();
+    if(await target.getByRole("button",{name:"I still have my old phone",exact:true}).count())await target.getByRole("button",{name:"I still have my old phone",exact:true}).click();else await target.getByRole("button",{name:"Show a device-link QR code",exact:true}).click();
     const linkCreated = await linkResponse;
     assert.equal(linkCreated.status(), 201);
     const { id: requestId, token } = await linkCreated.json();

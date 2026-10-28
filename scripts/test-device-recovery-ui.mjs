@@ -20,13 +20,14 @@ export async function testDeviceRecoveryUI(base, pool) {
   const open = async () => {
     const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, serviceWorkers: "block" });
     await login(context); const page = await context.newPage(); page.on("pageerror", error => errors.push(error.message));
-    await page.goto(base + "/app/profile#encryption-devices"); await openDeviceTools(page);
+    await page.goto(base + "/app/settings#privacy"); await openDeviceTools(page);
     return { context, page };
   };
   try {
     const source = await open(); await source.page.getByText("This device: Linked", { exact: true }).waitFor();
     const simple = await source.context.newPage();
-    await simple.goto(base + "/app/profile#encryption-devices");
+    await simple.goto(base + "/app/settings#privacy");
+    await simple.getByText("Linked phones and account security",{exact:true}).click();
     await simple.getByText("This device: Linked", { exact:true }).waitFor();
     assert.equal(await simple.getByLabel("This device safety number").isVisible(),false,"Fingerprints are hidden in ordinary device settings");
     assert(!await simple.locator("#encryption-devices").innerText().then(text=>text.includes("Device ID:")),"Identifiers do not clutter the main view");
@@ -37,7 +38,7 @@ export async function testDeviceRecoveryUI(base, pool) {
     await simple.close();
     const overview = await source.context.newPage();
     await overview.goto(base + "/app/profile");
-    await overview.getByRole("heading", { name: username, exact: true }).waitFor();
+    await overview.getByRole("heading", { name: "Profile", exact: true }).waitFor();
     assert.equal(await overview.locator("details[open]").count(), 0, "Profile starts with compact settings sections");
     assert.equal(await overview.getByRole("heading", { name: "Notifications", exact: true }).count(), 0, "Collapsed settings do not mount their API-backed component");
     assert.equal(await overview.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
@@ -87,7 +88,7 @@ export async function testDeviceRecoveryUI(base, pool) {
     const target = await open(); await target.page.getByText("This device: Waiting for approval", { exact: true }).waitFor();
     await source.page.getByRole("button", { name: "Refresh encryption devices", exact: true }).click();
     const linkResponse = target.page.waitForResponse(response => response.url().endsWith("/api/e2ee/devices/link") && response.request().method() === "POST");
-    await target.page.getByRole("button", { name: "Show a device-link QR code", exact: true }).click();
+    if(await target.page.getByRole("button",{name:"I still have my old phone",exact:true}).count())await target.page.getByRole("button",{name:"I still have my old phone",exact:true}).click();else await target.page.getByRole("button",{name:"Show a device-link QR code",exact:true}).click();
     const created = await linkResponse; assert.equal(created.status(), 201);
     const { id: requestId, token } = await created.json(); assert.match(token, /^[A-Za-z0-9_-]{43}$/);
     const qrPayload = JSON.stringify({ kind: "circlo-device-link", version: 1, requestId, token });
@@ -118,10 +119,10 @@ export async function testDeviceRecoveryUI(base, pool) {
     assert.equal((await target.context.request.post(base + "/api/auth/logout", { headers: { Origin: base } })).status(), 200);
     assert.equal((await target.context.request.get(base + "/api/auth/me")).status(), 401);
     assert.equal((await source.context.request.get(base + "/api/auth/me")).status(), 200, "Signing out another browser keeps this session active");
-    await login(target.context); await target.page.reload();
+    await login(target.context); await target.page.reload();await openDeviceTools(target.page);
     await target.page.getByText("This device: Linked", { exact: true }).waitFor({ timeout: 30000 });
     const downloadEvent = source.page.waitForEvent("download");
-    await source.page.getByRole("button", { name: "Download encrypted recovery file", exact: true }).click();
+    await source.page.getByRole("button", { name: "Save recovery file", exact: true }).click();
     const file = await readFile(await (await downloadEvent).path());
     const recoveryCode = await source.page.locator('code[aria-label="Recovery file code"]').innerText();
     await openDeviceTools(source.page);
@@ -132,7 +133,8 @@ export async function testDeviceRecoveryUI(base, pool) {
     await restored.page.getByLabel("Encrypted recovery file", { exact: true }).setInputFiles({ name: "recovery.json", mimeType: "application/json", buffer: file });
     await restored.page.locator('input[type="password"]').last().fill(recoveryCode);
     await restored.page.getByRole("checkbox", { name: /I saved a recovery file/ }).check();
-    await restored.page.getByRole("button", { name: "Restore encryption identity", exact: true }).click();
+    await restored.page.getByRole("button", { name: "Open my saved file", exact: true }).click();
+    await openDeviceTools(restored.page);
     await restored.page.getByText("This device: Linked", { exact: true }).waitFor({ timeout: 30000 });
     await openDeviceTools(restored.page);
     assert.equal(await restored.page.getByLabel("This device safety number").innerText(), sourceFingerprint);

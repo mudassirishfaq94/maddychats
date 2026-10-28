@@ -1454,6 +1454,7 @@ export function ChatView({
         return;
       }
       const created = data.message;
+      if(!selfDestruct) window.dispatchEvent(new CustomEvent("circlo:message-sent",{detail:{userId:me.id}}));
       chatPerf("send-server-confirmed", sendStarted);
       await removeQueuedMessage(me.id, conversationId, clientMessageId).catch(() => undefined);
       await clearDeliveredDraft(submittedDraft);
@@ -2137,7 +2138,7 @@ export function ChatView({
           }
           title={
             e2eeState.checking
-              ? "Checking encryption…"
+              ? "Private chat details"
               : e2eeState.ready
                 ? "End-to-end encrypted"
                 : e2eeState.peersMissingKeys > 0
@@ -2152,7 +2153,7 @@ export function ChatView({
           )}
         >
           {e2eeState.checking ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
+            <Lock className="h-4 w-4" />
           ) : e2eeState.ready ? (
             <span className="relative flex">
               <Lock className="h-4 w-4" />
@@ -2190,7 +2191,7 @@ export function ChatView({
           className="flex items-center gap-2 border-b border-[var(--warning,#f59e0b)] bg-[color-mix(in_srgb,var(--warning,#f59e0b)_10%,var(--surface))] px-4 py-2 text-left"
         >
           <ShieldCheck className="h-4 w-4 shrink-0 text-amber-600" />
-          <span className="min-w-0 flex-1 text-[0.72rem] text-[var(--muted)]">A device changed in this chat. Check the safety numbers before you approve.</span>
+          <span className="min-w-0 flex-1 text-[0.72rem] text-[var(--muted)]">Your friend is using a new phone. Confirm it’s them before you send.</span>
           <span className="shrink-0 text-[0.65rem] font-bold text-amber-700">Approve</span>
         </button>
       ) : e2eeState.peersMissingKeys > 0 && !e2eeState.checking && !awaitingApproval ? (
@@ -2223,7 +2224,7 @@ export function ChatView({
             <ShieldCheck className="h-5 w-5 shrink-0 text-[var(--accent-fg)]" />
             <div className="min-w-0 flex-1">
               <p className="text-sm font-semibold">Message request</p>
-              <p className="text-xs text-[var(--muted)]">Someone wants to contact you. Accept to reply. No read receipt is sent before approval. If secure delivery is pending, the introduction will appear when its encryption key arrives.</p>
+              <p className="text-xs text-[var(--muted)]">They want to message you. Accept to reply.</p>
             </div>
             <button type="button" disabled={acceptingRequest} onClick={() => void acceptMessageRequest()} className="btn btn-primary shrink-0 px-3! py-2! text-xs!">
               {acceptingRequest ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Accept"}

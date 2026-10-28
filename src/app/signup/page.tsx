@@ -1,4 +1,3 @@
-import { TemporaryChatEntry } from "@/components/auth/temporary-chat-entry";
 import { verificationDeliveryConfigured } from "@/server/email-verification";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -17,7 +16,6 @@ export default async function SignupPage({ searchParams }: { searchParams: Promi
 
   return (
     <AuthLayout
-      entry={<TemporaryChatEntry />}
       title="Create your account"
       subtitle="One account. Your circle, always within reach."
       footer={

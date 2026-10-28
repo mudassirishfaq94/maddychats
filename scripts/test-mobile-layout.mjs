@@ -164,10 +164,10 @@ export async function testMobileLayout(base, pool, { recordOnly = false, navigat
     };
     await mkdir(".freebuff/performance", { recursive: true });
     const user = await login(accounts[0]);
-    await user.goto(base + "/app/profile#encryption-devices");
+    await user.goto(base + "/app/settings#privacy");
     await user.getByText("This device: Linked", { exact: true }).waitFor();
     const pending = await login(accounts[0]);
-    await pending.goto(base + "/app/profile#encryption-devices");
+    await pending.goto(base + "/app/settings#privacy");
     await pending.getByText("This device: Waiting for approval", { exact: true }).waitFor();
     await pending.getByRole("button", { name: "Emergency recovery: no linked device or backup file", exact: true }).click();
     const navigationScreens = await testNavigationSpace(pending);
@@ -209,11 +209,11 @@ export async function testMobileLayout(base, pool, { recordOnly = false, navigat
           }
         }
         if (path === "/app/communities") {
-          await user.getByRole("button", { name: "Create community", exact: true }).click();
-          await user.getByPlaceholder("Community name", {exact:true}).fill("Mobile audit fixture");
-          await user.getByRole("dialog",{name:"Create community",exact:true}).getByRole("button",{name:"Create",exact:true}).click({trial:true});
+          await user.getByRole("button", { name: "Create public group", exact: true }).click();
+          await user.getByPlaceholder("Group name", {exact:true}).fill("Mobile audit fixture");
+          await user.getByRole("dialog",{name:"Create public group",exact:true}).getByRole("button",{name:"Create",exact:true}).click({trial:true});
           await check(user, "community-editor-" + size);
-          await user.getByRole("dialog", { name: "Create community", exact: true }).getByRole("button",{name:"Cancel",exact:true}).click();
+          await user.getByRole("dialog", { name: "Create public group", exact: true }).getByRole("button",{name:"Cancel",exact:true}).click();
         }
         if (path === `/app/chats/${group.id}`) {
           // Model the viewport delivered by the native IME inset handler;

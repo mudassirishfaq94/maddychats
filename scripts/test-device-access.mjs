@@ -28,10 +28,10 @@ export async function testDeviceAccess(base, pool, secret) {
     assert([303,307].includes(redirect.status()));
     assert(new URL(redirect.headers().location,base).pathname === "/login"); assert.equal((await anonymous.request.get(base+"/api/admin/stats")).status(),401,"Anonymous requests cannot read admin data"); await anonymous.close();
     const source = await open(); await source.page.waitForURL(base+"/app/chats");
-    await source.page.goto(base+"/app/profile#encryption-devices");
+    await source.page.goto(base+"/app/settings#privacy");
     await source.page.getByText("This device: Linked",{exact:true}).waitFor();
     const target = await open();
-    await target.page.getByRole("button",{name:"Show a device-link QR code",exact:true}).waitFor();
+    await target.page.getByRole("button",{name:"I still have my old phone",exact:true}).waitFor();
     await target.page.screenshot({path:"test-artifacts/device-access-choice-after.png",fullPage:true,animations:"disabled"});
     assert(target.page.url().includes("/app/device-access?"));
     assert.equal((await target.context.request.get(base+"/api/auth/me")).status(),202,"Credentials create only a restricted verification session");
@@ -61,7 +61,7 @@ export async function testDeviceAccess(base, pool, secret) {
       assert.deepEqual(await inspectMobileLayout(target.page,"access-choice"),[]);
     }
     const linkResponse = target.page.waitForResponse(response=>response.url().endsWith("/api/e2ee/devices/link")&&response.request().method()==="POST");
-    await target.page.getByRole("button",{name:"Show a device-link QR code",exact:true}).click();
+    if(await target.page.getByRole("button",{name:"I still have my old phone",exact:true}).count())await target.page.getByRole("button",{name:"I still have my old phone",exact:true}).click();else await target.page.getByRole("button",{name:"Show a device-link QR code",exact:true}).click();
     const linkResult=await linkResponse; assert.equal(linkResult.status(),201);
     const {id:requestId,token}=await linkResult.json(); assert.match(token,/^[A-Za-z0-9_-]{43}$/);
     await target.page.getByRole("img",{name:"Temporary secure device-link QR code"}).waitFor();
@@ -98,10 +98,10 @@ export async function testDeviceAccess(base, pool, secret) {
     // Only this owned fake account loses trust, reproducing the no-trusted-device case.
     await pool.query("update e2ee_keys set trusted_at=null where user_id=$1",[user.id]);
     const recovery = await open();
-    await recovery.page.getByText("I don’t have my old device",{exact:true}).click();
-    await recovery.page.getByRole("heading",{name:"Recover with email",exact:true}).waitFor();
+    await recovery.page.getByRole("button",{name:"I saved a recovery file",exact:true}).click();
+    await recovery.page.getByText("More help with a saved file",{exact:true}).click();await recovery.page.getByRole("heading",{name:"Recover with email",exact:true}).waitFor();
     await recovery.page.getByRole("button",{name:"Send recovery code",exact:true}).waitFor();
-    const recoveryText = await recovery.page.locator("#encryption-devices").innerText();
+    const recoveryText = await recovery.page.getByRole("region",{name:"Set up this phone"}).innerText();
     assert(recoveryText.includes("Recover with email") && recoveryText.includes("Send recovery code"));
     assert(!recoveryText.includes("Show a device-link QR code") && !recoveryText.includes("Back up or restore chats"),"No-old-device recovery hides unrelated setup choices");
     const confirm = recovery.page.getByRole("button",{name:"Verify code and sign out other devices",exact:true});
@@ -134,7 +134,7 @@ export async function testDeviceAccess(base, pool, secret) {
     assert.deepEqual(after.filter(row=>row.trusted_at).map(row=>row.device_id),[pending.device_id]);
     for(const old of before) assert.equal(after.find(row=>row.device_id===old.device_id).public_key,old.public_key,"Old keys are retained without being reconstructed");
     const guessing = await open();
-    await guessing.page.getByRole("button",{name:"Show a device-link QR code",exact:true}).waitFor();
+    await guessing.page.getByRole("button",{name:"I still have my old phone",exact:true}).waitFor();
     const guessDevice = (await pool.query("select device_id from e2ee_keys where user_id=$1 order by created_at desc limit 1",[user.id])).rows[0];
     assert.equal((await guessing.context.request.post(base+"/api/e2ee/devices/link/verify",{headers:{Origin:base},data:{deviceId:guessDevice.device_id,code:"000000"}})).status(),404,"The retired typed-code approval endpoint is unavailable");
     assert.deepEqual(errors,[]);

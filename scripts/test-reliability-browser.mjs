@@ -186,7 +186,7 @@ try {
  console.log("PASS: encrypted file is fetched once on recipient intent");
 
 
- await owner.page.goto(base+"/app/profile#encryption-devices");await openDeviceTools(owner.page);
+ await owner.page.goto(base+"/app/settings#privacy");await openDeviceTools(owner.page);
  await owner.page.getByRole("button",{name:"Set up recovery code",exact:true}).click();const code=await owner.page.locator('[aria-label="New recovery code"]').textContent();assert(code);
  await owner.page.getByLabel("Re-enter the saved code",{exact:true}).fill(code);await owner.page.getByRole("button",{name:"Confirm code and save encrypted backup",exact:true}).click();await owner.page.getByText(/Encrypted recovery is configured/).waitFor();
  const backup=(await pool.query("select id,envelope from recovery_backups where user_id=$1",[owner.id])).rows[0];assert(backup);assert.equal(JSON.stringify(backup.envelope).includes(code),false);

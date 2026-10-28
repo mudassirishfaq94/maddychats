@@ -52,7 +52,7 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     const response = await context.request.fetch(base + route, { method, headers: { Origin: base, "Content-Type": "application/json" }, ...(body ? { data: body } : {}) });
     return new Response([204, 205, 304].includes(response.status()) ? null : await response.body(), { status: response.status(), headers: response.headers() });
   };
-  const profile = async page => { await page.goto(base + "/app/profile#encryption-devices"); await openDeviceTools(page); };
+  const profile = async page => { await page.goto(base + "/app/settings#privacy"); await openDeviceTools(page); };
   const chat = async page => { await page.goto(base + "/app/chats/" + conversationId); await page.getByRole("textbox", { name: "Message text" }).waitFor(); };
   const refresh = async page => { await openDeviceTools(page); const response = page.waitForResponse(r => r.url().endsWith("/api/e2ee/keys") && r.request().method() === "GET"); await page.getByRole("button", { name: "Refresh encryption devices", exact: true }).click(); assert.equal((await response).status(), 200); await openDeviceTools(page); };
   let sessionRaceChecked = false;
@@ -290,11 +290,11 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     await target.page.getByRole("textbox", { name: "Message text" }).press("Enter");
     await target.page.getByText("Queued", { exact: true }).waitFor();
     await target.page.getByRole("button", { name: "Try now", exact: true }).click();
-    await target.page.waitForURL("**/app/profile#encryption-devices");
+    await target.page.waitForURL("**/app/settings#privacy");
     await openDeviceTools(target.page);
     const targetDeviceId = (await pool.query("select device_id from e2ee_keys where user_id=$1 and trusted_at is null order by created_at desc limit 1", [owner.id])).rows[0].device_id;
     const linkResponse = target.page.waitForResponse(response => response.url().endsWith("/api/e2ee/devices/link") && response.request().method() === "POST", { timeout: 30000 });
-    await target.page.getByRole("button", { name: "Show a device-link QR code", exact: true }).click();
+    if(await target.page.getByRole("button",{name:"I still have my old phone",exact:true}).count())await target.page.getByRole("button",{name:"I still have my old phone",exact:true}).click();else await target.page.getByRole("button",{name:"Show a device-link QR code",exact:true}).click();
     const linkResult = await linkResponse; assert.equal(linkResult.status(), 201);
     const { id: linkId, token, expiresAt } = await linkResult.json();
     assert.match(token, /^[A-Za-z0-9_-]{43}$/); assert(Date.parse(expiresAt) - Date.now() <= 3 * 60 * 1000); assert(Date.parse(expiresAt) > Date.now());

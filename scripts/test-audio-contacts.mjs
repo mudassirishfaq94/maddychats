@@ -161,14 +161,8 @@ export async function testAudioContacts(base, pool, owner, peer, password, conve
     await pool.query("UPDATE users SET display_name=$1,bio=$2 WHERE id=$3", ["W".repeat(50), "W".repeat(160), owner.id]);
     for (const size of [{ width: 320, height: 640 }, { width: 390, height: 844 }, { width: 844, height: 390 }, { width: 1280, height: 800 }]) {
       await a.setViewportSize(size); await a.goto(base + "/app/profile");
-      await a.getByRole("heading", { name: "W".repeat(50), exact: true }).waitFor();
-      // Lazy sections and device requests must finish before enumerating their
-      // nested disclosures. A heading alone does not mean they have mounted.
-      const encryptionSummary = a.locator("summary:visible").filter({ has: a.getByText("Encryption & trusted devices", { exact: true }) });
-      await encryptionSummary.click();
-      const encryptionPanel = encryptionSummary.locator("..");
-      await encryptionPanel.getByLabel("This device safety number", { exact: true }).waitFor({ state: "attached" });
-      await encryptionPanel.locator("#local-chat-backup").waitFor({ state: "attached" });
+      await a.getByRole("heading",{name:"Profile",exact:true}).waitFor();
+      assert.equal(await a.locator("#pe-display").inputValue(),"W".repeat(50));
       // Opening lazy sections inserts nested disclosures. Re-query each time
       // instead of retaining positional locators that can move to hidden children.
       for (let opened = 0; opened < 40; opened++) {

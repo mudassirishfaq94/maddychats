@@ -17,11 +17,10 @@ export async function testUxFeatures(context,base,owner,member) {
   await page.getByLabel("Contact link or ID").fill(`${base}/contact/${member.id}`);await page.getByRole("button",{name:"Open contact",exact:true}).click();await page.getByRole("button",{name:"Add contact",exact:true}).click();await page.getByRole("button",{name:"Contact saved",exact:true}).waitFor();
   const contacts=await page.request.get(base+"/api/contacts");const saved=(await contacts.json()).users;assert(saved.some(user=>user.id===member.id));assert(saved.every(user=>user.lastSeenAt===null),"Contacts cannot bypass presence privacy");
   await page.goto(base+"/app/chats");await page.getByLabel("Search conversations",{exact:true}).waitFor();
-  const help=page.getByRole("link",{name:"Open Circlo Help",exact:true});
+  await page.goto(base+"/app/settings");const help=page.getByRole("link",{name:"Help",exact:true});
   await help.click();await page.getByRole("heading",{name:"Circlo Help",exact:true}).waitFor();
-  await page.getByRole("button",{name:"How do I add a contact?",exact:true}).click();
-  await page.getByRole("status",{name:"Circlo Help is typing",exact:true}).waitFor();
-  assert.equal(await page.getByRole("article",{name:"Help answer"}).count(),0,"Guide shows typing before answering");
+  await page.getByRole("textbox",{name:"Ask Circlo Help"}).fill("How do I add a contact?");await page.getByRole("button",{name:"Ask question",exact:true}).click();
+  assert.equal(await page.getByRole("status",{name:"Circlo Help is typing",exact:true}).count(),0,"Help answers without a fake typing delay");
   await page.getByRole("article",{name:"Help answer"}).waitFor();
   await page.getByRole("heading",{name:"Add a contact or scan a QR code",exact:true}).waitFor();
   assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),"Help must fit the phone viewport");

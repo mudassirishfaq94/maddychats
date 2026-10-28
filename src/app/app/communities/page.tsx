@@ -117,7 +117,7 @@ export default function CommunitiesPage() {
             <ArrowLeft className="h-5 w-5" />
           </Link>
           <div>
-            <h1 className="font-display text-xl font-bold">Communities</h1>
+            <h1 className="font-display text-xl font-bold">Public groups</h1><p className="mt-2 text-sm text-[var(--muted)]">Anyone can find and join these.</p>
             <p className="text-xs text-[var(--muted)]">
               {myCommunities.length} joined · {publicCommunities.length} available
             </p>
@@ -127,7 +127,7 @@ export default function CommunitiesPage() {
           type="button"
           onClick={() => setShowCreate(true)}
           className="flex h-11 min-w-[44px] items-center justify-center rounded-full bg-[var(--action)] text-[var(--action-fg)]"
-          aria-label="Create community"
+          aria-label="Create public group"
         >
           <Plus className="h-5 w-5" />
         </button>
@@ -220,12 +220,12 @@ export default function CommunitiesPage() {
         </div>
       )}
 
-      {/* Create community modal */}
+      {/* Create public group modal */}
       {showCreate && (
-        <div role="dialog" aria-modal="true" aria-label="Create community" className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-black/50 p-3 sm:p-4">
+        <div role="dialog" aria-modal="true" aria-label="Create public group" className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-black/50 p-3 sm:p-4">
           <div className="card-glass max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-3xl p-4 sm:p-6 animate-fade-up">
             <div className="flex items-center justify-between">
-              <h3 className="text-base font-bold">Create Community</h3>
+              <h3 className="text-base font-bold">Create public group</h3>
               <button type="button" onClick={() => setShowCreate(false)} className="flex h-8 w-8 items-center justify-center rounded-full text-[var(--muted)] hover:bg-[var(--surface-2)]">
                 <X className="h-4 w-4" />
               </button>
@@ -235,7 +235,7 @@ export default function CommunitiesPage() {
               <input
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
-                placeholder="Community name"
+                placeholder="Group name"
                 className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2.5 text-sm text-[var(--text)] placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:outline-none"
                 autoFocus
               />

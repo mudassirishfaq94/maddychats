@@ -16,7 +16,7 @@ export async function testStatusPhoto(base, pool, owner, peer, source, recipient
     assert.equal((await upload(Buffer.from("<svg/>"), "fake.png", "image/png")).status, 422);
     assert.equal((await upload(Buffer.from("video"), "video.mp4", "video/mp4")).status, 422);
     await source.page.goto(base + "/app/status");
-    await source.page.getByRole("button", { name: "Add photo status", exact: true }).click();
+    await source.page.getByRole("button", { name: "Add status", exact: true }).click();await source.page.getByRole("button",{name:"Photo",exact:true}).click();
     await source.page.locator('input[type="file"]').setInputFiles({ name: "photo.png", mimeType: "image/png", buffer: Buffer.concat([png, Buffer.from("UNTRUSTED_TRAILING_CONTENT")]) });
     await source.page.getByPlaceholder("Add a caption (optional)").fill("Verified photo status");
     await source.page.locator("select").selectOption("selected");

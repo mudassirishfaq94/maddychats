@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 
 import { useRef, useState } from "react";
 import { MessagePopover } from "./message-popover";
@@ -137,6 +138,8 @@ export function ChatActionsMenu({
 
       {open ? (
         <MessagePopover anchor={anchor} role="menu" label="Chat options" onClose={() => { setOpen(false); setConfirmClear(false); }} className="w-64">
+          <Link href="/app/starred" role="menuitem" className={item}>Starred messages</Link>
+          <Link href="/app/communities" role="menuitem" className={item}><span>Public groups<small className="block text-xs text-[var(--muted)]">Anyone can find and join these.</small></span></Link>
           {error ? <p role="alert" className="m-1 rounded-xl bg-[var(--surface-2)] p-3 text-xs text-[var(--danger)]">{error}</p> : null}
           <fieldset disabled={busy || exporting} className="contents">
           <button type="button" role="menuitem" className={item} onClick={openInfo}>
@@ -147,7 +150,7 @@ export function ChatActionsMenu({
             <Search className="h-4 w-4" /> Search messages
           </button>
           <button type="button" role="menuitem" className={item} onClick={() => void control(conversation.favorited ? "unfavorite" : "favorite")}>
-            <Star className={`h-4 w-4 ${conversation.favorited ? "fill-current text-[var(--accent-fg)]" : ""}`} /> {conversation.favorited ? "Remove from favorites" : "Add to favorites"}
+            <Star className={`h-4 w-4 ${conversation.favorited ? "fill-current text-[var(--accent-fg)]" : ""}`} /> {conversation.favorited ? "Unstar chat" : "Star chat"}
           </button>
           <div className="my-1 border-t border-[var(--border)]" />
           <button type="button" role="menuitem" className={item} onClick={() => void control(conversation.muted ? "unmute" : "mute")}>

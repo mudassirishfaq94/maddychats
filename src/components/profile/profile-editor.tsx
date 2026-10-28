@@ -271,6 +271,7 @@ export function ProfileEditor({ user }: { user: SafeUser }) {
           )}
         </div>
 
+        <details><summary className="min-h-11 cursor-pointer py-3 text-sm">More about you</summary>
         {/* bio */}
         <div>
           <div className="flex items-center justify-between">
@@ -321,6 +322,7 @@ export function ProfileEditor({ user }: { user: SafeUser }) {
           </p>
         </div>
 
+        </details>
         {editing ? (
           <div className="flex gap-3 pt-1">
             <button
@@ -342,7 +344,7 @@ export function ProfileEditor({ user }: { user: SafeUser }) {
           </div>
         ) : null}
       </form>
-      <PhoneDiscovery />
+      <details className="mt-3"><summary className="min-h-11 cursor-pointer py-3 text-sm">Find me by phone number</summary><PhoneDiscovery /></details>
     </section>
   );
 }

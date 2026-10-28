@@ -29,8 +29,8 @@ const statusRows = [
   { label: "Chats, groups, voice notes and photos", state: "Available" },
   { label: "Audio calls while both people are online", state: "Available" },
   { label: "Phone and desktop browser", state: "Available" },
-  { label: "Android app on Google Play", state: "Coming soon" },
-  { label: "Video calls and iPhone app", state: "Planned" },
+  { label: "Android app", state: "Available for testing" },
+  { label: "iPhone app", state: "Planned" },
 ] as const;
 
 const features = [
@@ -44,8 +44,8 @@ const features = [
 
 const steps = [
   { title: "Sign up", text: "Create an account with your email and password." },
-  { title: "Confirm your email", text: "Enter the code we email you, then sign in. No recovery file is needed to get started." },
-  { title: "Say hello", text: "Find your people and start a chat or group." },
+  { title: "Add a person", text: "Confirm your email, open New chat, and search for a person by name, username or phone." },
+  { title: "Say hello", text: "Send your first message. Afterward, Save my chats helps you keep a file for a new phone." },
 ];
 
 const questions = [
@@ -128,8 +128,8 @@ export default async function LandingPage() {
               <p className="mt-2 text-xs text-[var(--muted)]">Create an account with email and password.</p>
             </div>
             <div>
-              <button type="button" disabled aria-disabled="true" className="btn btn-secondary min-h-12 w-full justify-center opacity-70">Android app</button>
-              <p className="mt-2 text-xs text-[var(--muted)]">Coming soon to Google Play</p>
+              <Link href="/support" className="btn btn-secondary min-h-12 w-full justify-center">Get the Android app</Link>
+              <p className="mt-2 text-xs text-[var(--muted)]">Contact us for Android testing access.</p>
             </div>
           </div>
           <p className="mt-4 text-sm text-[var(--muted)]">Already have an account? <Link className="font-semibold text-[var(--accent-fg)] underline underline-offset-4" href="/login">Log in</Link></p>

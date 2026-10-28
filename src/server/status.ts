@@ -37,6 +37,20 @@ export async function canViewStatus(row: StatusRow, viewerId: string) {
   return selected.length > 0;
 }
 
+/** Freeze the accepted direct-chat audience at posting time; pending requests and blocks never qualify. */
+export async function statusChatAudienceIds(userId:string):Promise<string[]> {
+ const result=await db.execute<{id:string}>(sql`select distinct peer.user_id as id
+ from conversation_members mine
+ join conversations c on c.id=mine.conversation_id
+ join conversation_members peer on peer.conversation_id=c.id and peer.user_id<>${userId}
+ where mine.user_id=${userId} and c.type='dm' and c.deleted_at is null
+ and mine.accepted_at is not null and peer.accepted_at is not null
+ and not exists(select 1 from blocks b where
+ (b.blocker_id=${userId} and b.blocked_id=peer.user_id) or
+ (b.blocked_id=${userId} and b.blocker_id=peer.user_id))`);
+ return result.rows.map(row=>row.id);
+}
+
 export async function createStatus(input: {
   userId: string; type: "text" | "image" | "video"; text?: string | null; mediaPath?: string | null;
   mediaMimeType?: string | null; backgroundStyle?: string | null; privacy: "all" | "selected"; selectedUserIds?: string[];

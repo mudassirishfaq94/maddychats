@@ -4,10 +4,10 @@ import { readFile } from "node:fs/promises";
 /** Real local archive + restoration on an unapproved browser; no trust fixture bypass. */
 export async function testLocalChatBackup(base, pool, source, owner, password, conversationId) {
   const page = source.page;
-  const response = await page.goto(base + "/app/profile#local-chat-backup");
+  const response = await page.goto(base + "/app/settings#save-my-chats");
   assert.match(response.headers()["permissions-policy"], /camera=\(self\)/);
   const section = page.locator("#local-chat-backup");
-  await section.getByRole("button", { name: "Set up local backup", exact: true }).click();
+  await section.getByRole("button", { name: "Save my chats", exact: true }).click();
   const code = await section.getByLabel("Local backup code", { exact: true }).textContent();
   assert.match(code, /^[A-Za-z0-9_-]{43}$/);
   await section.getByLabel("Confirm your saved backup code", { exact: true }).fill(code);
@@ -27,7 +27,7 @@ export async function testLocalChatBackup(base, pool, source, owner, password, c
   // Pause from a second tab while collection is in flight. Completion must not
   // restore the old enabled settings or replace the previous archive.
   const settingsPage = await page.context().newPage();
-  await settingsPage.goto(base + "/app/profile#local-chat-backup");
+  await settingsPage.goto(base + "/app/settings#save-my-chats");
   const pause = settingsPage.getByRole("button", { name: "Pause daily backup", exact: true });
   await pause.waitFor();
   let release, arrived;
@@ -60,8 +60,7 @@ export async function testLocalChatBackup(base, pool, source, owner, password, c
     await target.getByLabel("Password", { exact: true }).fill(password);
     await target.getByRole("button", { name: "Sign in", exact: true }).click();
     await target.waitForURL("**/app/device-access**");
-    await target.getByRole("button", { name: "I don’t have my old device", exact: true }).click();
-    await target.getByText("Restore a saved backup instead", { exact: true }).click();
+    await target.getByRole("button", { name: "I saved a recovery file", exact: true }).click();
     const restore = target.locator("#local-chat-backup");
     await restore.getByLabel("Circlo backup file", { exact: true }).setInputFiles({ name: "saved.circlo", mimeType: "application/octet-stream", buffer: bytes });
     await restore.getByLabel("Saved backup code", { exact: true }).fill("A".repeat(43));
