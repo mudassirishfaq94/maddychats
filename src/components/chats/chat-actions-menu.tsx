@@ -16,7 +16,6 @@ import {
   Loader2,
   MoreVertical,
   Search,
-  Star,
   Trash2,
   XCircle,
 } from "lucide-react";
@@ -149,9 +148,7 @@ export function ChatActionsMenu({
           <button type="button" role="menuitem" className={item} onClick={openSearch}>
             <Search className="h-4 w-4" /> Search messages
           </button>
-          <button type="button" role="menuitem" className={item} onClick={() => void control(conversation.favorited ? "unfavorite" : "favorite")}>
-            <Star className={`h-4 w-4 ${conversation.favorited ? "fill-current text-[var(--accent-fg)]" : ""}`} /> {conversation.favorited ? "Unstar chat" : "Star chat"}
-          </button>
+
           <div className="my-1 border-t border-[var(--border)]" />
           <button type="button" role="menuitem" className={item} onClick={() => void control(conversation.muted ? "unmute" : "mute")}>
             {conversation.muted ? <Bell className="h-4 w-4" /> : <BellOff className="h-4 w-4" />}

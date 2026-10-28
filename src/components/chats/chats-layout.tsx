@@ -10,7 +10,7 @@ import { SavedChatOpening } from "./saved-chat-opening";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type * as React from "react";
-import { Archive, BellOff, Pin, Search, Star } from "lucide-react";
+import { Archive, BellOff, Pin, Search } from "lucide-react";
 import type { ConversationSummary } from "@/lib/types";
 import { useSharedE2EE } from "@/components/providers/e2ee-provider";
 import { Avatar } from "@/components/avatar";
@@ -123,7 +123,6 @@ const ConversationRow = memo(function ConversationRow({ conv, active, online, pr
               {conv.pinned ? (
                 <Pin className="h-3 w-3 shrink-0 text-[var(--accent-fg)]" />
               ) : null}
-              {conv.favorited ? <Star className="h-3 w-3 shrink-0 fill-current text-[var(--accent-fg)]" /> : null}
               {conv.muted ? (
                 <BellOff className="h-3 w-3 shrink-0 text-[var(--muted)]" />
               ) : null}
@@ -285,7 +284,6 @@ export function ChatsLayout({
   const filterChips: { key: typeof chatFilter; label: string; count: number; color?: string }[] = [
     { key: "all", label: "All", count: conversations.filter((c) => !c.archived).length },
     { key: "unread", label: "Unread", count: unreadCount, color: "var(--accent)" },
-    { key: "favorites", label: "Starred chats", count: conversations.filter((c) => !c.archived && c.favorited).length },
     { key: "groups", label: "Groups", count: groupCount },
     { key: "dms", label: "Direct", count: dmCount },
   ];

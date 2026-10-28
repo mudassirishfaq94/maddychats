@@ -62,7 +62,7 @@ try {
     await page.getByRole("listitem",{name:"Saved chat",exact:true}).waitFor();
     await page.getByRole("listitem",{name:"Team chat",exact:true}).waitFor();
     assert.equal(await page.getByText("Private locked chat",{exact:true}).count(),0);
-    await page.getByRole("button",{name:"Starred chats",exact:true}).click();
+    await page.getByRole("button",{name:"Direct",exact:true}).click();
     await page.getByRole("listitem",{name:"Team chat",exact:true}).waitFor({state:"hidden"});
     await page.getByRole("button",{name:"All",exact:true}).click();
     await page.getByRole("listitem",{name:"Saved chat",exact:true}).click();

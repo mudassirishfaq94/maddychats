@@ -2210,10 +2210,7 @@ export function ChatView({
 
       {awaitingApproval ? (
         <div role="status" className="border-b border-[var(--border)] bg-[var(--accent-soft)] px-4 py-3">
-          <p className="text-sm font-semibold">{sendPending ? "Sending message request" : requestSent ? "Message request sent" : "Start with a message request"}</p>
-          <p className="mt-1 text-xs text-[var(--muted)]">{requestSent
-            ? "They've been notified. You can send more messages after they accept. Secure delivery may wait for their phone to be ready and come back online."
-            : "You can send one encrypted introduction. The other person will receive an approval request before you can send more."}</p>
+          <p className="text-sm font-semibold">{sendPending ? "Sending message request…" : requestSent ? "Message request sent. Wait for them to accept." : "Send one message to ask to chat."}</p>
         </div>
       ) : null}
       {!requestAccepted ? (
@@ -2221,8 +2218,7 @@ export function ChatView({
           <div className="mx-auto flex max-w-xl items-center gap-3">
             <ShieldCheck className="h-5 w-5 shrink-0 text-[var(--accent-fg)]" />
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold">Message request</p>
-              <p className="text-xs text-[var(--muted)]">They want to message you. Accept to reply.</p>
+              <p className="text-sm font-semibold">They want to message you. Accept to reply.</p>
             </div>
             <button type="button" disabled={acceptingRequest} onClick={() => void acceptMessageRequest()} className="btn btn-primary shrink-0 px-3! py-2! text-xs!">
               {acceptingRequest ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Accept"}
