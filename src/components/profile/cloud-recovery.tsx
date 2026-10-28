@@ -93,7 +93,7 @@ export function CloudRecoverySync() {
         if(!active) return;
         const local=await readDeviceKeyMaterial(cloudRecoveryLocalKey(userId,deviceId));
         if(local) {await refreshCloudRecovery(userId,deviceId); if(active)setWarning(false);}
-        else {if(active)setWarning(true);}
+        else {if(active)setWarning(false);}
       } catch {if(active)setWarning(true);}
       finally{running=false;if(again){again=false;queue();}}
     };
@@ -102,5 +102,5 @@ export function CloudRecoverySync() {
     return()=>{active=false;if(timer)clearTimeout(timer);window.removeEventListener("maddy:recovery-keys-changed",queue);window.removeEventListener("online",queue);};
   },[userId,initialized,deviceId,waitForDeviceRegistration]);
   if(!warning||dismissed||!statusSlot) return null;
-  return createPortal(<aside role="status" className="flex items-center gap-1 border-b border-[var(--border)] bg-[var(--accent-soft)] px-2 py-1 text-xs"><Link className="flex min-h-11 min-w-0 flex-1 items-center gap-2.5 rounded-xl px-2 transition-colors hover:bg-[var(--surface-2)]" href="/app/profile#cloud-recovery"><ShieldCheck className="h-5 w-5 shrink-0 text-[var(--accent-fg)]" /><span className="min-w-0 flex-1"><span className="block font-semibold text-[var(--text)]">Protect your chat history</span><span className="block text-[var(--muted)]">Set up secure recovery</span><span className="sr-only">This device&apos;s recovery needs attention.</span></span><ChevronRight className="h-4 w-4 shrink-0 text-[var(--accent-fg)]" /></Link><button type="button" aria-label="Later" title="Remind me later" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[var(--muted)] hover:bg-[var(--surface-2)]" onClick={()=>setDismissed(true)}><X className="h-4 w-4" /></button></aside>,statusSlot);
+  return createPortal(<aside role="status" className="flex items-center gap-1 border-b border-[var(--border)] bg-[var(--accent-soft)] px-2 py-1 text-xs"><Link className="flex min-h-11 min-w-0 flex-1 items-center gap-2.5 rounded-xl px-2 transition-colors hover:bg-[var(--surface-2)]" href="/app/settings#save-my-chats"><ShieldCheck className="h-5 w-5 shrink-0 text-[var(--accent-fg)]" /><span className="min-w-0 flex-1"><span className="block font-semibold text-[var(--text)]">Save my chats</span><span className="block text-[var(--muted)]">A saved copy needs attention</span><span className="sr-only">This device&apos;s recovery needs attention.</span></span><ChevronRight className="h-4 w-4 shrink-0 text-[var(--accent-fg)]" /></Link><button type="button" aria-label="Later" title="Remind me later" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[var(--muted)] hover:bg-[var(--surface-2)]" onClick={()=>setDismissed(true)}><X className="h-4 w-4" /></button></aside>,statusSlot);
 }

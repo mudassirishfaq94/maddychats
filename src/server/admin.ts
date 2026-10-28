@@ -6,14 +6,16 @@
 import { eq, inArray, asc } from "drizzle-orm";
 import { db } from "@/db";
 import { users, adminAuditLog } from "@/db/schema";
-import { getSessionUser } from "./session";
+import { getSessionAccess, getSessionMfaTime, getSessionAuthTime } from "./session";
+import { freshAdminSession } from "@/lib/admin-session-policy";
 import { is2FAEnabled } from "./two-factor";
 import type { SafeUser } from "@/lib/types";
 
 /** Check if a user has admin or moderator role */
 export async function requireAdmin(): Promise<SafeUser> {
-  const user = await getSessionUser();
-  if (!user) throw new Error("UNAUTHENTICATED");
+  const access = await getSessionAccess();
+  if (!access) throw new Error("UNAUTHENTICATED");
+  const user = access.user;
 
   const [row] = await db
     .select({ role: users.role })
@@ -26,13 +28,16 @@ export async function requireAdmin(): Promise<SafeUser> {
   }
 
   if (!(await is2FAEnabled(user.id))) throw new Error("ADMIN_MFA_REQUIRED");
+  // Admin tools do not decrypt chats. A primary-authenticated administrator may
+  // use them after fresh MFA without approving this device for chat access.
+  // The restricted session, its 15-minute lifetime and all chat guards remain.
+  if (access.approvalRequired && !freshAdminSession(await getSessionAuthTime(), await getSessionMfaTime())) throw new Error("UNAUTHENTICATED");
   return user;
 }
 
 /** Check if a user has admin role specifically */
 export async function requireSuperAdmin(): Promise<SafeUser> {
-  const user = await getSessionUser();
-  if (!user) throw new Error("UNAUTHENTICATED");
+  const user = await requireAdmin();
 
   const [row] = await db
     .select({ role: users.role })

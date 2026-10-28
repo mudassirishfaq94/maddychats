@@ -26,7 +26,6 @@ import dynamic from "next/dynamic";
 import { useRouter, useSearchParams } from "next/navigation";
 import type * as React from "react";
 import {
-  Settings,
   Phone,
   AlertTriangle,
   ArrowDown,
@@ -474,11 +473,6 @@ export function ChatView({
   const decryptingRepliesRef = useRef<Set<string>>(new Set());
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [decryptRetry, setDecryptRetry] = useState(0);
-  const decryptConversationRef = useRef<string | null>(null);
-  useEffect(() => {
-    decryptConversationRef.current = conversationId;
-    return () => { decryptConversationRef.current = null; };
-  }, [conversationId]);
   useEffect(() => { decryptedTextsRef.current = decryptedTexts; }, [decryptedTexts]);
   useEffect(() => { decryptedRepliesRef.current = decryptedReplies; }, [decryptedReplies]);
   // Key reconciliation runs in the background. If it makes this chat's keys
@@ -548,6 +542,8 @@ export function ChatView({
     if (pending.length === 0 && pendingReplies.length === 0) return;
     let alive = true;
     let flushFrame: number | null = null;
+    const runningTexts = decryptingRef.current;
+    const runningReplies = decryptingRepliesRef.current;
     (async () => {
       let hadFailure = false;
       const messagesById = new Map(items.map(message => [message.id, message]));
@@ -557,10 +553,12 @@ export function ChatView({
         if (flushFrame !== null) { cancelAnimationFrame(flushFrame); flushFrame = null; }
         if (!alive || textBatch.size === 0) return;
         const ready = new Map(textBatch); textBatch.clear();
-        startTransition(() => setDecryptedTexts(current => new Map([...current, ...[...ready].filter(([id])=>{
+        const publish = () => setDecryptedTexts(current => new Map([...current, ...[...ready].filter(([id])=>{
           const message=messagesById.get(id);
           return message && (!message.expiresAt || Date.parse(message.expiresAt)>Date.now()+serverClockOffset.current);
-        })])));
+        })]));
+        if (decryptedTextsRef.current.size === 0) publish();
+        else startTransition(publish);
       };
       pending.forEach((m) => decryptingRef.current.add(m.id));
       pendingReplies.forEach((m) => decryptingRepliesRef.current.add(m.replyTo!.id));
@@ -569,6 +567,7 @@ export function ChatView({
       await mapWithConcurrency(pending, 4, async (m) => {
         try {
           const plain = await decrypt(m.text, conversationId);
+          if (!alive) return;
           failedDecryptionRef.current.delete(m.id);
           missingMessageKeys.current.delete(m.id);
           if (alive) setUnavailableMessageIds((current) => {
@@ -587,6 +586,7 @@ export function ChatView({
           // never hold the first successes behind the rest of a history page.
           if (flushFrame === null) flushFrame = requestAnimationFrame(flushText);
         } catch (cause) {
+          if (!alive) return;
           // A peer can still publish a just-created key, but retries must be
           // bounded so one legacy message never burns CPU forever.
           const attempts = (failedDecryptionRef.current.get(m.id) ?? 0) + 1;
@@ -604,9 +604,11 @@ export function ChatView({
         const reply = m.replyTo!;
         try {
           const plain = await decrypt(reply.text, conversationId);
+          if (!alive) return;
           failedDecryptionRef.current.delete(`reply:${reply.id}`);
           if (!reply.expiresAt || Date.parse(reply.expiresAt)>Date.now()+serverClockOffset.current) replyBatch.set(reply.id, plain);
         } catch {
+          if (!alive) return;
           const key = `reply:${reply.id}`;
           const attempts = (failedDecryptionRef.current.get(key) ?? 0) + 1;
           failedDecryptionRef.current.set(key, attempts);
@@ -617,10 +619,6 @@ export function ChatView({
         }
       });
       if (!alive) {
-        // A read receipt/history refresh can replace items during WebCrypto.
-        // The replacement effect skips those in-flight IDs; wake it when this
-        // batch releases them instead of leaving a permanent loading bubble.
-        if (decryptConversationRef.current === conversationId) setDecryptRetry(value => value + 1);
         return;
       }
       if (replyBatch.size) startTransition(() => setDecryptedReplies(current => new Map([...current, ...replyBatch])));
@@ -635,6 +633,10 @@ export function ChatView({
     })();
     return () => {
       alive = false;
+      // React runs cleanup before the replacement effect. Release this batch's
+      // IDs now, rather than making the new page wait for every old decrypt.
+      pending.forEach(message => runningTexts.delete(message.id));
+      pendingReplies.forEach(message => runningReplies.delete(message.replyTo!.id));
       if (flushFrame !== null) cancelAnimationFrame(flushFrame);
       if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
     };
@@ -698,7 +700,7 @@ export function ChatView({
     }));
     if (!prepared.ready) {
       throw new SecureDeliveryWaiting(prepared.trustChanged
-        ? "Someone in this chat changed phones. Compare their check number before sending."
+        ? "Your friend is using a new phone. Confirm it’s them before you send."
         : encryptionRef.current?.error ?? "Waiting for secure delivery. Your message will send automatically when encryption is ready.");
     }
   }, [conversationId]);
@@ -1472,6 +1474,7 @@ export function ChatView({
         return;
       }
       const created = data.message;
+      if(!selfDestruct) window.dispatchEvent(new CustomEvent("circlo:message-sent",{detail:{userId:me.id}}));
       chatPerf("send-server-confirmed", sendStarted);
       await removeQueuedMessage(me.id, conversationId, clientMessageId).catch(() => undefined);
       await clearDeliveredDraft(submittedDraft);
@@ -2023,7 +2026,7 @@ export function ChatView({
         setUnavailableMessageIds(current => { const next = new Set(current); next.delete(id); return next; });
         setDecryptRetry(value => value + 1);
       },
-      deviceSettings: () => router.push("/app/profile#encryption-devices"), security: () => setShowEncryptionInfo(true),
+      deviceSettings: () => router.push("/app/settings#privacy"), security: () => setShowEncryptionInfo(true),
       retrySend: message => { void retryFailedMessage(message); }, cancelQueued: async message => {
         if (!message.clientMessageId) return;
         cancelledMessages.current.add(message.clientMessageId);
@@ -2094,13 +2097,14 @@ export function ChatView({
           <ChevronLeft className="h-5 w-5" />
         </Link>
         {isGroup ? (
-          <button type="button" onClick={() => setShowDetails(true)} className="flex min-w-0 flex-1 items-center gap-2.5 text-left">
+          <button type="button" aria-label="Open group settings" onClick={() => setShowDetails(true)} className="flex min-w-0 flex-1 items-center gap-2.5 text-left">
             {conversation.avatarUrl ? <Image unoptimized width={36} height={36} src={conversation.avatarUrl} alt="Group photo" className="h-9 w-9 shrink-0 rounded-full object-cover" /> : <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--accent-soft)]"><Users className="h-4 w-4 text-[var(--accent-fg)]" /></span>}
             <span className="min-w-0"><span className="block truncate text-[0.92rem] font-semibold leading-tight">{otherName}</span><span className="block truncate text-[0.72rem] text-[var(--muted)]">{conversation.members.length} members</span></span>
           </button>
         ) : other ? (
           <Link
             href={`/app/users/${other.id}`}
+            prefetch={false}
             className="flex min-w-0 flex-1 items-center gap-2.5"
           >
             <span className="relative shrink-0">
@@ -2139,7 +2143,6 @@ export function ChatView({
           </div>
         )}
 
-        {isGroup ? <button type="button" aria-label="Open group settings" title="Group settings" onClick={() => setShowDetails(true)} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full hover:bg-[var(--surface-2)]"><Settings className="h-5 w-5" /></button> : null}
         {!isGroup && other ? <button type="button" aria-label="Start audio call" title="Direct audio call · keep Circlo open" disabled={audioCall.busy || conversation.blocked || conversation.requestPending || conversation.awaitingApproval} onClick={() => audioCall.start(conversationId, otherName)} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full hover:bg-[var(--surface-2)] disabled:opacity-40"><Phone className="h-5 w-5" /></button> : null}
         {showHeaderSearch ? <MessageSearch open onOpenChange={setShowHeaderSearch} /> : null}
 
@@ -2155,7 +2158,7 @@ export function ChatView({
           }
           title={
             e2eeState.checking
-              ? "Checking chat protection…"
+              ? "Private chat details"
               : e2eeState.ready
                 ? "Private chat protected"
                 : e2eeState.peersMissingKeys > 0
@@ -2170,7 +2173,7 @@ export function ChatView({
           )}
         >
           {e2eeState.checking ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
+            <Lock className="h-4 w-4" />
           ) : e2eeState.ready ? (
             <span className="relative flex">
               <Lock className="h-4 w-4" />
@@ -2208,7 +2211,7 @@ export function ChatView({
           className="flex items-center gap-2 border-b border-[var(--warning,#f59e0b)] bg-[color-mix(in_srgb,var(--warning,#f59e0b)_10%,var(--surface))] px-4 py-2 text-left"
         >
           <ShieldCheck className="h-4 w-4 shrink-0 text-amber-600" />
-          <span className="min-w-0 flex-1 text-[0.72rem] text-[var(--muted)]">A device changed in this chat. Check the safety numbers before you approve.</span>
+          <span className="min-w-0 flex-1 text-[0.72rem] text-[var(--muted)]">Your friend is using a new phone. Confirm it’s them before you send.</span>
           <span className="shrink-0 text-[0.65rem] font-bold text-amber-700">Approve</span>
         </button>
       ) : e2eeState.peersMissingKeys > 0 && !e2eeState.checking && !awaitingApproval ? (
@@ -2229,10 +2232,7 @@ export function ChatView({
 
       {awaitingApproval ? (
         <div role="status" className="border-b border-[var(--border)] bg-[var(--accent-soft)] px-4 py-3">
-          <p className="text-sm font-semibold">{sendPending ? "Sending message request" : requestSent ? "Message request sent" : "Start with a message request"}</p>
-          <p className="mt-1 text-xs text-[var(--muted)]">{requestSent
-            ? "They've been notified. You can send more messages after they accept. Secure delivery may wait for their phone to be ready and come back online."
-            : "You can send one encrypted introduction. The other person will receive an approval request before you can send more."}</p>
+          <p className="text-sm font-semibold">{sendPending ? "Sending message request…" : requestSent ? "Message request sent. Wait for them to accept." : "Send one message to ask to chat."}</p>
         </div>
       ) : null}
       {!requestAccepted ? (
@@ -2240,8 +2240,7 @@ export function ChatView({
           <div className="mx-auto flex max-w-xl items-center gap-3">
             <ShieldCheck className="h-5 w-5 shrink-0 text-[var(--accent-fg)]" />
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold">Message request</p>
-              <p className="text-xs text-[var(--muted)]">Someone wants to contact you. Accept to reply. No read receipt is sent before approval. If secure delivery is pending, the introduction will appear when its encryption key arrives.</p>
+              <p className="text-sm font-semibold">They want to message you. Accept to reply.</p>
             </div>
             <button type="button" disabled={acceptingRequest} onClick={() => void acceptMessageRequest()} className="btn btn-primary shrink-0 px-3! py-2! text-xs!">
               {acceptingRequest ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Accept"}

@@ -33,12 +33,12 @@ export async function testEncryptionDevices(base, pool, owner, peer, password, c
       // cases. Use a fresh disposable login so these recovery assertions test
       // the authenticated, pending-browser path rather than a revoked cookie.
       device = await login(owner);
-      await device.page.goto(base + "/app/profile#encryption-devices");
+      await device.page.goto(base + "/app/settings#privacy");
       await device.page.getByText("This device: Waiting for approval", { exact: true }).waitFor();
     }
     else {
       const original = await login(owner); contact = await login(peer);
-      for (const client of [original, contact]) { await client.page.goto(base + "/app/profile#encryption-devices"); await client.page.getByText("This device: Linked", { exact: true }).waitFor(); }
+      for (const client of [original, contact]) { await client.page.goto(base + "/app/settings#privacy"); await client.page.getByText("This device: Linked", { exact: true }).waitFor(); }
       for (const client of [original, contact]) { await client.page.goto(base + "/app/chats/" + conversationId); await client.page.getByRole("textbox", { name: "Message text" }).waitFor(); }
       await original.page.getByRole("textbox", { name: "Message text" }).fill("Recovery baseline ciphertext");
       await original.page.getByRole("textbox", { name: "Message text" }).press("Enter");
@@ -50,7 +50,7 @@ export async function testEncryptionDevices(base, pool, owner, peer, password, c
     const bucket = (await pool.query("select count,greatest(0,extract(epoch from window_started_at + interval '60 seconds' - now())*1000)::int as wait_ms from rate_limit_buckets where key=$1", ["e2ee-approval:" + owner.id])).rows[0];
     if (bucket?.count > 8 && bucket.wait_ms > 0) await new Promise(resolve => setTimeout(resolve, bucket.wait_ms + 100));
     await pool.query("update e2ee_keys set trusted_at=null where user_id=$1", [owner.id]);
-    await device.page.goto(base + "/app/profile#encryption-devices");
+    await device.page.goto(base + "/app/settings#privacy");
     await device.page.getByText("This device: Waiting for approval", { exact: true }).waitFor();
     assert.equal(await device.page.getByRole("button", { name: "Approve encryption device", exact: true }).count(), 0, "Pending browsers do not offer impossible approval controls");
     await device.page.getByText(/No linked device is available/).waitFor();
@@ -96,7 +96,7 @@ export async function testEncryptionDevices(base, pool, owner, peer, password, c
     await section.getByLabel("Encryption recovery confirmation").fill("RESET ENCRYPTION TRUST");
     await section.getByLabel("Email recovery code").fill(emailCode);
     await section.getByLabel("Current password", { exact: true }).fill(password);
-    await section.getByLabel("Authenticator or recovery code (if enabled)").fill(new TOTP({ secret: factor }).generate());
+    await section.getByLabel("Code from your code app or saved backup list (if enabled)").fill(new TOTP({ secret: factor }).generate());
     const approvalActions = [];
     device.page.on("response", response => {
       if (response.url().endsWith("/api/e2ee/devices/approve")) approvalActions.push({ action: response.request().postDataJSON()?.action, status: response.status(), body: response.text().catch(() => "") });
@@ -127,7 +127,7 @@ export async function testEncryptionDevices(base, pool, owner, peer, password, c
     await contact.page.getByRole("textbox", { name: "Message text" }).waitFor();
     const changed = contact.page.getByRole("button", { name: /A device changed in this chat/ });
     await changed.waitFor(); await changed.click();
-    const verification = contact.page.getByRole("dialog", { name: "Check that your chat is private", exact: true });
+    const verification = contact.page.getByRole("dialog", { name: "Check the safety numbers", exact: true });
     const confirmation = verification.getByRole("button", { name: "Approve", exact: true });
     assert.equal(await confirmation.isEnabled(), false);
     await openDeviceTools(device.page);

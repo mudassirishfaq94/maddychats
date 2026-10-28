@@ -40,7 +40,7 @@ export async function testChatOpeningFixture(base, pool, owner, peer, password, 
       assert.equal(response.status(), 200);
       await fixtureAppSession(pool,response);
       const page = await context.newPage(); page.setDefaultTimeout(30000);
-      await page.goto(base + "/app/profile#encryption-devices"); await page.getByText("This device: Linked", { exact: true }).waitFor(); pages.push(page);
+      await page.goto(base + "/app/settings#privacy"); await page.getByText("This device: Linked", { exact: true }).waitFor(); pages.push(page);
     }
     for (const page of pages) { await page.goto(base + "/app/chats/" + conversationId); await page.getByRole("textbox", { name: "Message text", exact: true }).waitFor(); }
     await pages[0].getByRole("textbox", { name: "Message text", exact: true }).fill("Opening race baseline");

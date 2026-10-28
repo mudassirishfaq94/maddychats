@@ -1,6 +1,6 @@
 import type { ConversationDetail, MessagePage } from "@/lib/types";
 
-export type ChatRouteData = { conversation: ConversationDetail; initial: MessagePage };
+export type ChatRouteData = { viewerId: string; conversation: ConversationDetail; initial: MessagePage };
 const MAX_ENTRIES = 8;
 const TTL_MS = 15_000;
 const OFFLINE_FALLBACK_TTL_MS = 5 * 60_000;
@@ -32,15 +32,17 @@ export function prefetchChatRouteData(userId: string, conversationId: string): P
     cache: "no-store", signal: AbortSignal.timeout(10_000),
   }).then(async (response) => {
     if (!response.ok) throw new Error("Conversation could not be loaded.");
-    const data = await response.json() as { conversation: ConversationDetail; initial: MessagePage };
+    const data = await response.json() as ChatRouteData;
+    if (data.viewerId !== userId || data.conversation.id !== conversationId) {
+      throw new Error("Conversation account changed.");
+    }
     entry.offlineData = data;
     entry.offlineExpiresAt = Date.now() + OFFLINE_FALLBACK_TTL_MS;
     return data;
   }).catch((error: unknown) => {
     // A transport failure may use the last member-authorized response from
     // this account. HTTP authorization failures never reach this fallback.
-    const offline = typeof navigator !== "undefined" && !navigator.onLine;
-    if ((error instanceof TypeError || offline) && entry.offlineData && entry.offlineExpiresAt > Date.now()) return entry.offlineData;
+    if (error instanceof TypeError && entry.offlineData && entry.offlineExpiresAt > Date.now()) return entry.offlineData;
     throw error;
   });
   entry.promise = promise;

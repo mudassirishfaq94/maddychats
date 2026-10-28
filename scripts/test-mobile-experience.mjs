@@ -31,9 +31,8 @@ try{
  const page=await browser.newPage({viewport:{width:360,height:800}});page.on('pageerror',error=>{errors.push(error.message);console.error('Browser error:',error.message);});
  const base=`http://127.0.0.1:${server.address().port}`;
  await page.goto(base);
- await page.getByRole('button',{name:'How do I add a contact?',exact:true}).click();
- await page.getByRole('status',{name:'Circlo Help is typing'}).waitFor();
- assert.equal(await page.getByRole('article',{name:'Help answer'}).count(),0);
+ await page.getByRole("textbox",{name:"Ask Circlo Help"}).fill("How do I add a contact?");await page.getByRole("button",{name:"Ask question",exact:true}).click();
+ assert.equal(await page.getByRole("status",{name:"Circlo Help is typing",exact:true}).count(),0,"Help answers without a fake typing delay");
  await page.getByRole('article',{name:'Help answer'}).waitFor();
  await page.getByRole('heading',{name:'Add a contact or scan a QR code'}).waitFor();
  for(const width of [320,390,1280]){
@@ -98,5 +97,5 @@ try{
  });
  assert.deepEqual(cacheResult,{progressive:true,changed:undefined,otherAccount:undefined,stale:undefined,encrypted:true});
  assert.deepEqual(errors,[]);
- console.log('PASS: responsive help conversation, typing/reply, one phone field with country selection/cancellation, fixed-ratio decoded video thumbnail, image optimization, progressive encrypted cache, ciphertext/account isolation and stale-write guard');
+ console.log('PASS: responsive help conversation, immediate help reply, one phone field with country selection/cancellation, fixed-ratio decoded video thumbnail, image optimization, progressive encrypted cache, ciphertext/account isolation and stale-write guard');
 }finally{await browser?.close();await new Promise(resolve=>server.close(resolve));}

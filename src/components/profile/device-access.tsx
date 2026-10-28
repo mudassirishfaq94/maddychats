@@ -13,9 +13,8 @@ export function DeviceAccess({ recoveryEmail, next, openRecovery }: { recoveryEm
   useEffect(() => { if (status === "unauthenticated") router.replace(`/login?next=${encodeURIComponent(destination)}`); }, [status, router, destination]);
   const continueToApp = useCallback(() => router.replace(destination), [router, destination]);
   const returnTo = `/app/device-access?recovery=1&next=${encodeURIComponent(destination)}`;
-  return <div className="min-w-0 space-y-4">
+  return <div className="w-full min-w-0 max-w-full space-y-4">
     <EncryptionDevices recoveryEmail={recoveryEmail} openRecovery={openRecovery} setup onLinked={continueToApp} returnTo={returnTo} />
     <button type="button" onClick={() => void signOut()} className="btn btn-secondary w-full">Cancel and sign out</button>
-    <p className="text-xs leading-relaxed text-[var(--muted)]">Finish to open your account. Linking keeps your other devices signed in; email recovery signs them out.</p>
   </div>;
 }

@@ -4,7 +4,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { usePathname } from "next/navigation";
-import { CircleDashed, Phone, Globe, MessagesSquare, Shield, Users } from "lucide-react";
+import { CircleDashed, Phone, MessagesSquare, Shield, Settings } from "lucide-react";
 import type { SafeUser } from "@/lib/types";
 import { LogoMark, LogoWordmark } from "@/components/brand/logo";
 import { MobileNav } from "./mobile-nav";
@@ -39,8 +39,8 @@ export function AppShell({
   }, []);
   const onPeople = pathname.startsWith("/app/people") || pathname.startsWith("/app/users");
   const onStatus = pathname.startsWith("/app/status");
-  const onCommunities = pathname.startsWith("/app/communities");
-  const onChats = pathname === "/app" || pathname.startsWith("/app/chats");
+  const onSettings = pathname.startsWith("/app/settings") || pathname.startsWith("/app/profile") || pathname.startsWith("/app/help");
+  const onChats = pathname === "/app" || ["/app/chats", "/app/people", "/app/users", "/app/communities", "/app/starred"].some(path=>pathname.startsWith(path));
   const onCalls = pathname.startsWith("/app/calls");
   const inChat = pathname.startsWith("/app/chats/");
 
@@ -75,33 +75,7 @@ export function AppShell({
             <MessagesSquare className="h-4 w-4" />
             <span className="hidden sm:inline">Chats</span>
           </Link>
-          <Link href="/app/calls" prefetch={false} aria-current={onCalls ? "page" : undefined} className={cn("flex min-h-11 items-center gap-1.5 rounded-full px-3 text-sm font-medium transition-colors", onCalls ? "bg-[var(--surface-2)] text-[var(--text)]" : "text-[var(--muted)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]")}><Phone className="h-4 w-4"/><span className="hidden sm:inline">Calls</span></Link>
-          <Link
-            href="/app/people"
-            prefetch={false}
-            aria-current={onPeople ? "page" : undefined}
-            className={cn(
-              "flex h-9 w-9 items-center justify-center rounded-full text-sm font-medium transition-colors sm:w-auto sm:gap-1.5 sm:px-3 sm:py-1.5",
-              onPeople ? "bg-[var(--surface-2)] text-[var(--text)]" : "text-[var(--muted)] hover:text-[var(--text)]",
-            )}
-          >
-            <Users className="h-4 w-4" />
-            <span className="hidden sm:inline">People</span>
-          </Link>
-          <Link
-            href="/app/communities"
-            prefetch={false}
-            aria-current={onCommunities ? "page" : undefined}
-            className={cn(
-              "flex h-9 w-9 items-center justify-center rounded-full text-sm font-medium transition-colors sm:w-auto sm:gap-1.5 sm:px-3 sm:py-1.5",
-              onCommunities
-                ? "bg-[var(--surface-2)] text-[var(--text)]"
-                : "text-[var(--muted)] hover:text-[var(--text)]",
-            )}
-          >
-            <Globe className="h-4 w-4" />
-            <span className="hidden sm:inline">Communities</span>
-          </Link>
+
           <Link
             href="/app/status"
             prefetch={false}
@@ -116,6 +90,8 @@ export function AppShell({
             <CircleDashed className="h-4 w-4" />
             <span className="hidden sm:inline">Status</span>
           </Link>
+          <Link href="/app/calls" prefetch={false} aria-current={onCalls ? "page" : undefined} className={cn("flex min-h-11 items-center gap-1.5 rounded-full px-3 text-sm font-medium transition-colors", onCalls ? "bg-[var(--surface-2)] text-[var(--text)]" : "text-[var(--muted)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]")}><Phone className="h-4 w-4"/><span className="hidden sm:inline">Calls</span></Link>
+          <Link href="/app/settings" prefetch={false} aria-current={onSettings ? "page" : undefined} className={cn("flex min-h-11 items-center gap-1.5 rounded-full px-3 text-sm font-medium",onSettings ? "bg-[var(--surface-2)]" : "text-[var(--muted)]")}><Settings className="h-4 w-4"/>Settings</Link>
         </nav>
 
         <div className="ml-auto flex min-w-0 shrink-0 items-center gap-0.5 sm:gap-1">

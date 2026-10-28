@@ -30,8 +30,8 @@ interface AuthContextValue {
   requestScope: object;
   status: AuthStatus;
   user: SafeUser | null;
-  signIn: (input: LoginInput) => Promise<AuthResult>;
-  signUp: (input: RegisterInput) => Promise<AuthResult>;
+  signIn: (input: LoginInput & { turnstileToken?: string }) => Promise<AuthResult>;
+  signUp: (input: RegisterInput & { turnstileToken?: string }) => Promise<AuthResult>;
   signOut: () => Promise<void>;
   refresh: () => Promise<void>;
 }
@@ -150,7 +150,7 @@ export function AuthProvider({ children, initialUser }: { children: ReactNode; i
   }, [refresh]);
 
   const signIn = useCallback(
-    async (input: LoginInput): Promise<AuthResult> => {
+    async (input: LoginInput & { turnstileToken?: string }): Promise<AuthResult> => {
       if (Date.now() < loginRetryAt.current) return {
         ok: false, error: `Please retry sign-in in ${Math.ceil((loginRetryAt.current - Date.now()) / 1000)} seconds.`,
       };
@@ -175,12 +175,12 @@ export function AuthProvider({ children, initialUser }: { children: ReactNode; i
         resetReads();
         if (!res.ok) {
           if (res.status === 503 || res.status === 429) {
-            const seconds = Number(res.headers.get("Retry-After") ?? 5);
+            const seconds = Number(res.headers.get("Retry-After") ?? 10);
             loginRetryAt.current = Date.now() + Math.min(60, Math.max(1, Number.isFinite(seconds) ? seconds : 5)) * 1000;
           }
           return {
             ok: false,
-            error: data?.error ?? "Something went wrong. Please try again.",
+            error: data?.error ?? (res.status === 429 ? "Too many attempts. Please wait a moment before trying again." : "Something went wrong. Please try again."),
             fields: data?.fields,
             verificationRequired: data?.verificationRequired,
           };
@@ -201,7 +201,7 @@ export function AuthProvider({ children, initialUser }: { children: ReactNode; i
   );
 
   const signUp = useCallback(
-    async (input: RegisterInput): Promise<AuthResult> => {
+    async (input: RegisterInput & { turnstileToken?: string }): Promise<AuthResult> => {
       resetReads();
       try {
         const res = await fetch("/api/auth/register", {
@@ -225,7 +225,7 @@ export function AuthProvider({ children, initialUser }: { children: ReactNode; i
         if (!res.ok) {
           return {
             ok: false,
-            error: data?.error ?? "Something went wrong. Please try again.",
+            error: data?.error ?? (res.status === 429 ? "Too many attempts. Please wait a moment before trying again." : "Something went wrong. Please try again."),
             fields: data?.fields,
             suggestions: data?.suggestions,
             verificationRequired: data?.verificationRequired,

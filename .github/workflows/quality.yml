@@ -101,6 +101,11 @@ jobs:
         run: npx tsx scripts/test-authentication-audit.ts
       - name: Install mobile lab browser
         run: npx playwright install --with-deps chromium
+      - name: Saved chat and decryption handoff regressions
+        run: |
+          node scripts/test-saved-chat-opening.mjs
+          node scripts/test-decryption-refresh-race.mjs
+          node scripts/test-familiar-flows.mjs
       - name: Dependency audit
         run: |
           npm audit --omit=dev --audit-level=high
@@ -137,6 +142,7 @@ jobs:
           LOAD_TEST_ADMIN_URL: postgresql://circlo_ci:disposable-ci-database-only@127.0.0.1:5432/postgres
         run: |
           npx tsx scripts/test-session-query.ts
+          npx tsx scripts/test-status-audience.ts
           node scripts/test-login-backoff.mjs
       - name: Verification-code security and provider integration
         run: npm run test:verification && npx tsx scripts/test-recovery-email.ts && npx tsx scripts/test-password-reset.ts && npm run test:verification-template && npm run test:send

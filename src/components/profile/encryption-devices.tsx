@@ -27,8 +27,9 @@ function maskEmail(email: string) {
   return `${local.slice(0, 1)}${local.length > 1 ? "•••" : "••"}@${domain}`;
 }
 
-export function EncryptionDevices({ recoveryEmail, openRecovery = false, setup = false, onLinked, returnTo = "/app/profile?recovery=1#encryption-devices" }: { recoveryEmail?: string; openRecovery?: boolean; setup?: boolean; onLinked?: () => void; returnTo?: string }) {
+export function EncryptionDevices({ recoveryEmail, openRecovery = false, setup = false, hideBackups = false, onLinked, returnTo = "/app/settings#privacy" }: { recoveryEmail?: string; openRecovery?: boolean; setup?: boolean; hideBackups?: boolean; onLinked?: () => void; returnTo?: string }) {
   const encryption = useSharedE2EE();
+  const [setupChoice,setSetupChoice]=useState<"link"|"file"|null>(null);
   const [devices, setDevices] = useState<Device[]>([]);
   const [verified, setVerified] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
@@ -217,20 +218,47 @@ export function EncryptionDevices({ recoveryEmail, openRecovery = false, setup =
     }
   }
 
-  return <section id="encryption-devices" className="card-flat rounded-2xl p-3 sm:p-5">
-    {!setup || !recoveryOpen ? <h2 className="font-semibold">{setup ? "Set up private chats" : "Devices that can open your chats"}</h2> : null}
-    {!setup || !recoveryOpen ? <p className="mt-1 text-sm text-[var(--muted)]">{setup ? current ? current.trustedAt ? "This device is ready. Opening Circlo…" : "Scan a QR code from another device you own to use your chats here." : "Checking this device…" : "Choose which devices can open your private chats. Link a device or save a recovery file."}</p> : null}
-    {setup && current && !current.trustedAt && <div className="mt-4 grid gap-3">
-      {recoveryOpen ? <div className="rounded-xl border border-[var(--border)] p-3">
-        <button type="button" className="min-h-11 text-sm underline" onClick={() => { setRecoveryOpen(false); setStatus(""); }}>Back</button>
-        <h3 className="font-semibold">Get a sign-in code by email</h3>
+  if(setup) return <section className="card-flat w-full min-w-0 max-w-full rounded-2xl p-4 [&_button]:whitespace-normal [&_button]:break-words" aria-label="Set up this phone">
+    <h2 className="font-semibold">Open your chats on this phone</h2>
+    {!current ? <p role="status" className="mt-3 text-sm">Getting this phone ready…</p> : current.trustedAt ? <p role="status" className="mt-3 text-sm">Opening your chats…</p> : !setupChoice ? <div className="mt-4 grid gap-3">
+      <button type="button" className="btn btn-primary min-h-12 w-full" onClick={()=>{setSetupChoice("link");void createLinkQr(current.deviceId);}}>I still have my old phone</button>
+      <button type="button" className="btn btn-secondary min-h-12 w-full" onClick={()=>{setSetupChoice("file");setRecoveryOpen(true);}}>I saved a recovery file</button>
+    </div> : <div className="mt-4"><button type="button" className="min-h-11 min-w-11 text-sm underline" onClick={()=>{setSetupChoice(null);setRecoveryOpen(false);setStatus("");}}>Back</button>
+      {setupChoice==="link" ? <><p className="text-sm">On your old phone, open Settings → Privacy → Linked phones and account security. Scan this code and confirm it’s your new phone.</p>{issuedQr?.deviceId===current.deviceId && !qrExpired ? <DeviceLinkQr payload={issuedQr.payload} expiresAt={issuedQr.expiresAt}/> : <button type="button" disabled={busy} className="btn btn-secondary mt-3" onClick={()=>void createLinkQr(current.deviceId)}>Show QR code</button>}<button type="button" className="min-h-11 text-sm underline" disabled={busy} onClick={()=>void createLinkCode(current.deviceId)}>Can’t scan? Show a one-time code</button>{issuedCode?.deviceId===current.deviceId && !qrExpired ? <div className="mt-3 rounded-xl border border-[var(--border)] p-3"><p className="text-sm">Enter this on your old phone. It expires in 3 minutes.</p><code aria-label="Device linking code" className="block break-all text-xl tracking-widest">{issuedCode.code}</code></div>:null}<details className="mt-3"><summary className="min-h-11 cursor-pointer py-3 text-sm">Check this phone’s number</summary><code aria-label="This device check number" className="block break-all text-xs">{current.fingerprint}</code></details></> : <><LocalChatBackupSettings restoreOnly/><details className="mt-3"><summary className="min-h-11 cursor-pointer py-3 text-sm">More help with a saved file</summary><DeviceRecovery restoreOnly/>        <h3 className="font-semibold">Recover with email</h3>
         {recoveryEmail ? <>
           <p className="mt-2 text-sm">{maskEmail(recoveryEmail)}</p>
           {recoveryReadiness?.recentSignIn === false ? <p className="mt-2 text-sm">For your safety, <Link className="underline" href={`/login?reauth=1&next=${encodeURIComponent(returnTo)}`}>sign in again</Link> before requesting a code.</p> : null}
           {recoveryReadiness?.configured === false ? <p className="mt-2 text-sm" role="status">Email recovery is unavailable. Try again later or contact support.</p> : null}
           <button type="button" className="btn btn-secondary mt-3 min-h-11 w-full" disabled={busy || recoveryReadiness?.configured === false || recoveryReadiness?.recentSignIn === false} onClick={() => void sendRecoveryEmailCode()}>{busy ? "Please wait…" : emailRecoveryCodeSent ? "Send another code" : "Send recovery code"}</button>
           <label className="mt-3 block text-sm">Code from your email<input className="field-input mt-1 w-full tracking-[0.3em]" aria-label="Email recovery code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={emailRecoveryCode} onChange={event => setEmailRecoveryCode(event.target.value.replace(/\D/g, "").slice(0, 6))} /></label>
-          <button type="button" className="btn btn-primary mt-3 min-h-11 w-full" disabled={busy || emailRecoveryCode.length !== 6} onClick={() => {
+          <button type="button" className="btn btn-primary mt-3 min-h-11 w-full whitespace-normal break-words" disabled={busy || emailRecoveryCode.length !== 6} onClick={() => {
+              setBusy(true); setStatus("Verifying your code…");
+              void encryption.approveDevice(current.deviceId, current.fingerprint, { decision: "recover", confirmation: "RESET ENCRYPTION TRUST", password, mfaCode, emailCode: emailRecoveryCode }).then(async () => {
+                setPassword(""); setMfaCode(""); setEmailRecoveryCode(""); setConfirmation(""); setRecoveryOpen(false); await refresh();
+                setStatus("This phone is set up. Older chats may need a linked phone to restore.");
+                window.dispatchEvent(new Event("maddy:message-request-keys"));
+              }).catch(cause => setStatus(cause instanceof Error ? cause.message : "We couldn’t verify that code. Try again.")).finally(() => setBusy(false));
+          }}>Verify code and sign out other devices</button>
+          {status ? <p role="status" className="mt-2 text-sm">{status}</p> : null}
+          <p className="mt-2 text-xs text-[var(--muted)]">This restores your account access. Older messages may need a linked phone.</p>
+        </> : <p className="mt-2 text-sm" role="status">No verified email is available for recovery. Contact support to regain account access.</p>}</details></>}
+      {status ? <p role="status" className="mt-3 text-sm">{status}</p>:null}
+    </div>}
+  </section>;
+  return <section id="encryption-devices" className="card-flat rounded-2xl p-3 sm:p-5">
+    {!setup || !recoveryOpen ? <h2 className="font-semibold">{setup ? "Set up private chats" : "Devices that can open your chats"}</h2> : null}
+    {!setup || !recoveryOpen ? <p className="mt-1 text-sm text-[var(--muted)]">{setup ? current ? current.trustedAt ? "This device is ready. Opening Circlo…" : "Scan a QR code from another device you own to use your chats here." : "Checking this device…" : "Choose which devices can open your private chats. Link a device or save a recovery file."}</p> : null}
+    {setup && current && !current.trustedAt && <div className="mt-4 grid gap-3">
+      {recoveryOpen ? <div className="rounded-xl border border-[var(--border)] p-3">
+        <button type="button" className="min-h-11 min-w-11 text-sm underline" onClick={() => { setRecoveryOpen(false); setStatus(""); }}>Back</button>
+        <h3 className="font-semibold">Recover with email</h3>
+        {recoveryEmail ? <>
+          <p className="mt-2 text-sm">{maskEmail(recoveryEmail)}</p>
+          {recoveryReadiness?.recentSignIn === false ? <p className="mt-2 text-sm">For your safety, <Link className="underline" href={`/login?reauth=1&next=${encodeURIComponent(returnTo)}`}>sign in again</Link> before requesting a code.</p> : null}
+          {recoveryReadiness?.configured === false ? <p className="mt-2 text-sm" role="status">Email recovery is unavailable. Try again later or contact support.</p> : null}
+          <button type="button" className="btn btn-secondary mt-3 min-h-11 w-full" disabled={busy || recoveryReadiness?.configured === false || recoveryReadiness?.recentSignIn === false} onClick={() => void sendRecoveryEmailCode()}>{busy ? "Please wait…" : emailRecoveryCodeSent ? "Send another code" : "Send recovery code"}</button>
+          <label className="mt-3 block text-sm">Code from your email<input className="field-input mt-1 w-full tracking-[0.3em]" aria-label="Email recovery code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={emailRecoveryCode} onChange={event => setEmailRecoveryCode(event.target.value.replace(/\D/g, "").slice(0, 6))} /></label>
+          <button type="button" className="btn btn-primary mt-3 min-h-11 w-full whitespace-normal break-words" disabled={busy || emailRecoveryCode.length !== 6} onClick={() => {
               setBusy(true); setStatus("Verifying your code…");
               void encryption.approveDevice(current.deviceId, current.fingerprint, { decision: "recover", confirmation: "RESET ENCRYPTION TRUST", password, mfaCode, emailCode: emailRecoveryCode }).then(async () => {
                 setPassword(""); setMfaCode(""); setEmailRecoveryCode(""); setConfirmation(""); setRecoveryOpen(false); await refresh();
@@ -244,9 +272,9 @@ export function EncryptionDevices({ recoveryEmail, openRecovery = false, setup =
       </div> : <>
       <button type="button" className="btn btn-primary min-h-11 w-full" disabled={busy} onClick={() => void createLinkQr(current.deviceId)}>{issuedQr && issuedQr.deviceId === current.deviceId ? "Create a new QR code" : "Show a device-link QR code"}</button>
       {issuedQr?.deviceId === current.deviceId && !qrExpired ? <DeviceLinkQr payload={issuedQr.payload} expiresAt={issuedQr.expiresAt} /> : null}
-      <button type="button" className="min-h-11 text-sm underline" disabled={busy} onClick={() => void createLinkCode(current.deviceId)}>Can’t scan? Show a one-time code</button>
+      <button type="button" className="min-h-11 min-w-11 text-sm underline" disabled={busy} onClick={() => void createLinkCode(current.deviceId)}>Can’t scan? Show a one-time code</button>
       {issuedCode?.deviceId === current.deviceId && !qrExpired ? <div className="rounded-xl border border-[var(--border)] p-4 text-center"><p className="text-xs text-[var(--muted)]">Enter this on a device you already linked · expires in 3 minutes</p><code aria-label="Device linking code" className="mt-2 block text-2xl font-bold tracking-[0.18em]">{issuedCode.code}</code></div> : null}
-      <button type="button" className="min-h-11 text-sm underline" onClick={() => { setStatus(""); setRecoveryOpen(true); }}>I don’t have my old device</button>
+      <button type="button" className="min-h-11 min-w-11 text-sm underline" onClick={() => { setStatus(""); setRecoveryOpen(true); }}>I don’t have my old device</button>
       </>}
     </div>}
     {!setup && current && !current.trustedAt && <div className="mt-4 rounded-xl border border-[var(--border)] p-3"><button type="button" className="btn btn-primary min-h-11 w-full" disabled={busy} onClick={() => void createLinkQr(current.deviceId)}>{issuedQr && issuedQr.deviceId === current.deviceId ? "Create a new QR code" : "Show a QR code to link this device"}</button>{issuedQr?.deviceId === current.deviceId && !qrExpired ? <DeviceLinkQr payload={issuedQr.payload} expiresAt={issuedQr.expiresAt} /> : null}<button type="button" className="mt-2 min-h-11 text-sm underline" disabled={busy} onClick={() => void createLinkCode(current.deviceId)}>Can’t scan? Show a one-time code</button>{issuedCode?.deviceId === current.deviceId && !qrExpired ? <div className="mt-2 rounded-xl border border-[var(--border)] p-4 text-center"><p className="text-xs text-[var(--muted)]">Enter this on a device you already linked · expires in 3 minutes</p><code aria-label="Device linking code" className="mt-2 block text-2xl font-bold tracking-[0.18em]">{issuedCode.code}</code></div> : null}<p className="mt-2 text-xs text-[var(--muted)]">Keep this page open. On a device you already linked, scan the QR code or enter this code, then compare the check number.</p></div>}
@@ -257,10 +285,10 @@ export function EncryptionDevices({ recoveryEmail, openRecovery = false, setup =
 
     {!setup && devices.some(device => device.trustedAt && device.deviceId !== encryption.deviceId && !device.sessionRevokedAt && device.sessionState !== "expired") && <details className="mt-4 rounded-xl border border-[var(--border)] p-3"><summary className="cursor-pointer min-h-11 py-2 text-sm font-semibold">Other linked devices ({devices.filter(device => device.trustedAt && device.deviceId !== encryption.deviceId && !device.sessionRevokedAt && device.sessionState !== "expired").length})</summary><ul className="space-y-2">{devices.filter(device => device.trustedAt && device.deviceId !== encryption.deviceId && !device.sessionRevokedAt && device.sessionState !== "expired").map(device => <li key={device.deviceId} className="border-t border-[var(--border)] py-3 text-sm"><p className="font-medium">{device.deviceName || browserLabel(device.browser) || "Linked device"}</p><p className="mt-1 text-xs text-[var(--muted)]">Linked{device.country ? ` · ${countryName(device.country)}` : ""}{device.lastUsedAt ? ` · Last used ${new Date(device.lastUsedAt).toLocaleDateString()}` : ""}</p></li>)}</ul></details>}
     {!setup && !devices.some(device => device.trustedAt) && current && <p className="mt-3 text-sm">No linked device is available. Use a recovery file or account recovery below.</p>}
-    {!setup && <LocalChatBackupSettings />}
+    {!setup && !hideBackups && <LocalChatBackupSettings />}
     {setup && recoveryOpen ? <BackupRestoreOption /> : null}
-    {!setup && <CloudRecoverySettings />}
-    {!setup && <details className="mt-4 rounded-xl border border-[var(--border)] p-3"><summary className="cursor-pointer min-h-11 py-2 text-sm font-semibold">Back up or restore chats</summary><DeviceRecovery /></details>}
+    {!setup && !hideBackups && <CloudRecoverySettings />}
+    {!setup && !hideBackups && <details className="mt-4 rounded-xl border border-[var(--border)] p-3"><summary className="cursor-pointer min-h-11 py-2 text-sm font-semibold">More ways to save</summary><DeviceRecovery /></details>}
     {!setup && current && !current.trustedAt && <div className="mt-4 rounded-xl border border-[var(--border)] p-3">
       {!setup && <button type="button" className="btn btn-secondary" disabled={busy} onClick={() => setRecoveryOpen(previous => !previous)}>Emergency recovery: no linked device or backup file</button>}
       {recoveryOpen && <div className="mt-3 text-sm">

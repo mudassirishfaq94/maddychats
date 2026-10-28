@@ -272,6 +272,9 @@ export function useE2EE(userId: string | undefined) {
       if (process.env.NEXT_PUBLIC_STARTER_MODE !== "1") void registration
         .then(async (ready) => {
           if (!ready || !active) return;
+          // Runtime policy must match the server, not an unset build-time flag.
+          const capabilities = await fetch("/api/chat-capabilities", { cache: "no-store", signal: controller.signal });
+          if (!capabilities.ok || (await capabilities.json()).signalProvisioning !== true || !active) return;
           await waitForBackgroundSlot(controller.signal);
           if (!active) return;
           const bridge = await loadSignalBridge();
@@ -398,6 +401,7 @@ export function useE2EE(userId: string | undefined) {
       throw cause;
     }
   }, [userId]);
+
 
   /**
    * Return the established legacy symmetric key for a conversation.
@@ -530,7 +534,7 @@ export function useE2EE(userId: string | undefined) {
 
   /** Receiving never generates or replaces a sending key. Try cached keys,
    * then current/device/history shares, retaining all recoverable keys. */
-  const decrypt = useCallback(async (ciphertext: string, conversationId: string): Promise<string> => {
+  const decrypt = useCallback(async (ciphertext: string, conversationId: string, options: { localOnly?: boolean } = {}): Promise<string> => {
     if (!keyPairRef.current) throw new Error("Device keys are not ready");
     const local = decryptionKeysRef.current.get(conversationId) ?? [];
     const sending = conversationKeysRef.current.get(conversationId);
@@ -543,6 +547,7 @@ export function useE2EE(userId: string | undefined) {
     for (const key of restored) {
       try { return await decryptMessage(ciphertext, key); } catch { /* Try the next key. */ }
     }
+    if (options.localOnly) throw new Error("Local conversation key is unavailable");
     const loaded = await loadDecryptionKeys(conversationId);
     for (const key of loaded) {
       try { return await decryptMessage(ciphertext, key); } catch { /* Try the next key. */ }

@@ -70,7 +70,8 @@ async function expandDetails(page, scope = page) {
 async function testNavigationSpace(page) {
   const settings = await page.context().newPage();
   await settings.goto(new URL("/app/settings#two-step-verification", page.url()).toString());
-  const enable = settings.getByRole("button", { name: "Enable two-factor authentication", exact: true });
+  const security=settings.locator("#security");if(await security.getAttribute("open")===null)await security.locator(":scope > summary").click();
+  const enable = settings.getByRole("button", { name: "Turn on the extra sign-in check", exact: true });
   await enable.waitFor({ state: "visible" });
   const twoFactor = settings.locator("#two-step-verification");
   const measurements = [];
@@ -119,7 +120,7 @@ async function testNavigationSpace(page) {
         await settings.setViewportSize({ width, height: height - 300 });
         await twoFactor.getByLabel("Current password", { exact: true }).focus();
         await settings.keyboard.press("Tab");
-        const codeInput = twoFactor.getByLabel("Authenticator or recovery code (if enabled)", { exact: true });
+        const codeInput = twoFactor.getByLabel("Code from your code app or saved backup list (if enabled)", { exact: true });
         assert(await codeInput.evaluate(node => node === document.activeElement));
         await enable.click({ trial: true });
       }
@@ -164,10 +165,10 @@ export async function testMobileLayout(base, pool, { recordOnly = false, navigat
     };
     await mkdir(".freebuff/performance", { recursive: true });
     const user = await login(accounts[0]);
-    await user.goto(base + "/app/profile#encryption-devices");
+    await user.goto(base + "/app/settings#privacy");await user.getByText("Linked phones and account security",{exact:true}).click();
     await user.getByText("This device: Linked", { exact: true }).waitFor();
     const pending = await login(accounts[0]);
-    await pending.goto(base + "/app/profile#encryption-devices");
+    await pending.goto(base + "/app/settings#privacy");await pending.getByText("Linked phones and account security",{exact:true}).click();
     await pending.getByText("This device: Waiting for approval", { exact: true }).waitFor();
     await pending.getByRole("button", { name: "Emergency recovery: no linked device or backup file", exact: true }).click();
     const navigationScreens = await testNavigationSpace(pending);
@@ -202,18 +203,18 @@ export async function testMobileLayout(base, pool, { recordOnly = false, navigat
           if (width === 320) {
             const two = user.locator(".card-glass").filter({has:user.getByRole("heading",{name:"Two-Factor Authentication",exact:true})}).last();
             await two.getByLabel("Current password", {exact:true}).fill(password);
-            await two.getByRole("button",{name:"Enable two-factor authentication",exact:true}).click();
+            await two.getByRole("button",{name:"Turn on the extra sign-in check",exact:true}).click();
             await two.getByPlaceholder("000000",{exact:true}).waitFor();
             await check(user, "two-factor-setup-" + size);
             await two.getByRole("button",{name:"Cancel setup",exact:true}).click();
           }
         }
         if (path === "/app/communities") {
-          await user.getByRole("button", { name: "Create community", exact: true }).click();
-          await user.getByPlaceholder("Community name", {exact:true}).fill("Mobile audit fixture");
-          await user.getByRole("dialog",{name:"Create community",exact:true}).getByRole("button",{name:"Create",exact:true}).click({trial:true});
+          await user.getByRole("button", { name: "Create public group", exact: true }).click();
+          await user.getByPlaceholder("Group name", {exact:true}).fill("Mobile audit fixture");
+          await user.getByRole("dialog",{name:"Create public group",exact:true}).getByRole("button",{name:"Create",exact:true}).click({trial:true});
           await check(user, "community-editor-" + size);
-          await user.getByRole("dialog", { name: "Create community", exact: true }).getByRole("button",{name:"Cancel",exact:true}).click();
+          await user.getByRole("dialog", { name: "Create public group", exact: true }).getByRole("button",{name:"Cancel",exact:true}).click();
         }
         if (path === `/app/chats/${group.id}`) {
           // Model the viewport delivered by the native IME inset handler;

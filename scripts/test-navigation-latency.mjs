@@ -44,10 +44,10 @@ export async function testNavigationLatency(context,base,conversationId) {
   console.log("PASS: deep-linked chat renders independently while the conversation list is delayed");
   const shell=await page.locator(".circlo-shell").elementHandle();assert(shell,"Shared shell exists");
   const sidebar=page.getByRole("complementary",{name:"Conversations",exact:true});
-  const help=await sidebar.getByRole("link",{name:"Open Circlo Help",exact:true}).boundingBox();
+  const help=await sidebar.getByRole("button",{name:"New chat",exact:true}).boundingBox();
   const listBottom=await sidebar.getByRole("list").first().evaluate(list=>list.parentElement.getBoundingClientRect().bottom);
-  assert(help&&help.width>=44&&help.height>=44,"Help remains an accessible touch target");
-  assert(listBottom>help.y+help.height,"Chat scrolling must extend behind Help without a full-width footer cutting off the list");
+  assert(help&&help.width>=44&&help.height>=44,"New chat remains an accessible touch target");
+  assert(listBottom>help.y+help.height,"Chat scrolling extends below New chat without a duplicate footer");
   await page.waitForTimeout(2000);
   for(const scenario of ["normal","mobile-100ms-4xCPU"]){
    if(scenario!=="normal"){
@@ -87,10 +87,15 @@ export async function testNavigationLatency(context,base,conversationId) {
    for(let round=0;round<2;round++)for(const target of [
     {name:"Calls",path:"/app/calls",text:"Calls"},
     {name:"People",path:"/app/people",text:"Your people"},
-    {name:"Communities",path:"/app/communities",text:"Communities"},
+    {name:"Public groups",path:"/app/communities",text:"Public groups"},
    ]){
-    if(target.name!=="Calls"){await page.getByRole("navigation",{name:"Mobile navigation",exact:true}).getByRole("link",{name:"Settings",exact:true}).click();await page.getByRole("heading",{name:"Settings",exact:true}).waitFor();}
-    const link=target.name==="Calls"?page.getByRole("navigation",{name:"Mobile navigation",exact:true}).getByRole("link",{name:target.name,exact:true}):page.getByRole("region",{name:"Explore Circlo"}).getByRole("link",{name:target.name==="People"?/People & contacts/:/Communities/});
+    let link;
+    if(target.name==="Calls")link=page.getByRole("navigation",{name:"Mobile navigation",exact:true}).getByRole("link",{name:"Calls",exact:true});
+    else {
+      await page.getByRole("navigation",{name:"Mobile navigation",exact:true}).getByRole("link",{name:"Chats",exact:true}).click();
+      if(target.name==="People") {await page.getByRole("button",{name:"New chat",exact:true}).click();link=page.getByRole("link",{name:"My contacts",exact:true});}
+      else {await page.locator(".chat-list-row").first().click();await page.getByRole("button",{name:"Chat options",exact:true}).click();link=page.getByRole("link",{name:/Public groups/});}
+    }
     additionalTabs.push({scenario,round,route:target.name,...await measure(page,link,target.path,"h1",target.text)});
     await page.waitForTimeout(250);
    }
@@ -102,8 +107,8 @@ export async function testNavigationLatency(context,base,conversationId) {
   if(process.env.NAV_BASELINE!=="1")assert(summary.normal.paintP95Ms<500,"Warm navigation must remain within the controlled 500ms regression budget; report actual timings against the 100–300ms target");
   await cdp.send("Emulation.setCPUThrottlingRate",{rate:1});
   await cdp.send("Network.emulateNetworkConditions",{offline:false,latency:0,downloadThroughput:-1,uploadThroughput:-1});
-  await page.locator('header button[aria-haspopup="menu"]').last().click();
-  await page.getByRole("menuitem",{name:"Sign out",exact:true}).click();await page.waitForURL(/\/login/);
+  await page.getByRole("navigation",{name:"Mobile navigation",exact:true}).getByRole("link",{name:"Settings",exact:true}).click();
+  await page.getByRole("button",{name:"Log out",exact:true}).click();await page.waitForURL(/\/login/);
   await page.goBack();await page.waitForURL(/\/login/);
   assert.equal(await page.getByLabel("Search conversations",{exact:true}).count(),0,"Logout must invalidate private route prefetches, including browser back");
   assert.equal((await context.request.get(base+"/api/auth/me")).status(),401,"Prefetching must not bypass the server session check");

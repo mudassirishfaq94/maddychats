@@ -22,10 +22,10 @@ export async function testMessageRequests(base, senderCookie, recipientCookie, c
   const introduction = "Hello from my circle — please approve this introduction";
   try {
     const sender = await makePage(senderCookie);
-    await sender.goto(`${base}/app/profile#encryption-devices`);
+    await sender.goto(`${base}/app/settings#privacy`);
     await sender.getByText("This device: Linked", { exact: true }).waitFor({ timeout: 60000 });
     await sender.goto(url);
-    await sender.getByText("Start with a message request", { exact: true }).waitFor();
+    await sender.getByText("Send one message to ask to chat.", { exact: true }).waitFor();
     const composer = sender.getByRole("textbox", { name: "Message text" });
     await composer.fill(introduction);
     const sent = sender.waitForResponse(response => response.request().method() === "POST" && response.url().endsWith(`/conversations/${conversationId}/messages`), { timeout: 30000 });
@@ -34,7 +34,7 @@ export async function testMessageRequests(base, senderCookie, recipientCookie, c
       throw new Error(`Introduction did not send: ${await sender.locator("body").innerText()}`, { cause });
     });
     assert.equal(sentResponse.status(), 201);
-    await sender.getByText("Message request sent", { exact: true }).waitFor();
+    await sender.getByText("Message request sent. Wait for them to accept.", { exact: true }).waitFor();
     assert.equal(await composer.isDisabled(), true);
     assert.equal(await sender.getByRole("region", { name: "Conversation", exact: true }).getByText(introduction, { exact: true }).count(), 1);
     assert.equal(await sender.getByText("Encryption keys are not ready", { exact: false }).count(), 0);
@@ -54,7 +54,7 @@ export async function testMessageRequests(base, senderCookie, recipientCookie, c
     assert(notificationData.notifications.some(entry => entry.data?.conversationId === conversationId && entry.data?.preview?.includes("Message request")));
     // Reconnect the same trusted sender on another app route: key delivery
     // must work even when the sender does not reopen this specific chat.
-    await sender.goto(`${base}/app/profile#encryption-devices`);
+    await sender.goto(`${base}/app/settings#privacy`);
     await recipient.getByRole("region", { name: "Conversation", exact: true }).getByText(introduction, { exact: true }).waitFor({ timeout: 60000 });
     await recipient.getByRole("button", { name: "Accept", exact: true }).click();
     await recipient.getByRole("textbox", { name: "Message text" }).waitFor();

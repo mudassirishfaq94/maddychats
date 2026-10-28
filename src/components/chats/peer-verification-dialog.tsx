@@ -22,8 +22,8 @@ export function PeerVerificationDialog({ review, names, onConfirm, onClose }: {
       if (event.shiftKey && (document.activeElement === first || document.activeElement === dialog.current)) { event.preventDefault(); last?.focus(); }
       else if (!event.shiftKey && (document.activeElement === last || document.activeElement === dialog.current)) { event.preventDefault(); first?.focus(); }
     }} className="max-h-[85dvh] w-full max-w-lg overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 shadow-xl">
-      <h2 id="peer-verification-title" className="text-lg font-semibold">Check that your chat is private</h2>
-      <p className="mt-2 text-sm text-[var(--muted)]">Ask each person using a way you already trust to open Profile → Private chats and devices. Compare their check number with the one below.</p>
+      <h2 id="peer-verification-title" className="text-lg font-semibold">Check the safety numbers</h2>
+      <p className="mt-2 text-sm text-[var(--muted)]">Ask each person, through a way you already know them, to open Settings → Privacy → Linked phones and account security and compare their safety number with the one below.</p>
       {review.devices.length ? <ul className="mt-4 space-y-3">{review.devices.map(device => <li key={`${device.userId}:${device.deviceId}`} className="rounded-xl border border-[var(--border)] p-3 text-xs">
         <p className="font-semibold">{names[device.userId] ?? device.userId}</p>
         <code className="mt-2 block select-all break-all" aria-label="Participant check number">{device.fingerprint}</code>

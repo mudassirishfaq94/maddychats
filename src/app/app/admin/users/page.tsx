@@ -42,6 +42,7 @@ export default function AdminUsersPage() {
   const [query, setQuery] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [proofOpen, setProofOpen] = useState(false);
 
   const loadUsers = useCallback(async () => {
     try {
@@ -74,7 +75,10 @@ export default function AdminUsersPage() {
     try {
       const response = await fetch("/api/admin/users", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId, ...changes, ...proof }) });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error ?? "Administrative change failed.");
+      if (!response.ok) {
+        if (response.status === 403 && data.error?.includes("Confirm your password")) setProofOpen(true);
+        throw new Error(data.error ?? "Administrative change failed.");
+      }
       await loadUsers();
     } catch (error) { setActionError(error instanceof Error ? error.message : "Administrative change failed."); }
     finally { clearProof(); setBusyId(null); }
@@ -95,7 +99,10 @@ export default function AdminUsersPage() {
     try {
       const res = await fetch(`/api/admin/users/${user.id}`, { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify(proof) });
       const data = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(data?.error ?? "Could not delete this user.");
+      if (!res.ok) {
+        if (res.status === 403 && data?.error?.includes("Confirm your password")) setProofOpen(true);
+        throw new Error(data?.error ?? "Could not delete this user.");
+      }
       // Refetch after the destructive action so the view always reflects the
       // database, including cascaded membership/message cleanup.
       await loadUsers();
@@ -112,7 +119,7 @@ export default function AdminUsersPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-6">
       <div>
         <h1 className="text-xl font-bold">Manage users</h1>
         <p className="mt-1 text-sm text-[var(--muted)]">
@@ -120,22 +127,29 @@ export default function AdminUsersPage() {
         </p>
       </div>
 
-      {form}
+      <details open={proofOpen} onToggle={event => setProofOpen(event.currentTarget.open)} className="card-flat overflow-hidden rounded-xl [&_section]:rounded-none [&_section]:border-0">
+        <summary className="min-h-11 cursor-pointer px-4 py-3 text-sm font-medium">Confirm an account change<span className="mt-1 block text-xs font-normal leading-5 text-[var(--muted)]">Only needed if you signed in more than five minutes ago.</span></summary>
+        {form}
+      </details>
       <div className="relative">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted)]" />
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search users by name, username, or email..."
+          aria-label="Search users"
+          placeholder="Search name, username or email"
           className="field-input field-input--icon w-full"
         />
       </div>
       {actionError ? <p role="alert" className="text-sm text-[var(--danger)]">{actionError}</p> : null}
 
       <div className="card-flat rounded-2xl overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead>
+        <div className="lg:overflow-x-auto">
+          <table className="block w-full text-left text-sm lg:table lg:table-fixed">
+            <colgroup className="hidden lg:table-column-group">
+              <col className="w-[32%]" /><col className="w-[17%]" /><col className="w-[15%]" /><col className="w-[14%]" /><col className="w-[22%]" />
+            </colgroup>
+            <thead className="sr-only lg:not-sr-only lg:table-header-group">
               <tr className="border-b border-[var(--border)] text-[0.7rem] uppercase tracking-wider text-[var(--muted)]">
                 <th className="px-4 py-3">User</th>
                 <th className="px-4 py-3">Role</th>
@@ -144,29 +158,32 @@ export default function AdminUsersPage() {
                 <th className="px-4 py-3">Actions</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="grid gap-3 lg:table-row-group">
               {filtered.map((user) => (
-                <tr key={user.id} className="border-b border-[var(--border)] last:border-0">
-                  <td className="px-4 py-3">
-                    <div>
+                <tr key={user.id} className="grid min-w-0 grid-cols-2 gap-x-3 gap-y-3 rounded-xl border border-[var(--border)] p-4 lg:table-row lg:rounded-none lg:border-x-0 lg:border-t-0 lg:p-0 lg:last:border-0">
+                  <td className="col-span-2 min-w-0 lg:px-4 lg:py-3">
+                    <div className="min-w-0 break-words [overflow-wrap:anywhere]">
                       <span className="font-medium">{user.displayName}</span>
-                      <span className="ml-2 text-xs text-[var(--muted)]">@{user.username}</span>
+                      <span className="mt-1 block text-xs text-[var(--muted)] lg:ml-2 lg:inline">@{user.username}</span>
                     </div>
-                    <div className="text-[0.65rem] text-[var(--muted)]">{user.email}</div>
+                    <div className="mt-1 break-all text-xs leading-5 text-[var(--muted)]">{user.email}</div>
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="min-w-0 lg:px-4 lg:py-3">
+                    <span className="mb-1 block text-xs text-[var(--muted)] lg:hidden">Access</span>
                     <select
+                      aria-label={`Access for ${user.displayName}`}
                       value={user.role}
                       onChange={(e) => void changeRole(user.id, e.target.value)}
                       disabled={busyId === user.id}
-                      className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-2 py-1 text-xs font-medium"
+                      className="min-h-11 w-full min-w-0 max-w-full rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-2 py-1 text-sm font-medium lg:w-auto lg:text-xs"
                     >
                       <option value="user">User</option>
                       <option value="moderator">Moderator</option>
                       <option value="admin">Admin</option>
                     </select>
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="min-w-0 lg:px-4 lg:py-3">
+                    <span className="mb-2 block text-xs text-[var(--muted)] lg:hidden">Account</span>
                     {user.suspendedAt ? (
                       <span className="inline-flex items-center gap-1 rounded-full bg-[color-mix(in_srgb,var(--danger)_12%,transparent)] px-2 py-0.5 text-[0.65rem] font-semibold text-[var(--danger)]">
                         <Ban className="h-3 w-3" />
@@ -179,15 +196,17 @@ export default function AdminUsersPage() {
                       </span>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-xs text-[var(--muted)]">
+                  <td className="col-span-2 min-w-0 text-xs text-[var(--muted)] lg:px-4 lg:py-3">
+                    <span className="mr-2 lg:hidden">Joined</span>
                     {new Date(user.createdAt).toLocaleDateString()}
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="col-span-2 min-w-0 lg:px-4 lg:py-3">
+                    <div className="flex flex-wrap gap-2">
                     <button
                       type="button"
                       onClick={() => void toggleSuspend(user)}
                       disabled={busyId === user.id || user.role === "admin"}
-                      className={`rounded-lg px-2.5 py-1 text-xs font-medium transition-colors ${
+                      className={`min-h-11 rounded-lg border border-[var(--border)] px-3 py-2 text-sm font-medium transition-colors ${
                         user.suspendedAt
                           ? "text-[var(--success)] hover:bg-[color-mix(in_srgb,var(--success)_10%,transparent)]"
                           : "text-[var(--danger)] hover:bg-[color-mix(in_srgb,var(--danger)_10%,transparent)]"
@@ -199,13 +218,15 @@ export default function AdminUsersPage() {
                       type="button"
                       onClick={() => void deleteUser(user)}
                       disabled={busyId === user.id || user.role === "admin"}
-                      className="ml-2 rounded-lg p-1.5 text-[var(--danger)] hover:bg-[color-mix(in_srgb,var(--danger)_10%,transparent)] disabled:opacity-50"
+                      className="min-h-11 rounded-lg border border-[var(--border)] px-3 py-2 text-sm text-[var(--danger)] hover:bg-[color-mix(in_srgb,var(--danger)_10%,transparent)] disabled:opacity-50"
                       aria-label={`Delete ${user.displayName}`}
                       title="Permanently delete user"
                     ><Trash2 className="mr-1 inline h-3.5 w-3.5" />Delete</button>
+                    </div>
                   </td>
                 </tr>
               ))}
+              {filtered.length === 0 ? <tr className="block lg:table-row"><td colSpan={5} className="block px-4 py-8 text-center text-sm text-[var(--muted)] lg:table-cell">No users match your search.</td></tr> : null}
             </tbody>
           </table>
         </div>

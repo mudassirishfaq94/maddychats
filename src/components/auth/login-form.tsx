@@ -1,7 +1,9 @@
 "use client";
 
+import { useSecurityCheck } from "./security-check";
+
 import { navigateWithReload } from "@/lib/navigation";
-import { deviceAccessPath } from "@/lib/device-access-navigation";
+import { postSignInPath } from "@/lib/device-access-navigation";
 
 import { useState, type FormEvent } from "react";
 import Link from "next/link";
@@ -11,6 +13,7 @@ import { useAuth } from "@/components/providers/auth-provider";
 import { Field } from "./field";
 
 export function LoginForm({ next }: { next?: string }) {
+  const challenge = useSecurityCheck("login");
   const { signIn } = useAuth();
 
   const [identifier, setIdentifier] = useState("");
@@ -25,6 +28,7 @@ export function LoginForm({ next }: { next?: string }) {
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
+    if (!challenge.ready) return;
     setFormError(null);
     setVerificationRequired(false);
 
@@ -36,7 +40,8 @@ export function LoginForm({ next }: { next?: string }) {
     setErrors({});
     setPending(true);
 
-    const result = await signIn(parsed.data);
+    const result = await signIn({ ...parsed.data, turnstileToken: challenge.token });
+    challenge.reset();
     setPending(false);
 
     if (result.mfaRequired) { navigateWithReload(`/login?mfa=1&next=${encodeURIComponent(target)}`); return; }
@@ -48,7 +53,7 @@ export function LoginForm({ next }: { next?: string }) {
     }
     // Full navigation: guarantees the just-set session cookie accompanies the
     // first request to /app in every embedding context (incl. iframes).
-    navigateWithReload(deviceAccessPath(target));
+    navigateWithReload(postSignInPath(target));
   }
 
   return (
@@ -104,7 +109,8 @@ export function LoginForm({ next }: { next?: string }) {
         </div>
       </div>
 
-      <button type="submit" disabled={pending} className="btn btn-primary w-full">
+      {challenge.field}
+      <button type="submit" disabled={!challenge.ready || pending} className="btn btn-primary w-full">
         {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
         {pending ? "Signing in…" : "Sign in"}
       </button>

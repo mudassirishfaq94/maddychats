@@ -4,8 +4,9 @@ import { prefetchChatRouteData, retainChatRouteAccount } from "../src/lib/chat-r
 
 const conversationId = "10000000-0000-4000-8000-000000000001";
 
-function fixtureResponse(status = 200) {
+function fixtureResponse(status = 200, viewerId = "account-a") {
   const body = {
+    viewerId,
     conversation: { id: conversationId, members: [] },
     initial: { messages: [], nextCursor: null, hasMore: false },
   };
@@ -38,7 +39,7 @@ test("chat route prefetch is isolated by account and discarded on account switch
   let requests = 0;
   globalThis.fetch = (async (_input: RequestInfo | URL) => {
     requests++;
-    return fixtureResponse();
+    return fixtureResponse(200, requests === 2 ? "account-c" : "account-b");
   }) as typeof fetch;
 
   await prefetchChatRouteData("account-b", conversationId);
@@ -55,7 +56,7 @@ test("failed authorization responses are never retained as chat data", async (t)
   let requests = 0;
   globalThis.fetch = (async (input: RequestInfo | URL) => {
     requests++;
-    return fixtureResponse(requests === 1 ? 404 : 200);
+    return fixtureResponse(requests === 1 ? 404 : 200, "account-d");
   }) as typeof fetch;
 
   await assert.rejects(prefetchChatRouteData("account-d", conversationId));
@@ -70,11 +71,18 @@ test("only a transport failure may fall back to recent authorized data", async (
   let fail = false;
   globalThis.fetch = (async () => {
     if (fail) throw new TypeError("Failed to fetch");
-    return fixtureResponse();
+    return fixtureResponse(200, "account-offline");
   }) as typeof fetch;
   const authorized = await prefetchChatRouteData("account-offline", conversationId);
   Date.now = () => originalNow() + 16_000;
   fail = true;
   const fallback = await prefetchChatRouteData("account-offline", conversationId);
   assert.equal(fallback, authorized);
+});
+
+test("chat response from a switched server session is rejected even for a shared chat", async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  globalThis.fetch = (async () => fixtureResponse(200, "different-account")) as typeof fetch;
+  await assert.rejects(prefetchChatRouteData("expected-account", conversationId), /account changed/);
 });

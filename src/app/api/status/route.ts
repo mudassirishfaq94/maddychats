@@ -9,7 +9,7 @@ import { users } from "@/db/schema";
 import { guardSameOrigin, guardUploadSize, jsonError, readJson } from "@/server/http";
 import { publishToUsers } from "@/server/realtime";
 import { getSessionUser } from "@/server/session";
-import { createStatus, listVisibleStatuses, visibleRecipientIds } from "@/server/status";
+import { createStatus, listVisibleStatuses, visibleRecipientIds, statusChatAudienceIds } from "@/server/status";
 import { deleteStored, generateStoredName, saveBuffer } from "@/server/storage";
 import { STATUS_MEDIA_OUTPUT_MAX_BYTES } from "@/lib/media-limits";
 
@@ -24,7 +24,8 @@ export async function POST(req: NextRequest) {
   const me = await getSessionUser(); if (!me) return jsonError(401, "Not authenticated.");
   const contentType = req.headers.get("content-type") ?? "";
   let type: "text" | "image" | "video"; let text: string | null = null; let backgroundStyle: string | null = null;
-  let privacy: "all" | "selected" = "all"; let selectedUserIds: string[] = [];
+  let chatAudience=true;
+  let privacy: "all" | "selected" = "selected"; let selectedUserIds: string[] = [];
   let mediaPath: string | null = null; let mediaMimeType: string | null = null;
 
   if (contentType.includes("multipart/form-data")) {
@@ -32,7 +33,8 @@ export async function POST(req: NextRequest) {
     const tooLarge = guardUploadSize(req, true); if (tooLarge) return tooLarge;
     let form: FormData; try { form = await readUploadForm(req); } catch (error) { return jsonError(error instanceof Error && error.message === "body_too_large" ? 413 : 400, "Invalid or oversized upload."); }
     type = "image"; text = String(form.get("caption") ?? "").trim().slice(0, 500) || null;
-    privacy = form.get("privacy") === "selected" ? "selected" : "all";
+    chatAudience = form.get("privacy") !== "all" && form.get("privacy") !== "selected";
+    privacy = form.get("privacy") === "all" ? "all" : "selected";
     try { const selected: unknown = JSON.parse(String(form.get("selectedUserIds") ?? "[]")); if (!Array.isArray(selected) || !selected.every((id) => typeof id === "string")) return jsonError(422, "Invalid selected users."); selectedUserIds = selected; } catch { return jsonError(422, "Invalid selected users."); }
     const entry = form.get("file"); if (!entry || typeof entry === "string") return jsonError(422, "Choose a file.");
     let prepared;
@@ -65,13 +67,15 @@ export async function POST(req: NextRequest) {
     type = "text"; text = typeof body.text === "string" ? body.text.trim() : "";
     if (!text || text.length > 700) return jsonError(422, "Text status must be between 1 and 700 characters.");
     backgroundStyle = typeof body.backgroundStyle === "string" ? body.backgroundStyle.slice(0, 40) : "sunset";
-    privacy = body.privacy === "selected" ? "selected" : "all";
+    chatAudience = body.privacy !== "all" && body.privacy !== "selected";
+    privacy = body.privacy === "all" ? "all" : "selected";
     selectedUserIds = Array.isArray(body.selectedUserIds) ? body.selectedUserIds.filter((id): id is string => typeof id === "string") : [];
   }
+  if(chatAudience) selectedUserIds=await statusChatAudienceIds(me.id);
   selectedUserIds = [...new Set(selectedUserIds)].filter((id) => id !== me.id);
   if (privacy === "selected") {
-    if (!selectedUserIds.length) { if (mediaPath) await deleteStored(mediaPath); return jsonError(422, "Select at least one person."); }
-    const valid = await db.select({ id: users.id }).from(users).where(inArray(users.id, selectedUserIds));
+    if (!selectedUserIds.length && !chatAudience) { if (mediaPath) await deleteStored(mediaPath); return jsonError(422, "Select at least one person."); }
+    const valid = selectedUserIds.length ? await db.select({ id: users.id }).from(users).where(inArray(users.id, selectedUserIds)) : [];
     if (valid.length !== selectedUserIds.length) { if (mediaPath) await deleteStored(mediaPath); return jsonError(422, "One or more selected users are invalid."); }
   }
   const status = await createStatus({ userId: me.id, type, text, mediaPath, mediaMimeType, backgroundStyle, privacy, selectedUserIds });

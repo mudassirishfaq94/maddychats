@@ -4,11 +4,13 @@ import Image from "next/image";
 import { SwipeFilters } from "./swipe-filters";
 import { useHydrated } from "@/hooks/use-hydrated";
 
-import { memo, useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { lazy, Suspense, memo, useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {SaveChatsReminder} from "./save-chats-reminder";
+import { SavedChatOpening } from "./saved-chat-opening";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type * as React from "react";
-import { Archive, BellOff, Pin, Search, Star } from "lucide-react";
+import { Archive, BellOff, Pin, Search } from "lucide-react";
 import type { ConversationSummary } from "@/lib/types";
 import { useSharedE2EE } from "@/components/providers/e2ee-provider";
 import { Avatar } from "@/components/avatar";
@@ -18,16 +20,18 @@ import { ConversationMenu } from "./conversation-menu";
 import { usePresenceMap } from "@/components/providers/realtime-provider";
 import { useConversationList } from "@/components/providers/conversation-list-provider";
 import { useAuth } from "@/components/providers/auth-provider";
+import { prefetchChatRouteData, retainChatRouteAccount } from "@/lib/chat-route-prefetch";
 import { mapWithConcurrency } from "@/lib/async";
 import { cn, timeAgo } from "@/lib/utils";
 
-// Warm JavaScript only: message history and server expiration timestamps must
-// be read on navigation, rather than retained in a full-route prefetch.
-let chatCode: Promise<unknown> | undefined;
+// The client chat route contains only the account shell. Its history and
+// expiration timestamps still come from the independently authorized /open API.
+let chatCode: Promise<typeof import("../../app/app/chats/[id]/chat-route")> | undefined;
 function warmChatCode() {
-  chatCode ??= import("./chat-view").catch(() => { chatCode = undefined; });
+  chatCode ??= import("../../app/app/chats/[id]/chat-route").catch(error => { chatCode = undefined; throw error; });
   return chatCode;
 }
+const InboxChatRoute = lazy(() => warmChatCode().then(module => ({ default: module.ChatRoute })));
 
 function previewText(conv: ConversationSummary, previews: Map<string, string>): string {
   const last = conv.lastMessage;
@@ -64,8 +68,9 @@ function stampTime(iso: string | null, hydrated: boolean): string {
   return dateStampFormatter.format(d);
 }
 
-const ConversationRow = memo(function ConversationRow({ conv, active, online, preview, timestamp }: {
+const ConversationRow = memo(function ConversationRow({ conv, active, online, preview, timestamp, userId }: {
   conv: ConversationSummary; active: boolean; online: boolean; preview: string; timestamp: string;
+  userId: string | null;
 }) {
   const name = conv.name ?? conv.otherMember?.displayName ?? "Unknown";
   return (
@@ -73,10 +78,16 @@ const ConversationRow = memo(function ConversationRow({ conv, active, online, pr
       <Link
         href={`/app/chats/${conv.id}`}
         prefetch={false}
-        onPointerEnter={() => void warmChatCode()}
-        onFocus={() => void warmChatCode()}
+        onNavigate={event => {
+          if (!userId) return;
+          event.preventDefault();
+          window.history.pushState(null, "", `/app/chats/${conv.id}`);
+        }}
+        onPointerEnter={() => void warmChatCode().catch(() => undefined)}
+        onFocus={() => void warmChatCode().catch(() => undefined)}
         onPointerDown={() => {
-          void warmChatCode();
+          void warmChatCode().catch(() => undefined);
+          if (userId) void prefetchChatRouteData(userId, conv.id).catch(() => undefined);
         }}
         aria-current={active ? "page" : undefined}
         className={cn(
@@ -112,7 +123,6 @@ const ConversationRow = memo(function ConversationRow({ conv, active, online, pr
               {conv.pinned ? (
                 <Pin className="h-3 w-3 shrink-0 text-[var(--accent-fg)]" />
               ) : null}
-              {conv.favorited ? <Star className="h-3 w-3 shrink-0 fill-current text-[var(--accent-fg)]" /> : null}
               {conv.muted ? (
                 <BellOff className="h-3 w-3 shrink-0 text-[var(--muted)]" />
               ) : null}
@@ -177,6 +187,7 @@ export function ChatsLayout({
   children: ReactNode;
 }) {
   const hydrated = useHydrated();
+  useEffect(() => { void warmChatCode().catch(() => undefined); }, []);
   const [liveList, setLiveList] = useState<{
     source: ConversationSummary[]; items: ConversationSummary[];
   } | null>(null);
@@ -184,6 +195,12 @@ export function ChatsLayout({
   const { user } = useAuth();
   useEffect(() => { if (initialConversations) seed(initialConversations); }, [initialConversations, seed]);
   const sourceConversations = useMemo(() => snapshot?.conversations ?? initialConversations ?? [], [snapshot?.conversations, initialConversations]);
+  useEffect(() => {
+    if (!user?.id) return;
+    retainChatRouteAccount(user.id);
+    // History prefetch belongs to row interaction, not every inbox refresh.
+    // Opening the app must not fetch messages for five unopened conversations.
+  }, [user?.id]);
   const conversations = liveList?.source === sourceConversations
     ? liveList.items : sourceConversations;
   const { initialized, decrypt, getCachedDecryptedMessage, cacheDecryptedMessage, loadCachedDecryptedMessages } = useSharedE2EE();
@@ -216,21 +233,20 @@ export function ChatsLayout({
       await loadCachedDecryptedMessages(c.id,[message],(id,text)=>{if(!cancelled)setPreviews(previous=>new Map(previous).set(`${id}:${message.text}`,text));});
     });
     const pending = conversations.filter(c => c.lastMessage?.encrypted && c.lastMessage.text && !c.lastMessage.deletedAt && !previewCache.current.has(`${c.lastMessage.id}:${c.lastMessage.text}`));
-    // Decrypting previews for every encrypted conversation at once fans out
-    // unbounded crypto work onto the main thread as soon as the list renders.
-    // Cap concurrency so the chat list stays responsive on a slow device.
+    // Previews may unwrap local keys, but never fetch remote key history.
+    // Keep the network available to the conversation the user actually opens.
     void mapWithConcurrency(pending, 4, async c => {
       const message = c.lastMessage!;
       const key = `${message.id}:${message.text}`;
-      for (let attempt = 0; attempt < 3; attempt++) {
+      for (let attempt = 0; attempt < 1; attempt++) {
         try {
-          const text = await decrypt(message.text, c.id);
+          const text = await decrypt(message.text, c.id, { localOnly: true });
           if (!message.expiresAt) cacheDecryptedMessage(c.id,message.id,message.text,text);
           if (!cancelled) setPreviews(previous => new Map(previous).set(key, text));
           return;
         } catch {
           if (cancelled) return;
-          if (attempt < 2) await new Promise(resolve => setTimeout(resolve, 1500));
+          // Preview work must never fetch key history or retry on the tap path.
         }
       }
       if (!cancelled) setPreviews(previous => previous.has(key) ? previous : new Map(previous).set(key, ({ audio:"Voice message",image:"Photo",video:"Video",file:"File" }[message.type] ?? "Message unavailable")));
@@ -268,9 +284,8 @@ export function ChatsLayout({
   const filterChips: { key: typeof chatFilter; label: string; count: number; color?: string }[] = [
     { key: "all", label: "All", count: conversations.filter((c) => !c.archived).length },
     { key: "unread", label: "Unread", count: unreadCount, color: "var(--accent)" },
-    { key: "favorites", label: "Favorites", count: conversations.filter((c) => !c.archived && c.favorited).length },
     { key: "groups", label: "Groups", count: groupCount },
-    { key: "dms", label: "DMs", count: dmCount },
+    { key: "dms", label: "Direct", count: dmCount },
   ];
 
   const filtered = useMemo(() => {
@@ -307,12 +322,8 @@ export function ChatsLayout({
         <div className="flex h-14 shrink-0 items-center justify-between gap-3 px-4">
           <h1 className="min-w-0 truncate text-xl font-semibold tracking-tight">Chats</h1>
           <div className="flex shrink-0 items-center gap-1">
-        <Link href="/help" aria-label="Open Circlo Help" title="Circlo Help" className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[var(--border-strong)] bg-[var(--surface)] text-[var(--accent-fg)] transition-colors hover:bg-[var(--surface-2)] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--accent)]">
-          <LogoMark size={26} />
-          <span aria-hidden="true" className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-[var(--accent)] text-[10px] font-bold text-white">?</span>
-        </Link>
-            <NewChatDialog start="group-people" compact />
-            <NewChatDialog start="direct" compact />
+
+            <NewChatDialog />
           </div>
         </div>
 
@@ -327,7 +338,7 @@ export function ChatsLayout({
               className="field-input field-input--icon min-h-11 rounded-xl! py-2! text-sm!"
             />
           </div>
-          <SwipeFilters>
+          {conversations.length > 0 ? <SwipeFilters>
             {filterChips.map((chip) => (
               <button
                 key={chip.key}
@@ -346,7 +357,7 @@ export function ChatsLayout({
                 ) : null}
               </button>
             ))}
-          </SwipeFilters>
+          </SwipeFilters> : null}
           {archivedCount > 0 || showArchived ? (
             <button
               type="button"
@@ -388,6 +399,7 @@ export function ChatsLayout({
                 key={conv.id} conv={conv} active={conv.id === activeId}
                 timestamp={stampTime(conv.lastMessageAt ?? conv.createdAt, hydrated)}
                 online={Boolean(conv.otherMember && presence[conv.otherMember.id]?.online)}
+                userId={user?.id ?? null}
                 preview={previewText(conv, previews)}
               />)}
             </ul>
@@ -400,13 +412,16 @@ export function ChatsLayout({
           empty selection panel. Deep chats still mount their content once. */}
       {!activeId ? children : null}
 
+      <SaveChatsReminder />
       {/* ------------------------------ chat area ------------------------------ */}
       <section
         className={cn("min-w-0 flex-1 flex-col lg:flex", activeId ? "flex" : "hidden")}
         aria-label="Conversation"
       >
         {activeId ? (
-          children
+          user ? <Suspense fallback={<SavedChatOpening conversationId={activeId} />}>
+            <InboxChatRoute key={`${user.id}:${activeId}`} conversationId={activeId} me={user} />
+          </Suspense> : <SavedChatOpening conversationId={activeId} />
         ) : (
           <div className="flex h-full flex-col items-center justify-center px-8 text-center">
             <LogoMark size={54} className="text-[var(--text)]" />

@@ -29,7 +29,7 @@ export async function GET(_request: NextRequest, context: { params: Promise<{ id
   }
   const initial = await historyPromise;
   const finishedAt = performance.now();
-  return NextResponse.json({ conversation, initial }, { headers: {
+  return NextResponse.json({ viewerId: me.id, conversation, initial }, { headers: {
     "Cache-Control": "no-store",
     "Server-Timing": `detail;dur=${(detailAt-startedAt).toFixed(1)}, history;dur=${(historyAt-startedAt).toFixed(1)}, total;dur=${(finishedAt-startedAt).toFixed(1)}`,
   } });

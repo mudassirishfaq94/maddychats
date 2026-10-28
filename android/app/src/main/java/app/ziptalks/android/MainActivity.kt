@@ -19,6 +19,7 @@ import androidx.core.content.ContextCompat
 import android.webkit.CookieManager
 import android.webkit.WebChromeClient
 import android.webkit.WebSettings
+import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.webkit.ValueCallback
@@ -478,6 +479,10 @@ class MainActivity : ComponentActivity() {
                     NativeSessionCookies.persist()
                     view.evaluateJavascript("document.documentElement.dataset.keyboardOpen='$keyboardVisible'", null)
                 }
+            }
+            override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
+                if (!request.isForMainFrame) return !WebOriginPolicy.allowsFrame(request.url.toString(), BuildConfig.API_BASE_URL)
+                return shouldOverrideUrlLoading(view, request.url.toString())
             }
             override fun shouldOverrideUrlLoading(view: WebView, url: String): Boolean {
                 if (WebOriginPolicy.isAllowed(url, BuildConfig.API_BASE_URL) && Uri.parse(url).path == "/api/auth/google") {

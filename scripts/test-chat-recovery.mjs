@@ -87,7 +87,7 @@ export async function testChatRecovery(base, cookieHeader, conversationId) {
     await source.getByRole("button", { name: "Close", exact: true }).click();
 
     const target = await context();
-    await target.goto(`${base}/app/profile#encryption-devices`);
+    await target.goto(`${base}/app/settings#privacy`);
     await target.getByText("This device: Waiting for approval", { exact: true }).waitFor({ timeout: 30000 });
     await openDeviceTools(target);
     const pendingText = "A new device waits safely for approval";
@@ -101,14 +101,14 @@ export async function testChatRecovery(base, cookieHeader, conversationId) {
     await queuedNotice.waitFor({ state: "hidden", timeout: 12000 });
     await target.getByLabel("Queued", { exact: true }).waitFor();
     await target.getByRole("button", { name: "Show queued message options", exact: true }).waitFor();
-    await source.goto(`${base}/app/profile#encryption-devices`);
-    await target.goto(`${base}/app/profile#encryption-devices`);
+    await source.goto(`${base}/app/settings#privacy`);
+    await target.goto(`${base}/app/settings#privacy`);
     const linkResponse = target.waitForResponse(response => {
       let request = response.request();
       while (request.redirectedFrom()) request = request.redirectedFrom();
       return new URL(request.url()).pathname.replace(/\/+$/, "") === "/api/e2ee/devices/link" && request.method() === "POST";
     }).then(response => ({ response }), cause => ({ cause }));
-    await target.getByRole("button", { name: /^Show (a device-link QR code|a QR code to link this device)$/ }).click();
+    if(await target.getByRole("button",{name:"I still have my old phone",exact:true}).count())await target.getByRole("button",{name:"I still have my old phone",exact:true}).click();else await target.getByRole("button",{name:"Show a QR code to link this device",exact:true}).click();
     const linkResult = await linkResponse;
     if ("cause" in linkResult) throw new Error(`Device-link request did not finish; status: ${await target.getByRole("status").allTextContents()}`, { cause: linkResult.cause });
     const linkCreated = linkResult.response;
@@ -127,7 +127,7 @@ export async function testChatRecovery(base, cookieHeader, conversationId) {
     })()`);
     await source.getByRole("button", { name: "Scan QR on your new device", exact: true }).click();
     await source.getByText("Check number:").waitFor();
-    await target.getByText("Device details", { exact: true }).click();
+    await target.getByText("Check this phone’s number", { exact: true }).click();
     await source.getByText("Show full check number", { exact: true }).click();
     await source.getByLabel("I compared this number with the new phone and it matches.").check();
     const approvalResponse = source.waitForResponse(response => {

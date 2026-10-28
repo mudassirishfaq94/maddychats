@@ -8,5 +8,8 @@ test("built-in help returns maintained app guides and declines unrelated questio
  assert.equal(findCircloGuides("How can a guest join by code?")[0].id,"temporary");
  assert.deepEqual(findCircloGuides("What is the weather tomorrow?"),[]);
  assert(circloGuides.every(guide=>guide.href.startsWith("/")&&!guide.href.startsWith("//")&&guide.steps.length>0));
- assert(circloGuides.find(guide=>guide.id==="recovery")!.note!.includes("may be lost"));
+ const recovery=circloGuides.find(guide=>guide.id==="recovery")!;
+ assert(recovery.note!.includes("Without a phone that can read them or a saved file"));
+ assert(recovery.note!.includes("Circlo cannot bring them back"),"Plain wording must retain the warning that lost access cannot be recreated");
+ assert.equal(recovery.href,"/app/settings#save-my-chats");
 });

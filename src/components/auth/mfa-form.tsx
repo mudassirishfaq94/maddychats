@@ -2,7 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import Link from "next/link";
-import { deviceAccessPath } from "@/lib/device-access-navigation";
+import { postSignInPath } from "@/lib/device-access-navigation";
 
 export function MfaForm({ next = "/app" }: { next?: string }) {
   const [code, setCode] = useState("");
@@ -16,7 +16,7 @@ export function MfaForm({ next = "/app" }: { next?: string }) {
       const response = await fetch("/api/auth/mfa", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code }) });
       const data = await response.json();
       if (!response.ok) { setError(data.error ?? "Verification failed."); return; }
-      window.location.assign(deviceAccessPath(next));
+      window.location.assign(postSignInPath(next));
     } catch { setError("Could not connect. Try again."); }
     finally { setPending(false); }
   }

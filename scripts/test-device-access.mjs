@@ -8,7 +8,8 @@ import { inspectMobileLayout } from "./test-mobile-layout.mjs";
 export async function testDeviceAccess(base, pool, secret) {
   assert(["127.0.0.1", "localhost"].includes(new URL(base).hostname));
   const name = "accessqa_" + randomBytes(6).toString("hex"), password = "Aa9" + randomBytes(20).toString("hex");
-  const user = (await pool.query("insert into users(username,display_name,email,password_hash,email_verified_at) values($1,$1,$2,$3,now()) returning id", [name,name+"@example.invalid",await bcrypt.hash(password,12)])).rows[0];
+  const user = (await pool.query("insert into users(username,display_name,email,password_hash,email_verified_at) values($1,$1,$2,$3,now()) returning id,role", [name,name+"@example.invalid",await bcrypt.hash(password,12)])).rows[0];
+  assert.equal(user.role, "user", "Device-access fixture must remain an ordinary user");
   const browser = await chromium.launch(), errors = [];
   const open = async existingContext => {
     const context = existingContext ?? await browser.newContext({viewport:{width:320,height:740},isMobile:true,hasTouch:true,serviceWorkers:"block",extraHTTPHeaders:{"X-Forwarded-For":"198.51.100.232"}});
@@ -25,18 +26,19 @@ export async function testDeviceAccess(base, pool, secret) {
     const anonymous = await browser.newContext();
     const redirect = await anonymous.request.get(base+"/app/device-access",{maxRedirects:0});
     assert([303,307].includes(redirect.status()));
-    assert(new URL(redirect.headers().location,base).pathname === "/login"); await anonymous.close();
+    assert(new URL(redirect.headers().location,base).pathname === "/login"); assert.equal((await anonymous.request.get(base+"/api/admin/stats")).status(),401,"Anonymous requests cannot read admin data"); await anonymous.close();
     const source = await open(); await source.page.waitForURL(base+"/app/chats");
-    await source.page.goto(base+"/app/profile#encryption-devices");
+    await source.page.goto(base+"/app/settings#privacy");await source.page.getByText("Linked phones and account security",{exact:true}).click();
     await source.page.getByText("This device: Linked",{exact:true}).waitFor();
     const target = await open();
-    await target.page.getByRole("button",{name:"Show a device-link QR code",exact:true}).waitFor();
+    await target.page.getByRole("button",{name:"I still have my old phone",exact:true}).waitFor();
     await target.page.screenshot({path:"test-artifacts/device-access-choice-after.png",fullPage:true,animations:"disabled"});
     assert(target.page.url().includes("/app/device-access?"));
     assert.equal((await target.context.request.get(base+"/api/auth/me")).status(),202,"Credentials create only a restricted verification session");
-    for (const route of ["/api/users/me","/api/conversations","/api/contacts","/api/status","/api/communities","/api/notifications","/api/privacy/settings","/api/admin/stats","/api/calls"]) {
+    for (const route of ["/api/users/me","/api/conversations","/api/contacts","/api/status","/api/communities","/api/notifications","/api/privacy/settings","/api/calls"]) {
       assert.equal((await target.context.request.get(base+route)).status(),401,route+" cannot be read before device approval");
     }
+    for (const session of [source.context, target.context]) assert.equal((await session.request.get(base+"/api/admin/stats")).status(),403,"Ordinary users cannot read admin data, whether their chat device is linked or unlinked");
     for (const route of ["/api/conversations","/api/calls","/api/status"]) assert.equal((await target.context.request.post(base+route,{headers:{Origin:base},data:{}})).status(),401,route+" cannot be mutated before device approval");
     const profile = await target.context.request.get(base+"/app/profile",{maxRedirects:0});
     assert.equal(profile.status(),307); assert(new URL(profile.headers().location,base).pathname === "/app/device-access");
@@ -58,6 +60,7 @@ export async function testDeviceAccess(base, pool, secret) {
       await target.page.setViewportSize({width,height});
       assert.deepEqual(await inspectMobileLayout(target.page,"access-choice"),[]);
     }
+    await target.page.getByRole("button",{name:"I still have my old phone",exact:true}).click();
     const linkResponse = target.page.waitForResponse(response=>response.url().endsWith("/api/e2ee/devices/link/code")&&response.request().method()==="POST");
     await target.page.getByRole("button",{name:"Can’t scan? Show a one-time code",exact:true}).click();
     const linkResult=await linkResponse; assert.equal(linkResult.status(),201);
@@ -92,12 +95,12 @@ export async function testDeviceAccess(base, pool, secret) {
     // Only this owned fake account loses trust, reproducing the no-trusted-device case.
     await pool.query("update e2ee_keys set trusted_at=null where user_id=$1",[user.id]);
     const recovery = await open();
-    await recovery.page.getByText("I don’t have my old device",{exact:true}).click();
-    await recovery.page.getByRole("heading",{name:"Get a sign-in code by email",exact:true}).waitFor();
+    await recovery.page.getByRole("button",{name:"I saved a recovery file",exact:true}).click();
+    await recovery.page.getByText("More help with a saved file",{exact:true}).click();await recovery.page.getByRole("heading",{name:"Recover with email",exact:true}).waitFor();
     await recovery.page.getByRole("button",{name:"Send recovery code",exact:true}).waitFor();
-    const recoveryText = await recovery.page.locator("#encryption-devices").innerText();
-    assert(recoveryText.includes("Get a sign-in code by email") && recoveryText.includes("Send recovery code"));
-    assert(!recoveryText.includes("Show a device-link QR code") && !recoveryText.includes("Back up or restore chats"),"No-old-device recovery hides unrelated setup choices");
+    const recoveryText = await recovery.page.getByRole("region",{name:"Set up this phone"}).innerText();
+    assert(recoveryText.includes("Recover with email") && recoveryText.includes("Send recovery code"));
+    assert(!recoveryText.includes("Show a QR code to link this device") && !recoveryText.includes("Back up or restore chats"),"No-old-device recovery hides unrelated setup choices");
     const confirm = recovery.page.getByRole("button",{name:"Verify code and sign out other devices",exact:true});
     assert(await confirm.isDisabled());
     // A mailbox-code fixture avoids calling a paid or third-party email service.
@@ -128,7 +131,7 @@ export async function testDeviceAccess(base, pool, secret) {
     assert.deepEqual(after.filter(row=>row.trusted_at).map(row=>row.device_id),[pending.device_id]);
     for(const old of before) assert.equal(after.find(row=>row.device_id===old.device_id).public_key,old.public_key,"Old keys are retained without being reconstructed");
     const guessing = await open();
-    await guessing.page.getByRole("button",{name:"Show a device-link QR code",exact:true}).waitFor();
+    await guessing.page.getByRole("button",{name:"I still have my old phone",exact:true}).waitFor();
     const guessDevice = (await pool.query("select device_id from e2ee_keys where user_id=$1 order by created_at desc limit 1",[user.id])).rows[0];
     assert.equal((await guessing.context.request.post(base+"/api/e2ee/devices/link/verify",{headers:{Origin:base},data:{deviceId:guessDevice.device_id,code:"000000"}})).status(),404,"The retired typed-code approval endpoint is unavailable");
     assert.deepEqual(errors,[]);
