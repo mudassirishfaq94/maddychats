@@ -392,6 +392,20 @@ export function useE2EE(userId: string | undefined) {
     }
   }, [userId]);
 
+  useEffect(() => {
+    if (!state.initialized || !userId || !keyPairRef.current) return;
+    let cancelled = false;
+    const prefix = `e2ee_sentkeys_${userId}_`;
+    const ids = Object.keys(localStorage).filter(key => key.startsWith(prefix))
+      .map(key => key.slice(prefix.length)).filter(id => /^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(id)).slice(0, 20);
+    // Local unwrap only: no membership bypass, network lookup, key creation,
+    // rotation or sharing. Send authorization still runs on every send.
+    void mapWithConcurrency(ids, 2, async id => {
+      if (!cancelled) await loadLocalConversationKeys(id).catch(() => undefined);
+    });
+    return () => { cancelled = true; };
+  }, [state.initialized, userId, loadLocalConversationKeys]);
+
   /**
    * Return the established legacy symmetric key for a conversation.
    *

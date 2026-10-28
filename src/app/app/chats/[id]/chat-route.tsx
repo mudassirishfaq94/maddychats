@@ -1,21 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { SavedChatOpening } from "@/components/chats/saved-chat-opening";
 import Link from "next/link";
-import { Ghost, Loader2 } from "lucide-react";
-import { Avatar } from "@/components/avatar";
+import { Ghost } from "lucide-react";
 import { ChatView } from "@/components/chats/chat-view";
-import { useConversationList } from "@/components/providers/conversation-list-provider";
 import { useAuth } from "@/components/providers/auth-provider";
 import { prefetchChatRouteData, retainChatRouteAccount, type ChatRouteData } from "@/lib/chat-route-prefetch";
 import type { SafeUser } from "@/lib/types";
 
 export function ChatRoute({ conversationId, me }: { conversationId: string; me: SafeUser }) {
   const { user, status } = useAuth();
-  const { snapshot } = useConversationList();
-  const summary = snapshot?.viewerId === me.id
-    ? snapshot.conversations.find((conversation) => conversation.id === conversationId)
-    : undefined;
   const routeKey = `${me.id}:${conversationId}`;
   const [result, setResult] = useState<{ key: string; data?: ChatRouteData; error?: string } | null>(null);
 
@@ -47,15 +42,8 @@ export function ChatRoute({ conversationId, me }: { conversationId: string; me: 
       <Link href="/app/chats" className="btn btn-secondary mx-auto mt-7">Back to chats</Link>
     </div>;
 
-    const title = summary?.name ?? summary?.otherMember?.displayName ?? "Conversation";
-    return <section aria-label="Opening conversation" className="flex h-full min-h-0 flex-col bg-[var(--surface)]">
-      <header className="flex min-h-16 shrink-0 items-center gap-3 border-b border-[var(--border)] px-4">
-        {summary?.otherMember ? <Avatar user={summary.otherMember} size={40} /> : <span className="h-10 w-10 rounded-full bg-[var(--surface-2)]" />}
-        <div className="min-w-0"><h1 className="truncate font-semibold">{title}</h1><p className="text-xs text-[var(--muted)]">Loading messages</p></div>
-        <Loader2 aria-hidden="true" className="ml-auto h-4 w-4 animate-spin text-[var(--muted)]" />
-      </header>
-      <div className="flex flex-1 items-center justify-center text-sm text-[var(--muted)]">Getting your messages…</div>
-    </section>;
+    return <SavedChatOpening />;
+
   }
 
   const other = data.conversation.members.find((member) => member.id !== me.id) ?? null;
