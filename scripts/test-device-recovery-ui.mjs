@@ -4,7 +4,9 @@ import assert from "node:assert/strict";
 import { chromium } from "playwright";
 import { randomBytes } from "node:crypto";
 import bcrypt from "bcryptjs";
-import { readFile, mkdir } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
+import { legacyRecoveryFixture } from "./legacy-recovery-fixture.mjs";
+import { createRecoveryFile } from "../src/lib/device-recovery-file.ts";
 
 export async function testDeviceRecoveryUI(base, pool) {
   assert(["127.0.0.1", "localhost"].includes(new URL(base).hostname), "Recovery UI tests require a local fake database");
@@ -27,7 +29,7 @@ export async function testDeviceRecoveryUI(base, pool) {
     const source = await open(); await source.page.getByText("This device: Linked", { exact: true }).waitFor();
     const simple = await source.context.newPage();
     await simple.goto(base + "/app/settings#privacy");
-    await simple.getByText("Linked phones and account security",{exact:true}).click();
+    await simple.getByText("Your phones and sign-in",{exact:true}).click();
     await simple.getByText("This device: Linked", { exact:true }).waitFor();
     assert.equal(await simple.getByLabel("This device check number").isVisible(),false,"Fingerprints are hidden in ordinary device settings");
     assert(!await simple.locator("#encryption-devices").innerText().then(text=>text.includes("Device ID:")),"Identifiers do not clutter the main view");
@@ -46,7 +48,7 @@ export async function testDeviceRecoveryUI(base, pool) {
     await overview.close();
     const settingsPage = await source.context.newPage();
     await settingsPage.goto(base + "/app/settings#notifications");
-    await settingsPage.getByRole("heading", { name: "Settings", exact: true }).waitFor();
+    await settingsPage.getByRole("heading", { name: "Notifications", level:1, exact: true }).waitFor();
     const notificationSection = settingsPage.locator("#notifications");
     await notificationSection.waitFor({ state: "visible" });
 
@@ -59,8 +61,6 @@ export async function testDeviceRecoveryUI(base, pool) {
       Object.defineProperty(navigator, "serviceWorker", { configurable: true, value: { ready: Promise.resolve(registration), register: async () => registration, getRegistration: async () => registration } });
       if (!("PushManager" in window)) Object.defineProperty(window, "PushManager", { configurable: true, value: function () {} });
     })()`);
-    await settingsPage.getByText("Notification preferences", { exact: true }).click();
-    await settingsPage.locator("#notifications details[data-profile-disclosure-ready='true'][open]").waitFor();
     const pushSettings = await source.context.request.get(base + "/api/notifications/push");
     assert.equal(pushSettings.status(), 200);
     const pushConfig = await pushSettings.json();
@@ -73,8 +73,8 @@ export async function testDeviceRecoveryUI(base, pool) {
     assert.equal((await pool.query("select count(*)::int as n from push_subscriptions where user_id=$1", [user.id])).rows[0].n, 1);
     assert.equal((await source.context.request.delete(base + "/api/notifications/push", { data: { endpoint: "https://fcm.googleapis.com/fcm/send/circlo-disposable-ui-fixture" }, headers: { Origin: base } })).status(), 200);
 
-    await settingsPage.getByRole("link",{name:"Manage secure devices",exact:true}).waitFor();
-    assert.equal(await settingsPage.getByRole("heading",{name:"Notifications",exact:true}).count(),1,"Detailed preference forms stay collapsed until requested");
+    assert.equal(await settingsPage.locator("#encryption-devices").count(),0,"Notifications do not mount unrelated security panels");
+    assert.equal(await settingsPage.getByRole("heading",{name:"Notifications",level:1,exact:true}).count(),1,"Chosen preference forms are visible");
     for(const width of [320,390,844]) { await settingsPage.setViewportSize({width,height:740}); assert(await settingsPage.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),"Simple settings fit mobile widths"); }
     await settingsPage.close();
     console.log("PASS mobile profile disclosures and push permission, runtime public key, UI subscription, persisted account binding, and cleanup (browser push mocked)");
@@ -120,18 +120,18 @@ export async function testDeviceRecoveryUI(base, pool) {
     assert.equal((await source.context.request.get(base + "/api/auth/me")).status(), 200, "Signing out another browser keeps this session active");
     await login(target.context); await target.page.reload();await openDeviceTools(target.page);
     await target.page.getByText("This device: Linked", { exact: true }).waitFor({ timeout: 30000 });
-    const downloadEvent = source.page.waitForEvent("download");
-    await source.page.getByRole("button", { name: "Save recovery file", exact: true }).click();
-    const file = await readFile(await (await downloadEvent).path());
-    const recoveryCode = await source.page.locator('code[aria-label="24-word recovery phrase"]').innerText();
+    // Compatibility fixture: new backups use Save my chats, while old files remain restorable.
+    const legacy = await createRecoveryFile(await legacyRecoveryFixture(source.page,user.id));
+    const file = Buffer.from(legacy.file), recoveryCode = legacy.code;
     await openDeviceTools(source.page);
     const sourceFingerprint = await source.page.getByLabel("This device check number").innerText();
     await source.context.close();
     const restored = await open();
-    await restored.page.getByText("Restore a recovery file or move from the old website", { exact: true }).click();
-    await restored.page.getByLabel("Encrypted recovery file", { exact: true }).setInputFiles({ name: "recovery.json", mimeType: "application/json", buffer: file });
-    await restored.page.locator('input[type="password"]').last().fill(recoveryCode);
-    await restored.page.getByRole("checkbox", { name: /I saved a recovery file/ }).check();
+    await restored.page.goto(base+"/app/settings#save-my-chats");
+    await restored.page.getByText("Use an older backup", { exact: true }).click();
+    await restored.page.getByLabel("Older recovery file", { exact: true }).setInputFiles({ name: "recovery.json", mimeType: "application/json", buffer: file });
+    await restored.page.getByLabel("Words or code saved with this file",{exact:true}).fill(recoveryCode);
+    await restored.page.getByRole("checkbox", { name: /I saved anything I need/ }).check();
     await restored.page.getByRole("button", { name: "Open my saved file", exact: true }).click();
     await openDeviceTools(restored.page);
     await restored.page.getByText("This device: Linked", { exact: true }).waitFor({ timeout: 30000 });

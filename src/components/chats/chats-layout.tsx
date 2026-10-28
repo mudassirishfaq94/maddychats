@@ -22,6 +22,8 @@ import { usePresenceMap } from "@/components/providers/realtime-provider";
 import { useConversationList } from "@/components/providers/conversation-list-provider";
 import { useAuth } from "@/components/providers/auth-provider";
 import { prefetchChatRouteData, retainChatRouteAccount } from "@/lib/chat-route-prefetch";
+import { currentChatPreview, type CurrentChatPreview } from "@/lib/current-chat-preview";
+import { chatLocked } from "../../../public/offline-store.js";
 import { mapWithConcurrency } from "@/lib/async";
 import { cn, timeAgo } from "@/lib/utils";
 
@@ -69,9 +71,10 @@ function stampTime(iso: string | null, hydrated: boolean): string {
   return dateStampFormatter.format(d);
 }
 
-const ConversationRow = memo(function ConversationRow({ conv, active, online, preview, timestamp, userId }: {
+const ConversationRow = memo(function ConversationRow({ conv, active, online, preview, timestamp, userId, onOpen }: {
   conv: ConversationSummary; active: boolean; online: boolean; preview: string; timestamp: string;
   userId: string | null;
+  onOpen: () => void;
 }) {
   const name = conv.name ?? conv.otherMember?.displayName ?? "Unknown";
   return (
@@ -82,6 +85,7 @@ const ConversationRow = memo(function ConversationRow({ conv, active, online, pr
         onNavigate={event => {
           if (!userId) return;
           event.preventDefault();
+          onOpen();
           window.history.pushState(null, "", `/app/chats/${conv.id}`);
         }}
         onPointerEnter={() => void warmChatCode().catch(() => undefined)}
@@ -193,7 +197,9 @@ export function ChatsLayout({
     source: ConversationSummary[]; items: ConversationSummary[];
   } | null>(null);
   const { snapshot, seed } = useConversationList();
-  const { user } = useAuth();
+  const { user, status, requestScope } = useAuth();
+  const [tapPreview, setTapPreview] = useState<CurrentChatPreview>();
+  const openedConversation = useRef<{id: string; userId: string; scope: object} | undefined>(undefined);
   useEffect(() => { if (initialConversations) seed(initialConversations); }, [initialConversations, seed]);
   const sourceConversations = useMemo(() => snapshot?.conversations ?? initialConversations ?? [], [snapshot?.conversations, initialConversations]);
   useEffect(() => {
@@ -227,11 +233,17 @@ export function ChatsLayout({
   useEffect(() => {
     if (!initialized) return;
     let cancelled = false;
+    const publishCurrent = (conversation: ConversationSummary, text: string) => {
+      const opened = openedConversation.current;
+      if (!cancelled && user && status === "authenticated" && snapshot?.viewerId === user.id && opened?.id === conversation.id && opened.userId === user.id && opened.scope === requestScope && !chatLocked(conversation.id)) {
+        setTapPreview(currentChatPreview(conversation,user.id,requestScope,text,snapshot.clock,performance.now()));
+      }
+    };
     // Authorized summary IDs/ciphertexts select the encrypted disk cache. It
     // races key/network decryption; it never supplies unverified history rows.
     void mapWithConcurrency(conversations.filter(c=>c.lastMessage?.encrypted && c.lastMessage.text && !c.lastMessage.deletedAt && !c.lastMessage.expiresAt),4,async c=>{
       const message=c.lastMessage!;
-      await loadCachedDecryptedMessages(c.id,[message],(id,text)=>{if(!cancelled)setPreviews(previous=>new Map(previous).set(`${id}:${message.text}`,text));});
+      await loadCachedDecryptedMessages(c.id,[message],(id,text)=>{if(!cancelled){publishCurrent(c,text);setPreviews(previous=>new Map(previous).set(`${id}:${message.text}`,text));}});
     });
     const pending = conversations.filter(c => c.lastMessage?.encrypted && c.lastMessage.text && !c.lastMessage.deletedAt && !previewCache.current.has(`${c.lastMessage.id}:${c.lastMessage.text}`));
     // Previews may unwrap local keys, but never fetch remote key history.
@@ -242,8 +254,8 @@ export function ChatsLayout({
       for (let attempt = 0; attempt < 1; attempt++) {
         try {
           const text = await decrypt(message.text, c.id, { localOnly: true });
-          if (!message.expiresAt) cacheDecryptedMessage(c.id,message.id,message.text,text);
-          if (!cancelled) setPreviews(previous => new Map(previous).set(key, text));
+          cacheDecryptedMessage(c.id,message.id,message.text,text,{ memoryOnly: Boolean(message.expiresAt || message.selfDestruct) });
+          if (!cancelled) { publishCurrent(c,text); setPreviews(previous => new Map(previous).set(key, text)); }
           return;
         } catch {
           if (cancelled) return;
@@ -253,12 +265,14 @@ export function ChatsLayout({
       if (!cancelled) setPreviews(previous => previous.has(key) ? previous : new Map(previous).set(key, ({ audio:"Voice message",image:"Photo",video:"Video",file:"File" }[message.type] ?? "Message unavailable")));
     });
     return () => { cancelled = true; };
-  }, [conversations, initialized, decrypt, cacheDecryptedMessage, loadCachedDecryptedMessages]);
+  }, [conversations, initialized, decrypt, cacheDecryptedMessage, loadCachedDecryptedMessages, user, status, requestScope, snapshot]);
   const pathname = usePathname();
   const presence = usePresenceMap();
   const activeId = pathname.startsWith("/app/chats/")
     ? pathname.split("/")[3]
     : null;
+  const selected = conversations.find(conversation => conversation.id === activeId);
+  const livePreview = selected?.id === tapPreview?.conversationId && selected?.lastMessage?.text === tapPreview?.sourceCiphertext ? tapPreview : undefined;
   const [filter, setFilter] = useState("");
   const deferredFilter = useDeferredValue(filter);
   const [showArchived, setShowArchived] = useState(false);
@@ -399,6 +413,11 @@ export function ChatsLayout({
                 timestamp={stampTime(conv.lastMessageAt ?? conv.createdAt, hydrated)}
                 online={Boolean(conv.otherMember && presence[conv.otherMember.id]?.online)}
                 userId={user?.id ?? null}
+                onOpen={() => {
+                  const message = conv.lastMessage;
+                  if (user) openedConversation.current = {id:conv.id,userId:user.id,scope:requestScope};
+                  setTapPreview(user && status === "authenticated" && snapshot?.viewerId === user.id && !chatLocked(conv.id) ? currentChatPreview(conv, user.id, requestScope, message?.encrypted ? getCachedDecryptedMessage(conv.id,message.id,message.text) : message?.text, snapshot.clock, performance.now()) : undefined);
+                }}
                 preview={previewText(conv, previews)}
               />)}
             </ul>
@@ -418,9 +437,9 @@ export function ChatsLayout({
         aria-label="Conversation"
       >
         {activeId ? (
-          user ? <Suspense fallback={<SavedChatOpening conversationId={activeId} />}>
-            <InboxChatRoute key={`${user.id}:${activeId}`} conversationId={activeId} me={user} />
-          </Suspense> : <SavedChatOpening conversationId={activeId} />
+          user ? <Suspense fallback={<SavedChatOpening conversationId={activeId} preview={livePreview} />}>
+            <InboxChatRoute key={`${user.id}:${activeId}`} conversationId={activeId} me={user} preview={livePreview} />
+          </Suspense> : <SavedChatOpening conversationId={activeId} preview={livePreview} />
         ) : (
           <div className="flex h-full flex-col items-center justify-center px-8 text-center">
             <LogoMark size={54} className="text-[var(--text)]" />

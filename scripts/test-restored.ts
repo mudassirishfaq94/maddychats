@@ -66,7 +66,7 @@ async function main() {
         await testDeviceAccess(base, pool, testSecret);
       } else if (process.env.AUDIO_ONLY === "1") {
         await testAudioContacts(base, pool, accounts[0], accounts[1], password, conversation!);
-      } else if (process.env.CHAT_RACE_ONLY === "1") {
+      } else if (process.env.CHAT_RACE_ONLY === "1" || process.env.BACKUP_ONLY === "1") {
         await testChatOpeningFixture(base, pool, accounts[0], accounts[1], password, conversation!);
       } else if (process.env.MOBILE_NAV_ONLY === "1") {
         console.log(await testMobileLayout(base, pool, { navigationOnly: true }));

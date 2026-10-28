@@ -8,9 +8,10 @@ import { useSharedE2EE } from "@/components/providers/e2ee-provider";
 import { ChatView } from "@/components/chats/chat-view";
 import { useAuth } from "@/components/providers/auth-provider";
 import { prefetchChatRouteData, retainChatRouteAccount, type ChatRouteData } from "@/lib/chat-route-prefetch";
+import type { CurrentChatPreview } from "@/lib/current-chat-preview";
 import type { SafeUser } from "@/lib/types";
 
-export function ChatRoute({ conversationId, me }: { conversationId: string; me: SafeUser }) {
+export function ChatRoute({ conversationId, me, preview }: { conversationId: string; me: SafeUser; preview?: CurrentChatPreview }) {
   const { user, status } = useAuth();
   const { loadCachedDecryptedMessages } = useSharedE2EE();
   const routeKey = `${me.id}:${conversationId}`;
@@ -56,7 +57,7 @@ export function ChatRoute({ conversationId, me }: { conversationId: string; me: 
       <Link href="/app/chats" className="btn btn-secondary mx-auto mt-7">Back to chats</Link>
     </div>;
 
-    return <SavedChatOpening conversationId={conversationId} />;
+    return <SavedChatOpening conversationId={conversationId} preview={preview} />;
 
   }
 

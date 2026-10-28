@@ -17,6 +17,7 @@ const bundle = await build({ bundle: true, write: false, format: "iife", platfor
     window.showInbox=auth=>{window.fixtureAuth=auth;root.render(<ConversationListProvider><Inbox/></ConversationListProvider>);};
     window.store=store; const root=createRoot(document.getElementById('root'));
     window.openChat=()=>root.render(<ChatRoute conversationId='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' me={window.fixtureAuth.user}/>);
+    window.showLive=(auth,ttl)=>{window.fixtureAuth=auth;root.render(<SavedChatOpening preview={{userId:auth.user?.id,scope:auth.requestScope,conversationId:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',name:'Fixture circle',messageId:'11111111-1111-4111-8111-111111111111',sourceCiphertext:'fixture-cipher',text:'Current inbox fixture',deadline:performance.now()+ttl}}/>);};
     window.show=(auth)=>{window.fixtureAuth=auth;root.render(<SavedChatOpening key={auth.requestScope.key}/>);};
   `,
 }, plugins: [{ name: "fixture-providers", setup(builder) {
@@ -121,6 +122,15 @@ try {
   });
   await page.getByText('Opening…',{exact:true}).waitFor();
   assert.equal(await page.getByText('Saved readable fixture',{exact:true}).count(),0);
+  await page.evaluate(()=>{localStorage.removeItem('maddy:locked-chats');window.showLive({user:{id:'dddddddd-dddd-4ddd-8ddd-dddddddddddd'},status:'authenticated',requestScope:{key:'live'}},250);});
+  await page.getByText('Current inbox fixture',{exact:true}).waitFor();
+  await page.getByText('Current inbox fixture',{exact:true}).waitFor({state:'hidden'});
+  await page.evaluate(()=>window.showLive({user:{id:'dddddddd-dddd-4ddd-8ddd-dddddddddddd'},status:'authenticated',requestScope:{key:'live-change'}},10000));
+  await page.getByText('Current inbox fixture',{exact:true}).waitFor();
+  await page.evaluate(()=>window.eventHandler({type:'message:update',conversationId:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'}));
+  await page.getByText('Current inbox fixture',{exact:true}).waitFor({state:'hidden'});
+  const persisted=await page.evaluate(async()=> (await window.store.offlineHistory('dddddddd-dddd-4ddd-8ddd-dddddddddddd','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa')).messages.some(row=>row.text==='Current inbox fixture'));
+  assert.equal(persisted,false,'Current disappearing previews must never enter persistent history');
   assert.deepEqual(errors,[]);
   console.log('PASS saved inbox/provider and ChatRoute with held server responses, 401/removal reconciliation: real encrypted offline history before the server response, ephemeral exclusion, account switch, logout and locked chat');
 } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }

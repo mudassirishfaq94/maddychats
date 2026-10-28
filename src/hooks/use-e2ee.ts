@@ -1027,8 +1027,9 @@ export function useE2EE(userId: string | undefined) {
     cache.delete(key); cache.set(key, { ciphertext, plaintext });
     while (cache.size > 512) cache.delete(cache.keys().next().value!);
   }, []);
-  const cacheDecryptedMessage = useCallback((conversationId: string, messageId: string, ciphertext: string, plaintext: string) => {
+  const cacheDecryptedMessage = useCallback((conversationId: string, messageId: string, ciphertext: string, plaintext: string, options?: { memoryOnly?: boolean }) => {
     rememberPlaintext(conversationId, messageId, ciphertext, plaintext);
+    if (options?.memoryOnly) return;
     if (!userId || !state.deviceId || !keyPairRef.current) return;
     const epoch = cacheEpochRef.current;
     if (!messageCacheKeyRef.current) {

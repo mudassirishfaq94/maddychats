@@ -106,6 +106,8 @@ jobs:
           node scripts/test-saved-chat-opening.mjs
           node scripts/test-decryption-refresh-race.mjs
           node scripts/test-familiar-flows.mjs
+            node scripts/test-settings-panels.mjs
+            node scripts/test-backup-refresh-ui.mjs
       - name: Dependency audit
         run: |
           npm audit --omit=dev --audit-level=high

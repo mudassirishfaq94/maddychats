@@ -16,7 +16,6 @@ import { cn } from "@/lib/utils";
 const ThemeToggle = dynamic(() => import("@/components/theme-toggle").then(module => module.ThemeToggle), { ssr: false });
 const NotificationBell = dynamic(() => import("./notification-bell").then(module => module.NotificationBell), { ssr: false });
 const MessageSearch = dynamic(() => import("@/components/chats/message-search").then(module => module.MessageSearch), { ssr: false });
-const UserMenu = dynamic(() => import("./user-menu").then(module => module.UserMenu), { ssr: false });
 
 /**
  * Authenticated shell: one compact header over a full-height content area.
@@ -115,7 +114,6 @@ export function AppShell({
             </Link>
           ) : null}
           <ThemeToggle className="hidden min-[390px]:inline-flex" />
-          <UserMenu user={user} />
         </div>
       </header>
 

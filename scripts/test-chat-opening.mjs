@@ -1,6 +1,7 @@
 import { fixtureAppSession } from "./fixture-app-session.mjs";
 import assert from "node:assert/strict";
 import { chromium } from "playwright";
+import { testLocalChatBackup } from "./test-local-chat-backup.mjs";
 
 /** Close the SSR-to-live-stream gap deterministically using owned fixtures. */
 export async function testChatOpeningRace(sender, recipient) {
@@ -40,12 +41,14 @@ export async function testChatOpeningFixture(base, pool, owner, peer, password, 
       assert.equal(response.status(), 200);
       await fixtureAppSession(pool,response);
       const page = await context.newPage(); page.setDefaultTimeout(30000);
-      await page.goto(base + "/app/settings#privacy"); await page.getByText("Linked phones and account security", { exact: true }).click(); await page.getByText("This device: Linked", { exact: true }).waitFor(); pages.push(page);
+      await page.goto(base + "/app/settings#privacy"); await page.getByText("Your phones and sign-in", { exact: true }).click(); await page.getByText("This device: Linked", { exact: true }).waitFor(); pages.push(page);
     }
     for (const page of pages) { await page.goto(base + "/app/chats/" + conversationId); await page.getByRole("textbox", { name: "Message text", exact: true }).waitFor(); }
-    await pages[0].getByRole("textbox", { name: "Message text", exact: true }).fill("Opening race baseline");
+    const baseline=process.env.BACKUP_ONLY==='1'?'Real encrypted delivery baseline':'Opening race baseline';
+    await pages[0].getByRole("textbox", { name: "Message text", exact: true }).fill(baseline);
     await pages[0].getByRole("textbox", { name: "Message text", exact: true }).press("Enter");
-    await pages[1].getByRole("region", { name: "Conversation", exact: true }).getByText("Opening race baseline", { exact: true }).waitFor();
-    await testChatOpeningRace(pages[0], pages[1]);
+    await pages[1].getByRole("region", { name: "Conversation", exact: true }).getByText(baseline, { exact: true }).waitFor();
+    if(process.env.BACKUP_ONLY==='1')await testLocalChatBackup(base,pool,{page:pages[0]},owner,password,conversationId);
+    else await testChatOpeningRace(pages[0], pages[1]);
   } finally { await browser.close(); }
 }

@@ -6,7 +6,7 @@ import { createReconciledRead } from "@/lib/reconciled-read";
 import { useAuth } from "./auth-provider";
 import { useRealtime } from "./realtime-provider";
 
-type Snapshot = { viewerId: string; conversations: ConversationSummary[] };
+type Snapshot = { viewerId: string; conversations: ConversationSummary[]; serverNow?: string; clock?: { serverMs: number; receivedAt: number } };
 type ConversationList = {
   snapshot: Snapshot | null;
   seed: (conversations: ConversationSummary[]) => void;
@@ -27,6 +27,7 @@ function AccountConversationList({ userId, children }: { userId: string; childre
       const request = new AbortController();
       controller = request;
       try {
+        const started = performance.now();
         const response = await fetch("/api/conversations", {
           cache: "no-store", signal: AbortSignal.any([request.signal, AbortSignal.timeout(10000)]),
         });
@@ -42,7 +43,11 @@ function AccountConversationList({ userId, children }: { userId: string; childre
         const data = await response.json() as Snapshot;
         if (data.viewerId !== userId || !Array.isArray(data.conversations)) throw new Error("Conversation account changed");
         request.signal.throwIfAborted();
-        return data;
+        const receivedAt = performance.now();
+        const serverMs = data.serverNow ? Date.parse(data.serverNow) : NaN;
+        // Add the full round trip conservatively: local expiry may be early,
+        // but cannot extend the deadline because a device clock is behind.
+        return { ...data, clock: Number.isFinite(serverMs) ? { serverMs: serverMs + receivedAt - started, receivedAt } : undefined };
       } finally {
         if (controller === request) controller = null;
       }
