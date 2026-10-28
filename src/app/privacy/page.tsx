@@ -1,5 +1,6 @@
 import { publicMetadata } from "@/lib/public-metadata";
 import Link from "next/link";
+import { SERVICE_OPERATOR } from "@/lib/service-operator";
 import {
   BellRing,
   CheckCheck,
@@ -33,7 +34,7 @@ import {
 
 export const metadata = publicMetadata("/privacy", "Privacy Policy — Circlo", "What Circlo stores, what it can see, how chat messages are protected, and how you can control your information.");
 
-const LAST_UPDATED = "27 October 2026";
+const LAST_UPDATED = "28 October 2026";
 
 /** Numbered sections, also used to build the jump-to index. */
 const INDEX = [
@@ -151,6 +152,7 @@ const NOT_COVERED = [
   "Group and community structure: names, avatars, membership, roles and admin settings.",
   "Status updates, which are stored in a readable form so they can be shown to your chosen audience and reviewed if reported.",
   "Details about chats: who is talking, when and how often messages are sent, and their size.",
+  "Message reactions: the selected emoji, who added it, and which message it belongs to.",
   "Security and account data: sign-in history, device and browser labels, and approximate country.",
   "Anything you deliberately send to us, such as a report, a support message or a verification request.",
 ];
@@ -209,27 +211,27 @@ const RIGHTS = [
 const COLLECTED: { lead: string; text: string }[] = [
   {
     lead: "Account and profile.",
-    text: "Display name, username, email address, and anything optional you add such as a bio, avatar, phone number or links. We store a protected check of your password, not the password itself, and never email it to you.",
+    text: "Display name, username and email identify your account and let us send verification and password-reset email. We store a protected check of your password, not the password itself. Bio, avatar, phone number and links are optional profile details. A phone number is for optional discovery by other people, not phone sign-in.",
   },
   {
     lead: "Private chat content.",
-    text: "Message text, captions, edits, reactions, attachments and voice notes. Your device locks this content before sending; only approved devices in the chat can open it.",
+    text: "Message text, captions, edits, attachments and voice notes are locked on your device before sending. We store and deliver locked copies so approved devices in the chat can open them. The server does not need the readable text to deliver a message.",
   },
   {
     lead: "Readable content you publish.",
-    text: "Profile photos, group and community names and avatars, and status updates. These are processed and stored in a readable form because they have to be displayed to other people and can be reported.",
+    text: "Profile photos, group and community names and avatars, and status updates are stored in a readable form to display them to the people allowed by your settings and to handle abuse reports. Do not treat a status update as an encrypted private chat.",
   },
   {
     lead: "Security and device data.",
-    text: "When sign-ins happen and whether they succeed, your internet address, browser and device names, an approximate country, active sign-ins, and public device codes used to set up private chats.",
+    text: "Sign-in times and outcomes, internet address, browser and device names, approximate country and active sign-ins help detect abuse, apply limits, show your signed-in devices and revoke access. Public device keys and approval records help deliver locked messages to the correct devices. Approximate country is not precise GPS location.",
   },
   {
     lead: "Operational data.",
-    text: "Sending rates and abuse signals such as excessive or duplicate sends, reports you file, and administrative actions, which we keep for accountability.",
+    text: "Sending rates, excessive or duplicate sends, reports you submit and administrative actions help prevent abuse and investigate problems. Push subscription addresses and phone notification tokens route notifications to your device. Contact and block lists support your saved contacts and safety choices.",
   },
   {
     lead: "Device permissions.",
-    text: "Camera, microphone, files and notifications are requested only when a feature needs them, and used only for that feature.",
+    text: "Camera access lets you scan a linking code or take a picture; microphone access supports calls and voice notes; file access lets you choose or save attachments; notification permission lets the app alert you. You can deny or revoke these permissions in your device settings; the related feature may then be unavailable.",
   },
 ];
 
@@ -332,9 +334,10 @@ export default function PrivacyPage() {
             separate recovery code you save can open that copy. Circlo does not receive that code.
           </p>
           <p>
-            Today, the web and Android app keep the information needed to open chats in saved data on that device.
-            Physical security keys and a word-based recovery phrase are not available yet. Before clearing saved data,
-            make a recovery file or link another device. Otherwise, you may lose access to older chats.
+            The app keeps saved chat access on your device; the website uses your browser&apos;s saved data.
+            A recovery file can be protected with a 24-word phrase; the file and phrase restore chat access,
+            but do not contain your message history. Before clearing saved data, save your recovery information or
+            transfer your chats from another linked device. Otherwise, you may lose access to older chats.
           </p>
           <LegalCallout>
             Circlo staff and administrators cannot open your private messages because the needed secret information is
@@ -348,17 +351,27 @@ export default function PrivacyPage() {
           <LegalChecklist items={NOT_COVERED} tone="note" />
           <p>
             Circlo stores a locked copy of private messages, so it cannot search their contents for you. Notifications
-            can tell you a message arrived, but the service cannot read the message to add its contents.
+            can show readable previews only when your device can open the message and your notification settings
+            allow them. The server does not decrypt private message text for a push notification. A preview displayed
+            on your phone may be visible to someone looking at its screen; use your phone&apos;s lock-screen settings
+            and Circlo&apos;s preview setting to control that.
           </p>
           <p className="text-[13px] leading-6">
             <strong className="text-[var(--text)]">Independent review.</strong> This page explains how private chat
             protection is designed to work. We have not published a review by an independent security specialist.
+            The current chat encryption is not the Signal Protocol, and we do not claim Signal-equivalent protection
+            or a completed Double Ratchet rollout.
           </p>
         </LegalSection>
 
         <LegalSection id="collect" number="2" title="Information we collect" icon={Database}>
           <p>Cloudflare helps block automated sign-in attempts. It receives connection and browser information for these security checks. Our verification request contains the check result, without chat messages or encryption keys.</p>
           <p>We collect information needed to run a messaging service. Chat contents and the details needed to deliver them are different, so we explain them separately.</p>
+          <p>
+            {SERVICE_OPERATOR.name} is {SERVICE_OPERATOR.description} based in {SERVICE_OPERATOR.location}.
+            Its operator is responsible for the personal information described here. For privacy questions or requests,
+            email <a className="underline" href={`mailto:${SERVICE_OPERATOR.privacyEmail}`}>{SERVICE_OPERATOR.privacyEmail}</a>.
+          </p>
           <ul className="space-y-4">
             {COLLECTED.map((item) => (
               <li key={item.lead}>
@@ -500,6 +513,12 @@ export default function PrivacyPage() {
         </LegalSection>
 
         <LegalSection id="contact" number="13" title="Contact us" icon={ShieldCheck}>
+          <p>
+            Contact Circlo&apos;s independent operator in {SERVICE_OPERATOR.location} at{" "}
+            <a className="underline" href={`mailto:${SERVICE_OPERATOR.privacyEmail}`}>{SERVICE_OPERATOR.privacyEmail}</a>{" "}
+            to ask about your information, correct it, request a copy or request deletion. You do not need to install
+            the app or sign in to send a privacy request. We may ask for information needed to confirm account ownership.
+          </p>
           <p>
             Visit <Link className="underline" href="/support">Circlo support</Link> for account access, reporting and the available contact options. You can <Link className="underline" href="/delete-account">request account deletion from your browser</Link> without installing the Android app. Do not send your password, verification codes or encryption recovery material with a request.
           </p>
