@@ -31,10 +31,13 @@ test("single-message reads enforce membership and cleared/deleted visibility", a
   await pool.query("update conversation_members set cleared_at=(select created_at from messages where id=$3) where conversation_id=$1 and user_id=$2", [group, member, message.id]);
   try {
     assert.equal(await chat.getMessageDTO(message.id, member), null, "The clear watermark includes messages at its timestamp");
+    assert.notEqual((await chat.listConversationsFor(member)).find(row=>row.id===group)?.lastMessage?.id,message.id,"The inbox cannot preview a cleared message");
     assert.equal((await chat.getMessageDTO(message.id, owner))?.text, "visibility-regression");
   } finally { await pool.query("update conversation_members set cleared_at=null where conversation_id=$1 and user_id=$2", [group, member]); }
   await pool.query("insert into message_deletions(message_id,user_id) values($1,$2)", [message.id, member]);
   assert.equal(await chat.getMessageDTO(message.id, member), null);
+  assert.notEqual((await chat.listConversationsFor(member)).find(row=>row.id===group)?.lastMessage?.id,message.id,"The inbox cannot preview a message deleted for this viewer");
+  assert.equal((await chat.listConversationsFor(owner)).find(row=>row.id===group)?.lastMessage?.id,message.id,"Other members keep their authorized preview");
   assert.equal((await chat.getMessageDTO(message.id, owner))?.text, "visibility-regression");
 });
 

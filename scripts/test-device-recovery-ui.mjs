@@ -111,9 +111,10 @@ export async function testDeviceRecoveryUI(base, pool) {
     await target.page.getByLabel("This device check number").waitFor({ state: "visible" });
     await source.page.getByText("Show full check number", { exact: true }).click();
     await source.page.getByLabel("I compared this number with the new phone and it matches.").check();
+    const linkedReload=target.page.waitForEvent("domcontentloaded");
     await source.page.getByRole("button", { name: "Approve this device", exact: true }).click();
-    await target.page.waitForURL(base+"/app/chats");
-    await target.page.goto(base+"/app/settings#security");await openDeviceTools(target.page);
+    await linkedReload;
+    await openDeviceTools(target.page);
     await target.page.getByText("This device: Linked", { exact: true }).waitFor({ timeout: 30000 });
     const device = (await pool.query("select device_id from e2ee_keys where user_id=$1 order by created_at desc limit 1", [user.id])).rows[0];
     const reused = await target.context.request.post(base + "/api/e2ee/devices/approve", { data: { action: "challenge", sourceDeviceId: sourceDevice.device_id, targetDeviceId: device.device_id, targetFingerprint: fingerprint, linkId: requestId, token }, headers: { Origin: base } });
