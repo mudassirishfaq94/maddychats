@@ -34,7 +34,7 @@ export function DomainMigration() {
     <button className="btn btn-primary" disabled={busy || !account} onClick={() => void download()}>Export encrypted migration file</button>
     {code && <div><p>Save this code separately. Both the file and code are needed to restore.</p><code className="block break-all select-all" aria-label="Migration recovery code">{code}</code></div>}
     {status && <p role="status">{status}</p>}
-    <p>On <a className="underline" href="https://circlo.chat/app/profile#encryption-devices">Circlo → Profile → Encryption devices</a>, open “Restore a recovery file” and choose this file. This restores the existing identity; it does not reset other devices or override revocation.</p>
+    <p>On <a className="underline" href="https://circlo.chat/app/settings#save-my-chats">Circlo → Settings → Save my chats → More ways to save</a>, open “Restore a recovery file” and choose this file. This restores the existing identity; it does not reset other devices or override revocation.</p>
     <p className="text-sm text-[var(--muted)]">Includes encryption identity and locally saved chat keys. Messages, media, drafts and Signal sessions are not included. Keep the original browser data until you have verified your chats on circlo.chat.</p>
   </main>;
 }

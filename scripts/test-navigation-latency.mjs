@@ -44,10 +44,10 @@ export async function testNavigationLatency(context,base,conversationId) {
   console.log("PASS: deep-linked chat renders independently while the conversation list is delayed");
   const shell=await page.locator(".circlo-shell").elementHandle();assert(shell,"Shared shell exists");
   const sidebar=page.getByRole("complementary",{name:"Conversations",exact:true});
-  const help=await sidebar.getByRole("link",{name:"Open Circlo Help",exact:true}).boundingBox();
+  const help=await sidebar.getByRole("button",{name:"New chat",exact:true}).boundingBox();
   const listBottom=await sidebar.getByRole("list").first().evaluate(list=>list.parentElement.getBoundingClientRect().bottom);
-  assert(help&&help.width>=44&&help.height>=44,"Help remains an accessible touch target");
-  assert(listBottom>help.y+help.height,"Chat scrolling must extend behind Help without a full-width footer cutting off the list");
+  assert(help&&help.width>=44&&help.height>=44,"New chat remains an accessible touch target");
+  assert(listBottom>help.y+help.height,"Chat scrolling extends below New chat without a duplicate footer");
   await page.waitForTimeout(2000);
   for(const scenario of ["normal","mobile-100ms-4xCPU"]){
    if(scenario!=="normal"){

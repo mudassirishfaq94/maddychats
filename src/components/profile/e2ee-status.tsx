@@ -36,7 +36,7 @@ export function E2EEStatus() {
         </div>
       </div>
 
-      <a className="btn btn-secondary mt-4 min-h-11 text-xs" href="/app/profile#encryption-devices">Manage secure devices</a>
+      <a className="btn btn-secondary mt-4 min-h-11 text-xs" href="/app/settings#privacy">Manage secure devices</a>
 
     </div>
   );

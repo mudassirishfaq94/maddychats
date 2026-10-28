@@ -2005,7 +2005,7 @@ export function ChatView({
         setUnavailableMessageIds(current => { const next = new Set(current); next.delete(id); return next; });
         setDecryptRetry(value => value + 1);
       },
-      deviceSettings: () => router.push("/app/profile#encryption-devices"), security: () => setShowEncryptionInfo(true),
+      deviceSettings: () => router.push("/app/settings#privacy"), security: () => setShowEncryptionInfo(true),
       retrySend: message => { void retryFailedMessage(message); }, cancelQueued: async message => {
         if (!message.clientMessageId) return;
         cancelledMessages.current.add(message.clientMessageId);

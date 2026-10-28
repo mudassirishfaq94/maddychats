@@ -27,7 +27,7 @@ function maskEmail(email: string) {
   return `${local.slice(0, 1)}${local.length > 1 ? "•••" : "••"}@${domain}`;
 }
 
-export function EncryptionDevices({ recoveryEmail, openRecovery = false, setup = false, hideBackups = false, onLinked, returnTo = "/app/profile?recovery=1#encryption-devices" }: { recoveryEmail?: string; openRecovery?: boolean; setup?: boolean; hideBackups?: boolean; onLinked?: () => void; returnTo?: string }) {
+export function EncryptionDevices({ recoveryEmail, openRecovery = false, setup = false, hideBackups = false, onLinked, returnTo = "/app/settings#privacy" }: { recoveryEmail?: string; openRecovery?: boolean; setup?: boolean; hideBackups?: boolean; onLinked?: () => void; returnTo?: string }) {
   const encryption = useSharedE2EE();
   const [setupChoice,setSetupChoice]=useState<"link"|"file"|null>(null);
   const [devices, setDevices] = useState<Device[]>([]);
