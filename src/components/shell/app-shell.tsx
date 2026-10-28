@@ -40,7 +40,7 @@ export function AppShell({
   const onPeople = pathname.startsWith("/app/people") || pathname.startsWith("/app/users");
   const onStatus = pathname.startsWith("/app/status");
   const onSettings = pathname.startsWith("/app/settings") || pathname.startsWith("/app/profile") || pathname.startsWith("/app/help");
-  const onChats = pathname === "/app" || pathname.startsWith("/app/chats");
+  const onChats = pathname === "/app" || ["/app/chats", "/app/people", "/app/users", "/app/communities", "/app/starred"].some(path=>pathname.startsWith(path));
   const onCalls = pathname.startsWith("/app/calls");
   const inChat = pathname.startsWith("/app/chats/");
 
