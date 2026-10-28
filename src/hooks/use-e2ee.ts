@@ -265,6 +265,9 @@ export function useE2EE(userId: string | undefined) {
       if (process.env.NEXT_PUBLIC_STARTER_MODE !== "1") void registration
         .then(async (ready) => {
           if (!ready || !active) return;
+          // Runtime policy must match the server, not an unset build-time flag.
+          const capabilities = await fetch("/api/chat-capabilities", { cache: "no-store", signal: controller.signal });
+          if (!capabilities.ok || (await capabilities.json()).signalProvisioning !== true || !active) return;
           await waitForBackgroundSlot(controller.signal);
           if (!active) return;
           const bridge = await loadSignalBridge();

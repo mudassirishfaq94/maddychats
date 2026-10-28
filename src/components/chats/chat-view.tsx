@@ -557,10 +557,12 @@ export function ChatView({
         if (flushFrame !== null) { cancelAnimationFrame(flushFrame); flushFrame = null; }
         if (!alive || textBatch.size === 0) return;
         const ready = new Map(textBatch); textBatch.clear();
-        startTransition(() => setDecryptedTexts(current => new Map([...current, ...[...ready].filter(([id])=>{
+        const publish = () => setDecryptedTexts(current => new Map([...current, ...[...ready].filter(([id])=>{
           const message=messagesById.get(id);
           return message && (!message.expiresAt || Date.parse(message.expiresAt)>Date.now()+serverClockOffset.current);
-        })])));
+        })]));
+        if (decryptedTextsRef.current.size === 0) publish();
+        else startTransition(publish);
       };
       pending.forEach((m) => decryptingRef.current.add(m.id));
       pendingReplies.forEach((m) => decryptingRepliesRef.current.add(m.replyTo!.id));
@@ -2079,6 +2081,7 @@ export function ChatView({
         ) : other ? (
           <Link
             href={`/app/users/${other.id}`}
+            prefetch={false}
             className="flex min-w-0 flex-1 items-center gap-2.5"
           >
             <span className="relative shrink-0">
