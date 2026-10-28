@@ -42,7 +42,7 @@ export function ChatRoute({ conversationId, me }: { conversationId: string; me: 
       <Link href="/app/chats" className="btn btn-secondary mx-auto mt-7">Back to chats</Link>
     </div>;
 
-    return <SavedChatOpening />;
+    return <SavedChatOpening conversationId={conversationId} />;
 
   }
 

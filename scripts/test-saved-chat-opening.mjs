@@ -9,11 +9,15 @@ const bundle = await build({ bundle: true, write: false, format: "iife", platfor
   resolveDir: process.cwd(), loader: "jsx", contents: `
     import React from 'react'; import {createRoot} from 'react-dom/client';
     import {SavedChatOpening} from './src/components/chats/saved-chat-opening';
+    import {ChatRoute} from './src/app/app/chats/[id]/chat-route';
     import * as store from './public/offline-store.js';
     window.store=store; const root=createRoot(document.getElementById('root'));
+    window.openChat=()=>root.render(<ChatRoute conversationId='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' me={window.fixtureAuth.user}/>);
     window.show=(auth)=>{window.fixtureAuth=auth;root.render(<SavedChatOpening key={auth.requestScope.key}/>);};
   `,
 }, plugins: [{ name: "fixture-providers", setup(builder) {
+  builder.onResolve({filter:/^(@\/components\/chats\/chat-view|next\/link|lucide-react)$/},args=>({path:args.path,namespace:'route-fixture'}));
+  builder.onLoad({filter:/.*/,namespace:'route-fixture'},args=>({contents: args.path.endsWith('chat-view') ? `import React from 'react';export const ChatView=()=> <p>Authorized server fixture</p>;` : args.path==='next/link' ? `import React from 'react';export default function Link({children,...props}){return <a {...props}>{children}</a>;}` : `import React from 'react';export const Ghost=()=>null;`,loader:'jsx',resolveDir:process.cwd()}));
   builder.onResolve({ filter: /^(next\/navigation|@\/components\/providers\/(auth-provider|realtime-provider))$/ }, args => ({ path: args.path, namespace: "fixture" }));
   builder.onLoad({ filter: /.*/, namespace: "fixture" }, args => ({ contents: args.path === "next/navigation"
     ? `export const useParams=()=>({id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'});`
@@ -42,6 +46,19 @@ try {
   });
   await page.getByText('Saved readable fixture', {exact:true}).waitFor();
   assert.equal(await page.getByText('Never show this', {exact:true}).count(),0);
+  let pendingHistory;
+  await page.route('**/api/conversations/*/open', route => {pendingHistory=route;});
+  await page.evaluate(() => window.openChat());
+  await page.waitForFunction(() => document.querySelector('[aria-label="Saved messages"]')?.textContent.includes('Saved readable fixture'));
+  await page.waitForTimeout(50);
+  assert(pendingHistory, 'The actual ChatRoute starts the authorized request while saved messages remain readable');
+  await pendingHistory.fulfill({status:200,contentType:'application/json',body:JSON.stringify({
+    viewerId:'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+    conversation:{id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',members:[{id:'dddddddd-dddd-4ddd-8ddd-dddddddddddd'}]},
+    initial:{messages:[],nextCursor:null,hasMore:false},
+  })});
+  await page.getByText('Authorized server fixture',{exact:true}).waitFor();
+
   await page.evaluate(() => window.show({user:{id:'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'},status:'authenticated',requestScope:{key:'b'}}));
   await page.getByText('Opening…',{exact:true}).waitFor();
   assert.equal(await page.getByText('Saved readable fixture',{exact:true}).count(),0);
@@ -65,5 +82,5 @@ try {
   await page.getByText('Opening…',{exact:true}).waitFor();
   assert.equal(await page.getByText('Saved readable fixture',{exact:true}).count(),0);
   assert.deepEqual(errors,[]);
-  console.log('PASS saved-chat transition: real encrypted offline history, no server request, ephemeral exclusion, account switch, logout and locked chat');
+  console.log('PASS saved-chat transition and actual ChatRoute with delayed authorized history: real encrypted offline history before the server response, ephemeral exclusion, account switch, logout and locked chat');
 } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }

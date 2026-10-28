@@ -4,7 +4,8 @@ import Image from "next/image";
 import { SwipeFilters } from "./swipe-filters";
 import { useHydrated } from "@/hooks/use-hydrated";
 
-import { memo, useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { lazy, Suspense, memo, useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { SavedChatOpening } from "./saved-chat-opening";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type * as React from "react";
@@ -24,11 +25,12 @@ import { cn, timeAgo } from "@/lib/utils";
 
 // The client chat route contains only the account shell. Its history and
 // expiration timestamps still come from the independently authorized /open API.
-let chatCode: Promise<unknown> | undefined;
+let chatCode: Promise<typeof import("../../app/app/chats/[id]/chat-route")> | undefined;
 function warmChatCode() {
-  chatCode ??= import("../../app/app/chats/[id]/chat-route").catch(() => { chatCode = undefined; });
+  chatCode ??= import("../../app/app/chats/[id]/chat-route").catch(error => { chatCode = undefined; throw error; });
   return chatCode;
 }
+const InboxChatRoute = lazy(() => warmChatCode().then(module => ({ default: module.ChatRoute })));
 
 function previewText(conv: ConversationSummary, previews: Map<string, string>): string {
   const last = conv.lastMessage;
@@ -74,11 +76,16 @@ const ConversationRow = memo(function ConversationRow({ conv, active, online, pr
     <li key={conv.id} className="group/row relative flex min-w-0 items-center border-b border-[var(--border)] last:border-b-0">
       <Link
         href={`/app/chats/${conv.id}`}
-        prefetch={true}
-        onPointerEnter={() => void warmChatCode()}
-        onFocus={() => void warmChatCode()}
+        prefetch={false}
+        onNavigate={event => {
+          if (!userId) return;
+          event.preventDefault();
+          window.history.pushState(null, "", `/app/chats/${conv.id}`);
+        }}
+        onPointerEnter={() => void warmChatCode().catch(() => undefined)}
+        onFocus={() => void warmChatCode().catch(() => undefined)}
         onPointerDown={() => {
-          void warmChatCode();
+          void warmChatCode().catch(() => undefined);
           if (userId) void prefetchChatRouteData(userId, conv.id).catch(() => undefined);
         }}
         aria-current={active ? "page" : undefined}
@@ -180,7 +187,7 @@ export function ChatsLayout({
   children: ReactNode;
 }) {
   const hydrated = useHydrated();
-  useEffect(() => { void warmChatCode(); }, []);
+  useEffect(() => { void warmChatCode().catch(() => undefined); }, []);
   const [liveList, setLiveList] = useState<{
     source: ConversationSummary[]; items: ConversationSummary[];
   } | null>(null);
@@ -416,7 +423,9 @@ export function ChatsLayout({
         aria-label="Conversation"
       >
         {activeId ? (
-          children
+          user ? <Suspense fallback={<SavedChatOpening conversationId={activeId} />}>
+            <InboxChatRoute key={`${user.id}:${activeId}`} conversationId={activeId} me={user} />
+          </Suspense> : <SavedChatOpening conversationId={activeId} />
         ) : (
           <div className="flex h-full flex-col items-center justify-center px-8 text-center">
             <LogoMark size={54} className="text-[var(--text)]" />

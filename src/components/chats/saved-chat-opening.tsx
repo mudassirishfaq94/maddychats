@@ -7,11 +7,11 @@ import { useRealtime } from "@/components/providers/realtime-provider";
 import { activeAccount, chatLocked, offlineChats, offlineHistory, type OfflineHistoryMessage } from "../../../public/offline-store.js";
 
 /** Read-only transition surface. Sending and all server checks remain in ChatView. */
-export function SavedChatOpening() {
+export function SavedChatOpening({ conversationId }: { conversationId?: string } = {}) {
   const { user, status, requestScope } = useAuth();
   const { subscribe } = useRealtime();
   const params = useParams<{ id?: string }>();
-  const id = params.id;
+  const id = conversationId ?? params.id;
   const [saved, setSaved] = useState<{ scope: object; id: string; name: string; messages: OfflineHistoryMessage[] } | null>(null);
   useEffect(() => {
     let stopped = false;
