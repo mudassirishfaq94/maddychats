@@ -214,7 +214,7 @@ export function ProfileEditor({ user }: { user: SafeUser }) {
         </div>
       ) : null}
 
-      <form onSubmit={onSubmit} noValidate hidden={!editing} className="mt-6 space-y-5">
+      <form onSubmit={onSubmit} noValidate className="mt-6 space-y-5">
         {/* display name */}
         <div>
           <label htmlFor="pe-display" className="field-label">
