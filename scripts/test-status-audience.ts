@@ -16,7 +16,20 @@ async function main(){
  assert.equal(await canViewStatus(status,ids[1]),true);for(const id of ids.slice(2))assert.equal(await canViewStatus(status,id),false);
  await local.query('INSERT INTO blocks(blocker_id,blocked_id) VALUES($1,$2)',[ids[1],ids[0]]);assert.deepEqual(await statusChatAudienceIds(ids[0]),[]);assert.equal(await canViewStatus(status,ids[1]),false);assert.deepEqual(await visibleRecipientIds(status),[ids[0]]);
  const own=await createStatus({userId:ids[0],type:'text',text:'Only me',privacy:'selected',selectedUserIds:[]});assert.equal(await canViewStatus(own,ids[5]),false);assert.equal(await canViewStatus({...status,expiresAt:new Date(0)},ids[0]),false);
- console.log('PASS status audience: accepted direct chats only; blocks, requests, deletion, strangers and expiry enforced; empty audience stays private');
- }finally{await appPool?.end();await local?.end();await admin.query(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`);await admin.end();}
+
+ }finally{
+  await appPool?.end();await local?.end();
+  try{
+   let active=0;
+   for(let attempt=0;attempt<100;attempt++){
+    active=Number((await admin.query("select count(*)::int as n from pg_stat_activity where datname=$1",[name])).rows[0].n);
+    if(active===0)break;
+    await new Promise(resolve=>setTimeout(resolve,50));
+   }
+   assert.equal(active,0,"Disposable database clients must close before deletion");
+   await admin.query(`DROP DATABASE IF EXISTS "${name}"`);
+  }finally{await admin.end();}
+ }
+ console.log('PASS status audience: accepted direct chats only; blocks, requests, deletion, strangers and expiry enforced; empty audience stays private; database cleanup completed');
 }
-main().catch(()=>{console.error('Status audience regression failed');process.exitCode=1;});
+main().catch(error=>{console.error('Status audience regression failed:',error instanceof Error?error.message:'unknown error');process.exitCode=1;});
