@@ -26,7 +26,7 @@ import { cn, timeAgo } from "@/lib/utils";
 // expiration timestamps still come from the independently authorized /open API.
 let chatCode: Promise<unknown> | undefined;
 function warmChatCode() {
-  chatCode ??= import("./chat-view").catch(() => { chatCode = undefined; });
+  chatCode ??= import("../../app/app/chats/[id]/chat-route").catch(() => { chatCode = undefined; });
   return chatCode;
 }
 

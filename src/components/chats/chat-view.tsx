@@ -474,11 +474,6 @@ export function ChatView({
   const decryptingRepliesRef = useRef<Set<string>>(new Set());
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [decryptRetry, setDecryptRetry] = useState(0);
-  const decryptConversationRef = useRef<string | null>(null);
-  useEffect(() => {
-    decryptConversationRef.current = conversationId;
-    return () => { decryptConversationRef.current = null; };
-  }, [conversationId]);
   useEffect(() => { decryptedTextsRef.current = decryptedTexts; }, [decryptedTexts]);
   useEffect(() => { decryptedRepliesRef.current = decryptedReplies; }, [decryptedReplies]);
   // Key reconciliation runs in the background. If it makes this chat's keys
@@ -548,6 +543,8 @@ export function ChatView({
     if (pending.length === 0 && pendingReplies.length === 0) return;
     let alive = true;
     let flushFrame: number | null = null;
+    const runningTexts = decryptingRef.current;
+    const runningReplies = decryptingRepliesRef.current;
     (async () => {
       let hadFailure = false;
       const messagesById = new Map(items.map(message => [message.id, message]));
@@ -571,6 +568,7 @@ export function ChatView({
       await mapWithConcurrency(pending, 4, async (m) => {
         try {
           const plain = await decrypt(m.text, conversationId);
+          if (!alive) return;
           failedDecryptionRef.current.delete(m.id);
           missingMessageKeys.current.delete(m.id);
           if (alive) setUnavailableMessageIds((current) => {
@@ -589,6 +587,7 @@ export function ChatView({
           // never hold the first successes behind the rest of a history page.
           if (flushFrame === null) flushFrame = requestAnimationFrame(flushText);
         } catch (cause) {
+          if (!alive) return;
           // A peer can still publish a just-created key, but retries must be
           // bounded so one legacy message never burns CPU forever.
           const attempts = (failedDecryptionRef.current.get(m.id) ?? 0) + 1;
@@ -606,9 +605,11 @@ export function ChatView({
         const reply = m.replyTo!;
         try {
           const plain = await decrypt(reply.text, conversationId);
+          if (!alive) return;
           failedDecryptionRef.current.delete(`reply:${reply.id}`);
           if (!reply.expiresAt || Date.parse(reply.expiresAt)>Date.now()+serverClockOffset.current) replyBatch.set(reply.id, plain);
         } catch {
+          if (!alive) return;
           const key = `reply:${reply.id}`;
           const attempts = (failedDecryptionRef.current.get(key) ?? 0) + 1;
           failedDecryptionRef.current.set(key, attempts);
@@ -619,10 +620,6 @@ export function ChatView({
         }
       });
       if (!alive) {
-        // A read receipt/history refresh can replace items during WebCrypto.
-        // The replacement effect skips those in-flight IDs; wake it when this
-        // batch releases them instead of leaving a permanent loading bubble.
-        if (decryptConversationRef.current === conversationId) setDecryptRetry(value => value + 1);
         return;
       }
       if (replyBatch.size) startTransition(() => setDecryptedReplies(current => new Map([...current, ...replyBatch])));
@@ -637,6 +634,10 @@ export function ChatView({
     })();
     return () => {
       alive = false;
+      // React runs cleanup before the replacement effect. Release this batch's
+      // IDs now, rather than making the new page wait for every old decrypt.
+      pending.forEach(message => runningTexts.delete(message.id));
+      pendingReplies.forEach(message => runningReplies.delete(message.replyTo!.id));
       if (flushFrame !== null) cancelAnimationFrame(flushFrame);
       if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
     };

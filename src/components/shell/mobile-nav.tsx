@@ -10,7 +10,6 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const PREFETCHED = new Set(["/app/chats", "/app/calls"]);
 const NAV_ITEMS = [
   { href: "/app/chats", icon: MessagesSquare, label: "Chats", match: "/app" },
   { href: "/app/status", icon: CircleDashed, label: "Status", match: "/app/status" },
@@ -22,7 +21,7 @@ export function MobileNav() {
   const pathname = usePathname();
   const router = useRouter();
   const warm = (href: string) => {
-    if (!PREFETCHED.has(href)) router.prefetch(href);
+    router.prefetch(href);
     if (href === "/app/status") void import("@/components/status/status-entry").then(module => module.warmStatusCode()).catch(() => undefined);
   };
 
@@ -44,7 +43,7 @@ export function MobileNav() {
             <Link
               key={item.href}
               href={item.href}
-              prefetch={PREFETCHED.has(item.href)}
+              prefetch={false}
               onPointerEnter={() => warm(item.href)}
               onFocus={() => warm(item.href)}
               onTouchStart={() => warm(item.href)}
