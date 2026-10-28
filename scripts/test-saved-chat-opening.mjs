@@ -13,7 +13,7 @@ const bundle = await build({ bundle: true, write: false, format: "iife", platfor
     import {SavedChatOpening} from './src/components/chats/saved-chat-opening';
     import {ChatRoute} from './src/app/app/chats/[id]/chat-route';
     import * as store from './public/offline-store.js';
-    function Inbox(){const {snapshot}=useConversationList();return snapshot?<p>Authorized inbox {snapshot.conversations.length}</p>:<SavedInboxList filter='' onPrepare={()=>{}}/>;}
+    function Inbox(){const {snapshot,refresh}=useConversationList();window.refreshInbox=refresh;return snapshot?<p>Authorized inbox {snapshot.conversations.length}</p>:<SavedInboxList filter='' onPrepare={()=>{}} onOpen={id=>{window.fixtureOpened=id;}}/>;}
     window.showInbox=auth=>{window.fixtureAuth=auth;root.render(<ConversationListProvider><Inbox/></ConversationListProvider>);};
     window.store=store; const root=createRoot(document.getElementById('root'));
     window.openChat=()=>root.render(<ChatRoute conversationId='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' me={window.fixtureAuth.user}/>);
@@ -22,14 +22,14 @@ const bundle = await build({ bundle: true, write: false, format: "iife", platfor
   `,
 }, plugins: [{ name: "fixture-providers", setup(builder) {
   builder.onResolve({filter:/^(@\/components\/chats\/chat-view|next\/link|lucide-react)$/},args=>({path:args.path,namespace:'route-fixture'}));
-  builder.onLoad({filter:/.*/,namespace:'route-fixture'},args=>({contents: args.path.endsWith('chat-view') ? `import React from 'react';export const ChatView=()=> <p>Authorized server fixture</p>;` : args.path==='next/link' ? `import React from 'react';export default function Link({children,...props}){return <a {...props}>{children}</a>;}` : `import React from 'react';export const Ghost=()=>null;`,loader:'jsx',resolveDir:process.cwd()}));
+  builder.onLoad({filter:/.*/,namespace:'route-fixture'},args=>({contents: args.path.endsWith('chat-view') ? `import React from 'react';export const ChatView=()=> <p>Authorized server fixture</p>;` : args.path==='next/link' ? `import React from 'react';export default function Link({children,onNavigate,prefetch,...props}){return <a {...props} onClick={event=>{event.preventDefault();onNavigate?.({preventDefault(){}});}}>{children}</a>;}` : `import React from 'react';export const Ghost=()=>null;`,loader:'jsx',resolveDir:process.cwd()}));
   builder.onResolve({filter:/^\.\/(auth-provider|realtime-provider)$/},args=>({path:args.path,namespace:"fixture"}));
   builder.onResolve({ filter: /^(next\/navigation|@\/components\/providers\/(auth-provider|realtime-provider|e2ee-provider))$/ }, args => ({ path: args.path, namespace: "fixture" }));
   builder.onLoad({ filter: /.*/, namespace: "fixture" }, args => ({ contents: args.path === "next/navigation"
     ? `export const useParams=()=>({id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'});`
     : args.path.endsWith("auth-provider") ? `export const useAuth=()=>window.fixtureAuth;`
     : args.path.endsWith("e2ee-provider") ? `const loadCachedDecryptedMessages=async()=>new Map();export const useSharedE2EE=()=>({loadCachedDecryptedMessages});`
-    : `const subscribe=handler=>{window.eventHandler=handler;return ()=>{};};export const useRealtime=()=>({subscribe});` }));
+    : `const subscribe=handler=>{window.eventHandler=handler;return ()=>{};};export const useRealtime=()=>({subscribe,connected:!!window.fixtureConnected});` }));
 } }] });
 const server = createServer((req, res) => {
   if (req.url === "/bundle.js") { res.setHeader("Content-Type", "text/javascript"); res.end(bundle.outputFiles[0].contents); }
@@ -60,6 +60,8 @@ try {
   await page.getByRole('list',{name:'Saved conversations'}).getByText('Fixture circle',{exact:true}).waitFor();
   await page.getByText('Saved readable fixture',{exact:true}).waitFor();
   assert(inboxRequests.length>0,'Saved list and preview paint while the authorized list response is withheld');
+  await page.getByRole('list',{name:'Saved conversations'}).getByRole('link').first().click();
+  assert.equal(await page.evaluate(()=>window.fixtureOpened),'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','A tap on a saved row records the selected chat before fresh inbox data arrives');
   await page.evaluate(()=>window.showInbox({user:{id:'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'},status:'authenticated',requestScope:{key:'inbox-b'}}));
   assert.equal(await page.getByText('Fixture circle',{exact:true}).count(),0);
   assert.equal(await page.getByText('Saved readable fixture',{exact:true}).count(),0);
@@ -131,6 +133,28 @@ try {
   await page.getByText('Current inbox fixture',{exact:true}).waitFor({state:'hidden'});
   const persisted=await page.evaluate(async()=> (await window.store.offlineHistory('dddddddd-dddd-4ddd-8ddd-dddddddddddd','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa')).messages.some(row=>row.text==='Current inbox fixture'));
   assert.equal(persisted,false,'Current disappearing previews must never enter persistent history');
+  // The first stream connection must not throw away the initial HTTP response.
+  await page.evaluate(auth=>{window.fixtureConnected=false;window.showInbox(auth);},authA);
+  await page.waitForFunction(()=>!!window.refreshInbox);
+  for(let n=0;n<100&&!inboxRequests.length;n++)await page.waitForTimeout(10);
+  assert(inboxRequests.length);
+  await page.evaluate(auth=>{window.fixtureConnected=true;window.showInbox(auth);},authA);
+  await inboxRequests.shift().fulfill({status:200,contentType:'application/json',body:JSON.stringify({viewerId:authA.user.id,conversations:[],serverNow:new Date().toISOString()})});
+  await page.getByText('Authorized inbox 0',{exact:true}).waitFor();
+  for(let n=0;n<100&&!inboxRequests.length;n++)await page.waitForTimeout(10);
+  assert(inboxRequests.length,'The first stream connection still reconciles its initial gap');
+  await inboxRequests.shift().fulfill({status:200,contentType:'application/json',body:JSON.stringify({viewerId:authA.user.id,conversations:[]})});
+  // Actual reconnects retain the old invalidation contract.
+  await page.evaluate(auth=>{window.fixtureConnected=false;window.showInbox(auth);},authA);
+  await page.evaluate(()=>void window.refreshInbox().catch(()=>{}));
+  for(let n=0;n<100&&!inboxRequests.length;n++)await page.waitForTimeout(10);
+  await page.evaluate(auth=>{window.fixtureConnected=true;window.showInbox(auth);},authA);
+  await inboxRequests.shift().fulfill({status:200,contentType:'application/json',body:JSON.stringify({viewerId:authA.user.id,conversations:[{id:'stale-fixture'}]})});
+  for(let n=0;n<100&&!inboxRequests.length;n++)await page.waitForTimeout(10);
+  assert.equal(await page.getByText('Authorized inbox 0',{exact:true}).count(),1,'A pre-reconnect response is not published');
+  assert(inboxRequests.length,'Reconnect performs a fresh authorized read');
+  await inboxRequests.shift().fulfill({status:200,contentType:'application/json',body:JSON.stringify({viewerId:authA.user.id,conversations:[{id:'current-fixture'},{id:'current-fixture-2'}]})});
+  await page.getByText('Authorized inbox 2',{exact:true}).waitFor();
   assert.deepEqual(errors,[]);
   console.log('PASS saved inbox/provider and ChatRoute with held server responses, 401/removal reconciliation: real encrypted offline history before the server response, ephemeral exclusion, account switch, logout and locked chat');
 } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }

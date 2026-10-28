@@ -389,7 +389,7 @@ export function ChatsLayout({
 
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain pb-2">
           {!snapshot && initialConversations === undefined ? (
-            <SavedInboxList filter={filter} onPrepare={id => {
+            <SavedInboxList filter={filter} onOpen={id=>{if(user)openedConversation.current={id,userId:user.id,scope:requestScope};}} onPrepare={id => {
               void warmChatCode().catch(() => undefined);
               if (user?.id) void prefetchChatRouteData(user.id, id).catch(() => undefined);
             }}/>

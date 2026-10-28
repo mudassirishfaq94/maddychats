@@ -7,7 +7,7 @@ import { useRealtime } from "@/components/providers/realtime-provider";
 import { activeAccount, chatLocked, offlineChats, type OfflineChat } from "../../../public/offline-store.js";
 
 /** Read-only local rows until the authorized conversation refresh replaces them. */
-export function SavedInboxList({ filter, onPrepare }: { filter: string; onPrepare: (id: string) => void }) {
+export function SavedInboxList({ filter, onPrepare, onOpen }: { filter: string; onPrepare: (id: string) => void; onOpen?: (id:string)=>void }) {
   const { user, status, requestScope } = useAuth();
   const { subscribe } = useRealtime();
   const [saved, setSaved] = useState<{ scope: object; chats: OfflineChat[] } | null>(null);
@@ -31,7 +31,7 @@ export function SavedInboxList({ filter, onPrepare }: { filter: string; onPrepar
       const locked = chat.locked || chatLocked(chat.id);
       return <li key={chat.id}><Link href={`/app/chats/${chat.id}`} prefetch={false}
         onPointerDown={() => onPrepare(chat.id)} onFocus={() => onPrepare(chat.id)}
-        onNavigate={event => { event.preventDefault(); window.history.pushState(null, "", `/app/chats/${chat.id}`); }}
+        onNavigate={event => { event.preventDefault(); onOpen?.(chat.id); window.history.pushState(null, "", `/app/chats/${chat.id}`); }}
         className="chat-list-row flex min-h-[76px] min-w-0 flex-col justify-center gap-1 px-4 py-3">
         <span className="truncate font-semibold">{locked ? "Locked chat" : chat.name}</span>
         {!locked && !chat.blocked && !chat.requestPending && chat.preview?.kind === "message" ? <span className="truncate text-sm text-[var(--muted)]">{chat.preview.text}</span> : null}

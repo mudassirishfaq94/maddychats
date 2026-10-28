@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { ConversationSummary } from "@/lib/types";
 import { createReconciledRead } from "@/lib/reconciled-read";
 import { useAuth } from "./auth-provider";
@@ -17,6 +17,7 @@ const Context = createContext<ConversationList | null>(null);
 
 function AccountConversationList({ userId, children }: { userId: string; children: ReactNode }) {
   const { connected, subscribe } = useRealtime();
+  const hasConnected = useRef(false);
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [account] = useState(() => {
     let active = true;
@@ -91,12 +92,28 @@ function AccountConversationList({ userId, children }: { userId: string; childre
     };
   }, [account, reads]);
   useEffect(() => {
-    // A reconnect invalidates any snapshot started before the transport came back.
-    // The next refresh follows it, so recovery stays correct without overlap.
-    if (userId && (connected || !account.current)) {
-      if (connected) reads.invalidate();
-      void refresh().catch(() => undefined);
+    if (!userId) return;
+    if (!connected) {
+      if (!account.current) void refresh().catch(() => undefined);
+      return;
     }
+    if (!hasConnected.current) {
+      hasConnected.current = true;
+      // The first stream connection is not a reconnect. Publish the in-flight
+      // authorized inbox, then reconcile its connection gap in the background.
+      // Destructive-event invalidations still suppress stale responses normally.
+      const initial = reads.pending;
+      if (initial) {
+        void initial.catch(() => undefined).then(() => {
+          reads.invalidate();
+          return refresh();
+        }).catch(() => undefined);
+      } else void refresh().catch(() => undefined);
+      return;
+    }
+    // A real reconnect must invalidate reads started before transport recovery.
+    reads.invalidate();
+    void refresh().catch(() => undefined);
   }, [userId, connected, account, reads, refresh]);
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | undefined;
