@@ -70,6 +70,7 @@ async function expandDetails(page, scope = page) {
 async function testNavigationSpace(page) {
   const settings = await page.context().newPage();
   await settings.goto(new URL("/app/settings#two-step-verification", page.url()).toString());
+  const security=settings.locator("#security");if(await security.getAttribute("open")===null)await security.locator(":scope > summary").click();
   const enable = settings.getByRole("button", { name: "Enable two-factor authentication", exact: true });
   await enable.waitFor({ state: "visible" });
   const twoFactor = settings.locator("#two-step-verification");
@@ -164,10 +165,10 @@ export async function testMobileLayout(base, pool, { recordOnly = false, navigat
     };
     await mkdir(".freebuff/performance", { recursive: true });
     const user = await login(accounts[0]);
-    await user.goto(base + "/app/settings#privacy");
+    await user.goto(base + "/app/settings#privacy");await user.getByText("Linked phones and account security",{exact:true}).click();
     await user.getByText("This device: Linked", { exact: true }).waitFor();
     const pending = await login(accounts[0]);
-    await pending.goto(base + "/app/settings#privacy");
+    await pending.goto(base + "/app/settings#privacy");await pending.getByText("Linked phones and account security",{exact:true}).click();
     await pending.getByText("This device: Waiting for approval", { exact: true }).waitFor();
     await pending.getByRole("button", { name: "Emergency recovery: no linked device or backup file", exact: true }).click();
     const navigationScreens = await testNavigationSpace(pending);
