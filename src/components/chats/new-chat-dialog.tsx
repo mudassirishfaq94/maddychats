@@ -104,10 +104,10 @@ export function NewChatDialog({ start = "choose", compact = false, openExternall
       <div className="card-glass dialog-card max-w-md rounded-3xl p-5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            {mode !== "choose" ? <button type="button" aria-label="Back" disabled={starting || Boolean(createdGroupId)} className="flex h-8 w-8 items-center justify-center rounded-full" onClick={() => { setError(null); setMode(mode === "group-info" ? "group-people" : "choose"); }}><ArrowLeft className="h-4 w-4" /></button> : null}
+            {mode !== "choose" ? <button type="button" aria-label="Back" disabled={starting || Boolean(createdGroupId)} className="flex h-11 w-11 items-center justify-center rounded-full" onClick={() => { setError(null); setMode(mode === "group-info" ? "group-people" : "choose"); }}><ArrowLeft className="h-4 w-4" /></button> : null}
             <h3 className="font-display text-lg font-bold">{title}</h3>
           </div>
-          <button type="button" onClick={close} aria-label="Close" className="flex h-8 w-8 items-center justify-center rounded-full text-[var(--muted)]"><X className="h-4 w-4" /></button>
+          <button type="button" onClick={close} aria-label="Close" className="flex h-11 w-11 items-center justify-center rounded-full text-[var(--muted)]"><X className="h-4 w-4" /></button>
         </div>
 
         {mode === "choose" ? <div className="mt-4 space-y-2">
