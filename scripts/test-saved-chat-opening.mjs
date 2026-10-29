@@ -31,7 +31,7 @@ const bundle = await build({ bundle: true, write: false, format: "iife", platfor
     ? `export const useParams=()=>({id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'});`
     : args.path.endsWith("auth-provider") ? `export const useAuth=()=>window.fixtureAuth;`
     : args.path.endsWith("e2ee-provider") ? `const loadCachedDecryptedMessages=async()=>new Map();export const useSharedE2EE=()=>({loadCachedDecryptedMessages});`
-    : `const subscribe=handler=>{window.eventHandler=handler;return ()=>{};};export const useRealtime=()=>({subscribe,connected:!!window.fixtureConnected});` }));
+    : `const listeners=(window.fixtureListeners??=new Set());window.eventHandler=event=>{for(const handler of [...listeners])handler(event);};const subscribe=handler=>{listeners.add(handler);return ()=>listeners.delete(handler);};export const useRealtime=()=>({subscribe,connected:!!window.fixtureConnected});` }));
 } }] });
 const server = createServer((req, res) => {
   if (req.url === "/bundle.js") { res.setHeader("Content-Type", "text/javascript"); res.end(bundle.outputFiles[0].contents); }
