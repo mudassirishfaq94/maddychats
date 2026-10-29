@@ -21,6 +21,7 @@ try{
     const store=await import('/offline-store.js');
     await store.rememberChats(account,[{id:chat,name:'Fixture friend',unreadCount:2}]);
     await store.rememberHistory(account,chat,[
+      ...Array.from({length:20},(_,index)=>({id:`11111111-1111-4111-8111-${String(index).padStart(12,'0')}`,kind:'message',text:'Older saved fixture '+index,createdAt:new Date(Date.now()-100000+index).toISOString()})),
       {id:'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',kind:'message',text:'Saved fixture',createdAt:new Date().toISOString()},
       {id:'cccccccc-cccc-4ccc-8ccc-cccccccccccc',kind:'ephemeral',text:'Secret expired fixture',createdAt:new Date().toISOString()},
     ],true);
@@ -31,6 +32,8 @@ try{
   assert.equal(await page.locator('.row-preview').innerText(),'Open to see messages');
   await page.getByRole('listitem').click();
   await page.getByText('Saved fixture',{exact:true}).waitFor();
+  assert.equal(await page.evaluate(()=>{const box=document.getElementById('messages');box.scrollTop=0;const first=box.querySelector('p').getBoundingClientRect();return first.top>=box.getBoundingClientRect().top;}),true,'Long saved history remains reachable at its top');
+  await page.evaluate(()=>{const box=document.getElementById('messages');box.scrollTop=box.scrollHeight;});
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'Phone layout stays within the screen');
   await mkdir('.freebuff/performance',{recursive:true});
   await page.screenshot({path:'.freebuff/performance/startup-fixture-chat.png'});
