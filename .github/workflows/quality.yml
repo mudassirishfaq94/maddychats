@@ -136,6 +136,8 @@ jobs:
         run: npx tsx scripts/test-data-api-boundary.ts
       - name: Unit and isolated integration suites
         run: npm test
+      - name: Disappearing text, media and shared-upload-cap regressions
+        run: DISAPPEARING_MEDIA_ONLY=1 npm run test:restored
       - name: Offline PWA fallback under enforced CSP
         run: npm run test:pwa-offline
       - name: TWA configuration boundaries without Android tooling or credentials
