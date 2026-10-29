@@ -112,7 +112,7 @@ export function VirtualMessageHistory({ items, scrollRef, scrollElement, content
   }, [scrollElement]);
   const setContent = useCallback((node: HTMLDivElement | null) => { contentRef.current = node; }, [contentRef]);
   return <HistoryRowRetention.Provider value={retain}><div ref={setContent} data-history-count={items.length} data-virtualized={enabled ? "true" : undefined}
-    className="relative z-10 pb-4" style={enabled ? { height: virtualizer.getTotalSize(), width: "100%", overflowAnchor: "none" } : undefined}>
+    className="relative z-10 shrink-0 pb-4" style={enabled ? { height: virtualizer.getTotalSize(), width: "100%", overflowAnchor: "none" } : undefined}>
     {enabled ? virtualizer.getVirtualItems().map(item => <div key={item.key} data-index={item.index}
       ref={virtualizer.measureElement} className="absolute left-0 top-0 w-full flow-root"
       style={{ transform: `translateY(${item.start - margin}px)` }}>

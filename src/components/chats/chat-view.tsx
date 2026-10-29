@@ -2369,7 +2369,7 @@ export function ChatView({
           }
         }}
         className={cn(
-          "relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 py-4 sm:px-6",
+          "relative flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden px-4 py-4 sm:px-6",
           dragging && "outline-2 outline-dashed outline-offset-[-10px] outline-[var(--accent)]",
         )}
       >
@@ -2380,7 +2380,7 @@ export function ChatView({
         ) : null}
 
         {hasMore ? (
-          <div ref={topSentinelRef} className="flex justify-center py-2">
+          <div ref={topSentinelRef} className="mt-auto flex shrink-0 justify-center py-2">
             <button
               type="button"
               onClick={loadOlder}
@@ -2396,7 +2396,7 @@ export function ChatView({
             </button>
           </div>
         ) : items.length > 0 ? (
-          <p className="mx-auto w-fit rounded-full bg-[var(--surface)] px-3.5 py-1.5 text-[0.64rem] font-medium uppercase tracking-widest text-[var(--muted)] shadow-sm">
+          <p className="mx-auto mt-auto w-fit shrink-0 rounded-full bg-[var(--surface)] px-3.5 py-1.5 text-[0.64rem] font-medium uppercase tracking-widest text-[var(--muted)] shadow-sm">
             Beginning of conversation
           </p>
         ) : null}
