@@ -328,10 +328,9 @@ class MainActivity : ComponentActivity() {
 
     private fun navigateBehindSnapshot(browser: WebView, destination: String, generation: Int, attempt: Int = 0) {
         if (startupView == null || webView !== browser || generation != startupGeneration) return
-        val path = JSONObject.quote(Uri.parse(destination).path)
         // Reuse the hydrated inbox's ordinary click flow. Reloading the whole
         // document here would throw away startup work and decrypt the inbox twice.
-        val script = """(()=>{if(typeof window.__circloNavigate!=='function')return false;const path=$path;if(location.pathname===path)return true;const row=Array.from(document.querySelectorAll('a.chat-list-row')).find(n=>n.getAttribute('href')===path);if(row){row.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}));row.click();return true;}return window.__circloNavigate(${JSONObject.quote(destination)});})()"""
+        val script = "typeof window.__circloOpenFromSnapshot === 'function' && window.__circloOpenFromSnapshot(${JSONObject.quote(destination)})"
         browser.evaluateJavascript(script) { handled ->
             if (startupView == null || webView !== browser || generation != startupGeneration) return@evaluateJavascript
             if (handled == "true") pollStartupHandoff(browser)

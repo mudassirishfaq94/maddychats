@@ -2,10 +2,14 @@ import assert from 'node:assert/strict';
 import {createServer} from 'node:http';
 import {readFile,mkdir} from 'node:fs/promises';
 import {chromium} from 'playwright';
+import {build} from 'esbuild';
+
+const navigationBundle=await build({bundle:true,write:false,format:'iife',platform:'browser',stdin:{resolveDir:process.cwd(),contents:"import {openStartupDestination} from './src/lib/native-startup-navigation';window.openStartupDestination=openStartupDestination;"}});
 
 const account='dddddddd-dddd-4ddd-8ddd-dddddddddddd', chat='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const server=createServer(async(req,res)=>{
   const path=new URL(req.url,'http://localhost').pathname;
+  if(path==='/nav-fixture.js'){res.setHeader('Content-Type','text/javascript');res.end(navigationBundle.outputFiles[0].contents);return;}
   if(!['/startup.html','/startup.css','/startup.js','/offline.css','/offline-store.js','/icons/circlo-mark.svg'].includes(path)){res.writeHead(404).end();return;}
   res.setHeader('Content-Type',path.endsWith('.js')?'text/javascript':path.endsWith('.css')?'text/css':path.endsWith('.svg')?'image/svg+xml':'text/html');
   res.end(await readFile('public'+path));
@@ -48,6 +52,19 @@ try{
   await page.reload();assert.equal(await page.locator('.chat-list-row,.saved-bubble').count(),0);
   await page.evaluate(()=>{localStorage.removeItem('circlo:offline-account');window.dispatchEvent(new StorageEvent('storage',{key:'circlo:offline-account'}));});
   assert.equal(await page.locator('.chat-list-row,.saved-bubble').count(),0);
+  await page.addScriptTag({url:base+'/nav-fixture.js'});
+  const navigation=await page.evaluate(chat=>{
+    history.replaceState(null,'','/app/chats');
+    let routed=0,warmed=0,clicked=0;const navigate=()=>{routed++;return true;};
+    const early=window.openStartupDestination('/app/chats/'+chat,navigate);
+    const row=document.createElement('a');row.href='/app/chats/'+chat;row.className='chat-list-row';row.onpointerdown=()=>warmed++;row.onclick=event=>{event.preventDefault();clicked++;};document.body.append(row);
+    const cached=window.openStartupDestination('/app/chats/'+chat,navigate);row.remove();
+    const marker=document.createElement('div');marker.dataset.inboxReady='true';document.body.append(marker);
+    const missing=window.openStartupDestination('/app/chats/'+chat,navigate);
+    const external=window.openStartupDestination('https://example.invalid/app/chats/'+chat,navigate);
+    return {early,cached,missing,external,routed,warmed,clicked};
+  },chat);
+  assert.deepEqual(navigation,{early:false,cached:true,missing:true,external:false,routed:1,warmed:1,clicked:1},'Early native taps wait for inbox hydration; cached rows use the ordinary handler; missing rows still reach server authorization');
   assert.deepEqual(api,[]);assert.deepEqual(errors,[]);
   console.log('PASS APK startup: real encrypted cache, cached messages without network, no ephemeral text, read-only controls, Back, locks, account switch and logout');
 }finally{await browser.close();await new Promise(resolve=>server.close(resolve));}

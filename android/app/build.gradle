@@ -16,8 +16,8 @@ android {
         applicationId "chat.circlo.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 23
-        versionName "0.9.14"
+        versionCode 24
+        versionName "0.9.15"
         manifestPlaceholders = [appLinkHost: 'circlo.chat']
         buildConfigField "String", "API_BASE_URL", '"' + appOrigin + '"'
         buildConfigField "boolean", "WEBVIEW_PROFILING", profileWebView.toString()

@@ -35,6 +35,9 @@ function warmChatCode() {
   return chatCode;
 }
 const InboxChatRoute = lazy(() => warmChatCode().then(module => ({ default: module.ChatRoute })));
+// Fetch code as soon as this public module is evaluated, before hydration's
+// provider effects. No history request, key sharing or authorization is skipped.
+if (typeof window !== "undefined") void warmChatCode().catch(() => undefined);
 
 function previewText(conv: ConversationSummary, previews: Map<string, string>): string {
   const last = conv.lastMessage;
@@ -328,6 +331,7 @@ export function ChatsLayout({
     <div className="flex h-full w-full min-w-0 overflow-hidden overflow-x-hidden bg-[var(--bg)]">
       {/* ------------------------ conversation sidebar ------------------------ */}
       <aside
+        data-inbox-ready={Boolean(snapshot || initialConversations) ? "true" : "false"}
         className={cn(
           "relative min-w-0 w-full shrink-0 flex-col border-r border-[var(--border)] bg-[var(--surface)] lg:flex lg:w-[360px] xl:w-[380px]",
           activeId ? "hidden" : "flex",
