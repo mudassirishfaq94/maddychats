@@ -11,7 +11,7 @@ export async function testDisappearingMedia(base,pool,owner,peer,sender,recipien
     assert.equal((await saved).status(),200);
     await sender.getByRole('button',{name:'Chat options',exact:true}).click();
     await sender.waitForFunction(seconds=>document.querySelector('select[aria-label="Disappearing message duration"]')?.value===String(seconds),seconds);
-    await sender.getByRole('button',{name:'Chat options',exact:true}).click();
+    await sender.keyboard.press('Escape');
   };
   const sendText=async text=>{
     const saved=sender.waitForResponse(r=>r.url().endsWith('/messages')&&r.request().method()==='POST');
