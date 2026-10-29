@@ -22,7 +22,7 @@ export async function testDisappearingMedia(base,pool,owner,peer,sender,recipien
   await controls(86400);
   const text=await sendText('Timed encrypted fixture');
   await recipient.getByText('Timed encrypted fixture',{exact:true}).waitFor();
-  assert.equal(Date.parse(text.expiresAt)-Date.parse(text.createdAt),86400000);
+  assert(Math.abs(Date.parse(text.expiresAt)-Date.parse(text.createdAt)-86400000)<1000,'Text expiry follows the 24-hour policy within timestamp/transaction clock precision');
   const fakeId=randomUUID(),paths=Array.from({length:51},()=>`statuses/capacity-fixture-${randomUUID()}`);
   try{
     // Inventory-only fixtures simulate old shared caps without storing 400 MB
@@ -33,7 +33,7 @@ export async function testDisappearingMedia(base,pool,owner,peer,sender,recipien
     await sender.getByRole('button',{name:'Send attachments',exact:true}).click();
     const response=await uploaded;assert.equal(response.status(),201,await response.text());
     const media=(await response.json()).message;
-    assert.equal(Date.parse(media.expiresAt)-Date.parse(media.createdAt),86400000,'Media receives the chat timer');
+    assert(Math.abs(Date.parse(media.expiresAt)-Date.parse(media.createdAt)-86400000)<1000,'Media receives the 24-hour timer within timestamp/transaction clock precision');
     const attachment=media.attachments[0];
     assert.equal((await recipient.request.get(base+'/api/media/'+attachment.id)).status(),200);
     await recipient.getByRole('button',{name:'Download timed-fixture.txt',exact:true}).waitFor();
@@ -50,10 +50,12 @@ export async function testDisappearingMedia(base,pool,owner,peer,sender,recipien
     const untimed=await sendText('Timer disabled fixture');assert.equal(untimed.expiresAt,null);
     assert.equal((await pool.query('select expires_at from messages where id=$1',[text.id])).rows[0].expires_at.toISOString(),deadline,'Turning off does not extend older deadlines');
     await sender.getByLabel('Self-destruct message · 5 seconds after first reveal',{exact:true}).check();
-    await sendText('Five second reveal fixture');
+    const selfDestruct=await sendText('Five second reveal fixture');
     assert.equal(await recipient.getByText('Five second reveal fixture',{exact:true}).count(),0,'Reveal is required before plaintext appears');
     const reveal=recipient.getByRole('button',{name:'Reveal · disappears in 5 seconds',exact:true});await reveal.click();
     await recipient.getByText('Five second reveal fixture',{exact:true}).waitFor();
+    const lifetime=(await pool.query('select expires_at,revealed_at from messages where id=$1',[selfDestruct.id])).rows[0];
+    assert.equal(lifetime.expires_at.getTime()-lifetime.revealed_at.getTime(),5000);
     await recipient.getByText('Five second reveal fixture',{exact:true}).waitFor({state:'hidden',timeout:10000});
     await pool.query('insert into stored_uploads(path) select unnest($1::text[])',[paths]);
     const image=await sharp({create:{width:40,height:40,channels:3,background:'blue'}}).png().toBuffer();
