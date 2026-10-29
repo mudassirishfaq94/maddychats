@@ -21,6 +21,8 @@ Before eliminating that reload, the same cached-startup APK recorded 543 ms to l
 
 These runs do not establish a universal one-second maximum. Network-only messages, new accounts, lost local history and disappearing messages have different constraints. No disappearing plaintext was persisted to meet a benchmark. A CDP touch attempt did not open the row; OS touch injection was rejected by Xiaomi's INJECT_EVENTS policy. Those attempts are excluded from successful chat timings.
 
+After deploying the newly compiled `speed-a8d98ad` web build, the first process launch recorded **883 ms to list / 3,769 ms to readable text**. The next recorded process launch was **517 ms / 525 ms**. The first-after-deployment result remains above target; do not report a reliable universal one-second first-chat maximum. These measurements do not isolate download, authorization and decryption costs within that outlier.
+
 ## Validation
 
 - 187 Node unit tests passed; TypeScript and changed-file ESLint passed.
@@ -28,5 +30,6 @@ These runs do not establish a universal one-second maximum. Network-only message
 - Real encrypted IndexedDB startup regression: no API requests, readable saved messages, no disappearing text, read-only controls, Back, lock changes, account switching and logout. Included in quality CI.
 - Saved-inbox/provider and decryption-race browser regressions passed, including held HTTP responses and authorization removal.
 - Packaged release `speed-69cc0a9` passed real lazy-audio suspension, message-scroll and cached-history regressions before deployment. Its Bluehost readiness/version checks passed; persistent uploads retained.
+- Final web release `speed-a8d98ad` passed those packaged checks plus native-startup regressions, then passed Bluehost readiness/version checks. APK source `3232214` adds the separately tested long-history scroll correction; it is installed in place on the Poco. PR #73 remains unmerged.
 
 The installed APK uses the existing local test certificate and profiling opt-in, preserving app data. It is not a Play Store publishing artifact. Build the final signed AAB without profiling and complete release review before publishing.
