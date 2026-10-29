@@ -104,6 +104,7 @@ jobs:
       - name: Saved chat and decryption handoff regressions
         run: |
           node scripts/test-saved-chat-opening.mjs
+          node scripts/test-native-startup.mjs
           node scripts/test-decryption-refresh-race.mjs
           node scripts/test-familiar-flows.mjs
             node scripts/test-settings-panels.mjs

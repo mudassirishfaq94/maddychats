@@ -150,6 +150,12 @@ private class ZipTalkApi(context: Context) {
 class MainActivity : ComponentActivity() {
     val backupExport = BackupExport(this)
     private var webView: WebView? = null
+    private var startupView: WebView? = null
+    @Volatile private var startupAccount: String? = null
+    @Volatile private var startupTrusted = false
+    private var startupDestination = "${BuildConfig.API_BASE_URL}/app/chats"
+    private var startupGeneration = 0
+    private var startupNewChat = false
     private var hostedContent: FrameLayout? = null
     private var callTransition: android.view.View? = null
     private fun showCallTransition() {
@@ -249,7 +255,8 @@ class MainActivity : ComponentActivity() {
         CookieManager.getInstance().setAcceptCookie(true)
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
-                if (webView?.canGoBack() == true) webView?.goBack() else finish()
+                val browser = startupView ?: webView
+                if (browser?.canGoBack() == true) browser.goBack() else finish()
             }
         })
         // Load the hosted app immediately. The server already owns the source
@@ -258,9 +265,12 @@ class MainActivity : ComponentActivity() {
         // Waiting for a separate native /api/auth/me probe before creating the
         // WebView could leave some Android devices on an empty launch surface
         // when that probe or the Compose first frame stalled.
-        webView = createHostedWebView()
+        val firstDestination = notificationDestination(intent)
+        startupAccount = if (firstDestination == null) localSnapshotAccount() else null
+        val initial = if (startupAccount != null) createStartupWebView().also { startupView = it }
+            else createHostedWebView(firstDestination).also { webView = it }
         val content = FrameLayout(this).apply {
-            addView(requireNotNull(webView), FrameLayout.LayoutParams(
+            addView(initial, FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT,
             ))
@@ -283,6 +293,116 @@ class MainActivity : ComponentActivity() {
             insets
         }
         setContentView(content)
+        if (startupView != null) initial.postOnAnimation { loadBehindSnapshot(startupDestination) }
+    }
+
+    /** Cookie claims select local device data only; the hosted app still checks
+     * the actual session, MFA, device approval and revocation against the server. */
+    private fun localSnapshotAccount(): String? = runCatching {
+        val token = CookieManager.getInstance().getCookie(BuildConfig.API_BASE_URL).orEmpty()
+            .split(';').map { it.trim() }.firstOrNull { it.startsWith("maddy_session=") }?.substringAfter('=') ?: return@runCatching null
+        val parts = token.split('.')
+        if (parts.size != 3 || token.length > 8192) return@runCatching null
+        val claims = JSONObject(String(android.util.Base64.decode(parts[1], android.util.Base64.URL_SAFE or android.util.Base64.NO_WRAP), Charsets.UTF_8))
+        val user = claims.optString("sub")
+        if (StartupSnapshotPolicy.eligible(user, claims.optString("sid"), claims.optLong("exp"), claims.optBoolean("devicePending"), System.currentTimeMillis())) user else null
+    }.getOrNull()
+
+    private fun finishStartupSnapshot() {
+        startupGeneration++
+        startupTrusted = false
+        startupView?.let { hostedContent?.removeView(it); it.destroy() }
+        startupView = null
+        startupAccount = null
+    }
+
+    private fun loadBehindSnapshot(destination: String) {
+        if (startupView == null) return
+        if (localSnapshotAccount() != startupAccount) { finishStartupSnapshot(); if (webView == null) attachHosted(destination); return }
+        val changed = startupDestination != destination
+        startupDestination = destination
+        if (changed || webView == null) startupGeneration++
+        if (webView == null) attachHosted(destination)
+        else if (changed) webView?.let { navigateBehindSnapshot(it, destination, startupGeneration) }
+    }
+
+    private fun navigateBehindSnapshot(browser: WebView, destination: String, generation: Int, attempt: Int = 0) {
+        if (startupView == null || webView !== browser || generation != startupGeneration) return
+        val path = JSONObject.quote(Uri.parse(destination).path)
+        // Reuse the hydrated inbox's ordinary click flow. Reloading the whole
+        // document here would throw away startup work and decrypt the inbox twice.
+        val script = """(()=>{if(typeof window.__circloNavigate!=='function')return false;const path=$path;if(location.pathname===path)return true;const row=Array.from(document.querySelectorAll('a.chat-list-row')).find(n=>n.getAttribute('href')===path);if(row){row.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}));row.click();return true;}return window.__circloNavigate(${JSONObject.quote(destination)});})()"""
+        browser.evaluateJavascript(script) { handled ->
+            if (startupView == null || webView !== browser || generation != startupGeneration) return@evaluateJavascript
+            if (handled == "true") pollStartupHandoff(browser)
+            else if (attempt < 150) browser.postDelayed({ navigateBehindSnapshot(browser, destination, generation, attempt + 1) }, 40)
+            else browser.loadUrl(destination)
+        }
+    }
+
+    private fun attachHosted(destination: String) {
+        val browser = createHostedWebView(destination)
+        webView = browser
+        hostedContent?.addView(browser, 0, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+    }
+
+    private inner class StartupBridge {
+        @android.webkit.JavascriptInterface fun accountHint(): String = if (startupTrusted) startupAccount.orEmpty() else ""
+        @android.webkit.JavascriptInterface fun cacheReady(account: String) = runOnUiThread {
+            if (startupTrusted && account == startupAccount) loadBehindSnapshot(startupDestination)
+        }
+        @android.webkit.JavascriptInterface fun unavailable() = runOnUiThread {
+            if (!startupTrusted) return@runOnUiThread
+            finishStartupSnapshot()
+            if (webView == null) attachHosted("${BuildConfig.API_BASE_URL}/app/chats")
+        }
+        @android.webkit.JavascriptInterface fun openChat(id: String) = runOnUiThread {
+            if (!startupTrusted || (id.isNotEmpty() && !StartupSnapshotPolicy.chatId(id))) return@runOnUiThread
+            loadBehindSnapshot("${BuildConfig.API_BASE_URL}/app/chats" + if (id.isEmpty()) "" else "/$id")
+        }
+        @android.webkit.JavascriptInterface fun openPage(path: String) = runOnUiThread {
+            if (startupTrusted && path in setOf("/app/status", "/app/calls", "/app/settings")) loadBehindSnapshot(BuildConfig.API_BASE_URL + path)
+        }
+        @android.webkit.JavascriptInterface fun newChat() = runOnUiThread {
+            if (startupTrusted) { startupNewChat = true; loadBehindSnapshot("${BuildConfig.API_BASE_URL}/app/chats") }
+        }
+    }
+
+    private fun createStartupWebView(): WebView = WebView(this).apply {
+        setBackgroundColor(AndroidColor.WHITE)
+        settings.javaScriptEnabled = true
+        settings.domStorageEnabled = true
+        settings.allowFileAccess = false
+        settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
+        settings.userAgentString = "${settings.userAgentString} ZipTalkAndroid/0.9 StartupSnapshot"
+        CookieManager.getInstance().setAcceptThirdPartyCookies(this, false)
+        addJavascriptInterface(StartupBridge(), "CircloStartup")
+        webViewClient = object : WebViewClient() {
+            override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): android.webkit.WebResourceResponse? {
+                val asset = OfflineShellAssets.assetPath(request.url.toString(), BuildConfig.API_BASE_URL, request.method) ?: return null
+                return android.webkit.WebResourceResponse(OfflineShellAssets.mimeType(asset), "UTF-8", assets.open(asset))
+            }
+            override fun onPageStarted(view: WebView, url: String, favicon: android.graphics.Bitmap?) {
+                startupTrusted = WebOriginPolicy.isAllowed(url, BuildConfig.API_BASE_URL) && Uri.parse(url).path == "/startup.html"
+            }
+            override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean = true
+        }
+        loadUrl("${BuildConfig.API_BASE_URL}/startup.html")
+    }
+
+    private fun pollStartupHandoff(browser: WebView, attempt: Int = 0) {
+        if (startupView == null || webView !== browser || attempt > 250) return
+        if (localSnapshotAccount() != startupAccount) { finishStartupSnapshot(); return }
+        val generation = startupGeneration
+        val expectedPath = JSONObject.quote(Uri.parse(startupDestination).path)
+        val script = """(()=>{if(document.querySelector('[aria-label="Opening Circlo"]'))return false;const p=location.pathname;if(p==='/login'||p==='/register'||p.includes('device-access'))return true;if(p==='/offline.html')return !!document.querySelector('#conversations .chat-row,#empty-list:not([hidden])');if(p!==$expectedPath)return false;if(document.querySelector('[role="alert"]'))return true;if(p==='/app/chats')return !!document.querySelector('.chat-list-row')||Array.from(document.querySelectorAll('p')).some(n=>n.textContent==='No conversations yet');if(p.startsWith('/app/chats/'))return !!document.querySelector('[aria-label="Messages"], [aria-label="Saved messages"] p');return document.readyState!=='loading'&&!!document.querySelector('h1,h2,input[type="password"]');})()"""
+        browser.evaluateJavascript(script) { ready ->
+            if (startupView == null || webView !== browser || generation != startupGeneration) return@evaluateJavascript
+            if (ready == "true") {
+                if (startupNewChat) { startupNewChat = false; browser.evaluateJavascript("document.querySelector('button[aria-label=\"New chat\"]')?.click()", null) }
+                finishStartupSnapshot()
+            } else browser.postDelayed({ pollStartupHandoff(browser, attempt + 1) }, 40)
+        }
     }
 
     // Firebase background notifications deliver data extras to the launcher;
@@ -315,6 +435,7 @@ class MainActivity : ComponentActivity() {
     private var navigationGeneration = 0
 
     private fun navigateHosted(destination: String) {
+        if (startupView != null) { finishStartupSnapshot(); if (webView == null) { attachHosted(destination); return } }
         val browser = webView ?: return
         val generation = ++navigationGeneration
         if (!WebOriginPolicy.isAllowed(browser.url.orEmpty(), BuildConfig.API_BASE_URL)) {
@@ -344,7 +465,7 @@ class MainActivity : ComponentActivity() {
 
     private fun createNotificationChannel() { NotificationChannels.ensure(this) }
 
-    override fun onDestroy() { backupExport.close(); NativeCallSessionService.stop(this); webView?.destroy(); webView = null; super.onDestroy() }
+    override fun onDestroy() { finishStartupSnapshot(); backupExport.close(); NativeCallSessionService.stop(this); webView?.destroy(); webView = null; super.onDestroy() }
 
     fun hostedWebChromeClient() = object : WebChromeClient() {
         override fun onPermissionRequestCanceled(request: PermissionRequest) {
@@ -413,7 +534,7 @@ class MainActivity : ComponentActivity() {
      * nonblank value and legacy cookies are available. Setup and migration
      * failures propagate to the caller.
      */
-    private fun createHostedWebView(): WebView = WebView(this).apply {
+    private fun createHostedWebView(destination: String? = null): WebView = WebView(this).apply {
         setBackgroundColor(AndroidColor.WHITE)
         settings.javaScriptEnabled = true
         settings.domStorageEnabled = true
@@ -442,7 +563,7 @@ class MainActivity : ComponentActivity() {
         HostedPushBridge(this@MainActivity) { done -> requestNotifications(done) }.install(this)
         webChromeClient = hostedWebChromeClient()
         webViewClient = hostedWebClient()
-        loadUrl(notificationDestination(intent) ?: "${BuildConfig.API_BASE_URL}/app/chats")
+        loadUrl(destination ?: notificationDestination(intent) ?: "${BuildConfig.API_BASE_URL}/app/chats")
     }
 
     private fun showOfflineShell(view: WebView) {
@@ -453,6 +574,13 @@ class MainActivity : ComponentActivity() {
     }
 
     fun hostedWebClient() = object : WebViewClient() {
+            override fun onPageStarted(view: WebView, url: String, favicon: android.graphics.Bitmap?) {
+                super.onPageStarted(view, url, favicon)
+                if (startupView != null && WebOriginPolicy.isAllowed(url, BuildConfig.API_BASE_URL)) {
+                    val path = Uri.parse(url).path.orEmpty()
+                    if (path == "/login" || path.startsWith("/app/device") || path == "/register") finishStartupSnapshot()
+                }
+            }
             override fun shouldInterceptRequest(view: WebView, request: android.webkit.WebResourceRequest): android.webkit.WebResourceResponse? {
                 val asset = OfflineShellAssets.assetPath(request.url.toString(), BuildConfig.API_BASE_URL, request.method)
                 if (asset != null) {
@@ -480,6 +608,7 @@ class MainActivity : ComponentActivity() {
                 if (WebOriginPolicy.isAllowed(url, BuildConfig.API_BASE_URL)) {
                     NativeSessionCookies.persist()
                     view.evaluateJavascript("document.documentElement.dataset.keyboardOpen='$keyboardVisible'", null)
+                    pollStartupHandoff(view)
                 }
             }
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {

@@ -35,7 +35,7 @@ export function SavedInboxList({ filter, onPrepare, onOpen }: { filter: string; 
       const locked = chat.locked || chatLocked(chat.id);
       const stamp=chat.lastMessageAt??chat.preview?.createdAt;
       const date=stamp?new Date(stamp):null;
-      const preview=chat.requestPending?"Message request":chat.blocked?"Blocked":chat.preview?.kind==="message"?chat.preview.text:chat.preview?.kind==="ephemeral"?"Disappearing message":chat.preview?.kind==="deleted"?"Message deleted":chat.preview?.kind==="media"?"Media":"Open chat";
+      const preview=chat.requestPending?"Message request":chat.blocked?"Blocked":chat.preview?.kind==="message"?chat.preview.text:chat.preview?.kind==="ephemeral"?"Open to see messages":chat.preview?.kind==="deleted"?"Message deleted":chat.preview?.kind==="media"?"Media":"Open chat";
       return <li key={chat.id}><Link href={`/app/chats/${chat.id}`} prefetch={false}
         onPointerDown={() => onPrepare(chat.id)} onFocus={() => onPrepare(chat.id)}
         onNavigate={event => { event.preventDefault(); onOpen?.(chat.id); window.history.pushState(null, "", `/app/chats/${chat.id}`); }}
