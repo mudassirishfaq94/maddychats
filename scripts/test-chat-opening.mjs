@@ -4,6 +4,7 @@ import { chromium } from "playwright";
 import { testLocalChatBackup } from "./test-local-chat-backup.mjs";
 import { testStatusVideo } from "./test-status-video.mjs";
 import { testChatHandoff } from "./test-chat-handoff.mjs";
+import { testChatScroll } from "./test-chat-scroll.mjs";
 
 /** Close the SSR-to-live-stream gap deterministically using owned fixtures. */
 export async function testChatOpeningRace(sender, recipient) {
@@ -50,7 +51,8 @@ export async function testChatOpeningFixture(base, pool, owner, peer, password, 
     await pages[0].getByRole("textbox", { name: "Message text", exact: true }).fill(baseline);
     await pages[0].getByRole("textbox", { name: "Message text", exact: true }).press("Enter");
     await pages[1].getByRole("region", { name: "Conversation", exact: true }).getByText(baseline, { exact: true }).waitFor();
-    if(process.env.CHAT_HANDOFF_ONLY==='1')await testChatHandoff(base,pool,pages[1],owner,conversationId,baseline);
+    if(process.env.CHAT_SCROLL_ONLY==='1')await testChatScroll(base,{page:pages[0]},{page:pages[1]},pool,conversationId);
+    else if(process.env.CHAT_HANDOFF_ONLY==='1')await testChatHandoff(base,pool,pages[1],owner,conversationId,baseline);
     else if(process.env.STATUS_VIDEO_ONLY==='1')await testStatusVideo(base,pool,owner,peer,pages[0],pages[1]);
     else if(process.env.BACKUP_ONLY==='1')await testLocalChatBackup(base,pool,{page:pages[0]},owner,password,conversationId);
     else await testChatOpeningRace(pages[0], pages[1]);
