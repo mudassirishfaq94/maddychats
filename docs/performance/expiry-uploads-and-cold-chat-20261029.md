@@ -22,6 +22,19 @@ Before the cold-path follow-up, the first launch after `speed-9749ed3` measured 
 
 These are force-stop tests retaining app data, using an automated real-WebView click, not manual touch. Eligible saved plaintext excludes disappearing, deleted and locked messages. An expired session hint requires fresh server authorization; it must not be loosened to manufacture a faster result. A consistent one-second maximum has not yet been established.
 
+After deploying `speed-81ab763` and installing the matching 0.9.15 profiling APK:
+
+| Run | Launch to saved list | First tap to observed readable text |
+| --- | ---: | ---: |
+| First after deployment | 904 ms | 1,534 ms |
+| Repeat 1, saved surface unavailable | 2,181 ms observed upper bound, no saved-list mark | 486 ms |
+| Repeat 2 | 585 ms | 810 ms |
+| Repeat 3 | 626 ms | 501 ms |
+
+The first-after-deployment chat improved from 3,643 ms to 1,534 ms in these individual observations. They are not controlled statistical medians or a reliable maximum. That first run still downloaded two changed inbox/layout chunks in 562–666 ms before the client could begin its normal chat request. The phone's first chat has no eligible permanent saved message bodies, so it still needs an authorized network response; disappearing plaintext was not persisted. Keep the above misses visible when assessing readiness.
+
+The packaged release passed the checks above plus real long-history scrolling and the decryption-refresh race before cutover. Bluehost readiness and public version checks passed; uploads remained mounted. PR #73 contains the source; its merge is separate from the explicitly authorized live deployment.
+
 ## Static delivery deployment requirement
 
 `Caddyfile` serves only public `/_next/static/` build assets from `/opt/circlo-static/_next/static`, behind the existing Cloudflare TCP-peer guard. Before switching **every** future release, copy that build's `.next/static` tree there, preserving its relative paths. Reject symlinks and same-path/different-byte collisions; publish files atomically with readable file/directory permissions. Retain previous hashed assets for already-open clients. Never copy uploads, environment files, HTML, standalone/server bundles or protected responses there.
