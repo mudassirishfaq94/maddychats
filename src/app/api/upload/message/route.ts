@@ -31,7 +31,7 @@ import {
   validateUpload,
   sanitizeName,
 } from "@/server/storage";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { ENCRYPTED_MEDIA_OVERHEAD, MEDIA_MAX_BYTES, INLINE_MEDIA_MAX_BYTES } from "@/lib/media-limits";
 
 export const dynamic = "force-dynamic";
@@ -199,12 +199,11 @@ export async function POST(req: NextRequest) {
           : "file";
 
     const created = await db.transaction(async (tx) => {
-      // Serialize quota reservations with the attachment inserts, including concurrent senders.
-      await tx.execute(sql`select pg_advisory_xact_lock(847221904)`);
-      const usage = await tx.execute<{ bytes: string }>(sql`select coalesce(sum(size),0)::text as bytes from message_attachments`);
-      const budgetMb = Number(process.env.CHAT_STORAGE_BUDGET_MB ?? "400");
-      const budget = (Number.isFinite(budgetMb) && budgetMb > 0 ? budgetMb : 400) * 1024 * 1024;
-      if (Number(usage.rows[0]?.bytes ?? 0) + prepared.reduce((total, item) => total + item.file.size, 0) > budget) throw new Error("storage_budget");
+      // Serialize the timer policy with a concurrent change. Media follows the
+      // same send-time expiry as text; switching the timer later is not retroactive.
+      const [current] = await tx.select({ seconds: conversations.disappearingSeconds, deletedAt: conversations.deletedAt })
+        .from(conversations).where(eq(conversations.id, conversationId)).for("share");
+      if (!current || current.deletedAt) throw new Error("conversation_gone");
       const now = new Date();
       const rows = await tx
         .insert(messages)
@@ -216,6 +215,7 @@ export async function POST(req: NextRequest) {
           replyToMessageId: validReplyId,
           encrypted: isEncrypted,
           forwarded: form.get("forwarded") === "true",
+          expiresAt: current.seconds > 0 ? new Date(now.getTime() + current.seconds * 1000) : null,
         })
         .returning();
       const message = rows[0];
@@ -286,7 +286,7 @@ export async function POST(req: NextRequest) {
     if ((err as Error)?.message === "too_large") {
       return jsonError(413, "That file is too large.");
     }
-    if ((err as Error)?.message === "storage_budget") return jsonError(507, "Chat storage is full. No attachment was sent.");
+    if ((err as Error)?.message === "conversation_gone") return jsonError(404, "Conversation not found.");
     console.error("[maddy-chats] attachment upload failed:", safeError(err));
     return jsonError(500, "Upload failed. Please try again.");
   }

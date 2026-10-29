@@ -7,17 +7,30 @@ import { Ghost } from "lucide-react";
 import { useSharedE2EE } from "@/components/providers/e2ee-provider";
 import { ChatView } from "@/components/chats/chat-view";
 import { useAuth } from "@/components/providers/auth-provider";
-import { prefetchChatRouteData, retainChatRouteAccount, type ChatRouteData } from "@/lib/chat-route-prefetch";
+import { useRealtime } from "@/components/providers/realtime-provider";
+import { invalidateChatRouteData, prefetchChatRouteData, retainChatRouteAccount, type ChatRouteData } from "@/lib/chat-route-prefetch";
 import type { CurrentChatPreview } from "@/lib/current-chat-preview";
 import type { SafeUser } from "@/lib/types";
 
 export function ChatRoute({ conversationId, me, preview }: { conversationId: string; me: SafeUser; preview?: CurrentChatPreview }) {
   const { user, status } = useAuth();
+  const { subscribe } = useRealtime();
+  const [revision, setRevision] = useState(0);
   const { loadCachedDecryptedMessages } = useSharedE2EE();
   const routeKey = `${me.id}:${conversationId}`;
   const [result, setResult] = useState<{ key: string; data?: ChatRouteData; error?: string } | null>(null);
 
   useEffect(() => { retainChatRouteAccount(me.id); }, [me.id]);
+  useEffect(() => {
+    if (status !== "authenticated" || user?.id !== me.id) return;
+    const refresh = () => { invalidateChatRouteData(me.id, conversationId); setRevision(value => value + 1); };
+    const unsubscribe = subscribe(event => {
+      if (event.type.startsWith("group:") && "conversationId" in event && event.conversationId === conversationId) refresh();
+    });
+    const local = (event: Event) => { if ((event as CustomEvent).detail?.conversationId === conversationId) refresh(); };
+    window.addEventListener("maddy:conversation-controls", local);
+    return () => { unsubscribe(); window.removeEventListener("maddy:conversation-controls", local); };
+  }, [conversationId, me.id, status, user?.id, subscribe]);
   useEffect(() => {
     let active = true;
     if (status === "loading" || user?.id !== me.id) return () => { active = false; };
@@ -44,7 +57,7 @@ export function ChatRoute({ conversationId, me, preview }: { conversationId: str
       if (active && user?.id === me.id) setResult({ key: routeKey, error: "Could not load this conversation. Check your connection and try again." });
     });
     return () => { active = false; };
-  }, [conversationId, me.id, routeKey, status, user?.id, loadCachedDecryptedMessages]);
+  }, [conversationId, me.id, routeKey, status, user?.id, loadCachedDecryptedMessages, revision]);
 
   const data = result?.key === routeKey ? result.data ?? null : null;
   const error = result?.key === routeKey ? result.error ?? null : null;

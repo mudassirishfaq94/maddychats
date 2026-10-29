@@ -96,6 +96,7 @@ export function ChatActionsMenu({
         body: JSON.stringify({ action: "setDisappearing", disappearingSeconds: seconds }),
       });
       if (!response.ok) throw new Error("Couldn't save the timer. Try again.");
+      window.dispatchEvent(new CustomEvent("maddy:conversation-controls", { detail: { conversationId } }));
       setOpen(false); router.refresh();
     } catch { setError("Couldn't save the timer. Try again."); } finally { setBusy(false); }
   }
@@ -167,7 +168,7 @@ export function ChatActionsMenu({
           <p className="px-3 pb-1 pt-1 text-[0.68rem] font-semibold uppercase tracking-wide text-[var(--muted)]">Disappearing messages</p>
           <p className="px-3 pb-2 text-xs text-[var(--muted)]">New messages disappear after the time you choose.</p>
           <div className="px-2 pb-1">
-            <select aria-label="Disappearing message duration" defaultValue={conversation.disappearingSeconds} onChange={(event) => void setDisappearing(Number(event.target.value))} className="field-input py-2! text-xs!">
+            <select aria-label="Disappearing message duration" value={conversation.disappearingSeconds} disabled={busy} onChange={(event) => void setDisappearing(Number(event.target.value))} className="field-input py-2! text-xs!">
               <option value={0}>Off</option><option value={86400}>After 24 hours</option><option value={604800}>After 7 days</option><option value={2592000}>After 30 days</option>
             </select>
           </div>

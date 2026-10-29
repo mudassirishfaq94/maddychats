@@ -3,7 +3,7 @@ import { prepareReadableUpload, UploadSafetyError } from "@/server/upload-safety
 import { reconstructStatusPhoto } from "@/server/status-photo";
 import { readUploadForm } from "@/server/http";
 import { NextRequest, NextResponse } from "next/server";
-import { inArray, sql } from "drizzle-orm";
+import { inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import { guardSameOrigin, guardUploadSize, jsonError, readJson } from "@/server/http";
@@ -51,14 +51,7 @@ export async function POST(req: NextRequest) {
     type = prepared.kind;
     const storedName = generateStoredName(prepared.extension);
     try {
-      mediaPath = await db.transaction(async tx => {
-        await tx.execute(sql`select pg_advisory_xact_lock(847221905)`);
-        const inventory = await tx.execute<{ count: string }>(sql`select count(*)::text as count from stored_uploads where path like 'statuses/%'`);
-        // Reconstructed photos remain capped at 3 MB; scanner-backed media can
-        // use the 10 MB output budget. Keep a separate bounded inventory from chat.
-        if (Number(inventory.rows[0]?.count ?? 0) >= 50) throw new UploadSafetyError(503, "Photo status storage is full. Try again after older updates expire.");
-        return saveBuffer("statuses", storedName, prepared.buffer);
-      });
+      mediaPath = await saveBuffer("statuses", storedName, prepared.buffer);
     } catch (error) { return jsonError(error instanceof UploadSafetyError ? error.status : 503, error instanceof UploadSafetyError ? error.message : "Photo storage is unavailable. Try again later."); }
     mediaMimeType = prepared.mimeType;
 
