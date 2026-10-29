@@ -2427,7 +2427,7 @@ export function ChatView({
 
         {/* Scroll to bottom button */}
         {showScrollDown && (
-          <div className="sticky bottom-2 z-20 flex justify-center pb-2">
+          <div className="sticky bottom-2 z-20 flex shrink-0 justify-center pb-2">
             <button
               type="button"
               onClick={() => scrollToBottom(true)}
