@@ -243,7 +243,9 @@ class MainActivity : ComponentActivity() {
             isAppearanceLightStatusBars = true
             isAppearanceLightNavigationBars = true
         }
-        WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG)
+        // Local optimized-APK measurements may inspect the WebView. Play bundle
+        // builds reject that opt-in and keep debugging disabled.
+        WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG || BuildConfig.WEBVIEW_PROFILING)
         CookieManager.getInstance().setAcceptCookie(true)
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
