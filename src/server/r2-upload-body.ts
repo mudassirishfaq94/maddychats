@@ -7,9 +7,10 @@ export const MAX_R2_PUT_BYTES = INLINE_MEDIA_MAX_BYTES + ENCRYPTED_MEDIA_OVERHEA
 export async function bufferR2UploadBody(
   body: Buffer | ReadableStream<Uint8Array> | NodeJS.ReadableStream,
   expectedSize?: number,
+  limit = MAX_R2_PUT_BYTES,
 ): Promise<Buffer> {
   if (Buffer.isBuffer(body)) {
-    if (body.byteLength > MAX_R2_PUT_BYTES) throw new Error("r2_object_too_large");
+    if (body.byteLength > limit) throw new Error("r2_object_too_large");
     if (expectedSize !== undefined && body.byteLength !== expectedSize) throw new Error("r2_object_size_mismatch");
     return body;
   }
@@ -22,7 +23,7 @@ export async function bufferR2UploadBody(
   for await (const chunk of stream) {
     const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
     size += bytes.byteLength;
-    if (size > MAX_R2_PUT_BYTES) throw new Error("r2_object_too_large");
+    if (size > limit) throw new Error("r2_object_too_large");
     chunks.push(bytes);
   }
   if (expectedSize !== undefined && size !== expectedSize) throw new Error("r2_object_size_mismatch");

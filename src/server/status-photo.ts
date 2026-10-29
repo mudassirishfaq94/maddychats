@@ -1,14 +1,15 @@
 import { spawn } from "node:child_process";
 import path from "node:path";
 import { prepareReadableUpload, UploadSafetyError } from "./upload-safety";
-import { validateUpload } from "./storage";
-import { INLINE_MEDIA_MAX_BYTES, PHOTO_OUTPUT_MAX_BYTES } from "@/lib/media-limits";
+import { LIMITS, validateUpload } from "./storage";
+import { STATUS_MEDIA_OUTPUT_MAX_BYTES, PHOTO_OUTPUT_MAX_BYTES } from "@/lib/media-limits";
 
 let processing = false;
 
 /** Photo-only reconstruction; never used to accept raw videos or other files. */
 export async function reconstructStatusPhoto(file: File, mode: "avatar" | "message" = "message") {
-  if (file.size > INLINE_MEDIA_MAX_BYTES) throw new UploadSafetyError(413, "Photos must be 10 MB or smaller.");
+  const inputLimit = mode === "avatar" ? LIMITS.avatar : STATUS_MEDIA_OUTPUT_MAX_BYTES;
+  if (file.size > inputLimit) throw new UploadSafetyError(413, `Photos must be ${Math.round(inputLimit / 1024 / 1024)} MB or smaller.`);
   const check = validateUpload(file.name, file.type, file.size, mode);
   const mime = file.type.split(";")[0].trim().toLowerCase();
   if (!check.ok || check.kind !== "image" || !["image/jpeg", "image/png", "image/webp"].includes(mime)) throw new UploadSafetyError(422, "Choose a JPG, PNG, or WebP photo.");

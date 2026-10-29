@@ -2,10 +2,11 @@ import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
 
 /** Actual browser picker -> scanner -> storage -> authorized recipient video. */
-export async function testStatusVideo(base,pool,owner,peer,source,recipient) {
+export async function testStatusVideo(base,pool,owner,peer,source,recipient,large=false) {
   assert.equal(new URL(base).hostname,'127.0.0.1');
   assert(process.env.CLAMAV_HOST,'Video regression requires the real scanner');
-  const bytes=execFileSync('ffmpeg',['-v','error','-f','lavfi','-i','color=c=blue:s=160x120:r=10','-t','2','-c:v','libvpx','-f','webm','pipe:1']);
+  const bytes=execFileSync('ffmpeg',large?['-v','error','-f','lavfi','-i','nullsrc=s=640x480:r=30,noise=alls=100:allf=t','-t','8','-c:v','libvpx','-threads','1','-deadline','realtime','-cpu-used','8','-b:v','24M','-f','webm','pipe:1']:['-v','error','-f','lavfi','-i','color=c=blue:s=160x120:r=10','-t','2','-c:v','libvpx','-f','webm','pipe:1'],{maxBuffer:55*1024*1024});
+  if(large)assert(bytes.length>10*1024*1024&&bytes.length<=50*1024*1024,'Large video fixture must cross the old cap and fit the new one');
   let status;
   try {
     await source.goto(base+'/app/status');
@@ -23,9 +24,9 @@ export async function testStatusVideo(base,pool,owner,peer,source,recipient) {
     assert.equal((await fetch(base+status.mediaUrl)).status,401);
     await recipient.goto(base+'/app/status');
     await recipient.getByRole('button',{name:new RegExp(owner.username)}).click();
-    await recipient.waitForFunction(()=>[...document.querySelectorAll('video')].some(video=>video.readyState>=2&&video.videoWidth===160));
+    await recipient.waitForFunction(width=>[...document.querySelectorAll('video')].some(video=>video.readyState>=2&&video.videoWidth===width),large?640:160);
     await recipient.getByRole('button',{name:'Close status',exact:true}).click();
-    console.log('PASS Status video: phone-sized picker, real scanner/upload/storage, private chat audience, authorized video decode, anonymous denial');
+    console.log('PASS Status video: phone-sized picker, real scanner/upload/storage, private chat audience, authorized video decode, anonymous denial'+(large?' (over 10 MB)':''));
   } finally {
     if(status)assert.equal((await source.request.delete(base+'/api/status/'+status.id,{headers:{Origin:base}})).status(),200);
   }

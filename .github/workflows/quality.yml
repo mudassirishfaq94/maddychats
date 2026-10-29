@@ -93,7 +93,7 @@ jobs:
           node-version: "22.23.4"
           cache: npm
       - name: Install PostgreSQL client
-        run: sudo apt-get update && sudo apt-get install -y postgresql-client-16
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client-16 ffmpeg
       - run: npm ci
       - name: Authentication state and provider replay regressions
         env:
@@ -137,6 +137,8 @@ jobs:
       - name: Unit and isolated integration suites
         run: npm test
       - name: Disappearing text, media and shared-upload-cap regressions
+        env:
+          CLAMAV_HOST: 127.0.0.1
         run: DISAPPEARING_MEDIA_ONLY=1 npm run test:restored
       - name: Offline PWA fallback under enforced CSP
         run: npm run test:pwa-offline

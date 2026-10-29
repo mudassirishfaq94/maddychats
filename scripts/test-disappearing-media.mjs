@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import sharp from 'sharp';
+import {randomBytes} from 'node:crypto';
+import {testStatusVideo} from './test-status-video.mjs';
 
 export async function testDisappearingMedia(base,pool,owner,peer,sender,recipient,conversationId){
   assert.equal(new URL(base).hostname,'127.0.0.1');
@@ -64,6 +66,13 @@ export async function testDisappearingMedia(base,pool,owner,peer,sender,recipien
     assert.equal(status.status(),201,await status.text());
     const result=await status.json();assert.equal((await recipient.request.get(base+result.status.mediaUrl)).status(),200);
     assert.equal((await sender.request.delete(base+'/api/status/'+result.status.id,{headers:{Origin:base}})).status(),200);
+    const largePhoto=await sharp(randomBytes(2048*2048*3),{raw:{width:2048,height:2048,channels:3}}).png({compressionLevel:0}).toBuffer();
+    assert(largePhoto.length>10*1024*1024);
+    const photo=await sender.request.post(base+'/api/status',{headers:{Origin:base},multipart:{file:{name:'large-status-fixture.png',mimeType:'image/png',buffer:largePhoto},privacy:'selected',selectedUserIds:JSON.stringify([peer.id])}});
+    assert.equal(photo.status(),201,await photo.text());
+    const photoResult=await photo.json();assert.equal((await recipient.request.get(base+photoResult.status.mediaUrl)).status(),200);
+    assert.equal((await sender.request.delete(base+'/api/status/'+photoResult.status.id,{headers:{Origin:base}})).status(),200);
+    await testStatusVideo(base,pool,owner,peer,sender,recipient,true);
     console.log('PASS real encrypted text/media expiry while open and after reload; media access denied after expiry; timer controls refresh; five-second reveal; uploads beyond former global status/chat caps');
   }finally{await pool.query('delete from message_attachments where id=$1',[fakeId]);await pool.query('delete from stored_uploads where path=any($1::text[])',[paths]);}
 }
