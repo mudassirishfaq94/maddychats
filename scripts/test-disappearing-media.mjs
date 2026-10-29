@@ -49,6 +49,7 @@ export async function testDisappearingMedia(base,pool,owner,peer,sender,recipien
     await controls(0);
     const untimed=await sendText('Timer disabled fixture');assert.equal(untimed.expiresAt,null);
     assert.equal((await pool.query('select expires_at from messages where id=$1',[text.id])).rows[0].expires_at.toISOString(),deadline,'Turning off does not extend older deadlines');
+    await sender.getByRole('textbox',{name:'Message text',exact:true}).fill('Five second reveal fixture');
     await sender.getByLabel('Self-destruct message · 5 seconds after first reveal',{exact:true}).check();
     const selfDestruct=await sendText('Five second reveal fixture');
     assert.equal(await recipient.getByText('Five second reveal fixture',{exact:true}).count(),0,'Reveal is required before plaintext appears');
