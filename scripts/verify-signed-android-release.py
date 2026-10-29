@@ -18,6 +18,7 @@ def main():
     parser.add_argument("--package", default="chat.circlo.app")
     parser.add_argument("--version-code", type=int, default=18)
     parser.add_argument("--version-name", default="0.9.9")
+    parser.add_argument("--permissions-file", help="Reviewed exact permission inventory for this release; otherwise enforce the legacy minimal policy")
     args = parser.parse_args()
     spec = importlib.util.spec_from_file_location("artifact_inspector", Path(__file__).with_name("inspect-android-build.py"))
     helper = importlib.util.module_from_spec(spec)
@@ -48,7 +49,15 @@ def main():
         raise ValueError("Unsafe release target/debug/network/backup configuration")
     permissions = [node.get(ns + "name") for node in manifest.findall("uses-permission")]
     forbidden = ("READ_MEDIA_", "READ_EXTERNAL_STORAGE", "WRITE_EXTERNAL_STORAGE", "CAMERA", "USE_FULL_SCREEN_INTENT", "RECEIVE_BOOT_COMPLETED", "USE_BIOMETRIC")
-    if any(part in permission for permission in permissions for part in forbidden):
+    if args.permissions_file:
+        expected = json.loads(Path(args.permissions_file).read_text(encoding="utf-8"))
+        if set(permissions) != set(expected):
+            raise ValueError("Bundle permissions differ from the reviewed exact inventory")
+        if any(not reason.strip() for reason in expected.values()):
+            raise ValueError("Every reviewed permission needs a concrete reason")
+        if any(part in permission for permission in permissions for part in ("READ_MEDIA_", "READ_EXTERNAL_STORAGE", "WRITE_EXTERNAL_STORAGE", "READ_CONTACTS", "ACCESS_FINE_LOCATION", "ACCESS_COARSE_LOCATION", "RECEIVE_BOOT_COMPLETED")):
+            raise ValueError("Broad data-access permission outside the release policy")
+    elif any(part in permission for permission in permissions for part in forbidden):
         raise ValueError("Unexpected broad sensitive permission")
     with zipfile.ZipFile(args.aab) as archive:
         names = archive.namelist()

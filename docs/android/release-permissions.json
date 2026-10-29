@@ -1,0 +1,15 @@
+{
+  "android.permission.INTERNET": "Hosted app, authorized API requests and realtime delivery.",
+  "android.permission.ACCESS_NETWORK_STATE": "Connection state and reconnect handling.",
+  "android.permission.CAMERA": "User-initiated QR scanning for contacts and device approval; requested at use.",
+  "android.permission.RECORD_AUDIO": "User-initiated voice notes and voice calls; requested at use.",
+  "android.permission.MODIFY_AUDIO_SETTINGS": "WebRTC communication audio routing.",
+  "android.permission.POST_NOTIFICATIONS": "Message and call alerts, subject to the user's Android permission.",
+  "android.permission.VIBRATE": "Notification vibration according to channel settings.",
+  "android.permission.WAKE_LOCK": "Active call and Firebase delivery work, not a permanent startup service.",
+  "android.permission.USE_FULL_SCREEN_INTENT": "Incoming voice-call presentation; requires accurate Play Console declaration and eligibility review.",
+  "android.permission.FOREGROUND_SERVICE": "Visible ongoing voice-call service.",
+  "android.permission.FOREGROUND_SERVICE_MICROPHONE": "Microphone service only for an authorized active voice call; requires Play declaration.",
+  "com.google.android.c2dm.permission.RECEIVE": "Firebase Cloud Messaging delivery.",
+  "chat.circlo.app.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION": "AndroidX internal non-exported receiver protection."
+}

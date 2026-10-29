@@ -298,15 +298,13 @@ class MainActivity : ComponentActivity() {
 
     /** Cookie claims select local device data only; the hosted app still checks
      * the actual session, MFA, device approval and revocation against the server. */
-    private fun localSnapshotAccount(): String? = runCatching {
-        val token = CookieManager.getInstance().getCookie(BuildConfig.API_BASE_URL).orEmpty()
-            .split(';').map { it.trim() }.firstOrNull { it.startsWith("maddy_session=") }?.substringAfter('=') ?: return@runCatching null
-        val parts = token.split('.')
-        if (parts.size != 3 || token.length > 8192) return@runCatching null
-        val claims = JSONObject(String(android.util.Base64.decode(parts[1], android.util.Base64.URL_SAFE or android.util.Base64.NO_WRAP), Charsets.UTF_8))
-        val user = claims.optString("sub")
-        if (StartupSnapshotPolicy.eligible(user, claims.optString("sid"), claims.optLong("exp"), claims.optBoolean("devicePending"), System.currentTimeMillis())) user else null
-    }.getOrNull()
+    private fun localSnapshotAccount(): String? = NativeStartupSnapshot.account(this,
+        BuildConfig.WEBVIEW_PROFILING && intent.getBooleanExtra("circlo_profile_binding_only", false))
+
+    internal fun clearStartupSnapshotBinding() {
+        NativeStartupSnapshot.clear(this)
+        finishStartupSnapshot()
+    }
 
     private fun finishStartupSnapshot() {
         startupGeneration++
@@ -575,9 +573,12 @@ class MainActivity : ComponentActivity() {
     fun hostedWebClient() = object : WebViewClient() {
             override fun onPageStarted(view: WebView, url: String, favicon: android.graphics.Bitmap?) {
                 super.onPageStarted(view, url, favicon)
-                if (startupView != null && WebOriginPolicy.isAllowed(url, BuildConfig.API_BASE_URL)) {
+                if (WebOriginPolicy.isAllowed(url, BuildConfig.API_BASE_URL)) {
                     val path = Uri.parse(url).path.orEmpty()
-                    if (path == "/login" || path.startsWith("/app/device") || path == "/register") finishStartupSnapshot()
+                    if (path == "/login" || path.startsWith("/app/device") || path == "/register") {
+                        NativeStartupSnapshot.clear(this@MainActivity)
+                        finishStartupSnapshot()
+                    }
                 }
             }
             override fun shouldInterceptRequest(view: WebView, request: android.webkit.WebResourceRequest): android.webkit.WebResourceResponse? {

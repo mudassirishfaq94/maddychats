@@ -2,6 +2,7 @@
 
 import { navigateWithReload } from "@/lib/navigation";
 import { openStartupDestination } from "@/lib/native-startup-navigation";
+import { useAuth } from "@/components/providers/auth-provider";
 
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
@@ -17,6 +18,16 @@ declare global { interface Window { __circloNavigate?: (destination: string) => 
  */
 export function NativeAppBridge() {
   const router = useRouter();
+  const { user, status } = useAuth();
+  const userId = user?.id;
+  useEffect(() => {
+    if (!isNativeApp() || status === "loading") return;
+    let disposed = false;
+    void import("@/lib/native-push-bridge").then(bridge => {
+      if (!disposed) return bridge.syncHostedStartup(status === "authenticated" && userId ? userId : null);
+    }).catch(() => undefined); // Older APKs do not implement these optional commands.
+    return () => { disposed = true; };
+  }, [status, userId]);
   useEffect(() => {
     if (!isNativeApp()) return;
 
