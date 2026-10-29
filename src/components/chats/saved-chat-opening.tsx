@@ -1,7 +1,8 @@
 "use client";
 
 import type { CurrentChatPreview } from "@/lib/current-chat-preview";
-import { useCallback, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
+import { scheduleMonotonicDeadline } from "@/lib/expiry-timer";
 import Link from "next/link";
 import { ChevronLeft, Lock, MoreVertical, Phone } from "lucide-react";
 import { Avatar } from "@/components/avatar";
@@ -13,9 +14,9 @@ import { activeAccount, chatLocked, offlineChats, offlineHistory, type OfflineHi
 function usePreviewDeadline(deadline: number | null | undefined) {
   const subscribe = useCallback((notify: () => void) => {
     if (deadline === null || deadline === undefined) return () => {};
-    const timer = setTimeout(notify, Math.min(2147483647, Math.max(0, deadline-performance.now())));
+    const cancel = scheduleMonotonicDeadline(deadline, notify);
     document.addEventListener("visibilitychange",notify);
-    return () => { clearTimeout(timer); document.removeEventListener("visibilitychange",notify); };
+    return () => { cancel(); document.removeEventListener("visibilitychange",notify); };
   },[deadline]);
   const current = useCallback(() => deadline === null || (deadline !== undefined && deadline > performance.now()),[deadline]);
   return useSyncExternalStore(subscribe,current,() => false);
@@ -32,7 +33,7 @@ export function SavedChatOpening({ conversationId, preview }: { conversationId?:
   const [invalidated, setInvalidated] = useState<{scope: object; id: string} | null>(null);
   const previewLive = usePreviewDeadline(preview?.deadline);
   const [saved, setSaved] = useState<{ scope: object; id: string; name: string; avatarUrl?:string|null; messages: OfflineHistoryMessage[] } | null>(null);
-  useLayoutEffect(() => {
+  useEffect(() => {
     let stopped = false;
     if (!user || status !== "authenticated" || !id || chatLocked(id)) return;
     const clear = () => { stopped = true; setSaved(null); setInvalidated({scope: requestScope,id}); };
