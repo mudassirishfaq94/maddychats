@@ -1,7 +1,7 @@
 "use client";
 
 import type { CurrentChatPreview } from "@/lib/current-chat-preview";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { ChevronLeft, Lock, MoreVertical, Phone } from "lucide-react";
 import { Avatar } from "@/components/avatar";
@@ -32,7 +32,7 @@ export function SavedChatOpening({ conversationId, preview }: { conversationId?:
   const [invalidated, setInvalidated] = useState<{scope: object; id: string} | null>(null);
   const previewLive = usePreviewDeadline(preview?.deadline);
   const [saved, setSaved] = useState<{ scope: object; id: string; name: string; avatarUrl?:string|null; messages: OfflineHistoryMessage[] } | null>(null);
-  useEffect(() => {
+  useLayoutEffect(() => {
     let stopped = false;
     if (!user || status !== "authenticated" || !id || chatLocked(id)) return;
     const clear = () => { stopped = true; setSaved(null); setInvalidated({scope: requestScope,id}); };
