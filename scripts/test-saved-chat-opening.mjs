@@ -13,7 +13,7 @@ const bundle = await build({ bundle: true, write: false, format: "iife", platfor
     import {SavedChatOpening} from './src/components/chats/saved-chat-opening';
     import {ChatRoute} from './src/app/app/chats/[id]/chat-route';
     import * as store from './public/offline-store.js';
-    function Inbox(){const {snapshot,refresh}=useConversationList();window.refreshInbox=refresh;return snapshot?<p>Authorized inbox {snapshot.conversations.length}</p>:<SavedInboxList filter='' onPrepare={()=>{}} onOpen={id=>{window.fixtureOpened=id;}}/>;}
+    function Inbox(){const {snapshot,refresh,read}=useConversationList();window.refreshInbox=refresh;window.readInbox=read;return snapshot?<p>Authorized inbox {snapshot.conversations.length}</p>:<SavedInboxList filter='' onPrepare={()=>{}} onOpen={id=>{window.fixtureOpened=id;}}/>;}
     window.showInbox=auth=>{window.fixtureAuth=auth;root.render(<ConversationListProvider><Inbox/></ConversationListProvider>);};
     window.store=store; const root=createRoot(document.getElementById('root'));
     window.openChat=()=>root.render(<ChatRoute conversationId='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' me={window.fixtureAuth.user}/>);
@@ -149,6 +149,8 @@ try {
   for(let n=0;n<100&&!inboxRequests.length;n++)await page.waitForTimeout(10);
   assert(inboxRequests.length,'The first stream connection still reconciles its initial gap');
   await inboxRequests.shift().fulfill({status:200,contentType:'application/json',body:JSON.stringify({viewerId:authA.user.id,conversations:[]})});
+  // Let the fulfilled gap read settle before starting a distinct reconnect read.
+  await page.evaluate(()=>window.readInbox());
   // Actual reconnects retain the old invalidation contract.
   await page.evaluate(auth=>{window.fixtureConnected=false;window.showInbox(auth);},authA);
   await page.evaluate(()=>void window.refreshInbox().catch(()=>{}));
