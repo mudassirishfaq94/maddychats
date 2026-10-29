@@ -18,6 +18,7 @@ import {
   useRef,
   useState,
   startTransition,
+  Suspense,
   type FormEvent,
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
@@ -64,10 +65,11 @@ import { Avatar } from "@/components/avatar";
 import { useRealtime, usePresence } from "@/components/providers/realtime-provider";
 import { VirtualMessageHistory, type MessageHistoryHandle } from "./virtual-message-history";
 import { MessageActions } from "./message-actions";
-const MessageSearch = dynamic(() => import("./message-search").then(module => module.MessageSearch));
+const quietLoading = () => null;
+const MessageSearch = dynamic(() => import("./message-search").then(module => module.MessageSearch),{loading:quietLoading});
 import { ChatActionsMenu } from "./chat-actions-menu";
 const AttachmentList = dynamic(() => import("./attachments").then((module) => module.AttachmentList));
-const ConversationDetails = dynamic(() => import("./conversation-details").then((module) => module.ConversationDetails));
+const ConversationDetails = dynamic(() => import("./conversation-details").then((module) => module.ConversationDetails),{loading:quietLoading});
 import {
   AttachButton,
   AttachmentPreviews,
@@ -78,16 +80,17 @@ import { splitMessageLinks } from "@/lib/message-links";
 import { cn, formatDate, timeAgo, initials, avatarHue } from "@/lib/utils";
 import { CHAT_BACKGROUNDS, chatBubbleTheme, isBackgroundImage } from "@/lib/chat-backgrounds";
 import { getPattern } from "@/lib/chat-patterns";
-const MediaPicker = dynamic(() => import("./media-picker").then((module) => module.MediaPicker));
+const MediaPicker = dynamic(() => import("./media-picker").then((module) => module.MediaPicker),{loading:quietLoading});
 const AudioMessage = dynamic(() => import("./audio-message").then((module) => module.AudioMessage));
-const VoiceComposer = dynamic(() => import("./voice-composer").then((module) => module.VoiceComposer));
+const VoiceComposer = dynamic(() => import("./voice-composer").then((module) => module.VoiceComposer),{loading:quietLoading});
 import { useVoiceRecorder } from "@/hooks/use-voice-recorder";
 import { LongPressTouchable } from "./long-press-touchable";
-const MobileMessageMenu = dynamic(() => import("./mobile-message-menu").then(module => module.MobileMessageMenu));
-const ForwardDialog = dynamic(() => import("./forward-dialog").then(module => module.ForwardDialog));
+const MobileMessageMenu = dynamic(() => import("./mobile-message-menu").then(module => module.MobileMessageMenu),{loading:quietLoading});
+const ForwardDialog = dynamic(() => import("./forward-dialog").then(module => module.ForwardDialog),{loading:quietLoading});
 import type { PeerVerification } from "./peer-verification-dialog";
-const PeerVerificationDialog = dynamic(() => import("./peer-verification-dialog").then(module => module.PeerVerificationDialog));
-const ReportDialog = dynamic(() => import("@/components/profile/report-dialog").then((module) => module.ReportDialog));
+const PeerVerificationDialog = dynamic(() => import("./peer-verification-dialog").then(module => module.PeerVerificationDialog),{loading:quietLoading});
+const ReportDialog = dynamic(() => import("@/components/profile/report-dialog").then((module) => module.ReportDialog),{loading:quietLoading});
+import { PendingMessageAttachments } from "./pending-message-attachments";
 import { E2EEMediaProvider } from "./e2ee-context";
 import { useSharedE2EE } from "@/components/providers/e2ee-provider";
 import {
@@ -751,6 +754,8 @@ export function ChatView({
   const followLatestRef = useRef(true);
   const touchScrollY = useRef(0);
   const topSentinelRef = useRef<HTMLDivElement>(null);
+  const olderPagingRequested = useRef(false);
+  const olderReadInFlight = useRef(false);
   const nearBottomRef = useRef(true);
   const [showScrollDown, setShowScrollDown] = useState(false);
   const [initialUnread, setInitialUnread] = useState<{ ids: Set<string>; count: number } | null>(null);
@@ -1274,7 +1279,8 @@ export function ChatView({
   /* --------------------------- pagination (older) -------------------------- */
 
   const loadOlder = useCallback(async () => {
-    if (!hasMore || loadingOlder || !nextCursor) return;
+    if (!hasMore || loadingOlder || olderReadInFlight.current || !nextCursor) return;
+    olderReadInFlight.current = true;
     followLatestRef.current = false;
     const el = scrollRef.current;
     const prevHeight = el?.scrollHeight ?? 0;
@@ -1303,6 +1309,7 @@ export function ChatView({
     } catch {
       setError("Couldn't load older messages. Check your connection.");
     } finally {
+      olderReadInFlight.current = false;
       setLoadingOlder(false);
     }
   }, [conversationId, hasMore, loadingOlder, nextCursor]);
@@ -1312,13 +1319,19 @@ export function ChatView({
     if (!sentinel || !hasMore) return;
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0].isIntersecting) void loadOlder();
+        if (entries[0].isIntersecting && olderPagingRequested.current) void loadOlder();
       },
       { root: scrollRef.current, rootMargin: "120px" },
     );
     observer.observe(sentinel);
     return () => observer.disconnect();
   }, [hasMore, loadOlder]);
+
+  const requestOlderHistory = (viewport: HTMLDivElement) => {
+    olderPagingRequested.current = true;
+    followLatestRef.current = false;
+    if (viewport.scrollTop < 120) void loadOlder();
+  };
 
   /* ------------------------------- mutations ------------------------------- */
 
@@ -2327,18 +2340,18 @@ export function ChatView({
         aria-label="Messages"
         style={{ overflowAnchor: "none" }}
         tabIndex={0}
-        onWheel={(event) => { if (event.deltaY < 0 && event.currentTarget.scrollHeight > event.currentTarget.clientHeight) followLatestRef.current = false; }}
+        onWheel={(event) => { if (event.deltaY < 0) requestOlderHistory(event.currentTarget); }}
         onTouchStart={(event) => { touchScrollY.current = event.touches[0]?.clientY ?? 0; }}
         onTouchMove={(event) => {
           const nextY = event.touches[0]?.clientY ?? touchScrollY.current;
-          if (nextY > touchScrollY.current && event.currentTarget.scrollHeight > event.currentTarget.clientHeight) followLatestRef.current = false;
+          if (nextY > touchScrollY.current + 2) requestOlderHistory(event.currentTarget);
           touchScrollY.current = nextY;
         }}
         onPointerDown={(event) => {
-          if (event.target === event.currentTarget && event.currentTarget.scrollHeight > event.currentTarget.clientHeight && event.clientX >= event.currentTarget.getBoundingClientRect().right - 20) followLatestRef.current = false;
+          if (event.target === event.currentTarget && event.currentTarget.scrollHeight > event.currentTarget.clientHeight && event.clientX >= event.currentTarget.getBoundingClientRect().right - 20) requestOlderHistory(event.currentTarget);
         }}
         onKeyDown={(event) => {
-          if ((["ArrowUp", "PageUp", "Home"].includes(event.key) || (event.key === " " && event.shiftKey)) && event.currentTarget.scrollHeight > event.currentTarget.clientHeight) followLatestRef.current = false;
+          if (["ArrowUp", "PageUp", "Home"].includes(event.key) || (event.key === " " && event.shiftKey)) requestOlderHistory(event.currentTarget);
         }}
         onScroll={onScroll}
         onDragOver={(e) => {
@@ -3326,22 +3339,22 @@ const MessageRow = memo(function MessageRow({msg, showDate, sameSenderPrev, me, 
                                 {msg.selfDestruct ? <SelfDestructCountdown deadline={msg.expiresAt} offset={clockOffset} /> : null}
                                 {msg.type === "audio" && msg.attachments.length > 0 ? (
                                   <div className="mb-1.5 min-w-0 max-w-full">
-                                    <AudioMessage
+                                    <Suspense fallback={<div aria-hidden="true" className="h-16 w-64 max-w-full rounded-2xl bg-black/5"/>}><AudioMessage
                                       src={msg.attachments[0].url}
                                       attachment={msg.attachments[0]}
                                       own={own}
                                       sender={msg.sender}
                                       duration={undefined}
                                       attachmentId={msg.attachments[0].id}
-                                    />
+                                    /></Suspense>
                                   </div>
                                 ) : msg.attachments.length > 0 ? (
                                   <div className={cn(text && "mb-1.5")}>
-                                    <AttachmentList
+                                    <Suspense fallback={<PendingMessageAttachments attachments={msg.attachments}/>}><AttachmentList
                                       messageId={msg.id}
                                       attachments={msg.attachments}
                                       own={own}
-                                    />
+                                    /></Suspense>
                                   </div>
                                 ) : null}
                                 {msg.encrypted && Boolean(msg.text) && decryptedText === undefined ? (
