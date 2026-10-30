@@ -19,11 +19,17 @@ export async function testChatMediaSize(base,sender,recipient){
         const response=await accepted;assert.equal(response.status(),201,await response.text());
         const attachment=(await response.json()).message.attachments[0];
         const view=recipient.getByRole('button',{name:'View '+attachment.originalName,exact:true});await view.waitFor();
-        for(const width of [320,390,1366]){
+        const sentView=sender.getByRole('button',{name:'View '+attachment.originalName,exact:true});
+        await sentView.waitFor();
+        const senderViewport=sender.viewportSize();
+        try { for(const width of [320,390,768,1366]){
           await recipient.setViewportSize({width,height:844});
+          await sender.setViewportSize({width,height:844});
           const box=await view.boundingBox();assert(box&&box.width>=180,`A ${attachment.kind} must reserve readable width before download at ${width}px: ${JSON.stringify(box)}`);
           assert(Math.abs(box.width/box.height-4/3)<0.05,'A single media preview keeps a consistent 4:3 frame');
-        }
+          const sentBox=await sentView.boundingBox();
+          assert(sentBox&&sentBox.width>=180,`Sent ${attachment.kind} must also reserve readable width at ${width}px`);
+        } } finally { await sender.setViewportSize(senderViewport); }
         await recipient.setViewportSize({width:390,height:844});const before=await view.boundingBox();release();
         await view.locator(attachment.kind==='image'?'img':'video').waitFor();
         await view.locator(attachment.kind==='image'?'img':'video').evaluate(element=>new Promise((resolve,reject)=>{

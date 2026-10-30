@@ -3161,6 +3161,7 @@ const MessageRow = memo(function MessageRow({msg, showDate, sameSenderPrev, me, 
                     <div
                       className={cn(
                         "relative max-w-[85%] sm:max-w-[65%] md:max-w-[55%]",
+                        !deleted && msg.attachments.some(attachment => attachment.kind !== "audio") && "w-[min(20rem,calc(100vw-6.5rem))]",
                         own ? "text-right" : "text-left",
                       )}
                     >
@@ -3216,7 +3217,7 @@ const MessageRow = memo(function MessageRow({msg, showDate, sameSenderPrev, me, 
                           <div
                             className={cn(
                               "chat-bubble inline-block max-w-full rounded-2xl px-3 py-2 text-left align-middle",
-                              !deleted && msg.attachments.some(attachment => attachment.kind !== "audio") && "w-[min(20rem,calc(100vw-6.5rem))]",
+                              !deleted && msg.attachments.some(attachment => attachment.kind !== "audio") && "w-full",
                               own
                                 ? "rounded-br-md text-[var(--bubble-own-fg)]"
                                 : "rounded-bl-md border border-[var(--border)] bg-[var(--bubble-other-bg)]",
