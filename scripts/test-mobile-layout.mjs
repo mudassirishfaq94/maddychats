@@ -202,7 +202,7 @@ export async function testMobileLayout(base, pool, { recordOnly = false, navigat
           await check(user, "delete-confirmation-" + size);
           await user.getByRole("dialog", { name: "Delete account", exact: true }).getByRole("button").first().click();
           if (width === 320) {
-            const two = user.locator(".card-glass").filter({has:user.getByRole("heading",{name:"Two-Factor Authentication",exact:true})}).last();
+            const two = user.locator(".card-glass").filter({has:user.getByRole("heading",{name:"Extra sign-in check",exact:true})}).last();
             await two.getByLabel("Current password", {exact:true}).fill(password);
             await two.getByRole("button",{name:"Turn on the extra sign-in check",exact:true}).click();
             await two.getByPlaceholder("000000",{exact:true}).waitFor();
