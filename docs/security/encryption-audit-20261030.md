@@ -21,6 +21,8 @@ Internal source review, not independent certification. Baseline: `4f3a99c` plus 
 | Experimental libsignal | Pinned official Rust implementation; registration/serialization only, no supported-chat importer, send endpoint quarantined | `signal-bridge/Cargo.toml:13`; `signal-bridge/src/lib.rs`; `src/app/api/e2ee/signal/send/route.ts` |
 | Other crypto dependencies | `@scure/bip39` for recovery phrases; `jose` for sessions; bcrypt for passwords; exact versions in lockfiles | `package.json`, `package-lock.json`, `signal-bridge/Cargo.lock` |
 
+Resolved dependency inventory at this review: `@scure/bip39`2.3.0, `jose`6.2.13, `bcrypt`6.0.0, `bcryptjs`3.0.3, `@capacitor/core`8.5.3 and `@aparajita/capacitor-secure-storage`8.0.1. Installed dependencies do not establish which client path is active. The browser bridge was rebuilt with Rust1.99.1 and wasm-bindgen CLI0.2.128 matching Cargo.lock.
+
 No weak random generator or hardcoded message key was found in the inspected active primitives: they use Web Crypto randomness. This is not an exhaustive entropy/supply-chain audit. AES-GCM byte integrity was tested; cryptographic sender/context authentication is absent. Successful round-trip is not evidence of that missing property.
 
 ## Device and backend storage
