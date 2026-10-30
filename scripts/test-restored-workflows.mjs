@@ -325,8 +325,10 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     await source.page.getByLabel("I compared this number with the new phone and it matches.").check();
     const proofResponse = source.page.waitForResponse(response => response.url().endsWith("/api/e2ee/devices/approve") && response.request().postDataJSON()?.action === "approve", { timeout: 60000 });
     await source.page.getByRole("button", { name: "Approve this device", exact: true }).click();
-    const proof = (await proofResponse).request().postDataJSON();
-    await source.page.getByText(/Device approved\./).waitFor();
+    const approval = await proofResponse;
+    assert.equal(approval.status(), 200);
+    const proof = approval.request().postDataJSON();
+    await source.page.getByRole("button", { name: "Approve this device", exact: true }).waitFor({ state: "hidden" });
     assert.equal((await pool.query("select status from device_link_requests where id=$1", [request.id])).rows[0].status, "approved");
     assert.equal((await api("/api/e2ee/devices/approve", source.cookies, challenge)).status, 409);
     assert.equal((await api("/api/e2ee/devices/approve", source.cookies, proof)).status, 409);

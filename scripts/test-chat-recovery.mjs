@@ -88,8 +88,8 @@ export async function testChatRecovery(base, cookieHeader, conversationId) {
 
     const target = await context();
     await target.goto(`${base}/app/settings#privacy`);
-    await target.getByText("This device: Waiting for approval", { exact: true }).waitFor({ timeout: 30000 });
     await openDeviceTools(target);
+    await target.getByText("This device: Waiting for approval", { exact: true }).waitFor({ timeout: 30000 });
     const pendingText = "A new device waits safely for approval";
     await target.goto(chatUrl);
     await target.getByRole("textbox", { name: "Message text" }).fill(pendingText);
@@ -102,7 +102,9 @@ export async function testChatRecovery(base, cookieHeader, conversationId) {
     await target.getByLabel("Queued", { exact: true }).waitFor();
     await target.getByRole("button", { name: "Show queued message options", exact: true }).waitFor();
     await source.goto(`${base}/app/settings#privacy`);
+    await openDeviceTools(source);
     await target.goto(`${base}/app/settings#privacy`);
+    await openDeviceTools(target);
     const linkResponse = target.waitForResponse(response => {
       let request = response.request();
       while (request.redirectedFrom()) request = request.redirectedFrom();
@@ -127,8 +129,10 @@ export async function testChatRecovery(base, cookieHeader, conversationId) {
     })()`);
     await source.getByRole("button", { name: "Scan QR on your new device", exact: true }).click();
     await source.getByText("Check number:").waitFor();
-    await target.getByText("Check this phone’s number", { exact: true }).click();
+    await target.getByLabel("This device check number").waitFor();
     await source.getByText("Show full check number", { exact: true }).click();
+    assert.equal((await source.getByText("Show full check number", { exact: true }).locator("..").locator("code").innerText()).trim(),
+      (await target.getByLabel("This device check number").innerText()).trim(), "Compare both displayed device check numbers before approval");
     await source.getByLabel("I compared this number with the new phone and it matches.").check();
     const approvalResponse = source.waitForResponse(response => {
       if (new URL(response.url()).pathname !== "/api/e2ee/devices/approve" || response.request().method() !== "POST") return false;
