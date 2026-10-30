@@ -9,7 +9,8 @@ import { Avatar } from "@/components/avatar";
 import { useParams } from "next/navigation";
 import { useAuth } from "@/components/providers/auth-provider";
 import { useRealtime } from "@/components/providers/realtime-provider";
-import { activeAccount, chatLocked, offlineChats, offlineHistory, type OfflineHistoryMessage } from "../../../public/offline-store.js";
+import { activeAccount, chatLocked, type OfflineHistoryMessage } from "../../../public/offline-store.js";
+import { invalidateSavedChatSnapshots, prepareSavedChatSnapshot, savedChatSnapshot } from "@/lib/saved-chat-snapshot";
 
 function usePreviewDeadline(deadline: number | null | undefined) {
   const subscribe = useCallback((notify: () => void) => {
@@ -36,7 +37,7 @@ export function SavedChatOpening({ conversationId, preview }: { conversationId?:
   useEffect(() => {
     let stopped = false;
     if (!user || status !== "authenticated" || !id || chatLocked(id)) return;
-    const clear = () => { stopped = true; setSaved(null); setInvalidated({scope: requestScope,id}); };
+    const clear = () => { stopped = true; invalidateSavedChatSnapshots(user.id, id); setSaved(null); setInvalidated({scope: requestScope,id}); };
     const unsubscribe = subscribe(event => {
       // New messages and read receipts do not invalidate the saved history.
       // Edits, deletion, lifetime or access changes do: never leave a revoked
@@ -49,12 +50,11 @@ export function SavedChatOpening({ conversationId, preview }: { conversationId?:
     window.addEventListener("storage", clear);
     void (async () => {
       if (activeAccount() !== user.id) return;
-      const chat = (await offlineChats(user.id)).find(chat => chat.id === id);
-      if (!chat || chat.locked || chat.blocked || chat.requestPending) return;
-      const history = await offlineHistory(user.id, id);
+      const snapshot = await prepareSavedChatSnapshot(user.id, requestScope, id);
+      if (!snapshot) return;
       if (!stopped && activeAccount() === user.id && !chatLocked(id)) setSaved({
-        scope: requestScope, id, name: chat.name, avatarUrl:chat.avatarUrl,
-        messages: history.messages.filter(row => row.kind === "message"),
+        scope: requestScope, id, name: snapshot.name, avatarUrl:snapshot.avatarUrl,
+        messages: snapshot.messages,
       });
     })().catch(() => undefined);
     return () => {
@@ -63,8 +63,10 @@ export function SavedChatOpening({ conversationId, preview }: { conversationId?:
       window.removeEventListener("storage", clear);
     };
   }, [user, status, id, requestScope, subscribe]);
-  const visible = status === "authenticated" && user && id && saved?.scope === requestScope && saved.id === id
-    && activeAccount() === user.id && !chatLocked(id) ? saved : null;
+  const warm = status === "authenticated" && user && id && !(invalidated?.scope === requestScope && invalidated.id === id)
+    ? savedChatSnapshot(user.id, requestScope, id) : null;
+  const visible = status === "authenticated" && user && id && activeAccount() === user.id && !chatLocked(id)
+    ? saved?.scope === requestScope && saved.id === id ? saved : warm : null;
   const current = user && status === "authenticated" && preview?.scope === requestScope && preview.userId === user.id && preview.conversationId === id && !chatLocked(preview.conversationId) && !(invalidated?.scope === requestScope && invalidated.id === id) && previewLive ? preview : null;
   const name=current?.name??visible?.name??"Opening…";
   useLayoutEffect(()=>{if(viewport.current&&followLatest.current)viewport.current.scrollTop=viewport.current.scrollHeight;},[visible,current]);

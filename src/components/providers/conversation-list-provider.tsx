@@ -5,6 +5,7 @@ import type { ConversationSummary } from "@/lib/types";
 import { createReconciledRead } from "@/lib/reconciled-read";
 import { useAuth } from "./auth-provider";
 import { useRealtime } from "./realtime-provider";
+import { invalidateSavedChatSnapshots } from "@/lib/saved-chat-snapshot";
 
 type Snapshot = { viewerId: string; conversations: ConversationSummary[]; serverNow?: string; clock?: { serverMs: number; receivedAt: number } };
 type ConversationList = {
@@ -36,6 +37,7 @@ function AccountConversationList({ userId, children }: { userId: string; childre
           // A rejected session must remove the local transition surface too.
           // Transport failures can retain it; authorization failures cannot.
           if (active && (response.status === 401 || response.status === 403)) {
+            invalidateSavedChatSnapshots(userId);
             current = { viewerId: userId, conversations: [] };
             setSnapshot(current);
           }
@@ -53,7 +55,7 @@ function AccountConversationList({ userId, children }: { userId: string; childre
         if (controller === request) controller = null;
       }
     }, data => {
-      if (active && data.viewerId === userId) { current = data; setSnapshot(data); }
+      if (active && data.viewerId === userId) { invalidateSavedChatSnapshots(userId); current = data; setSnapshot(data); }
     });
     return {
       reads,
@@ -89,8 +91,9 @@ function AccountConversationList({ userId, children }: { userId: string; childre
       reads.stop();
       account.abort();
       account.setCurrent(null);
+      invalidateSavedChatSnapshots(userId);
     };
-  }, [account, reads]);
+  }, [account, reads, userId]);
   useEffect(() => {
     if (!userId) return;
     if (!connected) {
@@ -129,10 +132,14 @@ function AccountConversationList({ userId, children }: { userId: string; childre
       if (!["message:new", "message:update", "message:deleted", "message:lifetime", "message:read",
         "message:deleted_for_me", "conversation:new", "conversation:delete", "group:updated",
         "group:member-added", "group:member-removed", "group:member-updated"].includes(event.type)) return;
+      if (event.type !== "message:new" && event.type !== "message:read") invalidateSavedChatSnapshots(userId, "conversationId" in event ? event.conversationId : undefined);
       reconcile();
     });
-    return () => { stopped = true; clearTimeout(timer); remove(); };
-  }, [subscribe, reads, refresh]);
+    const clearSaved = () => invalidateSavedChatSnapshots(userId);
+    window.addEventListener("maddy:locked-chats", clearSaved);
+    window.addEventListener("storage", clearSaved);
+    return () => { stopped = true; clearTimeout(timer); remove(); window.removeEventListener("maddy:locked-chats", clearSaved); window.removeEventListener("storage", clearSaved); };
+  }, [subscribe, reads, refresh, userId]);
   const value = useMemo(() => ({ snapshot, seed, read, refresh }), [snapshot, seed, read, refresh]);
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }

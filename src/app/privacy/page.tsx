@@ -159,7 +159,7 @@ const NOT_COVERED = [
 const USE = [
   "To run Circlo: signing you in, sending messages to the right devices, keeping your devices in sync, and showing you your information.",
   "To protect accounts: limiting repeated attempts, checking sign-ins, approving new devices, and sending security alerts.",
-  "To reduce abuse: spotting unusual sending patterns, repeated messages and reports, and letting you block accounts. We cannot read private chat messages to scan them.",
+  "To reduce abuse: spotting unusual sending patterns and reports, and letting you block accounts. Current private-chat content is encrypted on your device, so routine abuse checks use delivery details rather than reading it.",
   "To support you: answering in-app support threads and resolving the account problems you raise.",
   "To meet legal obligations: responding to valid legal requests to the extent we are able, and keeping the audit records that make administrative actions accountable.",
 ];
@@ -241,11 +241,11 @@ const SHARING: { lead: string; text: string }[] = [
   },
   {
     lead: "With the people who run Circlo.",
-    text: "Administrators can see account records and details about chats, and can remove content that breaks our terms. They cannot read private chat messages. Sensitive administrator actions require another identity check and are recorded.",
+    text: "Administrators can see account records and details about chats, and can remove content that breaks our terms. Current private-chat content is stored encrypted. Older records and content outside private chats are described separately below. Sensitive administrator actions require another identity check and are recorded.",
   },
   {
     lead: "Legal requests.",
-    text: "If we receive a valid legal request, we can provide account records, details about chats and the locked copies of messages. We cannot provide readable private messages because we do not have what is needed to open them. Where allowed, we will tell you if a request concerns your account.",
+    text: "If we receive a valid legal request, we can provide records we hold, including account and delivery details, encrypted message copies and any older records not protected by current chat encryption. Where allowed, we will tell you if a request concerns your account.",
   },
   {
     lead: "With service providers.",
@@ -261,7 +261,7 @@ export default function PrivacyPage() {
         badge="Privacy policy"
         badgeIcon={LockKeyhole}
         title="Your privacy, in plain language."
-        lead="Your private chats are end-to-end encrypted. Only approved devices in the conversation can open them. You control your devices and privacy settings; this page explains the information used to keep Circlo working."
+        lead="The current Circlo app encrypts private chats on your device before sending. You control your devices and privacy settings; this page explains the protection, its limits and the information used to keep Circlo working."
         meta={[
           { icon: ScrollText, text: `Last updated: ${LAST_UPDATED}` },
           { icon: Globe2, text: "Applies to the Circlo web app, Android app and this website" },
@@ -297,10 +297,15 @@ export default function PrivacyPage() {
       <LegalBody index={<LegalIndex entries={INDEX} />}>
         <LegalSection id="encryption" number="1" title="How private chats work" icon={LockKeyhole}>
           <p>
-            Circlo locks each private message on your device before it is sent. Only approved devices in the chat can
-            open it. This is called end-to-end encryption. It is always on for private chats; the service rejects a
-            private message if it is not locked first.
+            The current Circlo app locks private messages on your device before sending them, and the receiving
+            devices open them. This is called end-to-end encryption. Signing in, approving a device and checking
+            chat access are separate protections; encryption does not hide the delivery details listed below.
           </p>
+          <LegalCallout>
+            Earlier versions saved some messages and chat-access backups without today&apos;s protection. Those
+            records are not covered by the current encryption promise. We are preserving access while preparing
+            a safe upgrade; changing this page does not encrypt or delete older records.
+          </LegalCallout>
 
           <h3 className="font-display pt-2 text-base font-semibold text-[var(--text)]">How a message travels</h3>
           <ol className="space-y-3">
@@ -358,6 +363,11 @@ export default function PrivacyPage() {
           <p className="text-[13px] leading-6">
             <strong className="text-[var(--text)]">Protection checks.</strong> Automated tests check encrypted message
             delivery, device approval, account isolation, expiry and logout. These checks are part of our release process.
+          </p>
+          <p className="text-[13px] leading-6">
+            This protection depends on the app and its device directory behaving correctly. It does not yet provide
+            independent proof of who sent each message or protection against a service that deliberately supplies
+            altered app code or device information. A successful delivery test is not an independent security audit.
           </p>
         </LegalSection>
 

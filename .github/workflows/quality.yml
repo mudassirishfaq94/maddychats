@@ -149,7 +149,9 @@ jobs:
       - name: Direct-chat replacement-device key exclusion
         run: DM_ROTATION_ONLY=1 npm run test:restored
       - name: Experimental registration artifact consistency
-        run: node scripts/check-signal-artifacts.mjs
+        run: |
+          node scripts/check-signal-artifacts.mjs
+          node scripts/test-signal-registration-artifact.mjs
       - name: Offline PWA fallback under enforced CSP
         run: npm run test:pwa-offline
       - name: TWA configuration boundaries without Android tooling or credentials

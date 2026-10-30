@@ -36,6 +36,10 @@ Approve a new phone from a device you already use. Before replacing your phone, 
 
 For a private support or security concern, contact **mudassarmalak090@gmail.com**. Do not post passwords, recovery files, codes or private conversations in an issue.
 
+## Security architecture
+
+Private-chat content is encrypted on your device. Profiles, Status and delivery information are handled separately. Read [Security](SECURITY.md) for the current design, verified tests, known limitations and how to report a concern. It distinguishes working features from unfinished work; it is not an independent audit.
+
 ## About this repository
 
 This repository is currently private. Public availability and licensing are still under review; this page does not grant permission to redistribute the project.

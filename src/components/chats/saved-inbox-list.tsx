@@ -7,6 +7,7 @@ import { useRealtime } from "@/components/providers/realtime-provider";
 import { activeAccount, chatLocked, offlineChats, type OfflineChat } from "../../../public/offline-store.js";
 import { Avatar } from "@/components/avatar";
 import { BellOff, Lock, Pin } from "lucide-react";
+import { prepareSavedChatSnapshot } from "@/lib/saved-chat-snapshot";
 
 const savedTime = new Intl.DateTimeFormat("en",{hour:"2-digit",minute:"2-digit",hour12:false});
 
@@ -25,7 +26,10 @@ export function SavedInboxList({ filter, onPrepare, onOpen }: { filter: string; 
     window.addEventListener("maddy:locked-chats", clear);
     window.addEventListener("storage", clear);
     void offlineChats(user.id).then(chats => {
-      if (!stopped && activeAccount() === user.id) setSaved({ scope: requestScope, chats });
+      if (!stopped && activeAccount() === user.id) {
+        setSaved({ scope: requestScope, chats });
+        for (const chat of chats.slice(0, 3)) void prepareSavedChatSnapshot(user.id, requestScope, chat.id);
+      }
     }).catch(() => undefined);
     return () => { stopped = true; remove(); window.removeEventListener("maddy:locked-chats", clear); window.removeEventListener("storage", clear); };
   }, [user, status, requestScope, subscribe]);

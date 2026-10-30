@@ -37,6 +37,8 @@ try {
  await page.goto(base+'/privacy');const privacy=await page.locator('main').innerText();
  assert.match(privacy,/24-word phrase/);assert.match(privacy,/Status updates.*access controls rather than end-to-end encryption/s);
  assert.match(privacy,/Circlo delivers encrypted copies/,'Distinguish encrypted delivery from readable message text');
+ assert.match(privacy,/Earlier versions saved some messages/,'Historical records must not be relabelled as encrypted');
+ assert.match(privacy,/does not yet provide.*independent proof/s,'Do not turn cipher round-trips into a sender-authentication claim');
  assert.doesNotMatch(privacy,/Neon|Bluehost|Cloudflare|Supabase|Firebase|Resend/,'Explain service purposes without publishing the technology inventory');
  await page.goto(base+'/support');assert.equal(await page.getByRole('link',{name:'mudassarmalak090@gmail.com',exact:true}).count(),1);
  assert.deepEqual(errors,[],'Public pages produce no browser JavaScript errors');

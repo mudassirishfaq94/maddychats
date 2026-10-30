@@ -7,7 +7,8 @@ import { chromium } from "playwright";
 // the production IndexedDB encryption and the actual React transition surface.
 const bundle = await build({ bundle: true, write: false, format: "iife", platform: "browser", jsx: "automatic", stdin: {
   resolveDir: process.cwd(), loader: "jsx", contents: `
-    import React from 'react'; import {createRoot} from 'react-dom/client';
+    import React from 'react'; import {createRoot} from 'react-dom/client'; import {flushSync} from 'react-dom';
+    import {prepareSavedChatSnapshot,invalidateSavedChatSnapshots} from './src/lib/saved-chat-snapshot';
     import {SavedInboxList} from './src/components/chats/saved-inbox-list';
     import {ConversationListProvider,useConversationList} from './src/components/providers/conversation-list-provider';
     import {SavedChatOpening} from './src/components/chats/saved-chat-opening';
@@ -16,6 +17,9 @@ const bundle = await build({ bundle: true, write: false, format: "iife", platfor
     function Inbox(){const {snapshot,refresh,read}=useConversationList();window.refreshInbox=refresh;window.readInbox=read;return snapshot?<p>Authorized inbox {snapshot.conversations.length}</p>:<SavedInboxList filter='' onPrepare={()=>{}} onOpen={id=>{window.fixtureOpened=id;}}/>;}
     window.showInbox=auth=>{window.fixtureAuth=auth;root.render(<ConversationListProvider><Inbox/></ConversationListProvider>);};
     window.store=store; const root=createRoot(document.getElementById('root'));
+    window.prepareSnapshot=()=>prepareSavedChatSnapshot(window.fixtureAuth.user.id,window.fixtureAuth.requestScope,'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
+    window.invalidateSnapshot=()=>invalidateSavedChatSnapshots(window.fixtureAuth.user.id);
+    window.showSync=()=>{flushSync(()=>root.render(<SavedChatOpening key={Math.random()}/>));return document.querySelector('[aria-label="Saved messages"]')?.textContent;};
     window.openChat=()=>root.render(<ChatRoute conversationId='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' me={window.fixtureAuth.user}/>);
     window.showLive=(auth,ttl)=>{window.fixtureAuth=auth;root.render(<SavedChatOpening preview={{userId:auth.user?.id,scope:auth.requestScope,conversationId:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',name:'Fixture circle',messageId:'11111111-1111-4111-8111-111111111111',sourceCiphertext:'fixture-cipher',text:'Current inbox fixture',deadline:performance.now()+ttl}}/>);};
     window.show=(auth)=>{window.fixtureAuth=auth;root.render(<SavedChatOpening key={auth.requestScope.key}/>);};
@@ -55,6 +59,16 @@ try {
   });
   await page.getByText('Saved readable fixture', {exact:true}).waitFor();
   assert.equal(await page.getByText('Never show this', {exact:true}).count(),0);
+  await page.evaluate(() => { window.fixtureAuth={user:{id:'dddddddd-dddd-4ddd-8ddd-dddddddddddd'},status:'authenticated',requestScope:{key:'warm-first-frame'}}; });
+  await page.evaluate(()=>window.prepareSnapshot());
+  assert((await page.evaluate(()=>window.showSync())).includes('Saved readable fixture'),'A prepared encrypted-store snapshot renders in the tap commit, before any history response or effect finishes');
+  await page.evaluate(()=>window.invalidateSnapshot());
+  assert(!(await page.evaluate(()=>window.showSync())).includes('Saved readable fixture'),'An invalidated snapshot cannot flash on the first commit');
+  await page.getByText('Saved readable fixture', {exact:true}).waitFor();
+  await page.evaluate(()=>{window.fixtureAuth={user:{id:'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'},status:'authenticated',requestScope:{key:'warm-other'}};});
+  assert(!(await page.evaluate(()=>window.showSync())).includes('Saved readable fixture'),'A switched account cannot synchronously render the prepared plaintext');
+  await page.evaluate(()=>{window.fixtureAuth={user:null,status:'unauthenticated',requestScope:{key:'warm-out'}};});
+  assert(!(await page.evaluate(()=>window.showSync())).includes('Saved readable fixture'),'A logged-out render cannot show a prepared snapshot');
   const inboxRequests=[];
   await page.route('**/api/conversations',route=>inboxRequests.push(route));
   const authA={user:{id:'dddddddd-dddd-4ddd-8ddd-dddddddddddd'},status:'authenticated',requestScope:{key:'inbox-a'}};

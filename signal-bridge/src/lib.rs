@@ -30,6 +30,13 @@ struct PrivatePrekey { key_id: u32, private_key: Vec<u8> }
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
+struct PrekeyRefillBundle {
+    one_time_prekeys: Vec<PublicPrekey>,
+    private_one_time_prekeys: Vec<PrivatePrekey>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 struct DeviceRegistrationBundle {
     registration_id: u32,
     protocol_device_id: u32,
@@ -138,10 +145,12 @@ pub fn generate_one_time_prekeys(count: u32) -> Result<JsValue, JsValue> {
         public.push(PublicPrekey { key_id, public_key: key.public_key.serialize().to_vec(), signature: None });
         private.push(PrivatePrekey { key_id, private_key: key.private_key.serialize() });
     }
-    serde_wasm_bindgen::to_value(&serde_json::json!({
-        "oneTimePrekeys": public,
-        "privateOneTimePrekeys": private,
-    })).map_err(|error| JsValue::from_str(&format!("prekey serialization failed: {error}")))
+    // A typed struct becomes the object expected by the TS consumer. A JSON
+    // map instead becomes a JS Map under serde-wasm-bindgen's default settings.
+    serde_wasm_bindgen::to_value(&PrekeyRefillBundle {
+        one_time_prekeys: public,
+        private_one_time_prekeys: private,
+    }).map_err(|error| JsValue::from_str(&format!("prekey serialization failed: {error}")))
 }
 
 #[cfg(test)]

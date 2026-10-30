@@ -25,6 +25,7 @@ import { useAuth } from "@/components/providers/auth-provider";
 import { prefetchChatRouteData, retainChatRouteAccount } from "@/lib/chat-route-prefetch";
 import { currentChatPreview, type CurrentChatPreview } from "@/lib/current-chat-preview";
 import { chatLocked } from "../../../public/offline-store.js";
+import { prepareSavedChatSnapshot } from "@/lib/saved-chat-snapshot";
 import { mapWithConcurrency } from "@/lib/async";
 import { cn, timeAgo } from "@/lib/utils";
 
@@ -204,6 +205,15 @@ export function ChatsLayout({
   }, [user?.id]);
   const conversations = liveList?.source === sourceConversations
     ? liveList.items : sourceConversations;
+  useEffect(() => {
+    if (status !== "authenticated" || !user) return;
+    // Disk-only reads for the first visible chats: no history/key network fan-out.
+    for (const conversation of conversations.slice(0, 3)) {
+      if (!conversation.blocked && !conversation.requestPending) {
+        void prepareSavedChatSnapshot(user.id, requestScope, conversation.id);
+      }
+    }
+  }, [conversations, user, status, requestScope]);
   const { initialized, decrypt, getCachedDecryptedMessage, cacheDecryptedMessage, loadCachedDecryptedMessages } = useSharedE2EE();
   const [previews, setPreviews] = useState<Map<string, string>>(() => new Map((initialConversations ?? []).flatMap(conversation => {
     const message=conversation.lastMessage;
@@ -385,7 +395,7 @@ export function ChatsLayout({
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain pb-2">
           {!snapshot && initialConversations === undefined ? (
             <SavedInboxList filter={filter} onOpen={id=>{if(user)openedConversation.current={id,userId:user.id,scope:requestScope};}} onPrepare={id => {
-              if (user?.id) void prefetchChatRouteData(user.id, id).catch(() => undefined);
+              if (user?.id) { void prepareSavedChatSnapshot(user.id, requestScope, id); void prefetchChatRouteData(user.id, id).catch(() => undefined); }
             }}/>
 
           ) : conversations.length === 0 ? (
