@@ -46,12 +46,10 @@ export async function testPwaNotifications(base, pool) {
     await page.screenshot({ path: ".freebuff/performance/pwa-launch-320.png" });
     release(); await page.unrouteAll({ behavior: "wait" });
     await page.getByRole("status", { name: "Opening Circlo", exact: true }).waitFor({ state: "detached" });
-    await page.getByRole("heading", { name: owner.username, exact: true }).waitFor();
+    await page.getByRole("heading", { name: "Profile", level: 1, exact: true }).waitFor();
     await page.goto(base + "/app/settings#notifications");
-    await page.getByRole("heading", { name: "Settings", exact: true }).waitFor();
-    await page.locator("#notifications details > summary").click();
-    await page.locator("#notifications details[open]").waitFor();
-    const help = page.locator("#notifications details details").filter({ has: page.getByText("Notifications arrive, but no pop-up?", { exact: true }) });
+    await page.getByRole("heading", { name: "Notifications", level: 1, exact: true }).waitFor();
+    const help = page.locator("#notifications details").filter({ has: page.getByText("Notifications arrive, but no pop-up?", { exact: true }) });
     await help.locator(":scope > summary").click();
     const platformGuidance = help.getByText(/Android and your browser decide whether to show a banner/);
     await platformGuidance.waitFor();
