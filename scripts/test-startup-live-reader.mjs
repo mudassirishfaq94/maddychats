@@ -10,7 +10,7 @@ const server=createServer(async(req,res)=>{
   const path=new URL(req.url,'http://localhost').pathname;
   if(path==='/fixture-crypto.js'){res.setHeader('Content-Type','text/javascript');res.end(cryptoModule.outputFiles[0].contents);return;}
   if(path===`/api/conversations/${chat}/open`){requests++;res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify({viewerId:user,conversation:{id:chat,members:[{id:user}],blocked:false,requestPending:false},initial:{serverNow:new Date().toISOString(),messages:[{id:'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',senderId:user,type:'text',encrypted:true,text:ciphertext,createdAt:new Date().toISOString(),expiresAt:new Date(Date.now()+700).toISOString()}]}}));return;}
-  if(!['/startup.html','/startup.css','/startup.js','/startup-reader.js','/offline.css','/offline-store.js','/icons/circlo-mark.svg'].includes(path)){res.writeHead(404).end();return;}
+  if(!['/offline.html','/startup.html','/startup.css','/startup.js','/startup-reader.js','/offline.css','/offline-store.js','/icons/circlo-mark.svg'].includes(path)){res.writeHead(404).end();return;}
   res.setHeader('Content-Type',path.endsWith('.js')?'text/javascript':path.endsWith('.css')?'text/css':path.endsWith('.svg')?'image/svg+xml':'text/html');res.end(await readFile('public'+path));
 });
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const browser=await chromium.launch();
