@@ -26,7 +26,7 @@ const summarize=rows=>{
 };
 export async function testNavigationLatency(context,base,conversationId) {
  const page=await context.newPage();page.setDefaultTimeout(30000);await page.setViewportSize({width:390,height:844});
- const requests=[],historyRequests=[];page.on("request",request=>{const url=new URL(request.url());if(url.searchParams.has("_rsc"))requests.push({url:request.url(),time:Date.now()});if(url.pathname===`/api/conversations/${conversationId}/open`)historyRequests.push(request.url());});
+ const requests=[],historyRequests=[];page.on("request",request=>{const url=new URL(request.url());if(url.searchParams.has("_rsc"))requests.push({url:request.url(),time:Date.now()});if(url.pathname===`/api/conversations/${conversationId}/open`)historyRequests.push({url:request.url(),time:Date.now()});});
  const rows=[],additionalTabs=[];const cdp=await context.newCDPSession(page);
  try{
   await page.goto(base+"/app");await page.getByLabel("Search conversations",{exact:true}).waitFor();
@@ -69,8 +69,10 @@ export async function testNavigationLatency(context,base,conversationId) {
     }
     const chat=page.locator(`a.chat-list-row[href="/app/chats/${conversationId}"]`);await chat.waitFor();
     const before=requests.length,historyBefore=historyRequests.length;const timing=await measure(page,chat,`/app/chats/${conversationId}`,'textarea[aria-label="Message text"]',null);
-    if(process.env.NAV_BASELINE!=="1")assert(historyRequests.length>historyBefore||requests.slice(before).some(request=>new URL(request.url).pathname===`/app/chats/${conversationId}`),"Opening a chat must fetch authorized current history, not reuse a full-route snapshot");
-    rows.push({scenario,round,route:"Open chat",...timing,rscRequests:requests.length-before});
+    // Intent prefetch deliberately shares an authorized result for 15 seconds.
+    // A warm tap need not refetch that result, but cannot use an unbounded route snapshot.
+    if(process.env.NAV_BASELINE!=="1")assert(historyRequests.some(request=>Date.now()-request.time<15000)||requests.slice(before).some(request=>new URL(request.url).pathname===`/app/chats/${conversationId}`),"Opening a chat requires a current authorized history read within the bounded prefetch lifetime");
+    rows.push({scenario,round,route:"Open chat",...timing,rscRequests:requests.length-before,authorizedHistoryRequests:historyRequests.length-historyBefore});
     if(scenario==="normal"&&round===0){
      const dismissNotice=page.getByRole("button",{name:"Dismiss encryption notice",exact:true});
      if(await dismissNotice.count()){
@@ -95,7 +97,7 @@ export async function testNavigationLatency(context,base,conversationId) {
     else {
       await page.getByRole("navigation",{name:"Mobile navigation",exact:true}).getByRole("link",{name:"Chats",exact:true}).click();
       if(target.name==="People") {await page.getByRole("button",{name:"New chat",exact:true}).click();link=page.getByRole("link",{name:"My contacts",exact:true});}
-      else {await page.locator(".chat-list-row").first().click();await page.getByRole("button",{name:"Chat options",exact:true}).click();link=page.getByRole("link",{name:/Public groups/});}
+      else {await page.locator(".chat-list-row").first().click();await page.getByRole("button",{name:"Chat options",exact:true}).click();link=page.getByRole("menuitem",{name:/Public groups/});}
     }
     additionalTabs.push({scenario,round,route:target.name,...await measure(page,link,target.path,"h1",target.text)});
     await page.waitForTimeout(250);
