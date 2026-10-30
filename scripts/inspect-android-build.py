@@ -43,6 +43,8 @@ def main():
     parser.add_argument("--aab", required=True)
     parser.add_argument("--bundletool", required=True)
     parser.add_argument("--package", default="app.ziptalks.android")
+    parser.add_argument("--permissions-file", help="Exact reviewed permission inventory for the active hosted app; otherwise retain the legacy minimal policy")
+    parser.add_argument("--expected-apk-certificate-sha256", help="Expected public test or distribution certificate fingerprint")
     parser.add_argument("--output", required=True, help="Write evidence to an ignored local path, not APK bytes/keys")
     args = parser.parse_args()
     sdk = Path(os.environ["ANDROID_HOME"])
@@ -56,6 +58,8 @@ def main():
     if not package or package[1] != args.package: raise ValueError("Unexpected APK identity")
     signature = run([java, "-jar", tools / "lib/apksigner.jar", "verify", "--verbose", "--print-certs", args.apk])
     fingerprint = re.search(r"certificate SHA-256 digest: ([a-f0-9]+)", signature)[1]
+    if args.expected_apk_certificate_sha256 and fingerprint != args.expected_apk_certificate_sha256.lower().replace(":", ""):
+        raise ValueError("APK signer differs from the expected certificate")
     run([tools / "zipalign.exe", "-c", "-P", "16", "4", args.apk])
     run([java, "-jar", args.bundletool, "validate", "--bundle=" + args.aab])
     manifest = ET.fromstring(run([java, "-jar", args.bundletool, "dump", "manifest", "--bundle=" + args.aab, "--module=base"]))
@@ -63,6 +67,8 @@ def main():
     app = manifest.find("application")
     target = int(manifest.find("uses-sdk").get(ns + "targetSdkVersion"))
     if manifest.get("package") != args.package or target < 36: raise ValueError("AAB identity/target SDK mismatch")
+    if manifest.get(ns + "versionCode") != package[2] or manifest.get(ns + "versionName") != package[3]:
+        raise ValueError("APK and AAB versions differ")
     if app.get(ns + "debuggable", "false") != "false" or app.get(ns + "usesCleartextTraffic") != "false": raise ValueError("Unsafe release manifest")
     if app.get(ns + "allowBackup") != "false" or not app.get(ns + "dataExtractionRules") or not app.get(ns + "fullBackupContent"): raise ValueError("Explicit backup/transfer exclusions missing")
     rules = run([tools / "aapt2.exe", "dump", "xmltree", args.apk, "--file", "res/xml/data_extraction_rules.xml"])
@@ -71,7 +77,15 @@ def main():
     if "E: cloud-backup" not in rules or "E: device-transfer" not in rules or any(domains.count(domain) != 2 for domain in expected_domains): raise ValueError("Cloud/transfer exclusion coverage incomplete")
     permissions = [node.get(ns + "name") for node in manifest.findall("uses-permission")]
     forbidden = ["READ_MEDIA_", "READ_EXTERNAL_STORAGE", "WRITE_EXTERNAL_STORAGE", "USE_BIOMETRIC", "RECEIVE_BOOT_COMPLETED", "CAMERA", "USE_FULL_SCREEN_INTENT"]
-    if any(part in value for part in forbidden for value in permissions): raise ValueError("Unexpected broad permission in AAB")
+    if args.permissions_file:
+        expected = json.loads(Path(args.permissions_file).read_text(encoding="utf8"))
+        if set(permissions) != set(expected) or any(not reason.strip() for reason in expected.values()):
+            raise ValueError("Permissions differ from the exact reviewed inventory or lack reasons")
+        broad_data_access = ["READ_MEDIA_", "READ_EXTERNAL_STORAGE", "WRITE_EXTERNAL_STORAGE", "READ_CONTACTS", "ACCESS_FINE_LOCATION", "ACCESS_COARSE_LOCATION", "RECEIVE_BOOT_COMPLETED"]
+        if any(part in value for part in broad_data_access for value in permissions):
+            raise ValueError("Broad data access is outside the release policy")
+    elif any(part in value for part in forbidden for value in permissions):
+        raise ValueError("Unexpected broad permission in AAB")
     config = json.loads(run([java, "-jar", args.bundletool, "dump", "config", "--bundle=" + args.aab]))
     with zipfile.ZipFile(args.aab) as aab, zipfile.ZipFile(args.apk) as apk:
         signatures = [name for name in aab.namelist() if re.match(r"META-INF/.*\.(SF|RSA|DSA|EC)$", name, re.I)]
