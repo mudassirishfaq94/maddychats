@@ -336,7 +336,7 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     await chat(source.page);
     await source.page.getByRole("button", { name: "Private chat protection is on. View details", exact: true }).click();
     await source.page.getByRole("button", { name: "Share chat access with my devices", exact: true }).click();
-    await source.page.getByText(/Shared \d+ existing key/).waitFor({ timeout: 30000 });
+    await source.page.getByRole("status").filter({ hasText: "Chat history sent to your linked phone." }).waitFor({ timeout: 30000 });
     await chat(target.page);
     await recipient.page.getByRole("region", { name: "Conversation", exact: true }).getByText("Queued new device delivery", { exact: true }).waitFor({ timeout: 45000 });
     await chat(source.page);
