@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { openDeviceTools } from "./device-ui-tools.mjs";
 
 /** Real local archive + restoration on an unapproved browser; no trust fixture bypass. */
 export async function testLocalChatBackup(base, pool, source, owner, password, conversationId) {
@@ -11,16 +12,15 @@ export async function testLocalChatBackup(base, pool, source, owner, password, c
   const code = await section.getByLabel("Local backup code", { exact: true }).textContent();
   assert.match(code, /^[A-Za-z0-9_-]{43}$/);
   await section.getByLabel("Confirm your saved backup code", { exact: true }).fill(code);
-  await section.getByRole("button", { name: "I saved the code · Create backup", exact: true }).click();
-  await section.getByRole("status").filter({ hasText: "Backup saved on this device." }).waitFor({ timeout: 90000 });
+  const download = page.waitForEvent("download", {timeout:90000});
+  await section.getByRole("button", { name: "Save backup file", exact: true }).click();
+  await section.getByRole("status").filter({ hasText: "Backup file saved." }).waitFor({ timeout: 90000 });
   const saved = await page.evaluate(async userId => {
     const db = await new Promise((resolve, reject) => { const request = indexedDB.open(`circlo-backup:${userId}`); request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); });
     const value = await new Promise((resolve, reject) => { const request = db.transaction("backup").objectStore("backup").get("settings"); request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); });
     db.close(); return { enabled: value.enabled, extractable: value.key.extractable, savedAt: value.savedAt };
   }, owner.id);
   assert(saved.enabled && saved.savedAt); assert.equal(saved.extractable, false);
-  const download = page.waitForEvent("download");
-  await section.getByRole("button", { name: "Export backup file", exact: true }).click();
   const file = await download, bytes = await readFile(await file.path());
   assert(file.suggestedFilename().endsWith(".circlo"));
   assert.equal(bytes.includes(Buffer.from("Real encrypted delivery baseline")), false);
@@ -28,6 +28,7 @@ export async function testLocalChatBackup(base, pool, source, owner, password, c
   // restore the old enabled settings or replace the previous archive.
   const settingsPage = await page.context().newPage();
   await settingsPage.goto(base + "/app/settings#save-my-chats");
+  await settingsPage.getByText("More options", {exact:true}).click();
   const pause = settingsPage.getByRole("button", { name: "Pause daily backup", exact: true });
   await pause.waitFor();
   let release, arrived;
@@ -36,7 +37,7 @@ export async function testLocalChatBackup(base, pool, source, owner, password, c
   const detailPath = `**/api/conversations/${conversationId}`;
   await page.route(detailPath, async route => { arrived(); await gate; await route.continue(); });
   try {
-    await section.getByRole("button", { name: "Back up now", exact: true }).click();
+    await section.getByRole("button", { name: "Save my chats", exact: true }).click();
     await Promise.race([waiting, page.waitForTimeout(15000).then(() => { throw new Error("Backup detail collection did not begin"); })]);
     await pause.click(); await settingsPage.getByRole("button", { name: "Enable daily backup", exact: true }).waitFor();
     release();
@@ -48,8 +49,11 @@ export async function testLocalChatBackup(base, pool, source, owner, password, c
     }, owner.id);
     assert.equal(current.enabled, false); assert.equal(current.savedAt, saved.savedAt);
   } finally { release(); await page.unroute(detailPath); await settingsPage.close(); }
-  await section.getByRole("button", { name: "Back up now", exact: true }).click();
-  await section.getByRole("status").filter({ hasText: "Backup saved on this device." }).waitFor();
+  const retryDownload = page.waitForEvent("download", {timeout:90000});
+  await section.getByRole("button", { name: "Save my chats", exact: true }).click();
+  await retryDownload;
+  await section.getByRole("status").filter({ hasText: "Backup file saved." }).waitFor();
+  await section.getByText("More options", {exact:true}).click();
   await section.getByRole("button", { name: "Enable daily backup", exact: true }).waitFor();
   const context = await page.context().browser().newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: "block" });
   let targetId;
@@ -69,7 +73,7 @@ export async function testLocalChatBackup(base, pool, source, owner, password, c
     await restore.getByRole("status").filter({ hasText: "The backup code is incorrect" }).waitFor();
     await restore.getByLabel("Saved backup code", { exact: true }).fill(code);
     await restore.getByRole("button", { name: "Restore my chats", exact: true }).click();
-    await restore.getByRole("status").filter({ hasText: "Saved chats restored on this device." }).waitFor({ timeout: 60000 });
+    await restore.getByRole("status").filter({ hasText: "Your saved chats are on this phone." }).waitFor({ timeout: 60000 });
     targetId = await target.evaluate(() => localStorage.getItem("e2ee_device_id"));
     assert.equal((await pool.query("select trusted_at from e2ee_keys where user_id=$1 and device_id=$2", [owner.id, targetId])).rows[0].trusted_at, null, "A backup never auto-approves or revives a device");
     const conversations = await context.request.get(base + "/api/conversations");
@@ -87,6 +91,7 @@ export async function testLocalChatBackup(base, pool, source, owner, password, c
     if (targetId) await pool.query("delete from e2ee_keys where user_id=$1 and device_id=$2 and trusted_at is null", [owner.id, targetId]);
   }
   // Exercise the actual browser camera after navigating from another app tab.
+  await openDeviceTools(page);
   await page.context().grantPermissions(["microphone", "camera"], { origin: base });
   await page.evaluate(() => { const original = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices); navigator.mediaDevices.getUserMedia = async constraints => { const stream = await original(constraints); if (constraints.video) window.__qrStream = stream; return stream; }; });
   await page.getByRole("button", { name: "Scan QR on your new device", exact: true }).click();

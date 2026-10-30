@@ -1,4 +1,4 @@
-export interface OfflineChat {id:string;name:string;type?:"dm"|"group";unreadCount?:number;favorited?:boolean;pinned?:boolean;archived?:boolean;lastMessageAt?:string|null;blocked?:boolean;requestPending?:boolean;locked?:boolean;preview?:{text:string;kind:string;createdAt:string}}
+export interface OfflineChat {id:string;name:string;avatarUrl?:string|null;type?:"dm"|"group";unreadCount?:number;markedUnread?:boolean;muted?:boolean;favorited?:boolean;pinned?:boolean;archived?:boolean;lastMessageAt?:string|null;blocked?:boolean;requestPending?:boolean;locked?:boolean;preview?:{text:string;kind:string;createdAt:string}}
 export interface OfflineText {id:string;conversationId:string;text:string;createdAt:string;source?:"offline"|"chat";replyToMessageId?:string|null;failed?:boolean;reason?:string}
 export function activeAccount():string|null;
 export function rememberChats(userId:string,chats:OfflineChat[]):Promise<void>;

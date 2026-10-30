@@ -4,6 +4,14 @@ import { randomUUID } from "node:crypto";
 import { isActiveContentType, normalizeMediaType } from "../src/lib/media-types";
 import { validateUpload } from "../src/server/storage";
 import { stageToken,readStage,createStage,appendStage,stageOffset,claimStage,abandonStage } from "../src/server/staged-media";
+test("generic Android document MIME becomes a real reader association without overriding active content",()=>{
+  for(const [name,type] of [["check.pdf","application/pdf"],["check.docx","application/vnd.openxmlformats-officedocument.wordprocessingml.document"],["check.xlsx","application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"],["check.doc","application/msword"],["check.xls","application/vnd.ms-excel"]]){
+    assert.equal(normalizeMediaType(name,"application/octet-stream"),type);
+    assert.equal(validateUpload(name,"application/octet-stream",1024,"message").ok,true);
+    assert.equal(normalizeMediaType(name,"text/html"),"text/html");
+    assert.equal(validateUpload(name,"text/html",1024,"message").ok,false);
+  }
+});
 test("Android JPEG aliases and missing picker MIME are accepted without permitting mismatched or active files",()=>{
   for(const mime of ["image/jpg","image/pjpeg","application/octet-stream",""])assert.equal(validateUpload("photo.JPG",mime,128*1024,"message").ok,true,mime);
   assert.equal(normalizeMediaType("photo.heif",""),"image/heif");

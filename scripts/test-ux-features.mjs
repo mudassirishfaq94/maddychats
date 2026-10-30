@@ -35,15 +35,15 @@ export async function testUxFeatures(context,base,owner,member) {
    await page.setViewportSize({width,height:width===1280?900:844});
    await page.evaluate(()=>{document.documentElement.classList.add("light");document.querySelector(".chat-filters").scrollLeft=0;});
    assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),`Inbox must fit ${width}px`);
-   const helpBounds=await help.boundingBox();const listBounds=await page.getByRole("complementary",{name:"Conversations"}).boundingBox();
-   assert(helpBounds&&listBounds&&helpBounds.width>=44&&helpBounds.x>=listBounds.x&&helpBounds.x+helpBounds.width<=listBounds.x+listBounds.width&&helpBounds.y+helpBounds.height<=listBounds.y+listBounds.height,"Help must stay inside the chat list with an accessible touch target");
+   const newChatBounds=await page.getByRole("button",{name:"New chat",exact:true}).boundingBox();const listBounds=await page.getByRole("complementary",{name:"Conversations"}).boundingBox();
+   assert(newChatBounds&&listBounds&&newChatBounds.width>=44&&newChatBounds.height>=44&&newChatBounds.x>=listBounds.x&&newChatBounds.x+newChatBounds.width<=listBounds.x+listBounds.width&&newChatBounds.y+newChatBounds.height<=listBounds.y+listBounds.height,"New chat must stay inside the chat list with an accessible touch target");
    const scroller=page.locator('aside[aria-label="Conversations"] > div.overflow-y-auto');
    const scrollBounds=await scroller.boundingBox();
-   assert(scrollBounds&&scrollBounds.y+scrollBounds.height>helpBounds.y+helpBounds.height,"Help must float over the list without a full-width footer");
+   assert(scrollBounds&&scrollBounds.y+scrollBounds.height>newChatBounds.y+newChatBounds.height,"Chat scrolling must extend below the New chat control");
    await scroller.evaluate(element=>{element.scrollTop=element.scrollHeight;});
    const lastOptions=page.getByRole("complementary",{name:"Conversations"}).getByRole("button",{name:"Conversation options",exact:true}).last();
    await lastOptions.scrollIntoViewIfNeeded();
-   assert(await lastOptions.evaluate(button=>{const box=button.getBoundingClientRect();return button.contains(document.elementFromPoint(box.x+box.width/2,box.y+box.height/2));}),"The final conversation's controls remain reachable beside the floating Help button");
+   assert(await lastOptions.evaluate(button=>{const box=button.getBoundingClientRect();return button.contains(document.elementFromPoint(box.x+box.width/2,box.y+box.height/2));}),"The final conversation's controls remain reachable");
    await scroller.evaluate(element=>{element.scrollTop=0;});
    const heading=await page.getByRole("heading",{name:"Chats",exact:true}).boundingBox();
    const firstRow=await page.locator(".chat-list-row").first().boundingBox();
@@ -57,7 +57,7 @@ export async function testUxFeatures(context,base,owner,member) {
   assert.deepEqual(await page.getByRole("navigation",{name:"Mobile navigation"}).getByRole("link").allTextContents(),["Chats","Status","Calls","Settings"]);
   const calls=page.getByRole("navigation",{name:"Mobile navigation"}).getByRole("link",{name:"Calls",exact:true});await calls.click();await page.getByRole("heading",{name:"Calls",exact:true}).waitFor();
   const history=await page.request.get(base+"/api/calls/history");assert.equal(history.status(),200);assert(Array.isArray((await history.json()).calls));
-  await page.goto(base+"/app/settings");await page.getByText("Privacy preferences",{exact:true}).click();
+  await page.goto(base+"/app/settings");await page.getByRole("link",{name:"Privacy",exact:true}).click();
   await page.getByRole("combobox",{name:"Last seen",exact:true}).selectOption("specific");
   await page.getByRole("group",{name:"Share last seen with"}).waitFor();
   await page.getByText("Saved ✓",{exact:true}).waitFor();

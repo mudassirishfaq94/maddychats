@@ -2,7 +2,14 @@ import assert from "node:assert/strict";
 
 export async function testStartupInbox(base, source, conversationId) {
   const page = source.page, requests = [];
-  const track = request => { if (request.method() === "GET" && /\/api\/conversations\/[^/]+\/(?:messages|open)(?:\?|$)/.test(request.url())) requests.push(request); };
+  const track = request => {
+    if (request.method() !== "GET" || !/\/api\/conversations\/[^/]+\/(?:messages|open)(?:\?|$)/.test(request.url())) return;
+    // This page was previously an open chat. Its final background reads can
+    // start while goto is replacing that document; they are not inbox work.
+    const referer = request.headers().referer;
+    if (referer && new URL(referer).pathname !== "/app/chats") return;
+    requests.push(request);
+  };
   page.on("request", track);
   let releaseList;
   const listGate = new Promise(resolve => { releaseList = resolve; });

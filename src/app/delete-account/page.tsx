@@ -7,12 +7,12 @@ export const metadata = publicMetadata("/delete-account", "Delete your Circlo ac
 export const dynamic = "force-dynamic";
 
 export default function DeleteAccountPage() {
-  const email = publicSupportEmail(process.env.PUBLIC_SUPPORT_EMAIL);
+  const email = publicSupportEmail(process.env.PUBLIC_SUPPORT_EMAIL) ?? "mudassarmalak090@gmail.com";
   return <HelpPage title="Delete your Circlo account">
     <p>You can delete your account from this website. You do not need to install the Android app. Deletion is permanent and applies to the same Circlo account on all devices.</p>
-    <Link className="btn btn-primary inline-flex max-w-full whitespace-normal text-center" href="/login?next=%2Fapp%2Fprofile%23account-data">Sign in to delete my account</Link>
+    <Link className="btn btn-primary inline-flex max-w-full whitespace-normal text-center" href="/login?next=%2Fapp%2Fsettings%23data">Sign in to delete my account</Link>
     <section><h2 className="text-lg font-semibold">How to request deletion</h2>
-      <ol className="list-decimal space-y-2 pl-5"><li>Sign in using your existing Circlo email or Google account.</li><li>Open Settings → Your Data → Manage your data → Delete my account.</li><li>Confirm your identity when asked, read the warning and type DELETE. Nothing is deleted just by opening this page.</li></ol>
+      <ol className="list-decimal space-y-2 pl-5"><li>Sign in to your existing Circlo account.</li><li>Open Settings → Privacy → Your phones and sign-in → Your Data → Delete my account.</li><li>Confirm your identity when asked, read the warning and type DELETE. Nothing is deleted just by opening this page.</li></ol>
     </section>
     <section><h2 className="text-lg font-semibold">Lost your password or trusted device?</h2>
       <p><Link className="text-[var(--accent)] underline" href="/forgot-password">Reset your password by email</Link>. If sign-in asks for a trusted device you no longer have, choose email recovery in the device-access screen. Recover your existing account; do not create another account to delete it. Email recovery cannot recreate lost encryption keys.</p>

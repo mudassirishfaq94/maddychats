@@ -116,3 +116,9 @@ __pycache__/
 
 # Generated browser screenshots and navigation measurements
 /test-artifacts/
+
+# Separate private admin Android app
+/android-admin/.gradle/
+/android-admin/build/
+/android-admin/app/build/
+/android-admin/.kotlin/

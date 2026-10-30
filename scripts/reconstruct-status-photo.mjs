@@ -6,7 +6,7 @@ const chunks = []; let size = 0;
 try {
   for await (const chunk of process.stdin) {
     size += chunk.length;
-    if (size > 10 * 1024 * 1024) throw new Error("size");
+    if (size > 50 * 1024 * 1024) throw new Error("size");
     chunks.push(chunk);
   }
   const bytes = Buffer.concat(chunks);

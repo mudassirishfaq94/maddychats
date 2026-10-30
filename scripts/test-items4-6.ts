@@ -14,6 +14,7 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import sharp from "sharp";
 import { hashPassword } from "../src/server/password";
+import { encryptPrivateKeyForStorage } from "../src/lib/crypto";
 
 async function main() {
   const url = process.env.ITEM456_TEST_DATABASE_URL;
@@ -346,7 +347,8 @@ async function main() {
       const recoveryConversation = (await sql.query("insert into conversations(type,created_by_id) values('dm',$1) returning id", [carol.id])).rows[0];
       await sql.query("insert into conversation_members(conversation_id,user_id,accepted_at) values($1,$2,now()),($1,$3,now())", [recoveryConversation.id, carol.id, recoveryPeer.id]);
       await sql.query("insert into messages(conversation_id,sender_id,text,created_at) select $1,$2,'recovery-history-'||n,now()-n*interval '1 minute' from generate_series(1,500) n", [recoveryConversation.id, carol.id]);
-      assert.equal((await api("/api/e2ee/keys", recoveryPeerCookie, "POST", { deviceId: "recovery-peer", publicKey: targetPublic, encryptedPrivateKey: "test-only-backup" })).status, 200);
+      const peerBackup = "v2:" + await encryptPrivateKeyForStorage(JSON.stringify(targetPair.privateKey.export({ format: "jwk" })), randomUUID()+randomUUID());
+      assert.equal((await api("/api/e2ee/keys", recoveryPeerCookie, "POST", { deviceId: "recovery-peer", publicKey: targetPublic, encryptedPrivateKey: peerBackup })).status, 200);
       const { testChatRecovery } = await import("./test-chat-recovery.mjs");
       await testChatRecovery(base, carolCookie, recoveryConversation.id);
       const introSender = await account("item456_browser_request_sender");

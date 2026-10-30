@@ -33,7 +33,7 @@ const nextConfig: NextConfig = {
   // Keep development caching, but compile production releases from current source.
   // Proxy otherwise truncates at 10 MB before the bounded multipart reader can
   // receive a full 10 MB encrypted file plus its form and encryption overhead.
-  experimental: { turbopackFileSystemCacheForBuild: false, proxyClientMaxBodySize: "12mb",
+  experimental: { turbopackFileSystemCacheForBuild: false, proxyClientMaxBodySize: "52mb",
     // lucide-react is imported icon-by-icon across ~40 files. Without this,
     // each named import drags in the whole icon set at bundle time, inflating
     // the JS parse cost on every app open and tab switch.

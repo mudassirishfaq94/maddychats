@@ -28,20 +28,20 @@ for(const width of [390,1440]) {
    await page.screenshot({path:`.freebuff/performance/${route.slice(1)}-390.png`,fullPage:true});
   }
   if(route==='/' && pass==='first' && width===390) {
-   await page.getByRole('heading',{name:'Private chat for you and your people.',exact:true}).waitFor();
+   await page.getByRole('heading',{name:'Your circle. Your conversations. Your privacy.',exact:true}).waitFor();
    await page.getByRole('heading',{name:'What works today',exact:true}).waitFor();
    assert.equal(await page.locator('#status li').count(),5);
    assert.equal(await page.locator('#features article').count(),6);
    assert.equal(await page.locator('details').count(),4,'Landing page has four short answers');
-   assert.equal(await page.getByRole('button',{name:'Android app'}).isDisabled(),true,'Android button stays disabled until a Play Store listing exists');
-   assert.equal(await page.getByText('Coming soon to Google Play',{exact:true}).count(),1);
-   assert.equal(await page.getByRole('link',{name:'Use in browser',exact:true}).count(),2);
+   assert.equal(await page.getByRole('link',{name:'Get the Android app',exact:true}).getAttribute('href'),'/support','Android testing access has a working contact path');
+   assert.equal(await page.getByText('Contact us for Android testing access.',{exact:true}).count(),1);
+   assert.equal(await page.getByRole('link',{name:'Get started',exact:true}).count(),2);
    assert.equal(await page.getByRole('link',{name:'Log in',exact:true}).count(),2);
    assert.equal(await page.getByText('JoinGet started',{exact:true}).count(),0);
    assert.equal(await page.getByText('Find your circle',{exact:true}).count(),0);
    assert.equal(await page.getByText('Join Circlo',{exact:true}).count(),0);
    assert.equal(await page.getByText('010',{exact:true}).count(),0);
-   assert.equal(await page.getByText('Example chats · names are made up',{exact:true}).count(),1);
+   assert.equal(await page.locator('[aria-label="Example of the Circlo chat interface"]').count(),1,'Sample remains accessible without adding rejected visible labels');
    assert.equal(await page.getByRole('heading',{name:'Weekend plans',exact:true}).count(),1);
    assert.equal(await page.getByRole('link',{name:'Contact',exact:true}).getAttribute('href'),'/support');
    assert.equal(await page.locator('#roadmap').count(),0,'Long roadmap section has been removed');

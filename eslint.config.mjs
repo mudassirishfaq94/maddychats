@@ -7,6 +7,7 @@ export default defineConfig([
   globalIgnores([
     ".next/**", "out/**", "build/**", "next-env.d.ts",
     ".freebuff/**", "android/**/build/**", "android/.gradle/**",
+    "android-admin/**/build/**", "android-admin/.gradle/**",
     "signal-bridge/pkg/**", "signal-bridge/public/**", "signal-bridge/target/**",
     "public/signal/**", // generated wasm-bindgen runtime and declarations
   ]),

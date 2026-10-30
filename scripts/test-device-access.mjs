@@ -28,7 +28,7 @@ export async function testDeviceAccess(base, pool, secret) {
     assert([303,307].includes(redirect.status()));
     assert(new URL(redirect.headers().location,base).pathname === "/login"); assert.equal((await anonymous.request.get(base+"/api/admin/stats")).status(),401,"Anonymous requests cannot read admin data"); await anonymous.close();
     const source = await open(); await source.page.waitForURL(base+"/app/chats");
-    await source.page.goto(base+"/app/settings#privacy");await source.page.getByText("Linked phones and account security",{exact:true}).click();
+    await source.page.goto(base+"/app/settings#privacy");await source.page.getByText("Your phones and sign-in",{exact:true}).click();
     await source.page.getByText("This device: Linked",{exact:true}).waitFor();
     const target = await open();
     await target.page.getByRole("button",{name:"I still have my old phone",exact:true}).waitFor();
@@ -44,9 +44,15 @@ export async function testDeviceAccess(base, pool, secret) {
     assert.equal(profile.status(),307); assert(new URL(profile.headers().location,base).pathname === "/app/device-access");
     const backup = (await pool.query("select device_id,public_key,encrypted_private_key,device_name from e2ee_keys where user_id=$1 and trusted_at is not null",[user.id])).rows[0];
     await pool.query("update e2ee_keys set encrypted_private_key='legacy-device-id-only-backup' where user_id=$1 and device_id=$2",[user.id,backup.device_id]);
+    const ownerKeys = await (await source.context.request.get(base+"/api/e2ee/keys")).json();
+    const oldOwnerBackup = ownerKeys.keys.find(k=>k.deviceId===backup.device_id);
+    assert.equal(oldOwnerBackup.encryptedPrivateKey,undefined,"Legacy private-key backups are never returned, including to an approved session");
+    assert.equal(oldOwnerBackup.backupNeedsUpgrade,true,"The owner can identify a backup that needs safe migration");
     const restrictedKeys = await (await target.context.request.get(base+"/api/e2ee/keys")).json();
     assert.equal(restrictedKeys.keys.find(k=>k.deviceId===backup.device_id).encryptedPrivateKey,undefined,"Restricted sign-ins cannot download legacy weakly wrapped private keys");
-    const overwrite = await target.context.request.post(base+"/api/e2ee/keys",{headers:{Origin:base},data:{deviceId:backup.device_id,publicKey:backup.public_key,encryptedPrivateKey:"attacker-replacement",deviceName:"Spoofed trusted browser"}});
+    const invalidBackup = await target.context.request.post(base+"/api/e2ee/keys",{headers:{Origin:base},data:{deviceId:backup.device_id,publicKey:backup.public_key,encryptedPrivateKey:"attacker-replacement"}});
+    assert.equal(invalidBackup.status(),422,"New malformed or legacy private-key backups are rejected before writes");
+    const overwrite = await target.context.request.post(base+"/api/e2ee/keys",{headers:{Origin:base},data:{deviceId:backup.device_id,publicKey:backup.public_key,encryptedPrivateKey:backup.encrypted_private_key,deviceName:"Spoofed trusted browser"}});
     assert.equal(overwrite.status(),200);
     assert.equal((await pool.query("select encrypted_private_key from e2ee_keys where user_id=$1 and device_id=$2",[user.id,backup.device_id])).rows[0].encrypted_private_key,"legacy-device-id-only-backup","A primary credential cannot overwrite an existing key backup without private-key proof");
     assert.equal((await pool.query("select device_name from e2ee_keys where user_id=$1 and device_id=$2",[user.id,backup.device_id])).rows[0].device_name,backup.device_name,"Restricted sign-ins cannot spoof another browser's label");

@@ -27,8 +27,6 @@ import {
 import { e2eeRequest, awaitE2EERead } from "@/lib/e2ee-request";
 import { mapWithConcurrency } from "@/lib/async";
 import { transferDeviceHistory } from "@/lib/device-history-transfer";
-import { loadSignalBridge } from "@/lib/e2ee-signal-bridge";
-import { ensureSignalDeviceRegistered, maintainSignalPrekeyReserve } from "@/lib/e2ee-signal-registration";
 import {
   getMessageCacheKey,
   readVerifiedMessages,
@@ -187,6 +185,10 @@ export function useE2EE(userId: string | undefined) {
         const publicKey = await importPublicKey(serverDevice.publicKey);
         keyPair = { privateKey, publicKey };
         publicKeyStr = serverDevice.publicKey;
+      } else if (serverDevice) {
+        // Never manufacture a new identity over a registered device whose old
+        // backup cannot safely be returned. Preserve it for recovery/migration.
+        throw new Error("Open Circlo on your old phone to update chat access, or use your saved backup.");
       } else {
         keyPair = await generateKeyPair();
         const publicKey = await exportPublicKey(keyPair.publicKey);
@@ -265,28 +267,8 @@ export function useE2EE(userId: string | undefined) {
       });
       deviceRegistrationRef.current = registration;
 
-      // Register the Signal device directory independently of the legacy
-      // compatibility key. A temporary Signal-directory outage must not make
-      // already-established conversations unreadable; v2 sending is enabled
-      // only after its session ratchet is available.
-      if (process.env.NEXT_PUBLIC_STARTER_MODE !== "1") void registration
-        .then(async (ready) => {
-          if (!ready || !active) return;
-          // Runtime policy must match the server, not an unset build-time flag.
-          const capabilities = await fetch("/api/chat-capabilities", { cache: "no-store", signal: controller.signal });
-          if (!capabilities.ok || (await capabilities.json()).signalProvisioning !== true || !active) return;
-          await waitForBackgroundSlot(controller.signal);
-          if (!active) return;
-          const bridge = await loadSignalBridge();
-          if(!active)return;
-          await ensureSignalDeviceRegistered(activeUserId, deviceId, bridge);
-          if(!active)return;
-          await maintainSignalPrekeyReserve(activeUserId, deviceId, bridge);
-        })
-        .catch(() => {
-          // Retried at the next application initialization. Do not expose a
-          // silent fallback that would create a replacement Signal identity.
-        });
+      // Experimental Signal sending is quarantined. Do not generate/register
+      // unused identities or download its WASM during supported chat startup.
 
     }
 
@@ -808,11 +790,13 @@ export function useE2EE(userId: string | undefined) {
           return null;
         }
       })();
-      // Never reuse a group sending key across roster/device changes. A removed
-      // member can retain the old AES key even after server access is revoked.
-      // No local baseline (including an upgraded/new browser) also requires a
-      // fresh sending key. Keep old keys solely for decrypting existing history.
-      if (ready && groupRevision && persisted?.peerSignature !== peerSignature) {
+      // A changed approved-device roster must replace the sending key in DMs
+      // as well as groups. A removed device can retain old AES keys; approving
+      // a replacement peer must not automatically grant it the prior epoch.
+      // Existing keys remain available for legitimate local history/recovery.
+      // Groups also require a fresh baseline on first preparation, preserving
+      // the existing membership-change behavior.
+      if (ready && (groupRevision || persisted) && persisted?.peerSignature !== peerSignature) {
         const candidate = await generateConversationKey();
         const shared = await mapWithConcurrency(targets, 3, target =>
           shareKey(conversationId, target.userId, target.deviceId, target.publicKey, candidate).catch(() => false));
@@ -1027,8 +1011,9 @@ export function useE2EE(userId: string | undefined) {
     cache.delete(key); cache.set(key, { ciphertext, plaintext });
     while (cache.size > 512) cache.delete(cache.keys().next().value!);
   }, []);
-  const cacheDecryptedMessage = useCallback((conversationId: string, messageId: string, ciphertext: string, plaintext: string) => {
+  const cacheDecryptedMessage = useCallback((conversationId: string, messageId: string, ciphertext: string, plaintext: string, options?: { memoryOnly?: boolean }) => {
     rememberPlaintext(conversationId, messageId, ciphertext, plaintext);
+    if (options?.memoryOnly) return;
     if (!userId || !state.deviceId || !keyPairRef.current) return;
     const epoch = cacheEpochRef.current;
     if (!messageCacheKeyRef.current) {

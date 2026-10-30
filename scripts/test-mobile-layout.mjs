@@ -70,7 +70,7 @@ async function expandDetails(page, scope = page) {
 async function testNavigationSpace(page) {
   const settings = await page.context().newPage();
   await settings.goto(new URL("/app/settings#two-step-verification", page.url()).toString());
-  const security=settings.locator("#security");if(await security.getAttribute("open")===null)await security.locator(":scope > summary").click();
+  const security=settings.locator("#security");await security.waitFor({state:"visible"});if(await security.getAttribute("open")===null)await security.locator(":scope > summary").click();
   const enable = settings.getByRole("button", { name: "Turn on the extra sign-in check", exact: true });
   await enable.waitFor({ state: "visible" });
   const twoFactor = settings.locator("#two-step-verification");
@@ -165,10 +165,10 @@ export async function testMobileLayout(base, pool, { recordOnly = false, navigat
     };
     await mkdir(".freebuff/performance", { recursive: true });
     const user = await login(accounts[0]);
-    await user.goto(base + "/app/settings#privacy");await user.getByText("Linked phones and account security",{exact:true}).click();
+    await user.goto(base + "/app/settings#privacy");await user.getByText("Your phones and sign-in",{exact:true}).click();
     await user.getByText("This device: Linked", { exact: true }).waitFor();
     const pending = await login(accounts[0]);
-    await pending.goto(base + "/app/settings#privacy");await pending.getByText("Linked phones and account security",{exact:true}).click();
+    await pending.goto(base + "/app/settings#privacy");await pending.getByText("Your phones and sign-in",{exact:true}).click();
     await pending.getByText("This device: Waiting for approval", { exact: true }).waitFor();
     await pending.getByRole("button", { name: "Emergency recovery: no linked device or backup file", exact: true }).click();
     const navigationScreens = await testNavigationSpace(pending);
@@ -193,6 +193,7 @@ export async function testMobileLayout(base, pool, { recordOnly = false, navigat
         if (path === "/app/profile" || path === "/app/settings") await expandDetails(user);
         await check(user, path + "-" + size);
         if (path === "/app/settings") {
+          await user.goto(base+"/app/settings#security");await user.locator("#security").waitFor({state:"visible"});await expandDetails(user);
           await user.getByRole("button", { name: "Delete my account", exact: true }).click();
           await user.getByPlaceholder("Type DELETE", {exact:true}).fill("DELETE");
           const remove = user.getByRole("dialog", {name:"Delete account",exact:true}).getByRole("button",{name:"Delete permanently",exact:true});
@@ -201,7 +202,7 @@ export async function testMobileLayout(base, pool, { recordOnly = false, navigat
           await check(user, "delete-confirmation-" + size);
           await user.getByRole("dialog", { name: "Delete account", exact: true }).getByRole("button").first().click();
           if (width === 320) {
-            const two = user.locator(".card-glass").filter({has:user.getByRole("heading",{name:"Two-Factor Authentication",exact:true})}).last();
+            const two = user.locator(".card-glass").filter({has:user.getByRole("heading",{name:"Extra sign-in check",exact:true})}).last();
             await two.getByLabel("Current password", {exact:true}).fill(password);
             await two.getByRole("button",{name:"Turn on the extra sign-in check",exact:true}).click();
             await two.getByPlaceholder("000000",{exact:true}).waitFor();

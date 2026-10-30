@@ -1,6 +1,13 @@
 import { fixtureAppSession } from "./fixture-app-session.mjs";
 import assert from "node:assert/strict";
 import { chromium } from "playwright";
+import { testLocalChatBackup } from "./test-local-chat-backup.mjs";
+import { testStatusVideo } from "./test-status-video.mjs";
+import { testChatHandoff } from "./test-chat-handoff.mjs";
+import { testChatScroll } from "./test-chat-scroll.mjs";
+import { testDisappearingMedia } from "./test-disappearing-media.mjs";
+import { testDocumentDelivery } from "./test-document-delivery.mjs";
+import { testDmDeviceRotation } from "./test-dm-device-rotation.mjs";
 
 /** Close the SSR-to-live-stream gap deterministically using owned fixtures. */
 export async function testChatOpeningRace(sender, recipient) {
@@ -32,7 +39,7 @@ export async function testChatOpeningRace(sender, recipient) {
 
 export async function testChatOpeningFixture(base, pool, owner, peer, password, conversationId) {
   assert(["localhost", "127.0.0.1"].includes(new URL(base).hostname));
-  const browser = await chromium.launch(); const pages = [];
+  const browser = await chromium.launch({args:["--use-fake-device-for-media-stream","--use-fake-ui-for-media-stream"]}); const pages = [];
   try {
     for (const account of [owner, peer]) {
       const context = await browser.newContext({ serviceWorkers: "block", viewport: { width: 390, height: 844 } });
@@ -40,12 +47,20 @@ export async function testChatOpeningFixture(base, pool, owner, peer, password, 
       assert.equal(response.status(), 200);
       await fixtureAppSession(pool,response);
       const page = await context.newPage(); page.setDefaultTimeout(30000);
-      await page.goto(base + "/app/settings#privacy"); await page.getByText("This device: Linked", { exact: true }).waitFor(); pages.push(page);
+      await page.goto(base + "/app/settings#privacy"); await page.getByText("Your phones and sign-in", { exact: true }).click(); await page.getByText("This device: Linked", { exact: true }).waitFor(); pages.push(page);
     }
     for (const page of pages) { await page.goto(base + "/app/chats/" + conversationId); await page.getByRole("textbox", { name: "Message text", exact: true }).waitFor(); }
-    await pages[0].getByRole("textbox", { name: "Message text", exact: true }).fill("Opening race baseline");
+    const baseline=process.env.BACKUP_ONLY==='1'?'Real encrypted delivery baseline':'Opening race baseline';
+    await pages[0].getByRole("textbox", { name: "Message text", exact: true }).fill(baseline);
     await pages[0].getByRole("textbox", { name: "Message text", exact: true }).press("Enter");
-    await pages[1].getByRole("region", { name: "Conversation", exact: true }).getByText("Opening race baseline", { exact: true }).waitFor();
-    await testChatOpeningRace(pages[0], pages[1]);
+    await pages[1].getByRole("region", { name: "Conversation", exact: true }).getByText(baseline, { exact: true }).waitFor();
+    if(process.env.DM_ROTATION_ONLY==='1')await testDmDeviceRotation(base,pool,owner,peer,pages[0],pages[1],conversationId,baseline);
+    else if(process.env.DOCUMENT_FILES_ONLY==='1')await testDocumentDelivery(base,pages[0],pages[1]);
+    else if(process.env.DISAPPEARING_MEDIA_ONLY==='1')await testDisappearingMedia(base,pool,owner,peer,pages[0],pages[1],conversationId);
+    else if(process.env.CHAT_SCROLL_ONLY==='1')await testChatScroll(base,{page:pages[0]},{page:pages[1]},pool,conversationId);
+    else if(process.env.CHAT_HANDOFF_ONLY==='1')await testChatHandoff(base,pool,pages[1],owner,conversationId,baseline);
+    else if(process.env.STATUS_VIDEO_ONLY==='1')await testStatusVideo(base,pool,owner,peer,pages[0],pages[1]);
+    else if(process.env.BACKUP_ONLY==='1')await testLocalChatBackup(base,pool,{page:pages[0]},owner,password,conversationId);
+    else await testChatOpeningRace(pages[0], pages[1]);
   } finally { await browser.close(); }
 }

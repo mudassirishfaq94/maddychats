@@ -1,8 +1,22 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { prefetchChatRouteData, retainChatRouteAccount } from "../src/lib/chat-route-prefetch";
+import { invalidateChatRouteData, prefetchChatRouteData, retainChatRouteAccount } from "../src/lib/chat-route-prefetch";
 
 const conversationId = "10000000-0000-4000-8000-000000000001";
+
+test("a changed conversation invalidates only its account's prefetched policy", async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  let calls=0;
+  globalThis.fetch=(async()=>{calls++;return fixtureResponse(200,"policy-account");}) as typeof fetch;
+  await prefetchChatRouteData("policy-account",conversationId);
+  invalidateChatRouteData("other-account",conversationId);
+  await prefetchChatRouteData("policy-account",conversationId);
+  assert.equal(calls,1);
+  invalidateChatRouteData("policy-account",conversationId);
+  await prefetchChatRouteData("policy-account",conversationId);
+  assert.equal(calls,2,"A changed timer must fetch fresh authorized details even within the prefetch TTL");
+});
 
 function fixtureResponse(status = 200, viewerId = "account-a") {
   const body = {

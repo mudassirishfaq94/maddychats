@@ -5,6 +5,8 @@ import {chromium} from "playwright";
 import sharp from "sharp";
 import {Pool} from "pg";
 import {openDeviceTools} from "./device-ui-tools.mjs";
+import {legacyRecoveryFixture} from "./legacy-recovery-fixture.mjs";
+import {newRecoveryCode,sealRecovery} from "../src/lib/cloud-key-recovery.ts";
 import {testCommunityUx} from "./test-community-ux.mjs";
 import {testUxFeatures,testDeliveryApi} from "./test-ux-features.mjs";
 import {testNativeNotificationState} from "./test-native-notification-state.mjs";
@@ -80,7 +82,7 @@ try {
  // Compare against the independently generated fixture identities before approval.
  for(const account of [owner,member]) {
   await account.page.reload();
-  await account.page.getByRole("button").filter({hasText:"A device changed in this chat."}).click();
+  await account.page.getByRole("button").filter({hasText:"Confirm this is still them before you send."}).click();
   await account.page.getByLabel("Participant check number").nth(accounts.length-2).waitFor();
   const fingerprints=await account.page.getByLabel("Participant check number").allTextContents();
   assert.deepEqual(fingerprints.sort(),accounts.filter(peer=>peer!==account).map(peer=>createHash("sha256").update(peer.publicKey).digest("hex")).sort());
@@ -187,10 +189,12 @@ try {
 
 
  await owner.page.goto(base+"/app/settings#privacy");await openDeviceTools(owner.page);
- await owner.page.getByRole("button",{name:"Set up chat recovery",exact:true}).click();const phrase=await owner.page.getByLabel("24-word recovery phrase").textContent();assert(phrase);const code=phrase.trim().toLowerCase().replace(/\s+/g," ");
- await owner.page.getByLabel("Enter the 24 words again",{exact:true}).fill(code);await owner.page.getByRole("button",{name:"Save phrase and set up recovery",exact:true}).click();await owner.page.getByText(/Chat recovery is set up/).waitFor();
+ const code=newRecoveryCode(),identity={id:randomUUID(),userId:owner.id,deviceId:owner.deviceId};
+ const envelope=await sealRecovery(await legacyRecoveryFixture(owner.page,owner.id),code,identity);
+ const savedRecovery=await owner.page.request.put(base+'/api/e2ee/recovery-backups',{data:{id:identity.id,deviceId:identity.deviceId,revision:0,confirmed:true,envelope},headers:{Origin:base}});
+ assert.equal(savedRecovery.status(),200,'An authorized old-format recovery fixture is accepted');
  const backup=(await pool.query("select id,envelope from recovery_backups where user_id=$1",[owner.id])).rows[0];assert(backup);assert.equal(JSON.stringify(backup.envelope).includes(code),false);
- await owner.page.evaluate(()=>localStorage.clear());await owner.page.reload();await openDeviceTools(owner.page);
+ await owner.page.evaluate(()=>localStorage.clear());await owner.page.goto(base+'/app/settings#save-my-chats');await owner.page.getByText('Use an older backup',{exact:true}).click();
  await owner.page.getByText("Open chats with a saved code",{exact:true}).click();await owner.page.getByLabel("Backup",{exact:true}).selectOption(backup.id);await owner.page.getByLabel("Enter its recovery phrase or older recovery code",{exact:true}).fill(code);
  await owner.page.getByLabel(/I saved a separate recovery file/).check();await owner.page.getByRole("button",{name:"Open chats on this device",exact:true}).click();
  await owner.page.waitForTimeout(1000);await owner.page.goto(`${base}/app/chats/${group}`);await owner.page.getByRole("region",{name:"Messages",exact:true}).getByText(normal,{exact:true}).waitFor();

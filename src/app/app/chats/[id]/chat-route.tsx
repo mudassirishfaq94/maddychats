@@ -4,32 +4,60 @@ import { useEffect, useState } from "react";
 import { SavedChatOpening } from "@/components/chats/saved-chat-opening";
 import Link from "next/link";
 import { Ghost } from "lucide-react";
+import { useSharedE2EE } from "@/components/providers/e2ee-provider";
 import { ChatView } from "@/components/chats/chat-view";
 import { useAuth } from "@/components/providers/auth-provider";
-import { prefetchChatRouteData, retainChatRouteAccount, type ChatRouteData } from "@/lib/chat-route-prefetch";
+import { useRealtime } from "@/components/providers/realtime-provider";
+import { invalidateChatRouteData, prefetchChatRouteData, retainChatRouteAccount, type ChatRouteData } from "@/lib/chat-route-prefetch";
+import type { CurrentChatPreview } from "@/lib/current-chat-preview";
 import type { SafeUser } from "@/lib/types";
 
-export function ChatRoute({ conversationId, me }: { conversationId: string; me: SafeUser }) {
+export function ChatRoute({ conversationId, me, preview }: { conversationId: string; me: SafeUser; preview?: CurrentChatPreview }) {
   const { user, status } = useAuth();
+  const { subscribe } = useRealtime();
+  const [revision, setRevision] = useState(0);
+  const { loadCachedDecryptedMessages } = useSharedE2EE();
   const routeKey = `${me.id}:${conversationId}`;
   const [result, setResult] = useState<{ key: string; data?: ChatRouteData; error?: string } | null>(null);
 
   useEffect(() => { retainChatRouteAccount(me.id); }, [me.id]);
   useEffect(() => {
+    if (status !== "authenticated" || user?.id !== me.id) return;
+    const refresh = () => { invalidateChatRouteData(me.id, conversationId); setRevision(value => value + 1); };
+    const unsubscribe = subscribe(event => {
+      if (event.type.startsWith("group:") && "conversationId" in event && event.conversationId === conversationId) refresh();
+    });
+    const local = (event: Event) => { if ((event as CustomEvent).detail?.conversationId === conversationId) refresh(); };
+    window.addEventListener("maddy:conversation-controls", local);
+    return () => { unsubscribe(); window.removeEventListener("maddy:conversation-controls", local); };
+  }, [conversationId, me.id, status, user?.id, subscribe]);
+  useEffect(() => {
     let active = true;
     if (status === "loading" || user?.id !== me.id) return () => { active = false; };
-    void prefetchChatRouteData(me.id, conversationId).then((result) => {
+    void prefetchChatRouteData(me.id, conversationId).then(async (result) => {
       if (!active || user?.id !== me.id) return;
       if (!result.conversation.members.some((member) => member.id === me.id)) {
         setResult({ key: routeKey, error: "Conversation not found or you no longer have access." });
         return;
       }
-      setResult({ key: routeKey, data: result });
+      // Keep the saved surface visible during the local, ciphertext-bound cache
+      // handoff. This never waits for key retrieval, sharing or rotation.
+      if (!result.conversation.blocked && !result.conversation.requestPending && !result.conversation.awaitingApproval && !result.conversation.disappearingSeconds) {
+        let timeout: ReturnType<typeof setTimeout> | undefined;
+        try {
+          await Promise.race([
+            loadCachedDecryptedMessages(conversationId, result.initial.messages.filter(message => !message.deletedAt && !message.deletedForMe && !message.selfDestruct && !message.expiresAt)),
+            new Promise<void>(resolve => { timeout = setTimeout(resolve, 150); }),
+          ]);
+        } catch { /* A missing local cache must not prevent normal decryption. */ }
+        finally { clearTimeout(timeout); }
+      }
+      if (active && user?.id === me.id) setResult({ key: routeKey, data: result });
     }).catch(() => {
       if (active && user?.id === me.id) setResult({ key: routeKey, error: "Could not load this conversation. Check your connection and try again." });
     });
     return () => { active = false; };
-  }, [conversationId, me.id, routeKey, status, user?.id]);
+  }, [conversationId, me.id, routeKey, status, user?.id, loadCachedDecryptedMessages, revision]);
 
   const data = result?.key === routeKey ? result.data ?? null : null;
   const error = result?.key === routeKey ? result.error ?? null : null;
@@ -42,7 +70,7 @@ export function ChatRoute({ conversationId, me }: { conversationId: string; me: 
       <Link href="/app/chats" className="btn btn-secondary mx-auto mt-7">Back to chats</Link>
     </div>;
 
-    return <SavedChatOpening conversationId={conversationId} />;
+    return <SavedChatOpening conversationId={conversationId} preview={preview} />;
 
   }
 

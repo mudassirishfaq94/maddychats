@@ -53,6 +53,10 @@ export function prefetchChatRouteData(userId: string, conversationId: string): P
 }
 
 /** Drop another account's data immediately on account changes. */
+export function invalidateChatRouteData(userId: string, conversationId: string) {
+  entries.delete(keyFor(userId, conversationId));
+}
+
 export function retainChatRouteAccount(userId: string) {
   for (const key of entries.keys()) if (!key.startsWith(`${userId}:`)) entries.delete(key);
 }

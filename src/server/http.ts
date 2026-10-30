@@ -56,8 +56,8 @@ export async function readBoundedBody(req: {body:ReadableStream<Uint8Array>|null
   return result;
 }
 
-export async function readUploadForm(req: Request): Promise<FormData> {
-  const bytes = await readBoundedBody(req, UPLOAD_BODY_MAX_BYTES);
+export async function readUploadForm(req: Request, limit = UPLOAD_BODY_MAX_BYTES, timeoutMs = 30_000): Promise<FormData> {
+  const bytes = await readBoundedBody(req, limit, timeoutMs);
   return new Response(new Uint8Array(bytes), { headers: { "content-type": req.headers.get("content-type") ?? "" } }).formData();
 }
 
@@ -84,12 +84,12 @@ export async function readJson(
  * Render accepts bounded multipart requests with 10 MB of media and 1 MB
  * of encryption/form overhead. The streamed reader enforces the same ceiling.
  */
-export function guardUploadSize(req: NextRequest, enabledMedia = false): NextResponse | null {
+export function guardUploadSize(req: NextRequest, enabledMedia = false, limit = UPLOAD_BODY_MAX_BYTES): NextResponse | null {
   if (process.env.STARTER_MODE === "1" && !(enabledMedia && process.env.CHAT_MEDIA_ENABLED === "1")) {
     return jsonError(503, "Uploads and voice messages are paused. Text chat is available.");
   }
   const length = Number(req.headers.get("content-length"));
-  if (Number.isFinite(length) && length > UPLOAD_BODY_MAX_BYTES) {
+  if (Number.isFinite(length) && length > limit) {
     return jsonError(413, "Upload too large.");
   }
   return null;

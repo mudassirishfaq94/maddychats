@@ -24,7 +24,7 @@ import { useEncryptedAttachmentUrl } from "./e2ee-context";
 import { useRetainHistoryRow } from "./history-row-retention";
 import { isNativeApp } from "@/lib/native-platform";
 import { openHostedFile } from "@/lib/native-push-bridge";
-import { isActiveContentType } from "@/lib/media-types";
+import { isActiveContentType, normalizeMediaType } from "@/lib/media-types";
 
 export function humanSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -353,7 +353,7 @@ export function FileChip({ file, own, initiallyRequested = false }: { file: Atta
         )}
       >
         <AttachmentIcon
-          mime={file.mimeType}
+          mime={normalizeMediaType(file.originalName, file.mimeType)}
           className={cn(
             "h-4.5 w-4.5",
             own ? "text-[var(--bubble-own-fg)]" : "text-[var(--accent-fg)]",

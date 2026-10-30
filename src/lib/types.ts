@@ -159,6 +159,7 @@ export interface ConversationSummary {
   hasPinnedMessages: boolean;
   lastMessage: {
     expiresAt?: string | null;
+    selfDestruct?: boolean;
     id: string;
     text: string;
     type: string;

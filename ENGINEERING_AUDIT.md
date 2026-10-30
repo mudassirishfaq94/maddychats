@@ -1,5 +1,7 @@
 # ZipTalk Engineering Audit
 
+> Historical September implementation, before chat E2EE was added. The plaintext/admin-readability statement below does **not** describe current private chat content. See [Current encryption coverage](docs/security/encryption-current.md) for active paths and feature-specific exclusions. The polling and rate-limiter observations also require current-code verification.
+
 Date: 2026-09-04  
 Historical findings; current completion and release status is tracked in
 [remaining project work](./docs/REMAINING_PROJECT_WORK.md).
@@ -12,7 +14,7 @@ The application has a sound baseline for an early production chat product: autho
 
 This audit fixed five security weaknesses and four measurable query/client performance problems. The optimized production build and TypeScript check pass. No committed secret, private key, database URL, or user-data dump was found in the tracked repository.
 
-The largest remaining scalability issue is realtime delivery: every connected client polls PostgreSQL once per second through a long-lived SSE function. The largest remaining abuse-control issue is the process-local rate limiter, which is not globally effective across Vercel instances. The product is also **not end-to-end encrypted**: the application server and the configured administrator can read messages.
+At this September review, the largest scalability issue was realtime delivery: every connected client polled PostgreSQL once per second through a long-lived SSE function. The abuse-control issue was the process-local rate limiter, which was not globally effective across Vercel instances. That older product revision was **not end-to-end encrypted**: the application server and configured administrator could read messages. Current private chat content uses E2EE; see the current coverage summary above rather than applying these historical findings to today's app.
 
 ## Changes made in this audit
 

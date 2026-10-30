@@ -21,7 +21,7 @@ import {
 import { useAuth } from "@/components/providers/auth-provider";
 import { createMediaResourceCache } from "@/lib/media-resource-cache";
 import type { AttachmentDTO } from "@/lib/types";
-import { isActiveContentType } from "@/lib/media-types";
+import { isActiveContentType, normalizeMediaType } from "@/lib/media-types";
 import {useExpiredAt} from "@/hooks/use-expired-at";
 import { registerLocalAudio, forgetLocalAudio } from "@/lib/audio-analysis";
 
@@ -94,7 +94,8 @@ export function useEncryptedAttachmentUrl(
   const ctx = useE2EEMediaContext();
   const { user } = useAuth();
   const userId = user?.id;
-  const { id, url, encrypted, encKey, mimeType, expiresAt } = attachment ?? {};
+  const { id, url, encrypted, encKey, expiresAt } = attachment ?? {};
+  const mimeType = normalizeMediaType(attachment?.originalName ?? "", attachment?.mimeType ?? "");
   const activeContent = isActiveContentType(mimeType ?? "");
   const expired=useExpiredAt(expiresAt);
   useEffect(()=>{if(expired && id)forgetDecryptedAttachments([id]);},[expired,id]);
@@ -112,7 +113,7 @@ export function useEncryptedAttachmentUrl(
     if (!id || !url || !encrypted || !encKey || expired || !enabled || !userId ||
         !ctx?.initialized || ctx.initializationError) return;
     let active = true;
-    const key = JSON.stringify([userId, ctx.conversationId, id, url, encKey]);
+    const key = JSON.stringify([userId, ctx.conversationId, id, url, encKey, mimeType]);
     const resource = mediaCache.acquire(key, id, async cancel => {
       const signal = AbortSignal.any([cancel, AbortSignal.timeout(mimeType?.startsWith("video/") ? 900000 : 180000)]);
       let ciphertext: ArrayBuffer | undefined;

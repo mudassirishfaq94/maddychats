@@ -222,7 +222,7 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
       await messageHistory.getByText("Message unavailable", { exact: true }).waitFor({ timeout: 45000 });
       await source.page.getByRole("button", { name: "Try again", exact: true }).click();
       await messageHistory.getByText("Message unavailable", { exact: true }).waitFor({ timeout: 45000 });
-      assert.equal(await source.page.getByRole("button", { name: "Recovery help", exact: true }).count(), 1);
+      assert.equal(await source.page.getByRole("button", { name: "How to bring chats over", exact: true }).count(), 1);
       assert.equal(await source.page.getByText("unreadable-owned-fixture", { exact: true }).count(), 0, "Ciphertext is never displayed");
     } finally {
       await pool.query("delete from messages where id=$1 and conversation_id=$2", [unreadable, conversationId]);
@@ -319,14 +319,16 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
       HTMLMediaElement.prototype.play = async () => {};
     })()`);
     await source.page.getByRole("button", { name: "Scan QR on your new device", exact: true }).click();
-    await source.page.getByText("Safety number:").waitFor();
+    await source.page.getByText("Check number:").waitFor();
     await target.page.getByLabel("This device check number").waitFor({ state: "visible" });
     await source.page.getByText("Show full check number", { exact: true }).click();
     await source.page.getByLabel("I compared this number with the new phone and it matches.").check();
     const proofResponse = source.page.waitForResponse(response => response.url().endsWith("/api/e2ee/devices/approve") && response.request().postDataJSON()?.action === "approve", { timeout: 60000 });
     await source.page.getByRole("button", { name: "Approve this device", exact: true }).click();
-    const proof = (await proofResponse).request().postDataJSON();
-    await source.page.getByText(/Device approved\./).waitFor();
+    const approval = await proofResponse;
+    assert.equal(approval.status(), 200);
+    const proof = approval.request().postDataJSON();
+    await source.page.getByRole("button", { name: "Approve this device", exact: true }).waitFor({ state: "hidden" });
     assert.equal((await pool.query("select status from device_link_requests where id=$1", [request.id])).rows[0].status, "approved");
     assert.equal((await api("/api/e2ee/devices/approve", source.cookies, challenge)).status, 409);
     assert.equal((await api("/api/e2ee/devices/approve", source.cookies, proof)).status, 409);
@@ -334,7 +336,7 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     await chat(source.page);
     await source.page.getByRole("button", { name: "Private chat protection is on. View details", exact: true }).click();
     await source.page.getByRole("button", { name: "Share chat access with my devices", exact: true }).click();
-    await source.page.getByText(/Shared \d+ existing key/).waitFor({ timeout: 30000 });
+    await source.page.getByRole("status").filter({ hasText: "Chat history sent to your linked phone." }).waitFor({ timeout: 30000 });
     await chat(target.page);
     await recipient.page.getByRole("region", { name: "Conversation", exact: true }).getByText("Queued new device delivery", { exact: true }).waitFor({ timeout: 45000 });
     await chat(source.page);
@@ -444,8 +446,8 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     console.log("PASS voice recording, upload, playback, and contrast");
     // No cron HTTP request is injected: the existing processor must deliver the persisted job.
     await composer.fill("");
-    await source.page.getByRole("button", { name: "Emoji", exact: true }).click();
-    await source.page.getByRole("button", { name: "Schedule message", exact: true }).click();
+    await source.page.getByRole("button", { name: "Chat options", exact: true }).click();
+    await source.page.getByRole("menuitem", { name: /^Schedule message/ }).click();
     assert(await source.page.getByRole("button",{name:"Schedule",exact:true}).isDisabled(),"An empty message must explain why scheduling is disabled");
     await source.page.getByText("Enter a message to enable scheduling.",{exact:true}).waitFor();
     await source.page.getByRole("textbox",{name:"Scheduled message text",exact:true}).fill("Actual scheduled encrypted delivery");

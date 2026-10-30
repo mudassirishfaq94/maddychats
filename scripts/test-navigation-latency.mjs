@@ -26,21 +26,22 @@ const summarize=rows=>{
 };
 export async function testNavigationLatency(context,base,conversationId) {
  const page=await context.newPage();page.setDefaultTimeout(30000);await page.setViewportSize({width:390,height:844});
- const requests=[];page.on("request",request=>{if(new URL(request.url()).searchParams.has("_rsc"))requests.push({url:request.url(),time:Date.now()});});
+ const requests=[],historyRequests=[];page.on("request",request=>{const url=new URL(request.url());if(url.searchParams.has("_rsc"))requests.push({url:request.url(),time:Date.now()});if(url.pathname===`/api/conversations/${conversationId}/open`)historyRequests.push({url:request.url(),time:Date.now()});});
  const rows=[],additionalTabs=[];const cdp=await context.newCDPSession(page);
  try{
   await page.goto(base+"/app");await page.getByLabel("Search conversations",{exact:true}).waitFor();
   const coldPage=await context.newPage();coldPage.setDefaultTimeout(30000);
-  let releaseList;let markListRequested;
+  let releaseList;let markListRequested;let listContinued=false;let pendingList;
   const listGate=new Promise(resolve=>releaseList=resolve);
   const listRequested=new Promise(resolve=>markListRequested=resolve);
-  await coldPage.route("**/api/conversations",async route=>{markListRequested();await listGate;await route.continue();});
+  await coldPage.route("**/api/conversations",route=>pendingList=(async()=>{markListRequested();await listGate;await route.continue();listContinued=true;})());
   try{
    await coldPage.goto(`${base}/app/chats/${conversationId}`);
    await coldPage.getByRole("textbox",{name:"Message text"}).waitFor();
    await listRequested;
-   assert.equal(await coldPage.locator('[aria-label="Loading conversations"]').count(),1,"The independent conversation-list load remains pending while chat content becomes usable");
-  }finally{releaseList();await coldPage.close();}
+   assert.equal(listContinued,false,"The independent conversation-list response is still withheld while chat content becomes usable");
+   assert(await coldPage.getByRole("textbox",{name:"Message text"}).isEnabled(),"The delayed list does not disable the composer");
+  }finally{releaseList();await pendingList;await coldPage.close();}
   console.log("PASS: deep-linked chat renders independently while the conversation list is delayed");
   const shell=await page.locator(".circlo-shell").elementHandle();assert(shell,"Shared shell exists");
   const sidebar=page.getByRole("complementary",{name:"Conversations",exact:true});
@@ -67,9 +68,11 @@ export async function testNavigationLatency(context,base,conversationId) {
      await page.waitForTimeout(250);
     }
     const chat=page.locator(`a.chat-list-row[href="/app/chats/${conversationId}"]`);await chat.waitFor();
-    const before=requests.length;const timing=await measure(page,chat,`/app/chats/${conversationId}`,'textarea[aria-label="Message text"]',null);
-    if(process.env.NAV_BASELINE!=="1")assert(requests.slice(before).some(request=>new URL(request.url).pathname===`/app/chats/${conversationId}`),"Opening a chat must fetch authorized current history, not reuse a full-route snapshot");
-    rows.push({scenario,round,route:"Open chat",...timing,rscRequests:requests.length-before});
+    const before=requests.length,historyBefore=historyRequests.length;const timing=await measure(page,chat,`/app/chats/${conversationId}`,'textarea[aria-label="Message text"]',null);
+    // Intent prefetch deliberately shares an authorized result for 15 seconds.
+    // A warm tap need not refetch that result, but cannot use an unbounded route snapshot.
+    if(process.env.NAV_BASELINE!=="1")assert(historyRequests.some(request=>Date.now()-request.time<15000)||requests.slice(before).some(request=>new URL(request.url).pathname===`/app/chats/${conversationId}`),"Opening a chat requires a current authorized history read within the bounded prefetch lifetime");
+    rows.push({scenario,round,route:"Open chat",...timing,rscRequests:requests.length-before,authorizedHistoryRequests:historyRequests.length-historyBefore});
     if(scenario==="normal"&&round===0){
      const dismissNotice=page.getByRole("button",{name:"Dismiss encryption notice",exact:true});
      if(await dismissNotice.count()){
@@ -82,7 +85,7 @@ export async function testNavigationLatency(context,base,conversationId) {
      assert.equal(await page.getByRole("button",{name:/^(Private chat status|Private chat protection is on\. View details|Chat safety check needed\. View details)$/}).count(),1,"Chat privacy details remain available from one compact header control");
      await mkdir("test-artifacts",{recursive:true});await page.screenshot({path:"test-artifacts/encryption-chat-after.png",animations:"disabled"});
     }
-    await nav().getByRole("link",{name:"Chats",exact:true}).click();await page.getByLabel("Search conversations",{exact:true}).waitFor();await page.waitForTimeout(250);
+    await page.getByRole("link",{name:"Back to chats",exact:true}).click();await page.getByLabel("Search conversations",{exact:true}).waitFor();await page.waitForTimeout(250);
    }
    for(let round=0;round<2;round++)for(const target of [
     {name:"Calls",path:"/app/calls",text:"Calls"},
@@ -94,7 +97,7 @@ export async function testNavigationLatency(context,base,conversationId) {
     else {
       await page.getByRole("navigation",{name:"Mobile navigation",exact:true}).getByRole("link",{name:"Chats",exact:true}).click();
       if(target.name==="People") {await page.getByRole("button",{name:"New chat",exact:true}).click();link=page.getByRole("link",{name:"My contacts",exact:true});}
-      else {await page.locator(".chat-list-row").first().click();await page.getByRole("button",{name:"Chat options",exact:true}).click();link=page.getByRole("link",{name:/Public groups/});}
+      else {await page.locator(".chat-list-row").first().click();await page.getByRole("button",{name:"Chat options",exact:true}).click();link=page.getByRole("menuitem",{name:/Public groups/});}
     }
     additionalTabs.push({scenario,round,route:target.name,...await measure(page,link,target.path,"h1",target.text)});
     await page.waitForTimeout(250);

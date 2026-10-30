@@ -1,6 +1,7 @@
 import { and, desc, eq, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { db } from "@/db";
+import { LOGIN_HISTORY_RETENTION_DAYS } from "@/lib/privacy-retention";
 import {
   reports,
   loginHistory,
@@ -109,7 +110,7 @@ export async function getLoginHistory(userId: string, limit = 20) {
   return db
     .select()
     .from(loginHistory)
-    .where(eq(loginHistory.userId, userId))
+    .where(and(eq(loginHistory.userId, userId), sql`${loginHistory.createdAt} >= now() - ${LOGIN_HISTORY_RETENTION_DAYS} * interval '1 day'`))
     .orderBy(desc(loginHistory.createdAt))
     .limit(limit);
 }

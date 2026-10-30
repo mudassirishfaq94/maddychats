@@ -18,6 +18,7 @@ import {
   useRef,
   useState,
   startTransition,
+  Suspense,
   type FormEvent,
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
@@ -64,10 +65,11 @@ import { Avatar } from "@/components/avatar";
 import { useRealtime, usePresence } from "@/components/providers/realtime-provider";
 import { VirtualMessageHistory, type MessageHistoryHandle } from "./virtual-message-history";
 import { MessageActions } from "./message-actions";
-const MessageSearch = dynamic(() => import("./message-search").then(module => module.MessageSearch));
+const quietLoading = () => null;
+const MessageSearch = dynamic(() => import("./message-search").then(module => module.MessageSearch),{loading:quietLoading});
 import { ChatActionsMenu } from "./chat-actions-menu";
 const AttachmentList = dynamic(() => import("./attachments").then((module) => module.AttachmentList));
-const ConversationDetails = dynamic(() => import("./conversation-details").then((module) => module.ConversationDetails));
+const ConversationDetails = dynamic(() => import("./conversation-details").then((module) => module.ConversationDetails),{loading:quietLoading});
 import {
   AttachButton,
   AttachmentPreviews,
@@ -78,16 +80,17 @@ import { splitMessageLinks } from "@/lib/message-links";
 import { cn, formatDate, timeAgo, initials, avatarHue } from "@/lib/utils";
 import { CHAT_BACKGROUNDS, chatBubbleTheme, isBackgroundImage } from "@/lib/chat-backgrounds";
 import { getPattern } from "@/lib/chat-patterns";
-const MediaPicker = dynamic(() => import("./media-picker").then((module) => module.MediaPicker));
+const MediaPicker = dynamic(() => import("./media-picker").then((module) => module.MediaPicker),{loading:quietLoading});
 const AudioMessage = dynamic(() => import("./audio-message").then((module) => module.AudioMessage));
-const VoiceComposer = dynamic(() => import("./voice-composer").then((module) => module.VoiceComposer));
+const VoiceComposer = dynamic(() => import("./voice-composer").then((module) => module.VoiceComposer),{loading:quietLoading});
 import { useVoiceRecorder } from "@/hooks/use-voice-recorder";
 import { LongPressTouchable } from "./long-press-touchable";
-const MobileMessageMenu = dynamic(() => import("./mobile-message-menu").then(module => module.MobileMessageMenu));
-const ForwardDialog = dynamic(() => import("./forward-dialog").then(module => module.ForwardDialog));
+const MobileMessageMenu = dynamic(() => import("./mobile-message-menu").then(module => module.MobileMessageMenu),{loading:quietLoading});
+const ForwardDialog = dynamic(() => import("./forward-dialog").then(module => module.ForwardDialog),{loading:quietLoading});
 import type { PeerVerification } from "./peer-verification-dialog";
-const PeerVerificationDialog = dynamic(() => import("./peer-verification-dialog").then(module => module.PeerVerificationDialog));
-const ReportDialog = dynamic(() => import("@/components/profile/report-dialog").then((module) => module.ReportDialog));
+const PeerVerificationDialog = dynamic(() => import("./peer-verification-dialog").then(module => module.PeerVerificationDialog),{loading:quietLoading});
+const ReportDialog = dynamic(() => import("@/components/profile/report-dialog").then((module) => module.ReportDialog),{loading:quietLoading});
+import { PendingMessageAttachments } from "./pending-message-attachments";
 import { E2EEMediaProvider } from "./e2ee-context";
 import { useSharedE2EE } from "@/components/providers/e2ee-provider";
 import {
@@ -97,6 +100,7 @@ import {
 } from "@/lib/crypto";
 import { mapWithConcurrency } from "@/lib/async";
 import { chatPerf } from "@/lib/performance";
+import { waitForBackgroundSlot } from "@/lib/background-work";
 import { offlineHistoryRows } from "@/lib/offline-history";
 import { optimizeImageForUpload } from "@/lib/optimize-image";
 import { rememberHistory } from "../../../public/offline-store.js";
@@ -422,10 +426,11 @@ export function ChatView({
   const decryptedRepliesRef = useRef(decryptedReplies);
   const { prepareConversation, decrypt, cacheDecryptedMessage, loadCachedDecryptedMessages } = e2ee;
 
-  // On open: fetch-or-create the conversation key, share it with every peer
-  // device, and learn whether this chat can actually be E2EE right now.
+  // Reconcile devices after local history has had a chance to paint.
+  // Sending still performs its own current device/trust checks.
   useEffect(() => {
     let alive = true;
+    const housekeeping = new AbortController();
     (async () => {
       // Let cleanup cancel stale initialization before updating the status.
       await Promise.resolve();
@@ -436,7 +441,9 @@ export function ChatView({
       }
       setE2eeState((prev) => ({ ...prev, ready: false, checking: true }));
       try {
-        const rotationPromise = fetch(`/api/e2ee/key-rotation/status?conversationId=${encodeURIComponent(conversationId)}&deviceId=${encodeURIComponent(e2ee.deviceId)}`)
+        await waitForBackgroundSlot(housekeeping.signal);
+        if (!alive) return;
+        const rotationPromise = fetch(`/api/e2ee/key-rotation/status?conversationId=${encodeURIComponent(conversationId)}&deviceId=${encodeURIComponent(e2ee.deviceId)}`, { signal: housekeeping.signal })
           .then(async (response) => response.ok ? await response.json() as { needsRotation?: boolean; keyVersion?: number } : null)
           .catch(() => null);
         const { ready, fingerprint, trustChanged, missingPeers = 0 } = await prepareConversation(conversationId);
@@ -458,6 +465,7 @@ export function ChatView({
     })();
     return () => {
       alive = false;
+      housekeeping.abort();
     };
   }, [e2ee.initialized, e2ee.loading, e2ee.deviceId, conversationId, me.id, prepareConversation]);
 
@@ -700,7 +708,7 @@ export function ChatView({
     }));
     if (!prepared.ready) {
       throw new SecureDeliveryWaiting(prepared.trustChanged
-        ? "Your friend is using a new phone. Confirm it’s them before you send."
+        ? "Confirm this is still them before you send."
         : encryptionRef.current?.error ?? "Waiting for secure delivery. Your message will send automatically when encryption is ready.");
     }
   }, [conversationId]);
@@ -746,6 +754,8 @@ export function ChatView({
   const followLatestRef = useRef(true);
   const touchScrollY = useRef(0);
   const topSentinelRef = useRef<HTMLDivElement>(null);
+  const olderPagingRequested = useRef(false);
+  const olderReadInFlight = useRef(false);
   const nearBottomRef = useRef(true);
   const [showScrollDown, setShowScrollDown] = useState(false);
   const [initialUnread, setInitialUnread] = useState<{ ids: Set<string>; count: number } | null>(null);
@@ -1269,7 +1279,8 @@ export function ChatView({
   /* --------------------------- pagination (older) -------------------------- */
 
   const loadOlder = useCallback(async () => {
-    if (!hasMore || loadingOlder || !nextCursor) return;
+    if (!hasMore || loadingOlder || olderReadInFlight.current || !nextCursor) return;
+    olderReadInFlight.current = true;
     followLatestRef.current = false;
     const el = scrollRef.current;
     const prevHeight = el?.scrollHeight ?? 0;
@@ -1298,6 +1309,7 @@ export function ChatView({
     } catch {
       setError("Couldn't load older messages. Check your connection.");
     } finally {
+      olderReadInFlight.current = false;
       setLoadingOlder(false);
     }
   }, [conversationId, hasMore, loadingOlder, nextCursor]);
@@ -1307,13 +1319,19 @@ export function ChatView({
     if (!sentinel || !hasMore) return;
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0].isIntersecting) void loadOlder();
+        if (entries[0].isIntersecting && olderPagingRequested.current) void loadOlder();
       },
       { root: scrollRef.current, rootMargin: "120px" },
     );
     observer.observe(sentinel);
     return () => observer.disconnect();
   }, [hasMore, loadOlder]);
+
+  const requestOlderHistory = (viewport: HTMLDivElement) => {
+    olderPagingRequested.current = true;
+    followLatestRef.current = false;
+    if (viewport.scrollTop < 120) void loadOlder();
+  };
 
   /* ------------------------------- mutations ------------------------------- */
 
@@ -2191,6 +2209,7 @@ export function ChatView({
           onOpenInfo={() => setShowDetails(true)}
           onOpenSearch={() => setShowHeaderSearch(true)}
           onReport={() => setReportChat(true)}
+          onSchedule={!selfDestruct && !schedulePaused && !sendPending && canCompose && !awaitingApproval ? () => { setDraftState(draftRef.current); setShowSchedule(true); } : undefined}
         />
 
       </header>
@@ -2211,7 +2230,7 @@ export function ChatView({
           className="flex items-center gap-2 border-b border-[var(--warning,#f59e0b)] bg-[color-mix(in_srgb,var(--warning,#f59e0b)_10%,var(--surface))] px-4 py-2 text-left"
         >
           <ShieldCheck className="h-4 w-4 shrink-0 text-amber-600" />
-          <span className="min-w-0 flex-1 text-[0.72rem] text-[var(--muted)]">Your friend is using a new phone. Confirm it’s them before you send.</span>
+          <span className="min-w-0 flex-1 text-[0.72rem] text-[var(--muted)]">Confirm this is still them before you send.</span>
           <span className="shrink-0 text-[0.65rem] font-bold text-amber-700">Approve</span>
         </button>
       ) : e2eeState.peersMissingKeys > 0 && !e2eeState.checking && !awaitingApproval ? (
@@ -2321,18 +2340,18 @@ export function ChatView({
         aria-label="Messages"
         style={{ overflowAnchor: "none" }}
         tabIndex={0}
-        onWheel={(event) => { if (event.deltaY < 0 && event.currentTarget.scrollHeight > event.currentTarget.clientHeight) followLatestRef.current = false; }}
+        onWheel={(event) => { if (event.deltaY < 0) requestOlderHistory(event.currentTarget); }}
         onTouchStart={(event) => { touchScrollY.current = event.touches[0]?.clientY ?? 0; }}
         onTouchMove={(event) => {
           const nextY = event.touches[0]?.clientY ?? touchScrollY.current;
-          if (nextY > touchScrollY.current && event.currentTarget.scrollHeight > event.currentTarget.clientHeight) followLatestRef.current = false;
+          if (nextY > touchScrollY.current + 2) requestOlderHistory(event.currentTarget);
           touchScrollY.current = nextY;
         }}
         onPointerDown={(event) => {
-          if (event.target === event.currentTarget && event.currentTarget.scrollHeight > event.currentTarget.clientHeight && event.clientX >= event.currentTarget.getBoundingClientRect().right - 20) followLatestRef.current = false;
+          if (event.target === event.currentTarget && event.currentTarget.scrollHeight > event.currentTarget.clientHeight && event.clientX >= event.currentTarget.getBoundingClientRect().right - 20) requestOlderHistory(event.currentTarget);
         }}
         onKeyDown={(event) => {
-          if ((["ArrowUp", "PageUp", "Home"].includes(event.key) || (event.key === " " && event.shiftKey)) && event.currentTarget.scrollHeight > event.currentTarget.clientHeight) followLatestRef.current = false;
+          if (["ArrowUp", "PageUp", "Home"].includes(event.key) || (event.key === " " && event.shiftKey)) requestOlderHistory(event.currentTarget);
         }}
         onScroll={onScroll}
         onDragOver={(e) => {
@@ -2350,7 +2369,7 @@ export function ChatView({
           }
         }}
         className={cn(
-          "relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 py-4 sm:px-6",
+          "relative flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden px-4 py-4 sm:px-6",
           dragging && "outline-2 outline-dashed outline-offset-[-10px] outline-[var(--accent)]",
         )}
       >
@@ -2361,12 +2380,12 @@ export function ChatView({
         ) : null}
 
         {hasMore ? (
-          <div ref={topSentinelRef} className="flex justify-center py-2">
+          <div ref={topSentinelRef} className="mt-auto flex shrink-0 justify-center py-2">
             <button
               type="button"
               onClick={loadOlder}
               disabled={loadingOlder}
-              className="btn btn-secondary py-1.5! text-xs!"
+              className="inline-flex min-h-8 items-center gap-1.5 rounded-full px-3 py-1 text-[0.6875rem] font-medium text-[var(--muted)] hover:bg-[var(--surface-2)] focus-visible:outline-2 focus-visible:outline-[var(--accent)] disabled:opacity-60"
             >
               {loadingOlder ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -2377,7 +2396,7 @@ export function ChatView({
             </button>
           </div>
         ) : items.length > 0 ? (
-          <p className="mx-auto w-fit rounded-full bg-[var(--surface)] px-3.5 py-1.5 text-[0.64rem] font-medium uppercase tracking-widest text-[var(--muted)] shadow-sm">
+          <p className="mx-auto mt-auto w-fit shrink-0 rounded-full bg-[var(--surface)] px-3.5 py-1.5 text-[0.64rem] font-medium uppercase tracking-widest text-[var(--muted)] shadow-sm">
             Beginning of conversation
           </p>
         ) : null}
@@ -2408,7 +2427,7 @@ export function ChatView({
 
         {/* Scroll to bottom button */}
         {showScrollDown && (
-          <div className="sticky bottom-2 z-20 flex justify-center pb-2">
+          <div className="sticky bottom-2 z-20 flex shrink-0 justify-center pb-2">
             <button
               type="button"
               onClick={() => scrollToBottom(true)}
@@ -2529,7 +2548,6 @@ export function ChatView({
                   anchor={mediaPickerAnchor}
                   mediaDisabled={mediaPaused || sendPending || !canCompose || awaitingApproval}
                   onAttach={() => { (document.getElementById(`chat-files-${conversationId}`) as HTMLInputElement | null)?.click(); setShowEmoji(false); }}
-                  onSchedule={!selfDestruct && !schedulePaused && !sendPending && canCompose && !awaitingApproval ? () => { setShowEmoji(false); setDraftState(draftRef.current); setShowSchedule(true); } : undefined}
                   onFile={file => { setShowEmoji(false); attachments.addFiles([file]); }}
                   onEmoji={(emoji) => {
                     setDraft((prev) => prev + emoji);
@@ -3143,6 +3161,7 @@ const MessageRow = memo(function MessageRow({msg, showDate, sameSenderPrev, me, 
                     <div
                       className={cn(
                         "relative max-w-[85%] sm:max-w-[65%] md:max-w-[55%]",
+                        !deleted && msg.attachments.some(attachment => attachment.kind !== "audio") && "w-[min(20rem,calc(100vw-6.5rem))]",
                         own ? "text-right" : "text-left",
                       )}
                     >
@@ -3198,6 +3217,7 @@ const MessageRow = memo(function MessageRow({msg, showDate, sameSenderPrev, me, 
                           <div
                             className={cn(
                               "chat-bubble inline-block max-w-full rounded-2xl px-3 py-2 text-left align-middle",
+                              !deleted && msg.attachments.some(attachment => attachment.kind !== "audio") && "w-full",
                               own
                                 ? "rounded-br-md text-[var(--bubble-own-fg)]"
                                 : "rounded-bl-md border border-[var(--border)] bg-[var(--bubble-other-bg)]",
@@ -3321,22 +3341,22 @@ const MessageRow = memo(function MessageRow({msg, showDate, sameSenderPrev, me, 
                                 {msg.selfDestruct ? <SelfDestructCountdown deadline={msg.expiresAt} offset={clockOffset} /> : null}
                                 {msg.type === "audio" && msg.attachments.length > 0 ? (
                                   <div className="mb-1.5 min-w-0 max-w-full">
-                                    <AudioMessage
+                                    <Suspense fallback={<div aria-hidden="true" className="h-16 w-64 max-w-full rounded-2xl bg-black/5"/>}><AudioMessage
                                       src={msg.attachments[0].url}
                                       attachment={msg.attachments[0]}
                                       own={own}
                                       sender={msg.sender}
                                       duration={undefined}
                                       attachmentId={msg.attachments[0].id}
-                                    />
+                                    /></Suspense>
                                   </div>
                                 ) : msg.attachments.length > 0 ? (
                                   <div className={cn(text && "mb-1.5")}>
-                                    <AttachmentList
+                                    <Suspense fallback={<PendingMessageAttachments attachments={msg.attachments}/>}><AttachmentList
                                       messageId={msg.id}
                                       attachments={msg.attachments}
                                       own={own}
-                                    />
+                                    /></Suspense>
                                   </div>
                                 ) : null}
                                 {msg.encrypted && Boolean(msg.text) && decryptedText === undefined ? (

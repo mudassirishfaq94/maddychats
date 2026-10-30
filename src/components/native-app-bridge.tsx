@@ -1,12 +1,14 @@
 "use client";
 
 import { navigateWithReload } from "@/lib/navigation";
+import { openStartupDestination } from "@/lib/native-startup-navigation";
+import { useAuth } from "@/components/providers/auth-provider";
 
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { isNativeApp, hasCapacitorRuntime } from "@/lib/native-platform";
 
-declare global { interface Window { __circloNavigate?: (destination: string) => boolean } }
+declare global { interface Window { __circloNavigate?: (destination: string) => boolean; __circloOpenFromSnapshot?: (destination: string) => boolean } }
 
 /**
  * Installs `window.__circloNavigate` for same-origin `/app` and `/app/` routes
@@ -16,6 +18,18 @@ declare global { interface Window { __circloNavigate?: (destination: string) => 
  */
 export function NativeAppBridge() {
   const router = useRouter();
+  const { user, status } = useAuth();
+  useEffect(() => {
+    if (!isNativeApp() || status === "loading") return;
+    const authenticatedUserId = user?.id;
+    let disposed = false;
+    void import("@/lib/native-push-bridge").then(bridge => {
+      if (!disposed) return bridge.syncHostedStartup(status === "authenticated" && authenticatedUserId ? authenticatedUserId : null);
+    }).catch(() => undefined); // Older APKs do not implement these optional commands.
+    return () => { disposed = true; };
+    // A successful refresh can rotate cookies without changing the account ID.
+    // Renew its local binding too; otherwise idle startup falls back to network.
+  }, [status, user]);
   useEffect(() => {
     if (!isNativeApp()) return;
 
@@ -28,6 +42,8 @@ export function NativeAppBridge() {
       } catch { return false; }
     };
     window.__circloNavigate = navigate;
+    const openSnapshot = (destination: string) => { try { return openStartupDestination(destination, navigate); } catch { return false; } };
+    window.__circloOpenFromSnapshot = openSnapshot;
     let disposed = false;
     const removeListeners: Array<() => Promise<void>> = [];
 
@@ -85,6 +101,7 @@ export function NativeAppBridge() {
     return () => {
       disposed = true;
       if (window.__circloNavigate === navigate) delete window.__circloNavigate;
+      if (window.__circloOpenFromSnapshot === openSnapshot) delete window.__circloOpenFromSnapshot;
       void Promise.all(removeListeners.map((remove) => remove()));
     };
   }, [router]);

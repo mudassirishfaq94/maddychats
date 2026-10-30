@@ -2,7 +2,9 @@ param(
     [Parameter(Mandatory=$true)][string]$UnsignedBundle,
     [Parameter(Mandatory=$true)][string]$SigningDirectory,
     [Parameter(Mandatory=$true)][string]$Bundletool,
-    [Parameter(Mandatory=$true)][string]$SignedBundle
+    [Parameter(Mandatory=$true)][string]$SignedBundle,
+    [Parameter(Mandatory=$true)][ValidateRange(1,2100000000)][int]$VersionCode,
+    [Parameter(Mandatory=$true)][ValidatePattern('^[0-9]+\.[0-9]+\.[0-9]+$')][string]$VersionName
 )
 $ErrorActionPreference = 'Stop'
 $keyFile = Join-Path $SigningDirectory 'circlo-upload.p12'
@@ -21,7 +23,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Cannot inspect bundle identity before signing.
 $manifestDocument = [xml]($manifestText -join "`n")
 $androidNamespace = 'http://schemas.android.com/apk/res/android'
 $manifest = $manifestDocument.DocumentElement
-if ($manifest.GetAttribute('package') -ne 'chat.circlo.app' -or $manifest.GetAttribute('versionCode', $androidNamespace) -ne '18' -or $manifest.GetAttribute('versionName', $androidNamespace) -ne '0.9.9') { throw 'Bundle identity/version does not match the approved release.' }
+if ($manifest.GetAttribute('package') -ne 'chat.circlo.app' -or $manifest.GetAttribute('versionCode', $androidNamespace) -ne [string]$VersionCode -or $manifest.GetAttribute('versionName', $androidNamespace) -ne $VersionName) { throw 'Bundle identity/version does not match the explicitly selected release.' }
 if ($manifest.application.GetAttribute('debuggable', $androidNamespace) -eq 'true') { throw 'Debuggable bundle must not be release-signed.' }
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $archive = [IO.Compression.ZipFile]::OpenRead([IO.Path]::GetFullPath($UnsignedBundle))
@@ -31,6 +33,15 @@ $secure = ConvertTo-SecureString ([IO.File]::ReadAllText($passwordFile))
 $pointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
 try {
     $env:CIRCLO_KEY_PASSWORD = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($pointer)
+    # Confirm the existing public certificate before using its private key.
+    $certificateFile = Join-Path $SigningDirectory 'upload-certificate.pem'
+    if (!(Test-Path -LiteralPath $certificateFile)) { throw 'Approved public upload certificate is missing.' }
+    $publicCertificate = & (Join-Path $env:JAVA_HOME 'bin\keytool.exe') -exportcert -rfc -keystore $keyFile -storepass:env CIRCLO_KEY_PASSWORD -alias circlo-upload 2>$null
+    if ($LASTEXITCODE -ne 0) { throw 'Could not verify upload-key identity.' }
+    $certificateBytes = { param($pem) [Convert]::FromBase64String(($pem -replace '-----BEGIN CERTIFICATE-----|-----END CERTIFICATE-----|\s','')) }
+    [byte[]]$expectedCertificate = & $certificateBytes ([IO.File]::ReadAllText($certificateFile))
+    [byte[]]$actualCertificate = & $certificateBytes ($publicCertificate -join "`n")
+    if ([Convert]::ToBase64String($expectedCertificate) -ne [Convert]::ToBase64String($actualCertificate)) { throw 'Upload key differs from the approved public certificate.' }
     New-Item -ItemType Directory -Path ([IO.Path]::GetDirectoryName($target)) -Force | Out-Null
     Copy-Item -LiteralPath $UnsignedBundle -Destination $target
     $jarsigner = Join-Path $env:JAVA_HOME 'bin\jarsigner.exe'

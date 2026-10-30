@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "@/db";
+import { LOGIN_HISTORY_RETENTION_DAYS } from "@/lib/privacy-retention";
 
 /** Expiry is enforced on reads; retention work must not delay sign-in. */
 export async function cleanupExpiredAuthentication() {
@@ -19,5 +20,14 @@ export async function cleanupExpiredAuthentication() {
     DELETE FROM device_sessions d USING expired e WHERE d.id=e.id
     RETURNING d.id
   `);
-  return { challenges: challenges.rowCount ?? 0, sessions: sessions.rowCount ?? 0 };
+  const loginHistory = await db.execute(sql`
+    WITH expired AS (
+      SELECT id FROM login_history
+      WHERE created_at < now() - ${LOGIN_HISTORY_RETENTION_DAYS} * interval '1 day'
+      ORDER BY created_at LIMIT 1000 FOR UPDATE SKIP LOCKED
+    )
+    DELETE FROM login_history h USING expired e WHERE h.id=e.id
+    RETURNING h.id
+  `);
+  return { challenges: challenges.rowCount ?? 0, sessions: sessions.rowCount ?? 0, loginHistory: loginHistory.rowCount ?? 0 };
 }

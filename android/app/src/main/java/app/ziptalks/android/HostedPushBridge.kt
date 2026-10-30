@@ -49,6 +49,8 @@ class HostedPushBridge(private val activity: MainActivity, private val requestPe
                 }.onFailure { respond(error = "Notifications are not configured for this Android build.") }
             }
             when (data.optString("command")) {
+                "startup-bind" -> { NativeStartupSnapshot.record(activity, data.optString("userId")); NativeSessionCookies.persist(); respond() }
+                "startup-clear" -> { activity.clearStartupSnapshotBinding(); respond() }
                 "backup-start" -> runCatching { val file = data.getJSONObject("file"); activity.backupExport.start(file.getString("name"), file.getLong("size")) }
                     .onSuccess { respond(token = it) }.onFailure { respond(error = it.message ?: "Could not start backup export.") }
                 "backup-chunk" -> runCatching { val file = data.getJSONObject("file"); activity.backupExport.append(file.getString("transfer"), file.getLong("offset"), file.getString("data")) }

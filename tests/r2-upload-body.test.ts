@@ -2,6 +2,15 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Readable } from "node:stream";
 import { bufferR2UploadBody, MAX_R2_PUT_BYTES } from "../src/server/r2-upload-body";
+import { STATUS_MEDIA_OUTPUT_MAX_BYTES } from "../src/lib/media-limits";
+
+test("status storage accepts larger media only with its dedicated bounded limit", async () => {
+  const bytes=Buffer.alloc(12*1024*1024);
+  await assert.rejects(bufferR2UploadBody(bytes),/r2_object_too_large/);
+  assert.equal(await bufferR2UploadBody(bytes,bytes.length,STATUS_MEDIA_OUTPUT_MAX_BYTES),bytes);
+  await assert.rejects(bufferR2UploadBody(bytes,bytes.length+1,STATUS_MEDIA_OUTPUT_MAX_BYTES),/r2_object_size_mismatch/);
+  await assert.rejects(bufferR2UploadBody(Buffer.alloc(STATUS_MEDIA_OUTPUT_MAX_BYTES+1),undefined,STATUS_MEDIA_OUTPUT_MAX_BYTES),/r2_object_too_large/);
+});
 
 test("R2 upload body materializes Web streams into bytes for request signing", async () => {
   const expected = Buffer.from("encrypted-image-payload");

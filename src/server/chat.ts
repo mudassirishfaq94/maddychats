@@ -337,12 +337,12 @@ export async function listConversationsFor(
   const [convs, allMembers, latest, unread, pinnedConvs, blockRows] = await Promise.all([
     conversationListQuery.execute({ ids: convIds }),
     conversationMembersQuery.execute({ ids: convIds }),
-    db.execute<{ id: string; conversation_id: string; sender_id: string; text: string; type: string; created_at: string; deleted_at: string | null; expires_at: string | null; encrypted: boolean }>(sql`
+    db.execute<{ id: string; conversation_id: string; sender_id: string; text: string; type: string; created_at: string; deleted_at: string | null; expires_at: string | null; encrypted: boolean; self_destruct: boolean }>(sql`
       SELECT latest.* FROM unnest(${sql.param(convIds)}::uuid[]) AS wanted(conversation_id)
       CROSS JOIN LATERAL (
         SELECT id, conversation_id, sender_id, CASE WHEN self_destruct THEN '' ELSE text END as text,
-          type, created_at, deleted_at, expires_at, encrypted
-        FROM messages WHERE conversation_id = wanted.conversation_id AND (expires_at IS NULL OR expires_at>now())
+          type, created_at, deleted_at, expires_at, encrypted, self_destruct
+        FROM messages WHERE conversation_id = wanted.conversation_id AND (expires_at IS NULL OR expires_at>now()) AND ${messageVisibleTo(userId)}
         ORDER BY created_at DESC, id DESC LIMIT 1
       ) latest
     `),
@@ -419,6 +419,7 @@ export async function listConversationsFor(
                 ? new Date(last.deleted_at).toISOString()
                 : null,
               encrypted: Boolean(last.encrypted),
+              selfDestruct: Boolean(last.self_destruct),
             }
           : null,
       } satisfies ConversationSummary;
