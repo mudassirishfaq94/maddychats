@@ -82,7 +82,7 @@ export async function testNavigationLatency(context,base,conversationId) {
      assert.equal(await page.getByRole("button",{name:/^(Private chat status|Private chat protection is on\. View details|Chat safety check needed\. View details)$/}).count(),1,"Chat privacy details remain available from one compact header control");
      await mkdir("test-artifacts",{recursive:true});await page.screenshot({path:"test-artifacts/encryption-chat-after.png",animations:"disabled"});
     }
-    await nav().getByRole("link",{name:"Chats",exact:true}).click();await page.getByLabel("Search conversations",{exact:true}).waitFor();await page.waitForTimeout(250);
+    await page.getByRole("link",{name:"Back to chats",exact:true}).click();await page.getByLabel("Search conversations",{exact:true}).waitFor();await page.waitForTimeout(250);
    }
    for(let round=0;round<2;round++)for(const target of [
     {name:"Calls",path:"/app/calls",text:"Calls"},
