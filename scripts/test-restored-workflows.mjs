@@ -319,7 +319,7 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
       HTMLMediaElement.prototype.play = async () => {};
     })()`);
     await source.page.getByRole("button", { name: "Scan QR on your new device", exact: true }).click();
-    await source.page.getByText("Safety number:").waitFor();
+    await source.page.getByText("Check number:").waitFor();
     await target.page.getByLabel("This device check number").waitFor({ state: "visible" });
     await source.page.getByText("Show full check number", { exact: true }).click();
     await source.page.getByLabel("I compared this number with the new phone and it matches.").check();
