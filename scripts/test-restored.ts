@@ -17,6 +17,7 @@ import bcrypt from "bcryptjs";
 import webPush from "web-push";
 import { testRestoredWorkflows } from "./test-restored-workflows.mjs";
 import { testPwaNotifications } from "./test-pwa-notifications.mjs";
+import { redactTestOutput } from "./redact-test-output";
 
 async function main() {
   const url = process.env.ITEM456_TEST_DATABASE_URL;
@@ -96,7 +97,7 @@ async function main() {
         if (process.env.GROUP_ONLY !== "1") console.log(await testMobileLayout(base, pool));
       }
     }
-    catch (error) { console.error(output.slice(-5000)); throw error; }
+    catch (error) { console.error(redactTestOutput(output.slice(-5000))); console.error(`Test server status: exit=${server?.exitCode ?? "running"}, signal=${server?.signalCode ?? "none"}`); throw error; }
   } finally {
     if (server && server.exitCode === null) { const exited = once(server, "exit"); server.kill(); await exited; }
     if (conversation) {
@@ -108,4 +109,4 @@ async function main() {
     await pool.end();
   }
 }
-main().catch(error => { console.error(error); process.exitCode = 1; });
+main().catch(error => { console.error(redactTestOutput(error instanceof Error ? error.stack ?? error.message : String(error))); process.exitCode = 1; });
