@@ -2,6 +2,8 @@
 
 This is the current source-path summary. Dated reviews describe the revision they inspected, not every later release. This document is not an independent audit or certification.
 
+The supported cipher protects content from routine server-side reading when the supplied client and key directory behave honestly. Current messages and wrapped keys do not provide cryptographic sender/context authentication against an actively malicious server. The browser and hosted Android WebView also receive client code from that server. Do not translate content encryption into an unqualified hostile-server, anti-replay or sender-authentication guarantee. See the [remediation ledger](review-remediation-20261030.md).
+
 | Feature/path | Current implementation and evidence |
 | --- | --- |
 | Direct, group and community chat text | `ChatView` prepares approved peers, calls `useE2EE.encrypt`, and sends the supported messages API. That hook uses conversation AES-256-GCM keys; approved-device key distribution uses RSA-OAEP. This is E2EE, but does not establish Signal's Double Ratchet properties. See `src/components/chats/chat-view.tsx`, `src/hooks/use-e2ee.ts`, `src/lib/crypto.ts`. |

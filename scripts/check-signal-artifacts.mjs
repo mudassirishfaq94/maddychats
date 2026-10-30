@@ -1,0 +1,13 @@
+import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
+const expected=['canonicalize_session_record','generate_device_registration','generate_identity','generate_one_time_prekeys','protocol_version'].sort();
+const rust=await readFile('signal-bridge/src/lib.rs','utf8'),js=await readFile('public/signal/maddy_signal_bridge.js','utf8');
+const source=[...rust.matchAll(/#\[wasm_bindgen\]\s*pub fn ([a-z_]+)/g)].map(match=>match[1]).sort();
+const glue=[...js.matchAll(/^export function ([a-z_]+)\(/gm)].map(match=>match[1]).sort();
+assert.deepEqual(source,expected,'Rust public API must match the reviewed registration-only contract');
+assert.deepEqual(glue,expected,'Generated glue must not claim a different public API');
+const module=new WebAssembly.Module(await readFile('public/signal/maddy_signal_bridge_bg.wasm'));
+const exports=WebAssembly.Module.exports(module).map(entry=>entry.name);
+for(const name of expected)assert(exports.includes(name),'WASM missing '+name);
+for(const name of ['get_sender_chain_key','get_receiver_chain_key','advance_sender_chain','advance_receiver_chain','encrypt_message','decrypt_message','create_x3dh_session'])assert(!exports.includes(name),'Unreviewed prototype export '+name);
+console.log('PASS registration-only Rust/glue/WASM API consistency; no message or chain-key exports. This is not a reproducible-build or ratchet claim.');

@@ -1,181 +1,45 @@
 # Circlo
 
-Circlo is a full-stack direct-messaging application built with Next.js,
-React, TypeScript, PostgreSQL, and Drizzle ORM. It supports persistent private
-conversations, realtime delivery and presence, typing indicators, read
-receipts, reactions, replies, search, notifications, private attachments, and
-responsive light/dark themes.
+**Private conversations. Closer connections.**
 
-For the live deployment and the approved Bluehost VPS cutover, see
-[DEPLOYMENT.md](./DEPLOYMENT.md) and the [migration runbook](./docs/BLUEHOST_VPS_MIGRATION.md).
-The 30 October runtime check confirms Cloudflare R2 is the media backend;
-Supabase remains configured for legacy fallback/rollback. See
-[the R2 migration guide](./docs/CLOUDFLARE_R2_MEDIA_MIGRATION.md).
-For current encryption coverage, recovery methods and historical review scope,
-start with [Current encryption coverage](./docs/security/encryption-current.md).
-Upload hardening, device sessions, staged CSP, and mobile profiling are documented
-in [Tasks 4–6](./docs/ITEMS4_6_HARDENING_AND_PERFORMANCE.md).
+Circlo helps you stay close to your people through direct messages, group chats, voice notes, photos, files and audio calls.
 
-## Tech stack
+[Open Circlo](https://circlo.chat) · [Get help](https://circlo.chat/support)
 
-- Next.js 16 with App Router and Route Handlers
-- React 19 and TypeScript
-- PostgreSQL with Drizzle ORM
-- Server-Sent Events for realtime updates
-- JWT sessions stored in HttpOnly cookies
-- bcrypt password hashing
-- Tailwind CSS 4
+## Stay in your circle
 
-## Prerequisites
+- Chat with one person or bring a group together.
+- Share photos, videos, documents and voice notes.
+- Make audio calls while both people have Circlo open.
+- Share a status with the audience you choose.
+- Control read receipts, activity visibility and notifications.
+- Accept message requests, block unwanted contact and report a concern.
 
-- Node.js 22 LTS
-- npm
-- PostgreSQL 15 or newer
+## Get started
 
-## Local setup
+Create an account, confirm your email, then choose **New chat**. Search for someone by name, username or an optional phone number they added. Your contacts need their own Circlo accounts.
 
-Clone the repository and install dependencies:
+Circlo works in a browser on a phone or computer. The Android app is available for testing through [support](https://circlo.chat/support); this is not a public Play Store release announcement.
 
-```bash
-git clone https://github.com/mudassirishfaq94/maddychats.git
-cd maddychats
-npm install
-```
+## Your conversations and privacy
 
-Create a local environment file from the safe template:
+Private chat messages and attachments are encrypted on your device before sending. Account information, delivery details, profiles and status updates are handled separately. The [Privacy Policy](https://circlo.chat/privacy) explains the coverage and your choices.
 
-```bash
-cp .env.example .env
-```
+Approve a new phone from a device you already use. Before replacing your phone, open **Settings → Save my chats**, save the backup file and keep its matching code separately. Check that saving finished and keep your old phone until your saved chats open on the new one.
 
-Configure `.env` with local values. Never commit this file.
+## Help and account choices
 
-| Variable | Required | Purpose |
-| --- | --- | --- |
-| `DATABASE_URL` | Yes | Server-only PostgreSQL connection string |
-| `SESSION_TTL_DAYS` | No | Absolute device lifetime in days (default: 30, maximum: 90); access JWTs last 15 minutes |
-| `JWT_SECRET` | Production | Secret of at least 32 characters used to sign sessions |
-| `PORT` | No | Application port; defaults to `3000` |
-| `CLIENT_URL` | Recommended | Canonical application origin |
-| `NEXT_PUBLIC_FIREBASE_API_KEY` | Phone auth | Firebase web-app API key (public) |
-| `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN` | Phone auth | Firebase Auth domain (for example, `project.firebaseapp.com`) |
-| `NEXT_PUBLIC_FIREBASE_PROJECT_ID` | Phone auth | Firebase project ID (public) |
-| `NEXT_PUBLIC_FIREBASE_APP_ID` | Phone auth | Firebase web app ID (public) |
-| `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY` | Phone auth | Service-account credentials used to verify phone tokens on the server |
-| `MAX_AVATAR_MB` | No | Avatar upload limit |
-| `MAX_IMAGE_MB` | No | Message-image upload limit |
-| `MAX_FILE_MB` | No | Message-file upload limit |
-| `DEV_SEED_PASSWORD` | Seed only | Password for local development accounts |
+- [Help with your account or chats](https://circlo.chat/support)
+- [Privacy Policy](https://circlo.chat/privacy)
+- [Terms of Service](https://circlo.chat/terms)
+- [Delete your account](https://circlo.chat/delete-account)
 
-Generate a production-quality session secret locally:
+For a private support or security concern, contact **mudassarmalak090@gmail.com**. Do not post passwords, recovery files, codes or private conversations in an issue.
 
-```bash
-openssl rand -hex 32
-```
+## About this repository
 
-Create the database, then apply the schema:
+This repository is currently private. Public availability and licensing are still under review; this page does not grant permission to redistribute the project.
 
-```bash
-createdb maddy_chats
-npm run db:migrate
-```
+Third-party components retain their own licences and notices.
 
-Start the development server:
-
-```bash
-npm run dev
-```
-
-Open [http://localhost:3000](http://localhost:3000).
-
-## Available commands
-
-| Command | Description |
-| --- | --- |
-| `npm run dev` | Start the development server |
-| `npm run build` | Create a production build |
-| `npm start` | Run the production build |
-| `npm run typecheck` | Run TypeScript checks |
-| `npm run lint` | Run ESLint |
-| `npm run db:migrate` | Apply the versioned migration journal |
-| `npx drizzle-kit generate` | Generate schema migration files |
-
-## Development seed
-
-The optional seed script creates two local test users. It requires an explicit
-password and refuses to run when `NODE_ENV=production`.
-
-```bash
-DEV_SEED_PASSWORD='local-password-only' node scripts/seed.mjs
-```
-
-## Project structure
-
-```text
-src/
-├── app/
-│   ├── api/          # authenticated HTTP and realtime endpoints
-│   └── app/          # protected application pages
-├── components/       # auth, chat, profile, people, and shell UI
-├── db/               # Drizzle connection and PostgreSQL schema
-├── lib/              # shared validation, types, and utilities
-└── server/           # server-only auth, chat, media, and realtime logic
-scripts/
-├── seed.mjs          # guarded local-development seed
-└── smoke-test.sh     # end-to-end API and realtime checks
-server/uploads/       # runtime media; excluded from Git
-```
-
-The browser communicates only with same-origin Next.js endpoints. Database
-credentials, password hashes, signing material, and storage paths remain on
-the server. Private media is served through authenticated routes that verify
-conversation membership.
-
-Realtime updates use the authenticated `/api/realtime/stream` Server-Sent
-Events endpoint. Realtime events and rate-limit buckets are persisted in
-PostgreSQL. Presence remains process-local, so production uses one web replica.
-Docker Compose runs an independent scheduled-message worker and private
-readiness checks. The deployment guide includes backup and restoration steps.
-
-## Testing
-
-Run static checks before opening a pull request:
-
-```bash
-npm run typecheck
-npm run lint
-npm run build
-```
-
-The `Quality` workflow also runs dependency audits and isolated integration
-tests on every pull request. Follow [the quality-gate guide](./docs/ITEM3_QUALITY_GATES.md)
-to prepare disposable local databases and run `npm test`. The supported suites
-exercise authentication/MFA, authorization, private media, migrations,
-scheduling, readiness and backup restoration. The old manual smoke script
-predates email verification and is not the supported automated test command.
-
-## Production checklist
-
-- Set a unique, random `JWT_SECRET`; never rely on a fallback in production.
-- Keep `DATABASE_URL`, `JWT_SECRET`, and seed credentials in the deployment
-  platform's secret manager, not in source control or client-visible variables.
-- Set `CLIENT_URL` to the exact HTTPS production origin.
-- Apply database schema changes before accepting traffic.
-- Use persistent private storage for uploads, or replace local storage with an
-  object-storage adapter while preserving authorization checks.
-- Use shared realtime and presence infrastructure when running more than one
-  application instance.
-- Run type checking, linting, a production build, and smoke tests before release.
-- Never commit `.env` files, database dumps, logs, uploads, credentials,
-  private keys, access tokens, or production user data.
-
-## Security notes
-
-- Authentication is enforced server-side with signed HttpOnly session cookies.
-- Passwords are hashed with bcrypt and are never returned by API responses.
-- Private routes independently verify ownership or conversation membership.
-- Uploads enforce size and type restrictions and reject executable content.
-- Only variables intentionally prefixed with `NEXT_PUBLIC_` can be exposed to
-  browser bundles. Do not use that prefix for secrets.
-- Report security issues privately to the repository owner rather than opening
-  a public issue containing exploit details or sensitive data.
+Contributor setup and maintenance instructions are kept in [the development guide](docs/development/README.md). Current protection details and the scope of older reviews are recorded in [the encryption coverage summary](docs/security/encryption-current.md).

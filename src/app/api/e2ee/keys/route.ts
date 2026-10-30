@@ -9,6 +9,7 @@ import { publishToConversation } from "@/server/realtime";
 import { rateLimit } from "@/server/rate-limit";
 import { detectCountry } from "@/server/country";
 import { browserLabel, platformLabel, COUNTRY_NAMES } from "@/server/device-meta";
+import { isCurrentPrivateKeyEnvelope } from "@/lib/private-key-envelope";
 
 const MAX_DEVICE_NAME = 60;
 
@@ -55,14 +56,13 @@ export async function GET(req: NextRequest) {
 
   // Private-key backups are only returned to their authenticated owner. A
   // peer can receive the public key only, which is all key exchange needs.
-  const restricted = (await getSessionAccess())?.approvalRequired;
   const keys = rows.filter((key) => !targetId || key.trustedAt).map((key) => targetId ? {
     id: key.id,
     deviceId: key.deviceId,
     publicKey: key.publicKey,
     createdAt: key.createdAt,
     lastUsedAt: key.lastUsedAt,
-  } : { ...key, encryptedPrivateKey: restricted && !key.encryptedPrivateKey.startsWith("v2:") ? undefined : key.encryptedPrivateKey, deviceName: key.deviceName ?? browserLabel(key.browser) ?? key.platform, country: key.country ?? user.country, sessionState: key.sessionRevokedAt ? "revoked" : key.sessionExpiresAt ? (key.sessionExpiresAt.getTime() <= Date.now() ? "expired" : "active") : "unknown" });
+  } : { ...key, encryptedPrivateKey: isCurrentPrivateKeyEnvelope(key.encryptedPrivateKey) ? key.encryptedPrivateKey : undefined, backupNeedsUpgrade: !isCurrentPrivateKeyEnvelope(key.encryptedPrivateKey), deviceName: key.deviceName ?? browserLabel(key.browser) ?? key.platform, country: key.country ?? user.country, sessionState: key.sessionRevokedAt ? "revoked" : key.sessionExpiresAt ? (key.sessionExpiresAt.getTime() <= Date.now() ? "expired" : "active") : "unknown" });
 
   return NextResponse.json({ keys }, { headers: { "Cache-Control": "no-store" } });
 }
@@ -85,6 +85,9 @@ export async function POST(req: NextRequest) {
 
   if (!deviceId || !publicKey || !encryptedPrivateKey || deviceId.length > 100 || publicKey.length > 8192 || encryptedPrivateKey.length > 16384) {
     return jsonError(422, "deviceId, publicKey, and encryptedPrivateKey are required.");
+  }
+  if (!isCurrentPrivateKeyEnvelope(data.encryptedPrivateKey)) {
+    return jsonError(422, "Update Circlo on this device before saving chat access. Existing chat access was not changed.");
   }
 
   // Optional, display-only identity. A label the user chose wins; otherwise the
