@@ -2,3 +2,4 @@
 
 /* Auto margin anchors short history without clipping overflow above long history. */
 #messages{justify-content:normal}.saved-bubble{flex-shrink:0}.saved-bubble:first-child{margin-top:auto}
+.in-chat #navigation{display:none}@media(max-width:639px){.in-chat .app-header{display:none}}

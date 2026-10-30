@@ -2385,7 +2385,7 @@ export function ChatView({
               type="button"
               onClick={loadOlder}
               disabled={loadingOlder}
-              className="btn btn-secondary py-1.5! text-xs!"
+              className="inline-flex min-h-8 items-center gap-1.5 rounded-full px-3 py-1 text-[0.6875rem] font-medium text-[var(--muted)] hover:bg-[var(--surface-2)] focus-visible:outline-2 focus-visible:outline-[var(--accent)] disabled:opacity-60"
             >
               {loadingOlder ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
