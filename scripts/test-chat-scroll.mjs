@@ -27,6 +27,8 @@ export async function testChatScroll(base, source, recipient, pool, conversation
       else await source.page.goto(base + "/app/chats/" + conversationId);
       await source.page.getByRole("textbox", { name: "Message text", exact: true }).waitFor();
       await source.page.locator('[data-history-count]').waitFor();
+      assert.equal(await source.page.getByRole('navigation',{name:'Mobile navigation',exact:true}).count(),0,'The open phone chat has no duplicate tab bar');
+      assert.equal(await source.page.locator('header:visible').count(),1,'Only the conversation header is visible on a phone');
       await source.page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
       const geometry = await source.page.getByRole("region", { name: "Messages", exact: true }).evaluate(viewport => {
         const content = viewport.querySelector('[data-history-count]');
@@ -35,6 +37,7 @@ export async function testChatScroll(base, source, recipient, pool, conversation
       });
       assert(geometry.rows > 0 && geometry.height < geometry.viewportHeight, "Owned baseline is a genuinely short chat");
       assert(geometry.gap >= 0 && geometry.gap <= 48, `Short messages stay beside the composer before/after reload: ${JSON.stringify(geometry)}`);
+      if(reload)await source.page.screenshot({path:'.freebuff/performance/chat-short-latest.png'});
     }
     assert.equal(unsolicitedPages, 0, "Opening and refreshing do not automatically load older pages");
   } finally {
