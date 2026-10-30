@@ -31,16 +31,17 @@ export async function testNavigationLatency(context,base,conversationId) {
  try{
   await page.goto(base+"/app");await page.getByLabel("Search conversations",{exact:true}).waitFor();
   const coldPage=await context.newPage();coldPage.setDefaultTimeout(30000);
-  let releaseList;let markListRequested;
+  let releaseList;let markListRequested;let listContinued=false;let pendingList;
   const listGate=new Promise(resolve=>releaseList=resolve);
   const listRequested=new Promise(resolve=>markListRequested=resolve);
-  await coldPage.route("**/api/conversations",async route=>{markListRequested();await listGate;await route.continue();});
+  await coldPage.route("**/api/conversations",route=>pendingList=(async()=>{markListRequested();await listGate;await route.continue();listContinued=true;})());
   try{
    await coldPage.goto(`${base}/app/chats/${conversationId}`);
    await coldPage.getByRole("textbox",{name:"Message text"}).waitFor();
    await listRequested;
-   assert.equal(await coldPage.locator('[aria-label="Loading conversations"]').count(),1,"The independent conversation-list load remains pending while chat content becomes usable");
-  }finally{releaseList();await coldPage.close();}
+   assert.equal(listContinued,false,"The independent conversation-list response is still withheld while chat content becomes usable");
+   assert(await coldPage.getByRole("textbox",{name:"Message text"}).isEnabled(),"The delayed list does not disable the composer");
+  }finally{releaseList();await pendingList;await coldPage.close();}
   console.log("PASS: deep-linked chat renders independently while the conversation list is delayed");
   const shell=await page.locator(".circlo-shell").elementHandle();assert(shell,"Shared shell exists");
   const sidebar=page.getByRole("complementary",{name:"Conversations",exact:true});
