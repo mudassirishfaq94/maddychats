@@ -146,6 +146,10 @@ jobs:
         run: DOCUMENT_FILES_ONLY=1 npm run test:restored
       - name: Owner-approved sign-in history retention
         run: AUTH_RETENTION_ONLY=1 npm run test:restored
+      - name: Direct-chat replacement-device key exclusion
+        run: DM_ROTATION_ONLY=1 npm run test:restored
+      - name: Experimental registration artifact consistency
+        run: node scripts/check-signal-artifacts.mjs
       - name: Offline PWA fallback under enforced CSP
         run: npm run test:pwa-offline
       - name: TWA configuration boundaries without Android tooling or credentials
