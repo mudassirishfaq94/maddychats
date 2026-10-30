@@ -85,7 +85,7 @@ def offlineShellAssets = layout.buildDirectory.dir('generated/offlineShell/asset
 android.sourceSets.main.assets.srcDir(offlineShellAssets)
 def copyOfflineShell = tasks.register('copyOfflineShell', Copy) {
     from('../../public') {
-        include 'offline.html', 'offline.css', 'offline-compose.js', 'offline-store.js', 'startup.html', 'startup.css', 'startup.js', 'icons/circlo-mark.svg'
+        include 'offline.html', 'offline.css', 'offline-compose.js', 'offline-store.js', 'startup.html', 'startup.css', 'startup.js', 'startup-reader.js', 'icons/circlo-mark.svg'
     }
     into(offlineShellAssets.map { it.dir('circlo-offline') })
 }

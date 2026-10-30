@@ -107,6 +107,8 @@ jobs:
           node scripts/test-tapped-chat-preview.mjs
           node scripts/test-native-startup.mjs
           node scripts/test-native-session-binding.mjs
+          node scripts/build-startup-reader.mjs --check
+          node scripts/test-startup-live-reader.mjs
           node scripts/test-decryption-refresh-race.mjs
           node scripts/test-familiar-flows.mjs
             node scripts/test-settings-panels.mjs

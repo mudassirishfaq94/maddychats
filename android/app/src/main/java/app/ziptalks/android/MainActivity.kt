@@ -346,6 +346,11 @@ class MainActivity : ComponentActivity() {
     }
 
     private inner class StartupBridge {
+        @android.webkit.JavascriptInterface fun messagePainted(elapsedMs: Double) {
+            if (BuildConfig.WEBVIEW_PROFILING && startupTrusted && elapsedMs.isFinite() && elapsedMs >= 0 && elapsedMs <= 60000) {
+                android.util.Log.i("CircloPerf", "tap-release-to-text-frame-ms=${elapsedMs.toLong()}")
+            }
+        }
         @android.webkit.JavascriptInterface fun listPainted() {
             if (BuildConfig.WEBVIEW_PROFILING && startupTrusted) {
                 android.util.Log.i("CircloPerf", "cached-list-frame-ms=${android.os.SystemClock.elapsedRealtime() - startupMeasurementStartedMs}")

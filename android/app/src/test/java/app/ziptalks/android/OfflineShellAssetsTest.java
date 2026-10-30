@@ -5,7 +5,7 @@ import static org.junit.Assert.*;
 
 public class OfflineShellAssetsTest {
     @Test public void publicShellAndEveryDependencyAreAvailableWithoutLoadingState() {
-        for (String path : new String[]{"/offline.html", "/offline.css", "/offline-compose.js", "/offline-store.js", "/startup.html", "/startup.css", "/startup.js", "/icons/circlo-mark.svg"}) {
+        for (String path : new String[]{"/offline.html", "/offline.css", "/offline-compose.js", "/offline-store.js", "/startup.html", "/startup.css", "/startup.js", "/startup-reader.js", "/icons/circlo-mark.svg"}) {
             assertEquals("circlo-offline" + path, OfflineShellAssets.assetPath("https://circlo.chat" + path, "https://circlo.chat", "GET"));
         }
         assertEquals("text/html", OfflineShellAssets.mimeType("offline.html"));

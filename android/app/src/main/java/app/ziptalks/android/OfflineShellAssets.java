@@ -7,7 +7,7 @@ import java.util.Set;
 
 /** Public assets only. Independent of WebView page-commit callback ordering. */
 final class OfflineShellAssets {
-    private static final Set<String> PATHS = new HashSet<>(Arrays.asList("/offline.html", "/offline.css", "/offline-compose.js", "/offline-store.js", "/startup.html", "/startup.css", "/startup.js", "/icons/circlo-mark.svg"));
+    private static final Set<String> PATHS = new HashSet<>(Arrays.asList("/offline.html", "/offline.css", "/offline-compose.js", "/offline-store.js", "/startup.html", "/startup.css", "/startup.js", "/startup-reader.js", "/icons/circlo-mark.svg"));
     static String assetPath(String url, String origin, String method) {
         if (!"GET".equals(method) || !WebOriginPolicy.isAllowed(url, origin)) return null;
         try {

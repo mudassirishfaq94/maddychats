@@ -10,7 +10,7 @@ const account='dddddddd-dddd-4ddd-8ddd-dddddddddddd', chat='aaaaaaaa-aaaa-4aaa-8
 const server=createServer(async(req,res)=>{
   const path=new URL(req.url,'http://localhost').pathname;
   if(path==='/nav-fixture.js'){res.setHeader('Content-Type','text/javascript');res.end(navigationBundle.outputFiles[0].contents);return;}
-  if(!['/startup.html','/startup.css','/startup.js','/offline.css','/offline-store.js','/icons/circlo-mark.svg'].includes(path)){res.writeHead(404).end();return;}
+  if(!['/startup.html','/startup.css','/startup.js','/startup-reader.js','/offline.css','/offline-store.js','/icons/circlo-mark.svg'].includes(path)){res.writeHead(404).end();return;}
   res.setHeader('Content-Type',path.endsWith('.js')?'text/javascript':path.endsWith('.css')?'text/css':path.endsWith('.svg')?'image/svg+xml':'text/html');
   res.end(await readFile('public'+path));
 });

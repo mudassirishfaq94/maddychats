@@ -30,6 +30,8 @@ Browser chat access uses an encrypted private-key envelope and its random wrappi
 
 `src/lib/device-key-storage.ts` has a Capacitor protected-storage path, but the shipped custom hosted WebView in `android/app/src/main/java/app/ziptalks/android/MainActivity.kt:533` does not make that path active. Do not claim Android Keystore protects the chat identity in this APK. Native session/startup protection is a separate feature, not evidence of chat-key protection. OS key storage requires a verified migration with recovery and rollback.
 
+The staged APK startup reader reuses those existing keys to decrypt a fresh, member-authorized message page before the full hosted UI is ready (`src/lib/startup-chat-reader.ts`). It does not register devices, share keys, fetch key history or persist fresh plaintext. Disappearing text requires the response's server clock and a conservative in-memory deadline; backgrounding and expiry remove it from the temporary surface. Its same-origin-only network permission is separate from server authorization. Missing local material falls back to the full client.
+
 ## 7. Backend visibility
 
 Current supported clients send private-chat message and attachment ciphertext. Account details, memberships, timing, public device keys, profiles, status and reaction data remain service-readable. Existing historical records require separate treatment: a read-only aggregate identified older unencrypted-flag messages and legacy device-backup envelopes. Their contents were not inspected; they were not deleted or reclassified as encrypted.
@@ -57,7 +59,7 @@ The staged API rejects new malformed/legacy device-backup envelopes and withhold
 
 ## 11. Tests and evidence
 
-Recorded staged results: 204 unit tests; TypeScript; targeted ESLint; production Linux build; actual browser device linking/recovery and DM replacement-device exclusion; two real Rust serialization/key-agreement tests. Seven active-primitive checks exercise randomness, round-trip, tampering, wrong keys and backup validation. The old unconditional-pass script was replaced. WASM API consistency is checked separately from rebuilding the binary; neither proves the message protocol secure. Full release/physical tests and outstanding findings are tracked in the ledger and [release checklist](docs/android/RELEASE_CANDIDATE_2026-10-30.md).
+Recorded staged results: 211 unit tests; TypeScript; targeted ESLint; production Linux build; actual browser device linking/recovery and DM replacement-device exclusion; two real Rust serialization/key-agreement tests. Seven active-primitive checks exercise randomness, round-trip, tampering, wrong keys and backup validation. The old unconditional-pass script was replaced. WASM API consistency is checked separately from rebuilding the binary; neither proves the message protocol secure. Full release/physical tests and outstanding findings are tracked in the ledger and [release checklist](docs/android/RELEASE_CANDIDATE_2026-10-30.md).
 
 ## 12. Report a vulnerability
 
