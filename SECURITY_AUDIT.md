@@ -1,5 +1,7 @@
 # Historical Encryption Review Notes (Superseded)
 
+Current source-path reference: [Current encryption coverage](docs/security/encryption-current.md). Read that summary before using any protocol description or rating below.
+
 ## Executive Summary
 
 > **Status: historical draft, not a current security audit.** The assessments below describe an earlier implementation and have not been reconciled with the current Circlo source or production configuration. Do not use them as claims about the shipped app, a release decision, or public encryption assurances.
@@ -12,9 +14,9 @@ This file is retained as historical context until a source- and deployment-verif
 
 ## 1. Architecture Overview
 
-### 1.1 Current E2EE Implementation
+### 1.1 Historical experimental E2EE implementation
 
-**Protocol:** Custom implementation based on Signal Protocol concepts
+**Protocol at the time of this draft:** Experimental implementation based on Signal Protocol concepts; not the current supported chat-send path
 **Language:** Rust WASM bridge + TypeScript client + PostgreSQL server
 **Status:** Partially implemented, not production-ready
 

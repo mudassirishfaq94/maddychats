@@ -1,5 +1,7 @@
 # Encryption device approval
 
+> Historical flow description. Current recovery choices and production protocol coverage are summarized in [Current encryption coverage](security/encryption-current.md). Some UI labels and linking steps below describe an older release.
+
 An encryption device is an account's browser keypair. A phone or laptop is not
 inherently trusted: different accounts and browser profiles have different keys.
 Clearing storage can remove the private key needed to authorize another device.

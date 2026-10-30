@@ -1,5 +1,7 @@
 # Group management and encryption review — 14 October 2026
 
+> Dated implementation review. For the current distinction between encrypted chats, readable Status, and the quarantined Signal transport, see [Current encryption coverage](security/encryption-current.md). The recorded tests below retain their original scope and date.
+
 ## Release source mismatch
 
 Codebuff's `edd7145` (name/description) and `187b56c` (photo UI) were present on the local `main` branch, but not on any fetched remote branch or GitHub's deployed `origin/main` (`090b0d2` at inspection). They had not reached the deployment source. This release cherry-picks those two focused changes without overwriting the root checkout's unrelated uncommitted work.

@@ -1,12 +1,14 @@
 # E2EE (End-to-End Encryption) Security Audit Report
 
+> Historical review of the 20 October implementation. The findings and rating below are retained as a record, not a current release assessment. For current feature coverage, the active chat path, and the quarantined experimental Signal transport, read [Current encryption coverage](docs/security/encryption-current.md). Internal review is not independent certification.
+
 **Date:** 2026-10-20
 **Auditor:** Security Review
 **Scope:** Complete E2EE implementation review including Signal bridge, client-side code, server endpoints, and cryptographic primitives
 
 ## Executive Summary
 
-The E2EE implementation demonstrates a solid foundation using the official Signal Protocol library (libsignal) with proper cryptographic primitives. However, the implementation is **incomplete and NOT production-ready**. Critical components like the Double Ratchet are missing or implemented as placeholders, and some security issues have been identified and fixed during this audit.
+The experimental Signal implementation inspected on 20 October used the official Signal Protocol library (libsignal), but that reviewed revision was incomplete. At that time, ratchet components were missing or placeholders. The findings and fixes below describe that experimental path and date, not the current supported conversation-key E2EE transport. Current Signal sending remains quarantined; this historical report does not establish a completed production Signal migration.
 
 **Overall Security Rating: 5/10 (Pre-Production - NOT Production Ready)**
 

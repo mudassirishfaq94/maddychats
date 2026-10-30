@@ -1,4 +1,5 @@
 import { publicMetadata } from "@/lib/public-metadata";
+import { LOGIN_HISTORY_RETENTION_DAYS } from "@/lib/privacy-retention";
 import Link from "next/link";
 import {
   BellRing,
@@ -53,9 +54,9 @@ const INDEX = [
 ];
 
 const HIGHLIGHTS = [
-  { icon: LockKeyhole, text: "Your device locks messages before they are sent" },
-  { icon: KeyRound, text: "Only approved devices can open your chats" },
-  { icon: Fingerprint, text: "A device you already use must approve a new one" },
+  { icon: LockKeyhole, text: "Private chats are end-to-end encrypted" },
+  { icon: KeyRound, text: "You control approved devices and privacy settings" },
+  { icon: Fingerprint, text: "We explain the information used to operate Circlo" },
 ];
 
 const NEVER_READ = [
@@ -70,28 +71,28 @@ const WE_HANDLE = [
   "Account details: display name, username, email, and any bio, avatar or phone number you add",
   "Details about chats: who is in a chat, when messages are sent, their size, and whether they were delivered or seen",
   "Security data: sign-in times, IP address, browser and device type, and an approximate country",
-  "Status updates, avatars and group names, which are stored in a readable form because other people must be shown them",
+  "Status updates, avatars and group names, which are currently processed in readable form; audience and access checks control who can see them",
   "Notification tokens, so your phone can tell you a message arrived",
 ];
 
 const PROCESSORS: { name: string; role: string; region: string }[] = [
   {
-    name: "Neon",
-    role: "Database for accounts, locked messages and delivery details",
+    name: "Account and delivery services",
+    role: "Keep accounts connected and deliver encrypted message copies; process account details, chat membership and delivery records",
     region: "Singapore",
   },
   {
-    name: "Bluehost",
-    role: "Runs the Circlo app and background services",
+    name: "App hosting",
+    role: "Runs Circlo and processes the requests needed to use it",
     region: "Mumbai, India",
   },
-  { name: "Cloudflare security", role: "Protects website traffic and checks for automated sign-in attempts", region: "Cloudflare network" },
-  { name: "Cloudflare R2", role: "Private storage for photos, videos and files", region: "Cloudflare network" },
-  { name: "Supabase", role: "Previous private media storage kept for rollback", region: "Mumbai, India" },
-  { name: "Resend", role: "Delivery of verification and password-reset email", region: "United States" },
+  { name: "Website protection", role: "Checks connection and browser information to protect traffic and limit automated sign-in attempts", region: "Global network" },
+  { name: "Private file storage", role: "Stores encrypted chat files and readable profile or status uploads with access checks", region: "Global network" },
+  { name: "Previous file storage", role: "Retains older uploads for fallback access and recovery during the storage transition", region: "Mumbai, India" },
+  { name: "Email delivery", role: "Sends verification and password-reset emails using the destination email address and email content", region: "Provider infrastructure; a fixed processing location has not been confirmed" },
   {
-    name: "Google, Apple, Mozilla",
-    role: "Push notification delivery and optional Google sign-in for existing accounts",
+    name: "Notifications and optional sign-in",
+    role: "Notification delivery uses device or browser push services and notification tokens. Optional sign-in uses the external account you choose",
     region: "Global",
   },
 ];
@@ -149,7 +150,7 @@ const STEPS = [
 const NOT_COVERED = [
   "Your profile: display name, username, bio, avatar and links, which other people must be able to see.",
   "Group and community structure: names, avatars, membership, roles and admin settings.",
-  "Status updates, which are stored in a readable form so they can be shown to your chosen audience and reviewed if reported.",
+  "Status updates, which currently use access controls rather than end-to-end encryption and can be reviewed if reported.",
   "Details about chats: who is talking, when and how often messages are sent, and their size.",
   "Security and account data: sign-in history, device and browser labels, and approximate country.",
   "Anything you deliberately send to us, such as a report, a support message or a verification request.",
@@ -176,17 +177,17 @@ const SAFEGUARDS = [
 
 const RETENTION = [
   "Account and profile data is kept for as long as your account exists.",
-  "Messages and attachments stay until you delete them, until the conversation is deleted, or until a disappearing-message timer or retention cleanup removes them.",
+  "Encrypted chat copies and files remain available until server-side deletion, a disappearing-message timer or retention cleanup removes them. Clearing a chat or deleting only for yourself changes your view, not another participant's copy.",
   "Media that is no longer referenced by any message, status or profile is removed by a retention process once it is older than 24 hours.",
-  "Status updates expire, and their media is deleted after they expire.",
-  "Sign-in and security records are kept for a limited window so we can show you recent activity and investigate misuse.",
+  "Status updates expire after 24 hours. Expired updates stop appearing; storage cleanup removes unused media separately.",
+  `Sign-in history, including IP and device details, is kept for ${LOGIN_HISTORY_RETENTION_DAYS} days. Older records are removed by scheduled cleanup in bounded batches.`,
   "Administrative audit records are retained so that moderation and trust changes stay accountable.",
 ];
 
 const RIGHTS = [
   {
     lead: "Access and portability.",
-    text: "You can export your account information from your profile and download one conversation as a data file. Private messages stay locked in the download because the export runs on servers that cannot open them.",
+    text: "You can export account information from Settings and download supported conversation data. Server exports keep private message content encrypted. Save my chats creates a separate encrypted backup on your device, with the messages and media it can successfully copy.",
   },
   {
     lead: "Correction.",
@@ -212,12 +213,12 @@ const COLLECTED: { lead: string; text: string }[] = [
     text: "Display name, username, email address, and anything optional you add such as a bio, avatar, phone number or links. We store a protected check of your password, not the password itself, and never email it to you.",
   },
   {
-    lead: "Private chat content.",
-    text: "Message text, captions, edits, reactions, attachments and voice notes. Your device locks this content before sending; only approved devices in the chat can open it.",
+    lead: "Encrypted messages and files.",
+    text: "Your device encrypts private messages, captions, edits, files and voice notes before sending. Circlo delivers encrypted copies that only approved devices in the chat can open. Reaction emojis and their sender are separate chat details.",
   },
   {
-    lead: "Readable content you publish.",
-    text: "Profile photos, group and community names and avatars, and status updates. These are processed and stored in a readable form because they have to be displayed to other people and can be reported.",
+    lead: "Profiles and status updates.",
+    text: "Profile photos, group and community names and avatars, and status updates. These are processed and stored in readable form. Profile visibility and status audience settings still apply; readable does not mean available to everyone.",
   },
   {
     lead: "Security and device data.",
@@ -248,7 +249,7 @@ const SHARING: { lead: string; text: string }[] = [
   },
   {
     lead: "With service providers.",
-    text: "We use a small number of processors under contract, each limited to what it needs to do its job. We never hand them your message keys.",
+    text: "Service providers process the information needed for hosting, storage, security, email and notifications. Private chat content is delivered encrypted; usable private chat keys are not included.",
   },
 ];
 
@@ -260,7 +261,7 @@ export default function PrivacyPage() {
         badge="Privacy policy"
         badgeIcon={LockKeyhole}
         title="Your privacy, in plain language."
-        lead="Your device locks private messages, attachments and voice notes before sending them. Circlo stores a locked copy it cannot open. This page explains what information we keep, what we can see, and the controls you have."
+        lead="Your private chats are end-to-end encrypted. Only approved devices in the conversation can open them. You control your devices and privacy settings; this page explains the information used to keep Circlo working."
         meta={[
           { icon: ScrollText, text: `Last updated: ${LAST_UPDATED}` },
           { icon: Globe2, text: "Applies to the Circlo web app, Android app and this website" },
@@ -272,7 +273,7 @@ export default function PrivacyPage() {
         <div className="grid gap-4 md:grid-cols-2">
           <article className="card-flat rounded-3xl p-6">
             <h2 className="font-display flex items-center gap-2 text-lg font-semibold">
-              <LockKeyhole className="h-5 w-5 text-[var(--accent-fg)]" /> What we can never read
+              <LockKeyhole className="h-5 w-5 text-[var(--accent-fg)]" /> What stays encrypted
             </h2>
             <div className="mt-4 text-sm leading-7 text-[var(--muted)]">
               <LegalChecklist items={NEVER_READ} />
@@ -280,7 +281,7 @@ export default function PrivacyPage() {
           </article>
           <article className="card-flat rounded-3xl p-6">
             <h2 className="font-display flex items-center gap-2 text-lg font-semibold">
-              <Database className="h-5 w-5 text-[var(--muted)]" /> What we do handle
+              <Database className="h-5 w-5 text-[var(--muted)]" /> Information that keeps Circlo working
             </h2>
             <div className="mt-4 text-sm leading-7 text-[var(--muted)]">
               <LegalChecklist items={WE_HANDLE} tone="note" />
@@ -323,23 +324,22 @@ export default function PrivacyPage() {
             Devices that can open your chats
           </h3>
           <p>
-            A new browser or phone can be linked only after approval from a device you already use. If you no longer
-            have an existing device, use the recovery phrase or file you saved to restore chat access. To link one, scan
-            its temporary QR code
-            and compare the safety code shown on both devices before you approve it. The QR code expires after three
-            minutes and does not contain the secret information needed to open chats. Removing a device stops it from
-            getting what it needs for new messages. Circlo also stores a locked recovery copy for this device; only the
-            separate recovery code you save can open that copy. Circlo does not receive that code.
+            Link a new phone or browser from a device you already use, using its QR code or linking code. Compare the
+            details shown before approving. Linking can transfer access to history the old device can still open.
+            Removing a device stops future access; it cannot erase copies already received.
           </p>
           <p>
-            Today, the web and Android app keep the information needed to open chats in saved data on that device.
-            Physical security keys and a word-based recovery phrase are not available yet. Before clearing saved data,
-            make a recovery file or link another device. Otherwise, you may lose access to older chats.
+            In Settings → Save my chats, save an encrypted backup file and keep its separate code. This file contains
+            the chats and available media the backup could copy; check its completion message before replacing your phone.
+            Your browser normally saves downloads to Downloads, or you can choose a location when offered. Android asks
+            where to save. Keep another copy away from the phone you might lose.
           </p>
           <LegalCallout>
-            Circlo staff and administrators cannot open your private messages because the needed secret information is
-            kept on your devices. If you lose every approved device and your recovery code or file, you may permanently
-            lose access to earlier chats. We cannot restore messages without that information.
+            More ways to save includes a chat-access recovery file protected by a 24-word phrase, and an optional
+            encrypted recovery copy stored by Circlo, opened only with its saved phrase or older code. The chat-access
+            file needs its matching phrase and does not contain messages or media. A phrase alone is not a complete
+            chat backup. If you lose every device and the matching saved recovery information, support cannot reopen
+            old messages. Email password recovery restores account access, not missing chat secrets.
           </LegalCallout>
 
           <h3 className="font-display pt-2 text-base font-semibold text-[var(--text)]">
@@ -350,14 +350,19 @@ export default function PrivacyPage() {
             Circlo stores a locked copy of private messages, so it cannot search their contents for you. Notifications
             can tell you a message arrived, but the service cannot read the message to add its contents.
           </p>
+          <p>
+            Audio calls use a separate real-time connection. Call setup includes the participants and connection
+            details; a direct connection can disclose your network address to the other participant. Chat encryption
+            does not make call metadata or network addresses anonymous.
+          </p>
           <p className="text-[13px] leading-6">
-            <strong className="text-[var(--text)]">Independent review.</strong> This page explains how private chat
-            protection is designed to work. We have not published a review by an independent security specialist.
+            <strong className="text-[var(--text)]">Protection checks.</strong> Automated tests check encrypted message
+            delivery, device approval, account isolation, expiry and logout. These checks are part of our release process.
           </p>
         </LegalSection>
 
         <LegalSection id="collect" number="2" title="Information we collect" icon={Database}>
-          <p>Cloudflare helps block automated sign-in attempts. It receives connection and browser information for these security checks. Our verification request contains the check result, without chat messages or encryption keys.</p>
+          <p>Our website protection service helps block automated sign-in attempts using connection and browser information. Verification uses the check result, without private chat messages or encryption keys.</p>
           <p>We collect information needed to run a messaging service. Chat contents and the details needed to deliver them are different, so we explain them separately.</p>
           <ul className="space-y-4">
             {COLLECTED.map((item) => (
@@ -404,19 +409,19 @@ export default function PrivacyPage() {
               </li>
             ))}
           </ul>
-          <div className="mt-5 overflow-x-auto">
-            <table className="w-full min-w-[560px] border-collapse text-left text-[13px]">
+          <div className="mt-5 overflow-x-auto rounded-xl border border-[var(--border)]">
+            <table className="w-full min-w-0 border-collapse text-left text-[13px]">
               <caption className="sr-only">Service providers that process Circlo data</caption>
               <thead>
                 <tr className="border-b border-[var(--border-strong)] text-[11px] uppercase tracking-[.12em] text-[var(--text)]">
                   <th scope="col" className="py-2.5 pr-4 font-semibold">
-                    Provider
+                    Service
                   </th>
                   <th scope="col" className="py-2.5 pr-4 font-semibold">
                     What it does
                   </th>
                   <th scope="col" className="py-2.5 font-semibold">
-                    Processing region
+                    Location
                   </th>
                 </tr>
               </thead>
@@ -443,7 +448,7 @@ export default function PrivacyPage() {
         </LegalSection>
 
         <LegalSection id="controls" number="7" title="Your privacy controls" icon={SlidersHorizontal}>
-          <p>These live in your profile and take effect immediately.</p>
+          <p>Find these in Settings → Privacy, Notifications and Save my chats. Device approval is under your phones and sign-in settings.</p>
           <div className="mt-2 grid gap-4 sm:grid-cols-2">
             {CONTROLS.map(({ icon: Icon, title, text }) => (
               <article key={title} className="card-flat rounded-2xl p-5">
@@ -476,9 +481,11 @@ export default function PrivacyPage() {
 
         <LegalSection id="transfers" number="10" title="Where data is processed" icon={Globe2}>
           <p>
-            Circlo runs on the providers listed in section 5, including Singapore, India, the United States, and the European Union. Where personal
-            data moves between regions we rely on safeguards required by law, and each provider publishes its own
-            transfer terms. Private messages remain locked wherever they are stored.
+            Account and delivery services operate in Singapore; app hosting and previous file storage operate in
+            India. Website protection, storage, email and notification services may process information in other
+            countries, including the United States and European Union, depending on the service and your connection.
+            Contact us for information about international processing. Private chat copies remain encrypted wherever
+            they are delivered or stored.
           </p>
         </LegalSection>
 
@@ -508,8 +515,8 @@ export default function PrivacyPage() {
       </LegalBody>
 
       <LegalClosing
-        title="Your circle. Your secrets. Sealed."
-        text="Everything above describes what the app actually does — you can review the same design in your own encryption settings."
+        title="Private conversations. Closer connections."
+        text="Manage your privacy in Settings, or contact us with a question about your information."
         links={[
           { href: "/terms", label: "Terms of Service" },
           { href: "/signup", label: "Join your circle", primary: true },

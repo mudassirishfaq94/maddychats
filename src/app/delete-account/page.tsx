@@ -7,7 +7,7 @@ export const metadata = publicMetadata("/delete-account", "Delete your Circlo ac
 export const dynamic = "force-dynamic";
 
 export default function DeleteAccountPage() {
-  const email = publicSupportEmail(process.env.PUBLIC_SUPPORT_EMAIL);
+  const email = publicSupportEmail(process.env.PUBLIC_SUPPORT_EMAIL) ?? "mudassarmalak090@gmail.com";
   return <HelpPage title="Delete your Circlo account">
     <p>You can delete your account from this website. You do not need to install the Android app. Deletion is permanent and applies to the same Circlo account on all devices.</p>
     <Link className="btn btn-primary inline-flex max-w-full whitespace-normal text-center" href="/login?next=%2Fapp%2Fsettings%23data">Sign in to delete my account</Link>
