@@ -148,6 +148,8 @@ jobs:
         run: AUTH_RETENTION_ONLY=1 npm run test:restored
       - name: Direct-chat replacement-device key exclusion
         run: DM_ROTATION_ONLY=1 npm run test:restored
+      - name: Packaged public privacy disclosures
+        run: PUBLIC_PAGES_ONLY=1 npm run test:restored
       - name: Experimental registration artifact consistency
         run: |
           node scripts/check-signal-artifacts.mjs
