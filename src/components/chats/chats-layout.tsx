@@ -69,10 +69,11 @@ function stampTime(iso: string | null, hydrated: boolean): string {
   return dateStampFormatter.format(d);
 }
 
-const ConversationRow = memo(function ConversationRow({ conv, active, online, preview, timestamp, userId, onOpen }: {
+const ConversationRow = memo(function ConversationRow({ conv, active, online, preview, timestamp, userId, onOpen, onPrepare }: {
   conv: ConversationSummary; active: boolean; online: boolean; preview: string; timestamp: string;
   userId: string | null;
   onOpen: () => void;
+  onPrepare: () => void;
 }) {
   const name = conv.name ?? conv.otherMember?.displayName ?? "Unknown";
   return (
@@ -86,8 +87,9 @@ const ConversationRow = memo(function ConversationRow({ conv, active, online, pr
           onOpen();
           window.history.pushState(null, "", `/app/chats/${conv.id}`);
         }}
-        onFocus={() => { if (userId) void prefetchChatRouteData(userId, conv.id).catch(() => undefined); }}
+        onFocus={() => { onPrepare(); if (userId) void prefetchChatRouteData(userId, conv.id).catch(() => undefined); }}
         onPointerDown={() => {
+          onPrepare();
           if (userId) void prefetchChatRouteData(userId, conv.id).catch(() => undefined);
         }}
         aria-current={active ? "page" : undefined}
@@ -417,6 +419,23 @@ export function ChatsLayout({
                 timestamp={stampTime(conv.lastMessageAt ?? conv.createdAt, hydrated)}
                 online={Boolean(conv.otherMember && presence[conv.otherMember.id]?.online)}
                 userId={user?.id ?? null}
+                onPrepare={() => {
+                  if (!user || status !== "authenticated" || snapshot?.viewerId !== user.id || chatLocked(conv.id)) return;
+                  void prepareSavedChatSnapshot(user.id, requestScope, conv.id);
+                  const message = conv.lastMessage;
+                  // Prioritize the selected summary over the inbox's queued
+                  // preview work. This never fetches/shares remote keys and
+                  // disappearing previews remain memory-only with a deadline.
+                  if (!message?.encrypted || !currentChatPreview(conv, user.id, requestScope, "", snapshot.clock, performance.now())) return;
+                  void decrypt(message.text, conv.id, { localOnly: true }).then(text => {
+                    if (chatLocked(conv.id)) return;
+                    cacheDecryptedMessage(conv.id, message.id, message.text, text, { memoryOnly: Boolean(message.expiresAt || message.selfDestruct) });
+                    const opened = openedConversation.current;
+                    if (opened?.id === conv.id && opened.userId === user.id && opened.scope === requestScope) {
+                      setTapPreview(currentChatPreview(conv, user.id, requestScope, text, snapshot.clock, performance.now()));
+                    }
+                  }).catch(() => undefined);
+                }}
                 onOpen={() => {
                   const message = conv.lastMessage;
                   if (user) openedConversation.current = {id:conv.id,userId:user.id,scope:requestScope};

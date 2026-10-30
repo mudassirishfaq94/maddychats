@@ -148,6 +148,7 @@ private class ZipTalkApi(context: Context) {
 }
 
 class MainActivity : ComponentActivity() {
+    private val startupMeasurementStartedMs = android.os.SystemClock.elapsedRealtime()
     val backupExport = BackupExport(this)
     private var webView: WebView? = null
     private var startupView: WebView? = null
@@ -267,6 +268,7 @@ class MainActivity : ComponentActivity() {
         // when that probe or the Compose first frame stalled.
         val firstDestination = notificationDestination(intent)
         startupAccount = if (firstDestination == null) localSnapshotAccount() else null
+        if (BuildConfig.WEBVIEW_PROFILING) android.util.Log.i("CircloPerf", "local-snapshot-selected=${startupAccount != null};direct-destination=${firstDestination != null}")
         val initial = if (startupAccount != null) createStartupWebView().also { startupView = it }
             else createHostedWebView(firstDestination).also { webView = it }
         val content = FrameLayout(this).apply {
@@ -344,6 +346,11 @@ class MainActivity : ComponentActivity() {
     }
 
     private inner class StartupBridge {
+        @android.webkit.JavascriptInterface fun listPainted() {
+            if (BuildConfig.WEBVIEW_PROFILING && startupTrusted) {
+                android.util.Log.i("CircloPerf", "cached-list-frame-ms=${android.os.SystemClock.elapsedRealtime() - startupMeasurementStartedMs}")
+            }
+        }
         @android.webkit.JavascriptInterface fun accountHint(): String = if (startupTrusted) startupAccount.orEmpty() else ""
         @android.webkit.JavascriptInterface fun cacheReady(account: String) = runOnUiThread {
             if (startupTrusted && account == startupAccount) loadBehindSnapshot(startupDestination)

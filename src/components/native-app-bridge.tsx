@@ -19,15 +19,17 @@ declare global { interface Window { __circloNavigate?: (destination: string) => 
 export function NativeAppBridge() {
   const router = useRouter();
   const { user, status } = useAuth();
-  const userId = user?.id;
   useEffect(() => {
     if (!isNativeApp() || status === "loading") return;
+    const authenticatedUserId = user?.id;
     let disposed = false;
     void import("@/lib/native-push-bridge").then(bridge => {
-      if (!disposed) return bridge.syncHostedStartup(status === "authenticated" && userId ? userId : null);
+      if (!disposed) return bridge.syncHostedStartup(status === "authenticated" && authenticatedUserId ? authenticatedUserId : null);
     }).catch(() => undefined); // Older APKs do not implement these optional commands.
     return () => { disposed = true; };
-  }, [status, userId]);
+    // A successful refresh can rotate cookies without changing the account ID.
+    // Renew its local binding too; otherwise idle startup falls back to network.
+  }, [status, user]);
   useEffect(() => {
     if (!isNativeApp()) return;
 
