@@ -26,7 +26,7 @@ const summarize=rows=>{
 };
 export async function testNavigationLatency(context,base,conversationId) {
  const page=await context.newPage();page.setDefaultTimeout(30000);await page.setViewportSize({width:390,height:844});
- const requests=[];page.on("request",request=>{if(new URL(request.url()).searchParams.has("_rsc"))requests.push({url:request.url(),time:Date.now()});});
+ const requests=[],historyRequests=[];page.on("request",request=>{const url=new URL(request.url());if(url.searchParams.has("_rsc"))requests.push({url:request.url(),time:Date.now()});if(url.pathname===`/api/conversations/${conversationId}/open`)historyRequests.push(request.url());});
  const rows=[],additionalTabs=[];const cdp=await context.newCDPSession(page);
  try{
   await page.goto(base+"/app");await page.getByLabel("Search conversations",{exact:true}).waitFor();
@@ -67,8 +67,8 @@ export async function testNavigationLatency(context,base,conversationId) {
      await page.waitForTimeout(250);
     }
     const chat=page.locator(`a.chat-list-row[href="/app/chats/${conversationId}"]`);await chat.waitFor();
-    const before=requests.length;const timing=await measure(page,chat,`/app/chats/${conversationId}`,'textarea[aria-label="Message text"]',null);
-    if(process.env.NAV_BASELINE!=="1")assert(requests.slice(before).some(request=>new URL(request.url).pathname===`/app/chats/${conversationId}`),"Opening a chat must fetch authorized current history, not reuse a full-route snapshot");
+    const before=requests.length,historyBefore=historyRequests.length;const timing=await measure(page,chat,`/app/chats/${conversationId}`,'textarea[aria-label="Message text"]',null);
+    if(process.env.NAV_BASELINE!=="1")assert(historyRequests.length>historyBefore||requests.slice(before).some(request=>new URL(request.url).pathname===`/app/chats/${conversationId}`),"Opening a chat must fetch authorized current history, not reuse a full-route snapshot");
     rows.push({scenario,round,route:"Open chat",...timing,rscRequests:requests.length-before});
     if(scenario==="normal"&&round===0){
      const dismissNotice=page.getByRole("button",{name:"Dismiss encryption notice",exact:true});
