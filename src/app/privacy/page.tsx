@@ -33,7 +33,7 @@ import {
 
 export const metadata = publicMetadata("/privacy", "Privacy Policy — Circlo", "What Circlo stores, what it can see, how chat messages are protected, and how you can control your information.");
 
-const LAST_UPDATED = "27 October 2026";
+const LAST_UPDATED = "30 October 2026";
 
 /** Numbered sections, also used to build the jump-to index. */
 const INDEX = [
@@ -500,6 +500,7 @@ export default function PrivacyPage() {
         </LegalSection>
 
         <LegalSection id="contact" number="13" title="Contact us" icon={ShieldCheck}>
+          <p>Circlo is run independently by its creator in Dubai, United Arab Emirates. For privacy questions or requests about your data, email <a className="underline" href="mailto:mudassarmalak090@gmail.com">mudassarmalak090@gmail.com</a>.</p>
           <p>
             Visit <Link className="underline" href="/support">Circlo support</Link> for account access, reporting and the available contact options. You can <Link className="underline" href="/delete-account">request account deletion from your browser</Link> without installing the Android app. Do not send your password, verification codes or encryption recovery material with a request.
           </p>

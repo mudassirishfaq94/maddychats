@@ -32,7 +32,7 @@ import {
 
 export const metadata = publicMetadata("/terms", "Terms of Service — Circlo", "The agreement between you and Circlo: service terms, encrypted messaging, account responsibilities and your rights.");
 
-const LAST_UPDATED = "14 October 2026";
+const LAST_UPDATED = "30 October 2026";
 
 const INDEX = [
   { id: "acceptance", label: "Acceptance of these terms" },
@@ -362,8 +362,8 @@ export default function TermsPage() {
 
         <LegalSection id="contact" number="14" title="Contact us" icon={ShieldCheck}>
           <p>
-            Questions about these terms, an enforcement decision, or a legal request can be sent from inside Circlo
-            through the support and report options in your profile, and you will get a recorded answer. Our{" "}
+            Circlo is run independently by its creator in Dubai, United Arab Emirates. Questions about these terms,
+            an enforcement decision, or a legal request can be sent to <a className="underline" href="mailto:mudassarmalak090@gmail.com">mudassarmalak090@gmail.com</a> or through <Link className="underline" href="/support">Circlo support</Link>. Our{" "}
             <Link
               href="/privacy"
               className="font-semibold text-[var(--accent-fg)] underline hover:text-[var(--text)]"
