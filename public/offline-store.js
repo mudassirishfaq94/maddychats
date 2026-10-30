@@ -38,7 +38,7 @@ async function readGroups(userId,prefixes) {
   } finally {db.close();}
 }
 async function read(userId,prefix){return (await readGroups(userId,[prefix]))[0];}
-export function activeAccount(){return localStorage.getItem(active);}
+export function activeAccount(){try{return typeof localStorage==="undefined"?null:localStorage.getItem(active);}catch{return null;}}
 export async function rememberChats(userId,chats){const epoch=epochs.get(userId)??0;await write(userId,"contacts",chats);if((epochs.get(userId)??0)===epoch)localStorage.setItem(active,userId);}
 export function chatLocked(id){try{const ids=JSON.parse(localStorage.getItem("maddy:locked-chats")??"[]");return !Array.isArray(ids)||ids.some(value=>typeof value!=="string")||ids.includes(id);}catch{return true;}}
 export async function offlineChats(userId){const [previewRows,contacts]=await readGroups(userId,["preview:","contacts"]);const previews=new Map(previewRows.map(value=>[value.conversationId,value]));return (contacts[0]??[]).map(chat=>chatLocked(chat.id)?{id:chat.id,name:"Locked chat",locked:true}:{...chat,preview:previews.get(chat.id)});}
