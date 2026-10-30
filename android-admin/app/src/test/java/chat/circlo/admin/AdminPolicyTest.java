@@ -4,6 +4,12 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 public class AdminPolicyTest {
+    @Test public void challengeFramesNeverBecomeTrustedNativeOrigins() {
+        for (String value : new String[]{"about:blank", "about:srcdoc", "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/"}) {
+            assertTrue(AdminPolicy.allowsFrame(value)); assertFalse(AdminPolicy.trusted(value));
+        }
+        for (String value : new String[]{"file:///data/private", "javascript:alert(1)", "https://challenges.cloudflare.com.evil.test"}) assertFalse(AdminPolicy.allowsFrame(value));
+    }
     @Test public void originChecksRejectRedirectTricksAndActiveSchemes() {
         assertTrue(AdminPolicy.trusted("https://circlo.chat/app/admin?tab=users"));
         assertTrue(AdminPolicy.trusted("https://circlo.chat:443/login"));
