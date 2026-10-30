@@ -12,6 +12,12 @@ export async function testChatScroll(base, source, recipient, pool, conversation
   assert.equal((await pool.query("select user_id from conversation_members where conversation_id=$1 and user_id=$2", [conversationId, peer.id])).rowCount, 1);
   const originalViewport = source.page.viewportSize();
   await source.page.setViewportSize({ width: 390, height: 844 });
+  // Play's public deletion entry must reach the current settings screen.
+  // Stop before its confirmation: this check never deletes an account.
+  await source.page.goto(base + "/delete-account");
+  await source.page.getByRole("link", { name: "Sign in to delete my account", exact: true }).click();
+  await source.page.getByRole("button", { name: "Delete my account", exact: true }).waitFor();
+  assert.equal(new URL(source.page.url()).pathname, "/app/settings");
   let unsolicitedPages = 0;
   const olderRequest = request => { if (request.url().includes(`/api/conversations/${conversationId}/messages?cursor=`)) unsolicitedPages++; };
   source.page.on("request", olderRequest);
