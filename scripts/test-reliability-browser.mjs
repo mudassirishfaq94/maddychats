@@ -82,7 +82,7 @@ try {
  // Compare against the independently generated fixture identities before approval.
  for(const account of [owner,member]) {
   await account.page.reload();
-  await account.page.getByRole("button").filter({hasText:"A device changed in this chat."}).click();
+  await account.page.getByRole("button").filter({hasText:"Confirm this is still them before you send."}).click();
   await account.page.getByLabel("Participant check number").nth(accounts.length-2).waitFor();
   const fingerprints=await account.page.getByLabel("Participant check number").allTextContents();
   assert.deepEqual(fingerprints.sort(),accounts.filter(peer=>peer!==account).map(peer=>createHash("sha256").update(peer.publicKey).digest("hex")).sort());

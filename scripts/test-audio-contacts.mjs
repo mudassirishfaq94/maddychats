@@ -57,6 +57,7 @@ export async function testAudioContacts(base, pool, owner, peer, password, conve
     await post(cb, "/api/contacts/phone", { enabled: false }); assert.equal((await findPhone()).length, 0);
     // User-provided discovery numbers never become authentication credentials.
     await b.goto(base + "/app/profile");
+    await b.getByText("Find me by phone number", { exact: true }).click();
     await b.getByLabel("Phone number", { exact: true }).fill("+15555550124");
     await b.getByLabel("Let people find me using my exact phone number", { exact: true }).check();
     await b.getByRole("button", { name: "Save phone number", exact: true }).click();
