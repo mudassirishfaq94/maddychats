@@ -15,7 +15,7 @@ const bundle = await build({ bundle: true, write: false, format: "iife", platfor
     import {ChatRoute} from './src/app/app/chats/[id]/chat-route';
     import * as store from './public/offline-store.js';
     function Inbox(){const {snapshot,refresh,read}=useConversationList();window.refreshInbox=refresh;window.readInbox=read;return snapshot?<p>Authorized inbox {snapshot.conversations.length}</p>:<SavedInboxList filter='' onPrepare={()=>{}} onOpen={id=>{window.fixtureOpened=id;}}/>;}
-    window.showInbox=auth=>{window.fixtureAuth=auth;root.render(<ConversationListProvider><Inbox/></ConversationListProvider>);};
+    window.showInbox=auth=>{window.fixtureAuth=auth;flushSync(()=>root.render(<ConversationListProvider><Inbox/></ConversationListProvider>));};
     window.store=store; const root=createRoot(document.getElementById('root'));
     window.prepareSnapshot=()=>prepareSavedChatSnapshot(window.fixtureAuth.user.id,window.fixtureAuth.requestScope,'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
     window.invalidateSnapshot=()=>invalidateSavedChatSnapshots(window.fixtureAuth.user.id);

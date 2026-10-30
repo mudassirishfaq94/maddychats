@@ -11,8 +11,8 @@ export async function testChatHandoff(base,pool,page,owner,conversationId,baseli
   await pool.query("update messages set type='audio' where id=$1",[message.id]);
   await pool.query("insert into message_attachments(id,message_id,original_name,stored_name,mime_type,size,path,kind) values($1,$2,'handoff-fixture.webm',$3,'audio/webm',10,$4,'audio')",[file,message.id,file+'.webm','files/'+file+'.webm']);
   const manifest=JSON.parse(await readFile('.next/react-loadable-manifest.json','utf8'));
-  const module=Object.entries(manifest).find(([name])=>name.endsWith('-> ./audio-message'))?.[1];
-  const chunk=module?.files.find(file=>file.endsWith('.js'));assert(chunk,'The actual voice-control chunk must exist');
+  const audioModule=Object.entries(manifest).find(([name])=>name.endsWith('-> ./audio-message'))?.[1];
+  const chunk=audioModule?.files.find(file=>file.endsWith('.js'));assert(chunk,'The actual voice-control chunk must exist');
   const pattern='**/_next/'+chunk;
   let release,held;
   const gate=new Promise(resolve=>{release=resolve;}),requested=new Promise(resolve=>{held=resolve;});
