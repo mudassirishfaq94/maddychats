@@ -59,6 +59,9 @@ try {
   });
   await page.getByText('Saved readable fixture', {exact:true}).waitFor();
   assert.equal(await page.getByText('Never show this', {exact:true}).count(),0);
+  const diskRead=await page.evaluate(async()=>{const original=indexedDB.open;let opens=0;indexedDB.open=function(...args){opens++;return original.apply(this,args);};try{const chats=await window.store.offlineChats('dddddddd-dddd-4ddd-8ddd-dddddddddddd');return{opens,rows:chats.length,preview:chats[0].preview?.text};}finally{indexedDB.open=original;}});
+  assert.equal(diskRead.opens,1,'A cold saved-list read opens its encrypted database once for contacts and previews');
+  assert.equal(diskRead.rows,1);assert.equal(diskRead.preview,'Saved readable fixture');
   await page.evaluate(() => { window.fixtureAuth={user:{id:'dddddddd-dddd-4ddd-8ddd-dddddddddddd'},status:'authenticated',requestScope:{key:'warm-first-frame'}}; });
   await page.evaluate(()=>window.prepareSnapshot());
   assert((await page.evaluate(()=>window.showSync())).includes('Saved readable fixture'),'A prepared encrypted-store snapshot renders in the tap commit, before any history response or effect finishes');

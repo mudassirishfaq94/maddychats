@@ -30,16 +30,18 @@ async function write(userId,id,value) {
     if((epochs.get(userId)??0)===epoch)await request(db,"records","readwrite",s=>s.put({id,iv,ciphertext},id));
   } finally {db.close();}
 }
-async function read(userId,prefix) {
+async function readGroups(userId,prefixes) {
   const db=await database(userId);
-  try { const records=await request(db,"records","readonly",s=>s.getAll(IDBKeyRange.bound(prefix,prefix+"\uffff")));const key=await deviceKey(db);const result=[];
-    for(const r of records){try{const bytes=await crypto.subtle.decrypt({name:"AES-GCM",iv:r.iv,additionalData:new TextEncoder().encode(r.id)},key,r.ciphertext);result.push(JSON.parse(new TextDecoder().decode(bytes)));}catch{damagedRecord=true;}}return result;
+  try {
+    const [groups,key]=await Promise.all([Promise.all(prefixes.map(prefix=>request(db,"records","readonly",s=>s.getAll(IDBKeyRange.bound(prefix,prefix+"\uffff"))))),deviceKey(db)]);
+    return await Promise.all(groups.map(async records=>{const result=[];for(const r of records){try{const bytes=await crypto.subtle.decrypt({name:"AES-GCM",iv:r.iv,additionalData:new TextEncoder().encode(r.id)},key,r.ciphertext);result.push(JSON.parse(new TextDecoder().decode(bytes)));}catch{damagedRecord=true;}}return result;}));
   } finally {db.close();}
 }
+async function read(userId,prefix){return (await readGroups(userId,[prefix]))[0];}
 export function activeAccount(){return localStorage.getItem(active);}
 export async function rememberChats(userId,chats){const epoch=epochs.get(userId)??0;await write(userId,"contacts",chats);if((epochs.get(userId)??0)===epoch)localStorage.setItem(active,userId);}
 export function chatLocked(id){try{const ids=JSON.parse(localStorage.getItem("maddy:locked-chats")??"[]");return !Array.isArray(ids)||ids.some(value=>typeof value!=="string")||ids.includes(id);}catch{return true;}}
-export async function offlineChats(userId){const previews=new Map((await read(userId,"preview:")).map(value=>[value.conversationId,value]));return ((await read(userId,"contacts"))[0]??[]).map(chat=>chatLocked(chat.id)?{id:chat.id,name:"Locked chat",locked:true}:{...chat,preview:previews.get(chat.id)});}
+export async function offlineChats(userId){const [previewRows,contacts]=await readGroups(userId,["preview:","contacts"]);const previews=new Map(previewRows.map(value=>[value.conversationId,value]));return (contacts[0]??[]).map(chat=>chatLocked(chat.id)?{id:chat.id,name:"Locked chat",locked:true}:{...chat,preview:previews.get(chat.id)});}
 const historyWork=new Map();
 export async function rememberHistory(userId,conversationId,messages,replace=false,removedIds=[]){
   const epoch=epochs.get(userId)??0;const id="history:"+conversationId,queueId=userId+":"+id;

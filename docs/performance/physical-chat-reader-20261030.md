@@ -33,3 +33,9 @@ Earlier “first chat” text-timer timeouts were invalid as text timings: that 
 - TypeScript and targeted ESLint passed. Android release unit tests and both profiling/normal builds passed; normal-build profiling is disabled.
 - The direct raw DevTools timing command was rejected by automatic approval review with only “blocked by policy.” It was not retried through another route. A profiling-only, elapsed-time-only native marker supports a manual tap check instead.
 - **Final physical after-result pending.** Do not call the one-second goal complete, extrapolate a maximum from a small sample, or report these APK-only changes as a Bluehost deployment. The existing active-protocol authentication limitations remain in the separate security ledger.
+
+## Owner's manual check and next local-read fix
+
+The owner confirmed opening and tapping the updated profiling APK. The available marker recorded **1,090ms from activity construction to the cached-list frame**. No tap-to-text marker was emitted, so this is not a successful chat timing and does not meet the requested maximum. The normal, non-profiling reader test APK was restored with `adb install -r`; data and keys were retained. Its native activity draw was912ms, which must not be reported as usable-list speed.
+
+The following code change removes an actual serial disk step: `offlineChats()` now reads contacts and previews using one IndexedDB connection and one local-key lookup, with independent reads in parallel. Existing authenticated record encryption, damaged-record handling, locks and account isolation remain. The browser regression confirms one database open, correct rows and preview, plus the existing authorization/expiry/logout tests. This is an operational improvement; a sub-second physical after-timing is not inferred from it.
