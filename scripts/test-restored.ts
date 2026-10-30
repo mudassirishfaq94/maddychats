@@ -66,7 +66,10 @@ async function main() {
     );
     assert(!xml.includes("/app") && !xml.includes("/login"));
     try {
-      if (process.env.DEVICE_ACCESS_ONLY === "1") {
+      if (process.env.AUTH_RETENTION_ONLY === "1") {
+        const child = spawn(process.execPath, [resolve("node_modules/tsx/dist/cli.mjs"), resolve("scripts/test-auth-retention.ts")], { windowsHide: true, stdio: "inherit", env: { ...process.env, DATABASE_URL: database } });
+        const [code] = await once(child, "exit"); assert.equal(code, 0, "Real sign-in retention regression");
+      } else if (process.env.DEVICE_ACCESS_ONLY === "1") {
         await testDeviceAccess(base, pool, testSecret);
       } else if (process.env.AUDIO_ONLY === "1") {
         await testAudioContacts(base, pool, accounts[0], accounts[1], password, conversation!);

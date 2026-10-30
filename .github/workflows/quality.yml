@@ -144,6 +144,8 @@ jobs:
         env:
           CLAMAV_HOST: 127.0.0.1
         run: DOCUMENT_FILES_ONLY=1 npm run test:restored
+      - name: Owner-approved sign-in history retention
+        run: AUTH_RETENTION_ONLY=1 npm run test:restored
       - name: Offline PWA fallback under enforced CSP
         run: npm run test:pwa-offline
       - name: TWA configuration boundaries without Android tooling or credentials
