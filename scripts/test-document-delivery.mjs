@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {readFile,unlink} from 'node:fs/promises';
 import {documentFixtures} from './document-fixtures.mjs';
+import {testChatMediaSize} from './test-chat-media-size.mjs';
 
 /** Real encrypted sender-to-recipient delivery; only disposable owned accounts. */
 export async function testDocumentDelivery(base,sender,recipient){
@@ -26,4 +27,5 @@ export async function testDocumentDelivery(base,sender,recipient){
     }finally{if(path)await unlink(path).catch(()=>{});}
   }
   console.log('PASS encrypted document delivery: generic picker MIME, PDF/Word/Excel/CSV'+(process.env.ATTACHMENT_APK_FIXTURE?'/real APK':'')+', ciphertext storage, recipient decryption, filename and byte-identical download');
+  await testChatMediaSize(base,sender,recipient);
 }
