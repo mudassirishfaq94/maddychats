@@ -57,7 +57,7 @@ The staged API rejects new malformed/legacy device-backup envelopes and withhold
 
 ## 11. Tests and evidence
 
-Recorded staged results: 200 unit tests; TypeScript; targeted ESLint; production Linux build; actual browser device linking/recovery and DM replacement-device exclusion; two real Rust serialization/key-agreement tests. Seven active-primitive checks exercise randomness, round-trip, tampering, wrong keys and backup validation. The old unconditional-pass script was replaced. WASM API consistency is checked separately from rebuilding the binary; neither proves the message protocol secure. Full release/physical tests and outstanding findings are tracked in the ledger and [release checklist](docs/android/RELEASE_CANDIDATE_2026-10-30.md).
+Recorded staged results: 204 unit tests; TypeScript; targeted ESLint; production Linux build; actual browser device linking/recovery and DM replacement-device exclusion; two real Rust serialization/key-agreement tests. Seven active-primitive checks exercise randomness, round-trip, tampering, wrong keys and backup validation. The old unconditional-pass script was replaced. WASM API consistency is checked separately from rebuilding the binary; neither proves the message protocol secure. Full release/physical tests and outstanding findings are tracked in the ledger and [release checklist](docs/android/RELEASE_CANDIDATE_2026-10-30.md).
 
 ## 12. Report a vulnerability
 
