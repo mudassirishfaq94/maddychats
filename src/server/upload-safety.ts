@@ -1,6 +1,7 @@
 import sharp from "sharp";
 import { createConnection } from "node:net";
 import { LIMITS, validateUpload } from "./storage";
+import { STATUS_MEDIA_OUTPUT_MAX_BYTES } from "@/lib/media-limits";
 
 export class UploadSafetyError extends Error {
   constructor(public status: number, message: string) { super(message); }
@@ -71,7 +72,7 @@ export async function prepareReadableUpload(file: File, mode: "avatar" | "messag
   const check = validateUpload(file.name, file.type, file.size, mode);
   if (!check.ok) throw new UploadSafetyError(422, check.error);
   const bytes = Buffer.from(await file.arrayBuffer());
-  const limit = mode === "avatar" ? LIMITS.avatar : check.kind === "image" ? LIMITS.image : LIMITS.file;
+  const limit = mode === "avatar" ? LIMITS.avatar : check.kind === "image" ? LIMITS.image : check.kind === "video" ? STATUS_MEDIA_OUTPUT_MAX_BYTES : LIMITS.file;
   if (bytes.length !== file.size || bytes.length > limit) throw new UploadSafetyError(413, "That file is too large.");
   const mime = file.type.split(";")[0].trim().toLowerCase();
   if (check.kind === "image") {

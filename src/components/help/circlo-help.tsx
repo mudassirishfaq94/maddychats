@@ -36,6 +36,7 @@ export function CircloHelp() {
       <div className="max-w-[90%] rounded-2xl rounded-tl-sm bg-[var(--surface-2)] p-4 text-sm leading-relaxed"><p className="font-semibold">Hi! What would you like help with?</p><p className="mt-2">Ask about Circlo or choose a question below. Your questions stay on this page. Please keep passwords and recovery codes private.</p></div>
       {turns.map(turn=><section key={turn.id} className="space-y-3"><p className="ml-auto w-fit max-w-[90%] break-words rounded-2xl rounded-tr-sm bg-[var(--accent-soft)] px-4 py-3 text-sm text-[var(--accent-fg)]">{turn.question}</p>{answer(turn)}</section>)}
 
+      <Link href="/support" className="inline-flex min-h-11 items-center text-sm underline">Still stuck? Write to us</Link>
     </div>
     <footer className="shrink-0 border-t border-[var(--border)] px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 sm:px-6">
       <div aria-label="Suggested questions" className="mb-3 flex max-h-36 flex-wrap gap-2 overflow-y-auto">{suggestions.map(guide=><button key={guide.id} type="button" disabled={Boolean(pending)} onClick={()=>ask(questions[guide.id]??guide.title,guide)} className={chip}>{questions[guide.id]??guide.title}</button>)}</div>

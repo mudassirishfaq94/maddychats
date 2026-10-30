@@ -7,7 +7,6 @@ import { ProfileEditor } from "@/components/profile/profile-editor";
 import { AuthenticationMethods } from "@/components/profile/authentication-methods";
 import { PasswordSettings } from "@/components/profile/password-settings";
 import { Devices } from "@/components/profile/devices";
-import Link from "next/link";
 import { ProfileDisclosure } from "@/components/profile/profile-disclosure";
 import { db } from "@/db";
 import { oauthAccounts } from "@/db/schema";
@@ -61,7 +60,7 @@ export default async function ProfilePage({
           <ProfileDisclosure title="More account options" description="Google, passwords, and signed-in sessions." anchors={["account-security", "devices", "authentication-methods"]} defaultOpen={Boolean(notice)}>
             <div id="account-security" className="space-y-4"><AuthenticationMethods initialMethods={initialMethods} notice={notice} /><ProfileDisclosure title="Password" description="Set or change your password."><PasswordSettings email={user.email} google={initialMethods.google} /></ProfileDisclosure><Devices /></div>
           </ProfileDisclosure>
-          <Link href="/app/settings" className="flex min-h-16 items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--card)] px-5 py-4"><span className="min-w-0 flex-1"><span className="block font-semibold">Notifications, privacy and extra sign-in check</span><span className="mt-1 block text-xs text-[var(--muted)]">These live in Settings.</span></span><span aria-hidden className="text-[var(--muted)]">›</span></Link>
+
         </div>
 
 

@@ -26,7 +26,12 @@ export const pool =
     // A long-running VPS can safely hold a small pool. Keep this bounded so
     // Supabase's shared pooler is not exhausted during traffic spikes.
     max: databasePoolMax(process.env.DATABASE_POOL_MAX),
-    idleTimeoutMillis: 10_000,
+    // Retain one established connection after first use. Reopening TCP/TLS
+    // on every short idle gap adds a round trip to session authorization.
+    // This creates no eager connection or keep-alive polling; burst clients
+    // still expire, and every authorization query remains fresh.
+    min: 1,
+    idleTimeoutMillis: 30_000,
     connectionTimeoutMillis: 10_000,
     ssl: databaseUrl.includes("supabase.co")
       ? { rejectUnauthorized: true }

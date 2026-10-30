@@ -8,7 +8,7 @@ const pending = new Map<string, (reply: Reply) => void>();
 export function hasHostedPushBridge(): boolean { return typeof window !== "undefined" && Boolean(window.CircloPush); }
 type CallSession = { callId: string; userId: string; clientId?: string; conversationId?: string; actionToken?: string; connected?: boolean; muted?: boolean; deviceId?: string };
 type NativeFile = { name: string; mime: string; data: string; size?: number; transfer?: string; offset?: number };
-async function request(command: "token" | "request" | "bind" | "reconcile" | "clear" | "settings" | "status" | "dismiss" | "preview" | "preview-finished" | "privacy" | "call-start" | "call-renew" | "call-stop" | "call-settings" | "call-answer" | "call-audio" | "open-file" | "camera-settings" | "backup-start" | "backup-chunk" | "backup-finish" | "backup-cancel", userId?: string, notification?: LocalNotification, lockedChats?: string[] | null, call?: CallSession, notificationId?: string, file?: NativeFile): Promise<Reply | null> {
+async function request(command: "token" | "request" | "bind" | "reconcile" | "clear" | "startup-bind" | "startup-clear" | "settings" | "status" | "dismiss" | "preview" | "preview-finished" | "privacy" | "call-start" | "call-renew" | "call-stop" | "call-settings" | "call-answer" | "call-audio" | "open-file" | "camera-settings" | "backup-start" | "backup-chunk" | "backup-finish" | "backup-cancel", userId?: string, notification?: LocalNotification, lockedChats?: string[] | null, call?: CallSession, notificationId?: string, file?: NativeFile): Promise<Reply | null> {
   const port = window.CircloPush;
   if (!port) return null;
   port.onmessage = event => {
@@ -42,6 +42,11 @@ export async function hostedCallAudio(call: CallSession): Promise<CallAudioState
 
 export async function hostedPush(command: "token" | "request" | "bind" | "reconcile" | "clear" | "settings" | "dismiss", userId?: string): Promise<string | null> {
   return (await request(command, userId))?.token ?? null;
+}
+
+/** Local snapshot selection is independent of notification preferences. */
+export async function syncHostedStartup(userId: string | null): Promise<void> {
+  if (hasHostedPushBridge()) await request(userId ? "startup-bind" : "startup-clear", userId ?? undefined);
 }
 export async function androidNotificationStatus(): Promise<AndroidNotificationStatus | null> {
   const status = (await request("status"))?.status;

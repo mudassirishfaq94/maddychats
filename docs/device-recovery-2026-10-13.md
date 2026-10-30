@@ -1,5 +1,7 @@
 # Circlo device continuity
 
+> Historical implementation record. Recovery files now support a 24-word phrase, and Save my chats provides a separate local message archive. See [Current encryption coverage](security/encryption-current.md) for current terminology and scope; retain the dated details below as release history.
+
 `https://circlo.chat` is the canonical app origin. The release combines the
 production security branch with the device-identity changes previously merged
 only to main. Both migration histories are retained in chronological order.

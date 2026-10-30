@@ -99,7 +99,7 @@ export function PeopleSearch() {
               { kind: "loading" },
             );
           }}
-          placeholder="Full name, username or +country phone number"
+          placeholder="Search by name, username or phone…"
           aria-label="Search people"
           className="field-input rounded-2xl! py-3.5! pl-12! text-base!"
         />
@@ -157,10 +157,10 @@ export function PeopleSearch() {
           <div className="card-flat rounded-3xl px-8 py-14 text-center animate-fade-up">
             <SearchX className="mx-auto h-8 w-8 text-[var(--muted)]" />
             <p className="mt-4 font-semibold">
-              {q.length < 2 ? "Your contacts will appear here" : `No people match “${q}”`}
+              {q.length < 2 ? "Your contacts will appear here" : "No one found"}
             </p>
             <p className="mx-auto mt-1.5 max-w-xs text-sm text-[var(--muted)]">
-              Search for someone, then choose Add contact. Phone lookup requires an exact international number and their permission. User-provided numbers are not proof of identity.
+              {q.length < 2 ? "Search for someone, then choose Add contact. Phone lookup requires an exact international number and their permission. User-provided numbers are not proof of identity." : "Ask them to open Circlo and send you their username."}
             </p>
           </div>
         ) : null}

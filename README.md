@@ -8,9 +8,11 @@ responsive light/dark themes.
 
 For the live deployment and the approved Bluehost VPS cutover, see
 [DEPLOYMENT.md](./DEPLOYMENT.md) and the [migration runbook](./docs/BLUEHOST_VPS_MIGRATION.md).
-The private-media move to Cloudflare R2 is staged separately; Supabase remains
-the live storage backend until the object copy is verified and deployed. See
+The 30 October runtime check confirms Cloudflare R2 is the media backend;
+Supabase remains configured for legacy fallback/rollback. See
 [the R2 migration guide](./docs/CLOUDFLARE_R2_MEDIA_MIGRATION.md).
+For current encryption coverage, recovery methods and historical review scope,
+start with [Current encryption coverage](./docs/security/encryption-current.md).
 Upload hardening, device sessions, staged CSP, and mobile profiling are documented
 in [Tasks 4–6](./docs/ITEMS4_6_HARDENING_AND_PERFORMANCE.md).
 

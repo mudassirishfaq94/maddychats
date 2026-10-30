@@ -3,7 +3,7 @@ import { prepareReadableUpload, UploadSafetyError } from "@/server/upload-safety
 import { reconstructStatusPhoto } from "@/server/status-photo";
 import { readUploadForm } from "@/server/http";
 import { NextRequest, NextResponse } from "next/server";
-import { inArray, sql } from "drizzle-orm";
+import { inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import { guardSameOrigin, guardUploadSize, jsonError, readJson } from "@/server/http";
@@ -11,7 +11,7 @@ import { publishToUsers } from "@/server/realtime";
 import { getSessionUser } from "@/server/session";
 import { createStatus, listVisibleStatuses, visibleRecipientIds, statusChatAudienceIds } from "@/server/status";
 import { deleteStored, generateStoredName, saveBuffer } from "@/server/storage";
-import { STATUS_MEDIA_OUTPUT_MAX_BYTES } from "@/lib/media-limits";
+import { STATUS_MEDIA_OUTPUT_MAX_BYTES, STATUS_UPLOAD_BODY_MAX_BYTES } from "@/lib/media-limits";
 
 export const runtime = "nodejs";
 export async function GET() {
@@ -30,8 +30,8 @@ export async function POST(req: NextRequest) {
 
   if (contentType.includes("multipart/form-data")) {
     const budget = await guardReadableUploadBudget(me.id); if (budget) return budget;
-    const tooLarge = guardUploadSize(req, true); if (tooLarge) return tooLarge;
-    let form: FormData; try { form = await readUploadForm(req); } catch (error) { return jsonError(error instanceof Error && error.message === "body_too_large" ? 413 : 400, "Invalid or oversized upload."); }
+    const tooLarge = guardUploadSize(req, true, STATUS_UPLOAD_BODY_MAX_BYTES); if (tooLarge) return tooLarge;
+    let form: FormData; try { form = await readUploadForm(req, STATUS_UPLOAD_BODY_MAX_BYTES, 120_000); } catch (error) { return jsonError(error instanceof Error && error.message === "body_too_large" ? 413 : 400, "Invalid or oversized upload."); }
     type = "image"; text = String(form.get("caption") ?? "").trim().slice(0, 500) || null;
     chatAudience = form.get("privacy") !== "all" && form.get("privacy") !== "selected";
     privacy = form.get("privacy") === "all" ? "all" : "selected";
@@ -40,6 +40,7 @@ export async function POST(req: NextRequest) {
     let prepared;
     try {
       const file = entry as File;
+      if (file.size > STATUS_MEDIA_OUTPUT_MAX_BYTES) throw new UploadSafetyError(413, "Status photos and videos must be 50 MB or smaller.");
       // Scanner-equipped installations retain scanning. The starter can only
       // publish reconstructed raster photos; raw readable uploads stay closed.
       if (process.env.STARTER_MODE === "1" && !process.env.CLAMAV_HOST) prepared = await reconstructStatusPhoto(file);
@@ -47,18 +48,11 @@ export async function POST(req: NextRequest) {
     }
     catch (error) { return jsonError(error instanceof UploadSafetyError ? error.status : 500, error instanceof UploadSafetyError ? error.message : "Upload failed."); }
     if (prepared.kind !== "image" && prepared.kind !== "video") return jsonError(422, "Status media must be an image or video.");
-    if (prepared.buffer.byteLength > STATUS_MEDIA_OUTPUT_MAX_BYTES) return jsonError(413, "Status media must be 10 MB or smaller after processing.");
+    if (prepared.buffer.byteLength > STATUS_MEDIA_OUTPUT_MAX_BYTES) return jsonError(413, "Status media must be 50 MB or smaller after processing.");
     type = prepared.kind;
     const storedName = generateStoredName(prepared.extension);
     try {
-      mediaPath = await db.transaction(async tx => {
-        await tx.execute(sql`select pg_advisory_xact_lock(847221905)`);
-        const inventory = await tx.execute<{ count: string }>(sql`select count(*)::text as count from stored_uploads where path like 'statuses/%'`);
-        // Reconstructed photos remain capped at 3 MB; scanner-backed media can
-        // use the 10 MB output budget. Keep a separate bounded inventory from chat.
-        if (Number(inventory.rows[0]?.count ?? 0) >= 50) throw new UploadSafetyError(503, "Photo status storage is full. Try again after older updates expire.");
-        return saveBuffer("statuses", storedName, prepared.buffer);
-      });
+      mediaPath = await saveBuffer("statuses", storedName, prepared.buffer);
     } catch (error) { return jsonError(error instanceof UploadSafetyError ? error.status : 503, error instanceof UploadSafetyError ? error.message : "Photo storage is unavailable. Try again later."); }
     mediaMimeType = prepared.mimeType;
 

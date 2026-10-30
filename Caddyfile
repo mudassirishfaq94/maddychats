@@ -9,11 +9,24 @@ www.circlo.chat {
 circlo.chat {
 	# Official Cloudflare ranges, verified 2026-10-27. Match the TCP peer, never a caller-supplied header.
 	@outside not remote_ip 127.0.0.1 ::1 173.245.48.0/20 103.21.244.0/22 103.22.200.0/22 103.31.4.0/22 141.101.64.0/18 108.162.192.0/18 190.93.240.0/20 188.114.96.0/20 197.234.240.0/22 198.41.128.0/17 162.158.0.0/15 104.16.0.0/13 104.24.0.0/14 172.64.0.0/13 131.0.72.0/22 2400:cb00::/32 2606:4700::/32 2803:f800::/32 2405:b500::/32 2405:8100::/32 2a06:98c0::/29 2c0f:f248::/32
-	respond @outside "Forbidden" 403
-	encode zstd gzip
-	reverse_proxy 127.0.0.1:3000 {
-		# The accepted external peer is Cloudflare, which supplies the visitor address.
-		# Replace rather than append a visitor-controlled forwarding chain.
-		header_up X-Forwarded-For {http.request.header.Cf-Connecting-Ip}
+	route {
+		# Keep this before public files as well as protected application routes.
+		respond @outside "Forbidden" 403
+		encode zstd gzip
+		handle /_next/static/* {
+			# Public content-hashed build files only; never uploads, HTML or server code.
+			root * /opt/circlo-static
+			header Cache-Control "no-store"
+			header {
+				Cache-Control "public, max-age=31536000, immutable"
+				match status 200 206
+			}
+			file_server
+		}
+		handle {
+			reverse_proxy 127.0.0.1:3000 {
+				header_up X-Forwarded-For {http.request.header.Cf-Connecting-Ip}
+			}
+		}
 	}
 }

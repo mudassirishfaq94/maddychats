@@ -1,12 +1,12 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { ConversationSummary } from "@/lib/types";
 import { createReconciledRead } from "@/lib/reconciled-read";
 import { useAuth } from "./auth-provider";
 import { useRealtime } from "./realtime-provider";
 
-type Snapshot = { viewerId: string; conversations: ConversationSummary[] };
+type Snapshot = { viewerId: string; conversations: ConversationSummary[]; serverNow?: string; clock?: { serverMs: number; receivedAt: number } };
 type ConversationList = {
   snapshot: Snapshot | null;
   seed: (conversations: ConversationSummary[]) => void;
@@ -17,6 +17,7 @@ const Context = createContext<ConversationList | null>(null);
 
 function AccountConversationList({ userId, children }: { userId: string; children: ReactNode }) {
   const { connected, subscribe } = useRealtime();
+  const hasConnected = useRef(false);
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [account] = useState(() => {
     let active = true;
@@ -27,14 +28,27 @@ function AccountConversationList({ userId, children }: { userId: string; childre
       const request = new AbortController();
       controller = request;
       try {
+        const started = performance.now();
         const response = await fetch("/api/conversations", {
           cache: "no-store", signal: AbortSignal.any([request.signal, AbortSignal.timeout(10000)]),
         });
-        if (!response.ok) throw new Error("Conversation refresh failed");
+        if (!response.ok) {
+          // A rejected session must remove the local transition surface too.
+          // Transport failures can retain it; authorization failures cannot.
+          if (active && (response.status === 401 || response.status === 403)) {
+            current = { viewerId: userId, conversations: [] };
+            setSnapshot(current);
+          }
+          throw new Error("Conversation refresh failed");
+        }
         const data = await response.json() as Snapshot;
         if (data.viewerId !== userId || !Array.isArray(data.conversations)) throw new Error("Conversation account changed");
         request.signal.throwIfAborted();
-        return data;
+        const receivedAt = performance.now();
+        const serverMs = data.serverNow ? Date.parse(data.serverNow) : NaN;
+        // Add the full round trip conservatively: local expiry may be early,
+        // but cannot extend the deadline because a device clock is behind.
+        return { ...data, clock: Number.isFinite(serverMs) ? { serverMs: serverMs + receivedAt - started, receivedAt } : undefined };
       } finally {
         if (controller === request) controller = null;
       }
@@ -78,12 +92,28 @@ function AccountConversationList({ userId, children }: { userId: string; childre
     };
   }, [account, reads]);
   useEffect(() => {
-    // A reconnect invalidates any snapshot started before the transport came back.
-    // The next refresh follows it, so recovery stays correct without overlap.
-    if (userId && (connected || !account.current)) {
-      if (connected) reads.invalidate();
-      void refresh().catch(() => undefined);
+    if (!userId) return;
+    if (!connected) {
+      if (!account.current) void refresh().catch(() => undefined);
+      return;
     }
+    if (!hasConnected.current) {
+      hasConnected.current = true;
+      // The first stream connection is not a reconnect. Publish the in-flight
+      // authorized inbox, then reconcile its connection gap in the background.
+      // Destructive-event invalidations still suppress stale responses normally.
+      const initial = reads.pending;
+      if (initial) {
+        void initial.catch(() => undefined).then(() => {
+          reads.invalidate();
+          return refresh();
+        }).catch(() => undefined);
+      } else void refresh().catch(() => undefined);
+      return;
+    }
+    // A real reconnect must invalidate reads started before transport recovery.
+    reads.invalidate();
+    void refresh().catch(() => undefined);
   }, [userId, connected, account, reads, refresh]);
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | undefined;

@@ -32,7 +32,7 @@ import {
 
 export const metadata = publicMetadata("/terms", "Terms of Service — Circlo", "The agreement between you and Circlo: service terms, encrypted messaging, account responsibilities and your rights.");
 
-const LAST_UPDATED = "14 October 2026";
+const LAST_UPDATED = "30 October 2026";
 
 const INDEX = [
   { id: "acceptance", label: "Acceptance of these terms" },
@@ -58,7 +58,7 @@ const HIGHLIGHTS = [
   },
   {
     icon: KeyRound,
-    text: "Keep your recovery code or file safe. If you lose them and every device that can open your chats, no one can restore your old messages.",
+    text: "Use Save my chats and keep its file and code separately. Linking from an old device is another way to bring over chats it can open.",
   },
   {
     icon: ScrollText,
@@ -96,7 +96,7 @@ const MODERATION = [
   },
   {
     lead: "We cannot read encrypted content.",
-    text: "If you report a message, a screenshot or a forward is usually the only way for us to see what you saw, because message content is encrypted to you and your recipients and we hold no key for it.",
+    text: "Reporting a message identifies it for investigation but does not automatically decrypt its contents for us. If support needs context, share only the details you choose to provide. Never send passwords or recovery information.",
   },
   {
     lead: "Metadata supports abuse prevention.",
@@ -118,8 +118,8 @@ const AVAILABILITY = [
     text: "We may add, change, pause, or retire features. Some capabilities are operated as limited or experimental and can be paused, including optional sign-in methods and device provisioning.",
   },
   {
-    lead: "Provided as is.",
-    text: "Circlo is provided without warranties of any kind, express or implied, including fitness for a particular purpose, to the fullest extent the law allows.",
+    lead: "Choose what works for you.",
+    text: "Check that Circlo works on your devices before relying on it for important conversations. It is not an emergency calling service. Your legal rights and any warranties required by law still apply.",
   },
   {
     lead: "Local law still applies.",
@@ -129,12 +129,12 @@ const AVAILABILITY = [
 
 const LIABILITY = [
   {
-    lead: "No indirect liability.",
-    text: "To the extent the law allows, we are not liable for indirect, incidental, special, consequential, or punitive damages, or for lost data, lost profits, or business interruption.",
+    lead: "Responsibility under the law.",
+    text: "Responsibility for loss depends on the facts and applicable law. These terms do not remove rights or remedies that the law gives you.",
   },
   {
-    lead: "Ceiling on liability.",
-    text: "Our total liability for any claim relating to Circlo is limited to the greater of the amount you paid us for the service in the twelve months before the claim, or the minimum the law requires. Circlo is currently provided free of charge.",
+    lead: "Raise a problem with us.",
+    text: "Contact support if a service problem causes harm. We will review the circumstances and the remedies available under applicable law. Circlo is currently free to use.",
   },
   {
     lead: "What cannot be limited.",
@@ -142,7 +142,7 @@ const LIABILITY = [
   },
   {
     lead: "Back up what matters.",
-    text: "Your old chats depend on information saved on your devices or in your recovery file. Keep the recovery code or file safe, and keep another copy of anything irreplaceable.",
+    text: "Your old chats depend on information saved on your devices or in your recovery file. Keep each saved file and its matching code or phrase safe, and keep another copy of anything irreplaceable.",
   },
 ];
 
@@ -183,15 +183,15 @@ const KEY_DUTIES = [
     text: "Approve only devices you recognise. Compare the safety codes when asked, and remove any device you do not recognise. Removing it stops it from opening new messages.",
   },
   {
-    lead: "Keep your recovery code and file safe.",
-    text: "Use the recovery code with its matching recovery file to restore access after replacing a device or clearing saved browser data. Your email password cannot open old chats.",
+    lead: "Save my chats before changing phones.",
+    text: "Keep your encrypted chat backup file and its matching code. Additional chat-access recovery files use their matching 24-word phrase; optional recovery copies use their saved phrase or older code. These access copies are not message archives. Your email password alone cannot open old chats.",
   },
   {
-    lead: "There is no backdoor.",
-    text: "We cannot read your private messages or restore old chats for you. If you lose every approved device and your recovery code or file, earlier conversations may stay unreadable, including to you.",
+    lead: "If you lose your saved copies.",
+    text: "We cannot read your private messages or restore old chats for you. If you lose every approved device and the matching saved recovery information, earlier conversations may stay unreadable, including to you.",
   },
   {
-    lead: "Encryption has limits.",
+    lead: "Protect your phone too.",
     text: "Chat protection cannot protect a device that has been taken over, a harmful app on your device, or someone looking at your screen. It also does not hide the chat details described in our Privacy Policy.",
   },
   {
@@ -208,7 +208,7 @@ export default function TermsPage() {
         badge="Terms of service"
         badgeIcon={FileText}
         title="The ground rules, in plain language."
-        lead="These terms are the agreement between you and Circlo. They cover what the service does, what we expect from you, and what happens if something goes wrong. Because encryption is central to Circlo, they also explain the one consequence worth understanding before you rely on it: your messages are readable by you and the people you send them to, and by nobody else, including us."
+        lead="These terms are the agreement between you and Circlo. They cover what the service does, what we expect from you, and what happens if something goes wrong. Private chat content is end-to-end encrypted. Account, delivery and publicly shared information are handled as described in our Privacy Policy."
         meta={[
           { icon: ScrollText, text: `Last updated: ${LAST_UPDATED}` },
           { icon: ShieldCheck, text: "Read together with our Privacy Policy" },
@@ -221,7 +221,7 @@ export default function TermsPage() {
           <ShieldAlert className="h-5 w-5 shrink-0 text-[var(--accent-fg)]" />
           <p className="max-w-3xl text-sm leading-7 text-[var(--muted)]">
             <strong className="text-[var(--text)]">The short version.</strong> Use Circlo for real conversations with
-            people who want to hear from you. Keep your recovery code and file somewhere safe. Do not use the service to harm
+            people who want to hear from you. Keep your chat backup file and its matching code somewhere safe. Do not use the service to harm
             anyone or to break the law. We keep the service running, we do not sell your data, and we cannot read your
             encrypted messages even if we wanted to. The numbered sections below are the part that binds us both.
           </p>
@@ -270,7 +270,7 @@ export default function TermsPage() {
             Circlo locks private chat messages on your device before sending them. Our service delivers the locked
             copies and the public information needed to connect approved devices. It does not have what it needs to
             open your conversations. This protection is called end-to-end encryption, and it also means you must keep
-            your recovery code or file safe.
+            your backup file and its matching code safe.
           </p>
           <LegalPoints points={KEY_DUTIES} />
         </LegalSection>
@@ -298,8 +298,7 @@ export default function TermsPage() {
           <p>Depending on the situation, enforcement can include one or more of the following:</p>
           <LegalChecklist items={ENFORCEMENT} tone="note" />
           <p>
-            To appeal, or to ask why an action was taken, contact us through the support and report options in your
-            profile. We keep enforcement records so decisions can be reviewed.
+            To appeal, or to ask why an action was taken, contact us through Circlo support or the public email in section 14. We keep enforcement records so decisions can be reviewed.
           </p>
           <LegalCallout>
             If we receive a valid legal request, we can provide account records, details about chats and the locked
@@ -326,7 +325,7 @@ export default function TermsPage() {
 
         <LegalSection id="termination" number="11" title="Suspension and termination" icon={Trash2}>
           <p>
-            You can stop using Circlo at any time, and you can delete your account from your profile. Deleting an account
+            You can stop using Circlo at any time, and you can delete your account from Settings → Privacy → Your phones and sign-in → Your Data. Deleting an account
             requires a typed confirmation and fresh authentication, and it removes your account data, the messages you
             sent, and the encryption keys registered to you, as described in our Privacy Policy.
           </p>
@@ -340,9 +339,9 @@ export default function TermsPage() {
 
         <LegalSection id="law" number="12" title="Governing law and disputes" icon={Gavel}>
           <p>
-            These terms are governed by the laws of the jurisdiction in which the operator of Circlo is established,
-            without regard to conflict-of-law rules, and the courts of that place have exclusive jurisdiction over any
-            dispute that cannot be resolved informally.
+            Circlo is operated independently from Dubai, United Arab Emirates. Applicable law determines your
+            rights and the court able to hear a dispute. These terms do not require you to give up mandatory
+            consumer protections or access to a court available to you under that law.
           </p>
           <p>
             Before starting formal proceedings, please raise the issue with us through the in-app support options so we
@@ -362,8 +361,8 @@ export default function TermsPage() {
 
         <LegalSection id="contact" number="14" title="Contact us" icon={ShieldCheck}>
           <p>
-            Questions about these terms, an enforcement decision, or a legal request can be sent from inside Circlo
-            through the support and report options in your profile, and you will get a recorded answer. Our{" "}
+            Circlo is run independently by its creator in Dubai, United Arab Emirates. Questions about these terms,
+            an enforcement decision, or a legal request can be sent to <a className="underline" href="mailto:mudassarmalak090@gmail.com">mudassarmalak090@gmail.com</a> or through <Link className="underline" href="/support">Circlo support</Link>. Our{" "}
             <Link
               href="/privacy"
               className="font-semibold text-[var(--accent-fg)] underline hover:text-[var(--text)]"
@@ -376,8 +375,8 @@ export default function TermsPage() {
       </LegalBody>
 
       <LegalClosing
-        title="Your circle. Your secrets. Sealed."
-        text="Your devices open your private chats. Keep your recovery code and file somewhere safe."
+        title="Private conversations. Closer connections."
+        text="Your devices open your private chats. Keep your chat backup file and its matching code somewhere safe."
         links={[
           { href: "/privacy", label: "Privacy Policy" },
           { href: "/signup", label: "Join your circle", primary: true },

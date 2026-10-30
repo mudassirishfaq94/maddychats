@@ -444,8 +444,8 @@ export async function testRestoredWorkflows(base, pool, owner, peer, password, c
     console.log("PASS voice recording, upload, playback, and contrast");
     // No cron HTTP request is injected: the existing processor must deliver the persisted job.
     await composer.fill("");
-    await source.page.getByRole("button", { name: "Emoji", exact: true }).click();
-    await source.page.getByRole("button", { name: "Schedule message", exact: true }).click();
+    await source.page.getByRole("button", { name: "Chat options", exact: true }).click();
+    await source.page.getByRole("menuitem", { name: /^Schedule message/ }).click();
     assert(await source.page.getByRole("button",{name:"Schedule",exact:true}).isDisabled(),"An empty message must explain why scheduling is disabled");
     await source.page.getByText("Enter a message to enable scheduling.",{exact:true}).waitFor();
     await source.page.getByRole("textbox",{name:"Scheduled message text",exact:true}).fill("Actual scheduled encrypted delivery");

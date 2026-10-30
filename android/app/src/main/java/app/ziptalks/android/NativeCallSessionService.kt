@@ -62,7 +62,7 @@ class NativeCallSessionService : Service() {
         NativeIncomingCall.dismiss(this, current.id)
         val notice = notification(current)
         try {
-            if (Build.VERSION.SDK_INT >= 29) startForeground(NOTICE_ID, notice, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
+            if (Build.VERSION.SDK_INT >= 30) startForeground(NOTICE_ID, notice, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
             else startForeground(NOTICE_ID, notice)
             if (wake == null) wake = getSystemService(PowerManager::class.java).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "circlo:active-call").apply { setReferenceCounted(false) }
         } catch (_: Exception) { endMediaOnStop = false; stopSelf() }

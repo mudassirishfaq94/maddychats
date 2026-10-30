@@ -16,7 +16,6 @@ import { cn } from "@/lib/utils";
 const ThemeToggle = dynamic(() => import("@/components/theme-toggle").then(module => module.ThemeToggle), { ssr: false });
 const NotificationBell = dynamic(() => import("./notification-bell").then(module => module.NotificationBell), { ssr: false });
 const MessageSearch = dynamic(() => import("@/components/chats/message-search").then(module => module.MessageSearch), { ssr: false });
-const UserMenu = dynamic(() => import("./user-menu").then(module => module.UserMenu), { ssr: false });
 
 /**
  * Authenticated shell: one compact header over a full-height content area.
@@ -50,7 +49,7 @@ export function AppShell({
         Skip to content
       </a>
 
-      <header className="z-40 flex h-14 w-full min-w-0 shrink-0 items-center gap-0.5 overflow-visible border-b border-[var(--border)] bg-[var(--surface)] px-2 sm:gap-1 sm:px-4">
+      <header className={cn("z-40 h-14 w-full min-w-0 shrink-0 items-center gap-0.5 overflow-visible border-b border-[var(--border)] bg-[var(--surface)] px-2 sm:gap-1 sm:px-4", inChat ? "hidden sm:flex" : "flex")}>
         <Link href="/app/chats" aria-label="Circlo home" className="mr-0.5 shrink-0 sm:mr-3">
           <span className="flex items-center sm:hidden">
             <LogoWordmark size={25} />
@@ -115,7 +114,6 @@ export function AppShell({
             </Link>
           ) : null}
           <ThemeToggle className="hidden min-[390px]:inline-flex" />
-          <UserMenu user={user} />
         </div>
       </header>
 
@@ -125,7 +123,7 @@ export function AppShell({
         {children}
       </main>
 
-      <MobileNav />
+      {!inChat ? <MobileNav /> : null}
     </div>
   );
 }

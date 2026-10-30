@@ -130,10 +130,12 @@ async function main() {
     assert.equal((await local.query("SELECT last_seen_at FROM users WHERE id=$1",[id])).rows[0].last_seen_at.getTime(),presence.getTime(),"failed statement rolls back presence");
     await local.query("INSERT INTO device_sessions(user_id,refresh_hash,user_agent,auth_time,mfa_time,expires_at) SELECT $1,'expired','Cleanup fixture',0,0,now()-interval '1 day' FROM generate_series(1,1005)",[other]);
     await local.query("INSERT INTO mfa_challenges(token_hash,user_id,expires_at) SELECT 'expired-'||g,$1,now()-interval '1 day' FROM generate_series(1,1005) g",[other]);
+    await local.query("INSERT INTO login_history(user_id,identifier,success,user_agent,created_at) SELECT $1,'retention-fixture',false,'Cleanup fixture',now()-interval '31 days' FROM generate_series(1,1005)",[other]);
     const { cleanupExpiredAuthentication } = await import("../src/server/auth-maintenance");
-    assert.deepEqual(await cleanupExpiredAuthentication(),{challenges:1000,sessions:1000});
+    assert.deepEqual(await cleanupExpiredAuthentication(),{challenges:1000,sessions:1000,loginHistory:1000});
     assert.equal((await resolveSessionToken(credentials.access))?.id,id,"active sessions survive cleanup");
-    assert.deepEqual(await cleanupExpiredAuthentication(),{challenges:5,sessions:5});
+    assert.deepEqual(await cleanupExpiredAuthentication(),{challenges:5,sessions:5,loginHistory:5});
+    assert.equal((await local.query("SELECT count(*)::int AS n FROM login_history WHERE user_agent='Atomic login fixture'")).rows[0].n,1,"Recent sign-in history survives bounded retention cleanup");
     console.log("PASS: atomic login audit, presence and session; rollback on failure; bounded expiry cleanup preserves active sessions.");
     const { consumePasswordReset } = await import("../src/server/password-reset");
     const { verifyPassword } = await import("../src/server/password");

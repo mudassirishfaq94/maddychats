@@ -4,6 +4,10 @@ apply plugin: 'kotlin-android'
 // Owner approved chat.circlo.app for a new Play listing; Java namespace stays unchanged.
 def appOrigin = System.getenv('CLIENT_URL') ?: 'https://circlo.chat'
 if (appOrigin != 'https://circlo.chat') throw new GradleException('Android builds must use the canonical https://circlo.chat origin.')
+def profileWebView = project.findProperty('circloProfile') == 'true'
+if (profileWebView && gradle.startParameter.taskNames.any { it.toLowerCase(java.util.Locale.ROOT).contains('bundle') }) {
+    throw new GradleException('WebView profiling is only for local APK measurements. Build Play bundles without circloProfile.')
+}
 
 android {
     namespace = "app.ziptalks.android"
@@ -12,10 +16,11 @@ android {
         applicationId "chat.circlo.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 22
-        versionName "0.9.13"
+        versionCode 26
+        versionName "0.9.17"
         manifestPlaceholders = [appLinkHost: 'circlo.chat']
         buildConfigField "String", "API_BASE_URL", '"' + appOrigin + '"'
+        buildConfigField "boolean", "WEBVIEW_PROFILING", profileWebView.toString()
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -80,7 +85,7 @@ def offlineShellAssets = layout.buildDirectory.dir('generated/offlineShell/asset
 android.sourceSets.main.assets.srcDir(offlineShellAssets)
 def copyOfflineShell = tasks.register('copyOfflineShell', Copy) {
     from('../../public') {
-        include 'offline.html', 'offline.css', 'offline-compose.js', 'offline-store.js', 'icons/circlo-mark.svg'
+        include 'offline.html', 'offline.css', 'offline-compose.js', 'offline-store.js', 'startup.html', 'startup.css', 'startup.js', 'icons/circlo-mark.svg'
     }
     into(offlineShellAssets.map { it.dir('circlo-offline') })
 }

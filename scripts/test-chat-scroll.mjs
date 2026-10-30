@@ -10,6 +10,40 @@ export async function testChatScroll(base, source, recipient, pool, conversation
   assert(/^(viewer_|restored_|releaseqa_perf_)/.test(peer.username));
   assert.notEqual(peer.id, owner.id);
   assert.equal((await pool.query("select user_id from conversation_members where conversation_id=$1 and user_id=$2", [conversationId, peer.id])).rowCount, 1);
+  const originalViewport = source.page.viewportSize();
+  await source.page.setViewportSize({ width: 390, height: 844 });
+  // Play's public deletion entry must reach the current settings screen.
+  // Stop before its confirmation: this check never deletes an account.
+  await source.page.goto(base + "/delete-account");
+  await source.page.getByRole("link", { name: "Sign in to delete my account", exact: true }).click();
+  await source.page.getByRole("button", { name: "Delete my account", exact: true }).waitFor();
+  assert.equal(new URL(source.page.url()).pathname, "/app/settings");
+  let unsolicitedPages = 0;
+  const olderRequest = request => { if (request.url().includes(`/api/conversations/${conversationId}/messages?cursor=`)) unsolicitedPages++; };
+  source.page.on("request", olderRequest);
+  try {
+    for (const reload of [false, true]) {
+      if (reload) await source.page.reload();
+      else await source.page.goto(base + "/app/chats/" + conversationId);
+      await source.page.getByRole("textbox", { name: "Message text", exact: true }).waitFor();
+      await source.page.locator('[data-history-count]').waitFor();
+      assert.equal(await source.page.getByRole('navigation',{name:'Mobile navigation',exact:true}).count(),0,'The open phone chat has no duplicate tab bar');
+      assert.equal(await source.page.locator('header:visible').count(),1,'Only the conversation header is visible on a phone');
+      await source.page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      const geometry = await source.page.getByRole("region", { name: "Messages", exact: true }).evaluate(viewport => {
+        const content = viewport.querySelector('[data-history-count]');
+        return { rows: Number(content.dataset.historyCount), height: content.getBoundingClientRect().height,
+          viewportHeight: viewport.clientHeight, gap: viewport.getBoundingClientRect().bottom - content.lastElementChild.getBoundingClientRect().bottom };
+      });
+      assert(geometry.rows > 0 && geometry.height < geometry.viewportHeight, "Owned baseline is a genuinely short chat");
+      assert(geometry.gap >= 0 && geometry.gap <= 48, `Short messages stay beside the composer before/after reload: ${JSON.stringify(geometry)}`);
+      if(reload)await source.page.screenshot({path:'.freebuff/performance/chat-short-latest.png'});
+    }
+    assert.equal(unsolicitedPages, 0, "Opening and refreshing do not automatically load older pages");
+  } finally {
+    source.page.off("request", olderRequest);
+    await source.page.setViewportSize(originalViewport);
+  }
   const input = source.page.getByRole("textbox", { name: "Message text", exact: true });
   await input.fill("A longer encrypted message that wraps on mobile and changes the history height. ".repeat(20));
   const response = source.page.waitForResponse(r => r.url().endsWith(`/api/conversations/${conversationId}/messages`) && r.request().method() === "POST");

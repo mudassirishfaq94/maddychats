@@ -51,7 +51,7 @@ const steps = [
 const questions = [
   { title: "Is Circlo free?", text: "Yes. You can use Circlo in your browser for free." },
   { title: "Are my private chats really private?", text: "Only approved devices in a chat can open its messages. Circlo still stores basic account information needed to run the service." },
-  { title: "What if I change phones?", text: "Link your new phone from your old one to bring over chats it can open. A saved recovery file is another option; without either, older chats may be lost." },
+  { title: "What if I change phones?", text: "Link from your old phone to bring over chats it can open. Or use Save my chats: keep the backup file and its separate code." },
   { title: "Can I use Circlo on a computer?", text: "Yes. Open Circlo in a browser on your phone, tablet or computer." },
 ];
 
@@ -120,11 +120,11 @@ export default async function LandingPage() {
       <section className="mx-auto grid max-w-7xl items-center gap-12 px-4 py-10 sm:px-8 sm:py-16 lg:grid-cols-[.9fr_1.1fr] lg:gap-12 lg:py-20">
         <div className="mx-auto w-full max-w-xl text-center lg:mx-0 lg:text-left">
           <span className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-xs text-[var(--muted)]"><span className="h-2 w-2 rounded-full bg-[var(--success)]" /> A little closer, a little quieter</span>
-          <h1 className="font-display mt-6 text-[clamp(2.5rem,8vw,4.7rem)] font-semibold leading-[1.03] tracking-[-.055em]">Private chat for you and your people.</h1>
-          <p className="mx-auto mt-5 max-w-lg text-base leading-7 text-[var(--muted)] sm:text-lg lg:mx-0">Private messages, free to use. Chat in your browser today.</p>
+          <h1 className="font-display mt-6 text-[clamp(2.5rem,8vw,4.7rem)] font-semibold leading-[1.03] tracking-[-.055em]">Your circle. Your conversations. Your privacy.</h1>
+          <p className="mx-auto mt-5 max-w-lg text-base leading-7 text-[var(--muted)] sm:text-lg lg:mx-0">Stay close to the people who matter. Chat, share and build groups with private messaging designed to put your conversations first.</p>
           <div className="mx-auto mt-7 grid max-w-md gap-3 sm:grid-cols-2 lg:mx-0">
             <div>
-              <Link href="/signup" className="btn btn-primary min-h-12 w-full justify-center px-5">Use in browser</Link>
+              <Link href="/signup" className="btn btn-primary min-h-12 w-full justify-center px-5">Get started</Link>
               <p className="mt-2 text-xs text-[var(--muted)]">Create an account with email and password.</p>
             </div>
             <div>
@@ -167,17 +167,13 @@ export default async function LandingPage() {
       <section id="privacy" aria-labelledby="privacy-title" className="scroll-mt-20 mx-auto grid max-w-7xl gap-5 px-4 py-14 sm:px-8 sm:py-20 md:grid-cols-[1fr_auto] md:items-center">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[.16em] text-[var(--accent-fg)]">Your messages stay yours</p>
-          <h2 id="privacy-title" className="font-display mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">A clear promise about privacy.</h2>
-          <p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--muted)]">Private chats use end-to-end encryption: AES-256-GCM protects content, and RSA-OAEP shares chat keys with approved devices.</p>
-          <p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--muted)]">To run the service, we store:</p>
-          <ul className="mt-3 max-w-2xl list-disc space-y-2 pl-5 text-sm leading-6 text-[var(--muted)]">
-            <li>Account details: display name, username, email address and a password hash, rather than your password.</li>
-            <li>Optional profile details: the bio, avatar, phone number and links you add.</li>
-            <li>Security details: sign-in times, IP address, browser and device type, and approximate country.</li>
-            <li>Delivery details: chat membership, message times and sizes, and delivery and read status.</li>
-          </ul>
-          <p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--muted)]"><strong className="text-[var(--text)]">Open-source code and security audits:</strong> Circlo’s application code is currently private. We have not published an independent security review.</p>
-          <p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--muted)]"><strong className="text-[var(--text)]">Photo location details:</strong> some uploads keep the original file, including location tags. Remove location information before sharing sensitive photos.</p>
+          <h2 id="privacy-title" className="font-display mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">Your conversations belong to you.</h2>
+          <p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--muted)]">Private chats use end-to-end encryption. Messages are encrypted on your device before they are sent, so only approved devices in the conversation can open them.</p>
+          <p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--muted)]">Privacy you can understand.</p>
+          <p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--muted)]">Circlo uses account, delivery and security information to connect chats, deliver notifications and protect accounts.</p>
+          <p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--muted)]">In Settings, manage approved devices, read receipts, activity visibility and notifications. Save my chats helps you prepare for a new phone.</p>
+          <p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--muted)]"><strong className="text-[var(--text)]">Protection checks:</strong> Project reviews and automated tests check encrypted delivery, device approval and account isolation. Read the policy for coverage and data-handling details.</p>
+          <p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--muted)]"><strong className="text-[var(--text)]">Photo location details:</strong> original files can include location tags. Check the sharing notice and remove location information before sending a sensitive original.</p>
           <p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--muted)]"><strong className="text-[var(--text)]">Advertising:</strong> we do not use your messages or shared photos for advertising algorithms or ad targeting.</p>
         </div>
         <Link href="/privacy" className="btn btn-secondary min-h-11 justify-center">Read the Privacy Policy</Link>
@@ -196,7 +192,7 @@ export default async function LandingPage() {
         <LogoWordmark size={42} className="justify-center" />
         <h2 className="font-display mt-6 text-3xl font-semibold tracking-tight sm:text-4xl">Make room for your people.</h2>
         <p className="mt-3 text-sm text-[var(--muted)]">Start a private chat in your browser.</p>
-        <Link href="/signup" className="btn btn-primary mt-6 min-h-12 justify-center px-6">Use in browser</Link>
+        <Link href="/signup" className="btn btn-primary mt-6 min-h-12 justify-center px-6">Get started</Link>
       </section>
 
       <footer className="border-t border-[var(--border)]">
