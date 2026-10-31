@@ -27,3 +27,19 @@ test("encrypted messages show a calm loading state and explain failures in plain
   assert.match(render({ signal: true }), /needs an update.*send it again/);
   assert.match(render({ failed: true, introduction: true }), /when they open Circlo/);
 });
+
+test("missing chat history offers the exact recovery button only in the appropriate failure state", () => {
+  const buttonLabels = (markup: string) => Array.from(
+    markup.matchAll(/<button\b[^>]*>([^<]*)<\/button>/g),
+    match => match[1],
+  );
+
+  const missingHistory = buttonLabels(render({ failed: true, missingKey: true }));
+  assert.deepEqual(missingHistory, ["Try again", "How to bring chats over"]);
+  assert.equal(missingHistory.includes("Recovery help"), false);
+
+  assert.deepEqual(buttonLabels(render()), []);
+  assert.deepEqual(buttonLabels(render({ failed: true })), ["Try again", "Message help"]);
+  assert.deepEqual(buttonLabels(render({ failed: true, missingKey: true, deviceError: true })), ["Open settings"]);
+  assert.deepEqual(buttonLabels(render({ failed: true, missingKey: true, signal: true })), ["Message help"]);
+});
